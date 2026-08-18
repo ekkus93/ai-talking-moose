@@ -3,8 +3,13 @@ import { useMooseStore } from "../../stores/mooseStore";
 import { Terminal, X, Send, Trash2, CornerDownLeft } from "lucide-react";
 
 export const TranscriptDrawer: React.FC = () => {
-  const { isTranscriptOpen, toggleTranscript, transcripts, sendTextMessage, forgetEverything } =
-    useMooseStore();
+  const {
+    isTranscriptOpen,
+    toggleTranscript,
+    transcripts,
+    sendTextMessage,
+    forgetEverything,
+  } = useMooseStore();
 
   const [inputMessage, setInputMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,7 +82,12 @@ export const TranscriptDrawer: React.FC = () => {
 
       {/* Suggested Fast Prompts */}
       <div className="px-2.5 py-1.5 bg-[#ded9cf] border-b border-black/30 flex gap-1.5 overflow-x-auto text-[10px] whitespace-nowrap">
-        {["Who are you?", "Tell me a joke", "What time is it?", "Why a moose?"].map((chip) => (
+        {[
+          "Who are you?",
+          "Tell me a joke",
+          "What time is it?",
+          "Why a moose?",
+        ].map((chip) => (
           <button
             key={chip}
             onClick={() => handleChipClick(chip)}
@@ -89,12 +99,16 @@ export const TranscriptDrawer: React.FC = () => {
       </div>
 
       {/* Transcript Log Output Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2.5 select-text">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-3 space-y-2.5 select-text"
+      >
         {transcripts.length === 0 ? (
           <div className="text-center text-gray-500 italic py-8 space-y-1">
             <p className="font-bold">Interactive Debug Terminal</p>
             <p className="text-[11px]">
-              Type a prompt below to bypass microphone input and test Gemini responses & speech!
+              Type a prompt below to bypass microphone input and test Gemini
+              responses & speech!
             </p>
           </div>
         ) : (
@@ -106,12 +120,18 @@ export const TranscriptDrawer: React.FC = () => {
               }`}
             >
               <div className="flex items-center justify-between text-[10px] font-bold text-gray-700 mb-1 border-b border-gray-200 pb-0.5">
-                <span className={entry.role === "moose" ? "text-amber-900" : "text-blue-900"}>
+                <span
+                  className={
+                    entry.role === "moose" ? "text-amber-900" : "text-blue-900"
+                  }
+                >
                   {entry.role === "moose" ? "🫎 MOOSE" : "👤 YOU"}
                 </span>
                 <span>{entry.created_at}</span>
               </div>
-              <p className="text-gray-900 leading-snug font-mono text-xs">{entry.text}</p>
+              <p className="text-gray-900 leading-snug font-mono text-xs">
+                {entry.text}
+              </p>
             </div>
           ))
         )}
@@ -122,7 +142,9 @@ export const TranscriptDrawer: React.FC = () => {
         onSubmit={handleSend}
         className="p-2.5 bg-[#dcd6cd] border-t-2 border-black flex gap-1.5 items-center"
       >
-        <span className="text-green-700 font-bold text-sm select-none">&gt;</span>
+        <span className="text-green-700 font-bold text-sm select-none">
+          &gt;
+        </span>
         <input
           ref={inputRef}
           type="text"

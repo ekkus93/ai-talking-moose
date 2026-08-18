@@ -11,13 +11,15 @@ describe("MooseSprite Component", () => {
   });
 
   it("renders different SVG for talking state with wide mouth", () => {
-    const { container } = render(<MooseSprite state="talking" mouth="wide" isBlinking={false} />);
+    const { container } = render(
+      <MooseSprite state="talking" mouth="wide" isBlinking={false} />,
+    );
     expect(container.innerHTML).toContain("#d32f2f"); // Wide mouth color
   });
 
   it("renders sleeping state with Zzz", () => {
     const { container } = render(
-      <MooseSprite state="sleeping" mouth="closed" isBlinking={false} />
+      <MooseSprite state="sleeping" mouth="closed" isBlinking={false} />,
     );
     expect(container.innerHTML).toContain("Zzz");
   });

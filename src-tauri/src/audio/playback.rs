@@ -10,8 +10,13 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 pub struct SafeStream(pub cpal::Stream);
+
+// SAFETY: CPAL intentionally makes its cross-platform `Stream` wrapper !Send because
+// Android's AAudio stream API is not thread-safe. Talking Moose V1 supports macOS and
+// Linux desktop builds only; CPAL's CoreAudio/ALSA stream handles may be moved between
+// threads, and this wrapper is only accessed through exclusive ownership or a mutex.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 unsafe impl Send for SafeStream {}
-unsafe impl Sync for SafeStream {}
 
 pub struct AudioPlayback {
     buffer: Arc<Mutex<VecDeque<f32>>>,

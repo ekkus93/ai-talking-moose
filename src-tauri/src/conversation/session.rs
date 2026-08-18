@@ -10,6 +10,27 @@ use tokio::sync::{mpsc, Mutex as AsyncMutex};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+pub struct ConversationCallbacks {
+    state: Arc<dyn Fn(CharacterState) + Send + Sync>,
+    transcript: Arc<dyn Fn(String, String) + Send + Sync>,
+    speech_bubble: Arc<dyn Fn(String) + Send + Sync>,
+}
+
+impl ConversationCallbacks {
+    pub fn new<S, T, B>(state: S, transcript: T, speech_bubble: B) -> Self
+    where
+        S: Fn(CharacterState) + Send + Sync + 'static,
+        T: Fn(String, String) + Send + Sync + 'static,
+        B: Fn(String) + Send + Sync + 'static,
+    {
+        Self {
+            state: Arc::new(state),
+            transcript: Arc::new(transcript),
+            speech_bubble: Arc::new(speech_bubble),
+        }
+    }
+}
+
 pub struct ConversationManager {
     active_session_id: Arc<SyncMutex<Option<String>>>,
     live_session: Arc<AsyncMutex<Option<Box<dyn LiveSession>>>>,
@@ -33,25 +54,28 @@ impl ConversationManager {
         self.active_session_id.lock().clone()
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn start_session(
         &self,
         provider: Arc<dyn RealtimeConversationProvider>,
         config: LiveSessionConfig,
         playback: Arc<AudioPlayback>,
         tool_router: Arc<ToolRouter>,
-        state_callback: impl Fn(CharacterState) + Send + Sync + 'static,
-        transcript_callback: impl Fn(String, String) + Send + Sync + 'static, // (role, text)
-        speech_bubble_callback: impl Fn(String) + Send + Sync + 'static,
+        callbacks: ConversationCallbacks,
     ) -> Result<String, String> {
         // End any prior session
         self.stop_session(playback.clone()).await;
+
+        let ConversationCallbacks {
+            state: state_callback,
+            transcript: transcript_callback,
+            speech_bubble: speech_bubble_callback,
+        } = callbacks;
 
         let session_id = Uuid::new_v4().to_string();
         *self.active_session_id.lock() = Some(session_id.clone());
         self.is_in_conversation.store(true, Ordering::SeqCst);
 
-        state_callback(CharacterState::Listening);
+        (state_callback)(CharacterState::Listening);
 
         let (server_ev_tx, mut server_ev_rx) = mpsc::channel::<LiveServerEvent>(64);
         let session = provider.connect(config, server_ev_tx).await?;
@@ -77,31 +101,29 @@ impl ConversationManager {
                         info!("Gemini Live session connected");
                     }
                     LiveServerEvent::UserTranscript(text) => {
-                        info!("User said: {}", text);
-                        transcript_callback("user".to_string(), text);
-                        state_callback(CharacterState::Thinking);
+                        (transcript_callback)("user".to_string(), text);
+                        (state_callback)(CharacterState::Thinking);
                     }
                     LiveServerEvent::ModelTranscript(text) => {
-                        info!("Moose said: {}", text);
-                        transcript_callback("moose".to_string(), text.clone());
-                        speech_bubble_callback(text);
+                        (transcript_callback)("moose".to_string(), text.clone());
+                        (speech_bubble_callback)(text);
                     }
                     LiveServerEvent::AudioData(pcm_bytes) => {
-                        state_callback(CharacterState::Talking);
+                        (state_callback)(CharacterState::Talking);
                         playback.enqueue_pcm_bytes(&pcm_bytes, 24000, 24000);
                     }
                     LiveServerEvent::Interrupted => {
                         info!("Interruption triggered! Barge-in active.");
                         playback.flush();
-                        state_callback(CharacterState::Interrupted);
+                        (state_callback)(CharacterState::Interrupted);
                         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                        state_callback(CharacterState::Listening);
+                        (state_callback)(CharacterState::Listening);
                     }
                     LiveServerEvent::TurnComplete => {
                         // After talking finishes, return to listening
                         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
                         if is_running.load(Ordering::SeqCst) {
-                            state_callback(CharacterState::Listening);
+                            (state_callback)(CharacterState::Listening);
                         }
                     }
                     LiveServerEvent::ToolCall { id, name, args } => {
@@ -125,7 +147,7 @@ impl ConversationManager {
                     }
                     LiveServerEvent::Error(err) => {
                         error!("Live session error: {}", err);
-                        state_callback(CharacterState::Error);
+                        (state_callback)(CharacterState::Error);
                     }
                     LiveServerEvent::Closed => {
                         info!("Live session closed by server");

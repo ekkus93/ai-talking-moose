@@ -11,7 +11,10 @@ import {
 export const isTauri = () => {
   return (
     typeof window !== "undefined" &&
-    Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+    Boolean(
+      (window as unknown as { __TAURI_INTERNALS__?: unknown })
+        .__TAURI_INTERNALS__,
+    )
   );
 };
 
@@ -19,7 +22,8 @@ export const tauriBridge = {
   async resizeWindow(width: number, height: number): Promise<void> {
     if (!isTauri()) return;
     try {
-      const { getCurrentWindow, LogicalSize } = await import("@tauri-apps/api/window");
+      const { getCurrentWindow, LogicalSize } =
+        await import("@tauri-apps/api/window");
       const appWindow = getCurrentWindow();
       await appWindow.setSize(new LogicalSize(width, height));
     } catch (err) {
@@ -103,10 +107,18 @@ export const tauriBridge = {
   async listAudioDevices(): Promise<[AudioDeviceInfo[], AudioDeviceInfo[]]> {
     if (!isTauri()) {
       const inputs: AudioDeviceInfo[] = [
-        { id: "mock_mic", name: "Default Internal Microphone", is_default: true },
+        {
+          id: "mock_mic",
+          name: "Default Internal Microphone",
+          is_default: true,
+        },
       ];
       const outputs: AudioDeviceInfo[] = [
-        { id: "mock_speakers", name: "Default Internal Speakers", is_default: true },
+        {
+          id: "mock_speakers",
+          name: "Default Internal Speakers",
+          is_default: true,
+        },
       ];
       return [inputs, outputs];
     }
@@ -204,10 +216,15 @@ export const tauriBridge = {
     return invoke<string>("send_text_message", { message });
   },
 
-  async listenEvent<T>(eventName: string, handler: (payload: T) => void): Promise<() => void> {
+  async listenEvent<T>(
+    eventName: string,
+    handler: (payload: T) => void,
+  ): Promise<() => void> {
     if (!isTauri()) return () => {};
     const { listen } = await import("@tauri-apps/api/event");
-    const unlisten = await listen<T>(eventName, (event) => handler(event.payload));
+    const unlisten = await listen<T>(eventName, (event) =>
+      handler(event.payload),
+    );
     return unlisten;
   },
 };

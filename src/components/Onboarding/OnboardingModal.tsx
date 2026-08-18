@@ -35,7 +35,9 @@ export const OnboardingModal: React.FC = () => {
         <div className="flex items-center justify-between border-b border-black pb-1.5">
           <div>
             <h2 className="font-bold text-xs">TALKING MOOSE AI</h2>
-            <p className="text-gray-600 text-[10px]">1986 Macintosh Reimagined</p>
+            <p className="text-gray-600 text-[10px]">
+              1986 Macintosh Reimagined
+            </p>
           </div>
           <button
             onClick={() => toggleOnboarding(false)}
@@ -54,8 +56,9 @@ export const OnboardingModal: React.FC = () => {
               <span>Lives on Your Desktop</span>
             </div>
             <p className="text-gray-800 leading-snug text-[11px]">
-              The Moose is a classic dry-witted cartoon companion. He lives quietly in your desktop
-              window, making witty observations and holding spoken conversations.
+              The Moose is a classic dry-witted cartoon companion. He lives
+              quietly in your desktop window, making witty observations and
+              holding spoken conversations.
             </p>
             <button
               onClick={() => setStep(2)}
@@ -75,11 +78,12 @@ export const OnboardingModal: React.FC = () => {
               <span>Click & Talk</span>
             </div>
             <p className="text-gray-800 leading-snug text-[11px]">
-              Click the Moose to speak with him in real time using Gemini Live. You can interrupt
-              him whenever he is talking.
+              Click the Moose to speak with him in real time using Gemini Live.
+              You can interrupt him whenever he is talking.
             </p>
             <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-700">
-              Microphone is only active when you click to talk. No hidden continuous recording.
+              Microphone is only active when you click to talk. No hidden
+              continuous recording.
             </div>
             <button
               onClick={() => setStep(3)}
@@ -99,7 +103,8 @@ export const OnboardingModal: React.FC = () => {
               <span>Gemini AI Studio Key</span>
             </div>
             <p className="text-gray-800 leading-snug text-[11px]">
-              Enter your Google AI Studio API key (or skip to use offline phrases):
+              Enter your Google AI Studio API key (or skip to use offline
+              phrases):
             </p>
 
             <div className="space-y-1">

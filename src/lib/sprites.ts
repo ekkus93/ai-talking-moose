@@ -11,7 +11,7 @@ export interface SpriteFrame {
 export const getMooseSprite = (
   state: CharacterState,
   mouth: MouthShape,
-  isBlinking: boolean
+  isBlinking: boolean,
 ): string => {
   // Determine effective eye state
   const eyesClosed = isBlinking || state === "sleeping";

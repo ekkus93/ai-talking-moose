@@ -59,15 +59,16 @@ impl GoogleTextModel {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("HTTP request to Gemini failed: {}", e))?;
+            .map_err(|e| {
+                format!(
+                    "HTTP request to Gemini failed: {}",
+                    self.auth.redact(&e.to_string())
+                )
+            })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let err_text = resp.text().await.unwrap_or_default();
-            error!(
-                "Gemini API error with model {}: {} - {}",
-                model, status, err_text
-            );
+            error!("Gemini API error with model {}: {}", model, status);
             return Err(format!("Gemini API returned error code {}", status));
         }
 

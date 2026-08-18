@@ -12,6 +12,10 @@ impl GoogleAuth {
         !self.api_key.trim().is_empty()
     }
 
+    pub fn redact(&self, input: &str) -> String {
+        crate::secrets::redact_secret(input, &self.api_key)
+    }
+
     pub fn masked_key(&self) -> String {
         if self.api_key.len() <= 8 {
             "********".to_string()

@@ -100,7 +100,12 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
 
         let (ws_stream, _) = connect_async(&url)
             .await
-            .map_err(|e| format!("WebSocket connection failed: {}", e))?;
+            .map_err(|e| {
+                format!(
+                    "WebSocket connection failed: {}",
+                    self.auth.redact(&e.to_string())
+                )
+            })?;
 
         let (mut write, mut read) = ws_stream.split();
         let (out_tx, mut out_rx) = mpsc::channel::<Message>(64);
@@ -139,12 +144,17 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
             }
         });
 
-        info!("Sending Gemini Live setup frame: {}", setup_msg);
+        info!("Sending Gemini Live setup frame");
 
         write
             .send(Message::Text(setup_msg.to_string()))
             .await
-            .map_err(|e| format!("Failed to send setup message: {}", e))?;
+            .map_err(|e| {
+                format!(
+                    "Failed to send setup message: {}",
+                    self.auth.redact(&e.to_string())
+                )
+            })?;
 
         // 2. Outgoing forwarder task
         tauri::async_runtime::spawn(async move {
@@ -158,6 +168,7 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
 
         // 3. Incoming receiver task
         let ev_tx = event_sender.clone();
+        let auth_for_logs = self.auth.clone();
         tauri::async_runtime::spawn(async move {
             let _ = ev_tx.send(LiveServerEvent::Connected).await;
 
@@ -170,23 +181,21 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
                     Ok(Message::Text(txt)) => Some(txt),
                     Ok(Message::Binary(bin)) => String::from_utf8(bin).ok(),
                     Ok(Message::Close(frame)) => {
-                        info!(
-                            "Gemini Live WebSocket closed by server with frame: {:?}",
-                            frame
-                        );
+                        let code = frame.as_ref().map(|value| u16::from(value.code));
+                        info!(?code, "Gemini Live WebSocket closed by server");
                         let _ = ev_tx.send(LiveServerEvent::Closed).await;
                         break;
                     }
                     Err(e) => {
-                        error!("WebSocket error in Gemini Live stream: {}", e);
-                        let _ = ev_tx.send(LiveServerEvent::Error(e.to_string())).await;
+                        let safe_error = auth_for_logs.redact(&e.to_string());
+                        error!("WebSocket error in Gemini Live stream: {}", safe_error);
+                        let _ = ev_tx.send(LiveServerEvent::Error(safe_error)).await;
                         break;
                     }
                     _ => None,
                 };
 
                 if let Some(txt) = json_text {
-                    info!("Received Gemini Live frame: {}", txt);
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&txt) {
                         if let Some(content) = val.get("serverContent") {
                             if let Some(interrupted) =

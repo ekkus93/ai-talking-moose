@@ -3,11 +3,26 @@ use serde_json::json;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
+fn live_api_enabled(value: Option<&str>) -> bool {
+    matches!(value, Some("1") | Some("true") | Some("TRUE"))
+}
+
+#[test]
+fn live_api_guard_defaults_off() {
+    assert!(!live_api_enabled(None));
+    assert!(!live_api_enabled(Some("0")));
+    assert!(live_api_enabled(Some("1")));
+}
+
 #[tokio::test]
-#[ignore = "live Google API test; run explicitly with TALKING_MOOSE_GOOGLE_API_KEY"]
+#[ignore = "live Google API test; requires explicit opt-in and dedicated API key"]
 async fn test_gemini_live_asr() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
+    assert!(
+        live_api_enabled(std::env::var("TALKING_MOOSE_ALLOW_LIVE_API").ok().as_deref()),
+        "set TALKING_MOOSE_ALLOW_LIVE_API=1 to opt in to the live Gemini test"
+    );
     let api_key = std::env::var("TALKING_MOOSE_GOOGLE_API_KEY")
         .expect("set TALKING_MOOSE_GOOGLE_API_KEY to run the live Gemini test");
 

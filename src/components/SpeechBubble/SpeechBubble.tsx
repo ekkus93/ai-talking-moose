@@ -2,7 +2,8 @@ import React from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 
 export const SpeechBubble: React.FC = () => {
-  const { speechBubbleText, speechBubbleVisible, hideSpeechBubble } = useMooseStore();
+  const { speechBubbleText, speechBubbleVisible, hideSpeechBubble } =
+    useMooseStore();
 
   if (!speechBubbleVisible || !speechBubbleText) {
     return null;

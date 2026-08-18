@@ -5,7 +5,17 @@ import { SpeechBubble } from "../components/SpeechBubble/SpeechBubble";
 import { TranscriptDrawer } from "../components/Transcript/TranscriptDrawer";
 import { SettingsModal } from "../components/Settings/SettingsModal";
 import { OnboardingModal } from "../components/Onboarding/OnboardingModal";
-import { Mic, MicOff, Volume2, VolumeX, Sliders, Terminal, Square, Minus, Key } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Sliders,
+  Terminal,
+  Square,
+  Minus,
+  Key,
+} from "lucide-react";
 
 export const MooseWindow: React.FC = () => {
   const {
@@ -36,9 +46,15 @@ export const MooseWindow: React.FC = () => {
   const getStateBadge = () => {
     switch (characterState) {
       case "listening":
-        return { label: "LISTENING...", color: "bg-green-600 text-white animate-pulse" };
+        return {
+          label: "LISTENING...",
+          color: "bg-green-600 text-white animate-pulse",
+        };
       case "thinking":
-        return { label: "THINKING...", color: "bg-amber-600 text-white animate-pulse" };
+        return {
+          label: "THINKING...",
+          color: "bg-amber-600 text-white animate-pulse",
+        };
       case "talking":
         return { label: "TALKING", color: "bg-blue-600 text-white" };
       case "interrupted":
@@ -60,7 +76,10 @@ export const MooseWindow: React.FC = () => {
   const badge = getStateBadge();
 
   const handleStartDrag = async (e: React.MouseEvent) => {
-    if (e.button === 0 && !(e.target as HTMLElement).closest("button, input, select")) {
+    if (
+      e.button === 0 &&
+      !(e.target as HTMLElement).closest("button, input, select")
+    ) {
       try {
         const { getCurrentWindow } = await import("@tauri-apps/api/window");
         await getCurrentWindow().startDragging();
@@ -152,7 +171,9 @@ export const MooseWindow: React.FC = () => {
               <div className="w-8 h-1.5 bg-gray-200 border border-gray-400 rounded-sm overflow-hidden">
                 <div
                   className="h-full bg-green-500 transition-all duration-75"
-                  style={{ width: `${Math.min(100, Math.max(0, inputLevel * 300))}%` }}
+                  style={{
+                    width: `${Math.min(100, Math.max(0, inputLevel * 300))}%`,
+                  }}
                 />
               </div>
             </div>
@@ -162,7 +183,9 @@ export const MooseWindow: React.FC = () => {
               <div className="w-8 h-1.5 bg-gray-200 border border-gray-400 rounded-sm overflow-hidden">
                 <div
                   className="h-full bg-blue-500 transition-all duration-75"
-                  style={{ width: `${Math.min(100, Math.max(0, outputLevel * 300))}%` }}
+                  style={{
+                    width: `${Math.min(100, Math.max(0, outputLevel * 300))}%`,
+                  }}
                 />
               </div>
             </div>
@@ -224,7 +247,11 @@ export const MooseWindow: React.FC = () => {
             }`}
             title={isMuted ? "Unmute Moose" : "Mute Moose"}
           >
-            {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+            {isMuted ? (
+              <VolumeX className="w-3.5 h-3.5" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5" />
+            )}
           </button>
 
           {/* Settings Button */}

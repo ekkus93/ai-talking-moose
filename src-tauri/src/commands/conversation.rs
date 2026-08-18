@@ -2,6 +2,7 @@ use crate::ai::types::LiveSessionConfig;
 use crate::app::state::AppState;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::CharacterState;
+use crate::conversation::session::ConversationCallbacks;
 use crate::persistence::{MemoryRecord, TranscriptRecord};
 use tauri::{Emitter, State};
 use tokio::sync::mpsc;
@@ -55,18 +56,20 @@ pub async fn start_conversation(
             config,
             playback,
             tool_router,
-            move |new_state: CharacterState| {
-                let _ = app_handle_1.emit("moose://state", new_state);
-            },
-            move |role: String, text: String| {
-                let _ = app_handle_2.emit(&format!("moose://transcript/{}", role), &text);
-                if save_transcripts {
-                    let _ = db_ref.add_transcript("active_session", &role, &text);
-                }
-            },
-            move |speech_text: String| {
-                let _ = app_handle_3.emit("moose://speech-bubble", &speech_text);
-            },
+            ConversationCallbacks::new(
+                move |new_state: CharacterState| {
+                    let _ = app_handle_1.emit("moose://state", new_state);
+                },
+                move |role: String, text: String| {
+                    let _ = app_handle_2.emit(&format!("moose://transcript/{}", role), &text);
+                    if save_transcripts {
+                        let _ = db_ref.add_transcript("active_session", &role, &text);
+                    }
+                },
+                move |speech_text: String| {
+                    let _ = app_handle_3.emit("moose://speech-bubble", &speech_text);
+                },
+            ),
         )
         .await?;
 

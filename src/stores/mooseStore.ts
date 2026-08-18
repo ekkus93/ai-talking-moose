@@ -98,7 +98,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     if (currentTimer) clearTimeout(currentTimer);
 
     // Speak aloud with SpeechSynthesis if not muted
-    if (typeof window !== "undefined" && "speechSynthesis" in window && !get().isMuted) {
+    if (
+      typeof window !== "undefined" &&
+      "speechSynthesis" in window &&
+      !get().isMuted
+    ) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.pitch = 0.78;
@@ -120,7 +124,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     }
 
     const timer = setTimeout(() => {
-      set({ speechBubbleVisible: false, speechBubbleText: null, speechBubbleTimer: null });
+      set({
+        speechBubbleVisible: false,
+        speechBubbleText: null,
+        speechBubbleTimer: null,
+      });
     }, durationMs);
 
     set({
@@ -158,9 +166,13 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     set({ isSettingsOpen: shouldOpen });
   },
   toggleOnboarding: (open) =>
-    set((state) => ({ isOnboardingOpen: open !== undefined ? open : !state.isOnboardingOpen })),
+    set((state) => ({
+      isOnboardingOpen: open !== undefined ? open : !state.isOnboardingOpen,
+    })),
   toggleTranscript: (open) =>
-    set((state) => ({ isTranscriptOpen: open !== undefined ? open : !state.isTranscriptOpen })),
+    set((state) => ({
+      isTranscriptOpen: open !== undefined ? open : !state.isTranscriptOpen,
+    })),
 
   startConversation: async () => {
     try {
@@ -175,7 +187,12 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   stopConversation: async () => {
     try {
       await tauriBridge.stopConversation();
-      set({ isConversationActive: false, characterState: "idle", inputLevel: 0, outputLevel: 0 });
+      set({
+        isConversationActive: false,
+        characterState: "idle",
+        inputLevel: 0,
+        outputLevel: 0,
+      });
     } catch (e) {
       console.error("Failed to stop conversation:", e);
     }
@@ -195,7 +212,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
   toggleMute: async () => {
     const nextMute = !get().isMuted;
-    if (nextMute && typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (
+      nextMute &&
+      typeof window !== "undefined" &&
+      "speechSynthesis" in window
+    ) {
       window.speechSynthesis.cancel();
     }
     await tauriBridge.setMute(nextMute);
@@ -268,18 +289,21 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       "moose://state",
       (state) => {
         set({ characterState: state });
-      }
+      },
     );
 
-    const unlistenMouth = await tauriBridge.listenEvent<MouthShape>("moose://mouth", (mouth) => {
-      set({ mouthShape: mouth });
-    });
+    const unlistenMouth = await tauriBridge.listenEvent<MouthShape>(
+      "moose://mouth",
+      (mouth) => {
+        set({ mouthShape: mouth });
+      },
+    );
 
     const unlistenBubble = await tauriBridge.listenEvent<string>(
       "moose://speech-bubble",
       (text) => {
         get().showSpeechBubble(text);
-      }
+      },
     );
 
     const unlistenUserInput = await tauriBridge.listenEvent<string>(
@@ -293,7 +317,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           created_at: new Date().toLocaleTimeString(),
         };
         set((s) => ({ transcripts: [...s.transcripts, entry] }));
-      }
+      },
     );
 
     const unlistenMooseOutput = await tauriBridge.listenEvent<string>(
@@ -307,21 +331,21 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           created_at: new Date().toLocaleTimeString(),
         };
         set((s) => ({ transcripts: [...s.transcripts, entry] }));
-      }
+      },
     );
 
     const unlistenInLvl = await tauriBridge.listenEvent<number>(
       "moose://audio/input-level",
       (level) => {
         set({ inputLevel: level });
-      }
+      },
     );
 
     const unlistenOutLvl = await tauriBridge.listenEvent<number>(
       "moose://audio/output-level",
       (level) => {
         set({ outputLevel: level });
-      }
+      },
     );
 
     return () => {

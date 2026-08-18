@@ -35,23 +35,32 @@
 ### Quality & Verification Commands
 
 ```bash
-# Run all frontend static checks (Typecheck, Lint, Format, Vitest)
+# Complete ordinary quality gate: TypeScript, ESLint, Prettier, Vitest,
+# frontend production build, rustfmt, Clippy (-D warnings), and Rust tests.
+# Default tests do not require Google credentials or live APIs.
 npm run check:all
 
-# Run Rust formatting, clippy, and unit/integration tests
-cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-cargo test --manifest-path src-tauri/Cargo.toml
+# Run only one side when iterating locally.
+npm run check:frontend
+npm run check:rust
 
-# Start Tauri development app
+# Start Tauri development app.
 npm run tauri dev
 
-# Production Build
+# Production build.
 npm run build
 cargo build --manifest-path src-tauri/Cargo.toml --release
 ```
 
-GitHub Actions runs the frontend, Rust, and macOS Tauri bundle checks on pushes to `master`, pull requests, tags, and manual runs. Build artifacts are retained only for tagged commits.
+The real Gemini Live integration test is intentionally excluded from ordinary test runs. To run it manually, opt in twice and provide a dedicated test credential:
+
+```bash
+TALKING_MOOSE_ALLOW_LIVE_API=1 \
+TALKING_MOOSE_GOOGLE_API_KEY='...' \
+cargo test --manifest-path src-tauri/Cargo.toml --test test_gemini_live_asr -- --ignored
+```
+
+GitHub Actions runs the ordinary frontend and Rust gates, dependency audits, and a macOS Tauri smoke build. Build artifacts are retained only for tag-triggered workflows.
 
 ---
 

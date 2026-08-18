@@ -33,11 +33,21 @@ export const SettingsModal: React.FC = () => {
   } = useMooseStore();
 
   const [activeTab, setActiveTab] = useState<
-    "general" | "behavior" | "voice" | "personality" | "ai" | "privacy" | "data" | "diagnostics"
+    | "general"
+    | "behavior"
+    | "voice"
+    | "personality"
+    | "ai"
+    | "privacy"
+    | "data"
+    | "diagnostics"
   >("general");
 
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isAuditioning, setIsAuditioning] = useState(false);
 
@@ -56,7 +66,10 @@ export const SettingsModal: React.FC = () => {
     if (apiKeyInput.trim()) {
       await tauriBridge.setGoogleApiKey(apiKeyInput.trim());
       setApiKeyInput("");
-      setTestResult({ success: true, message: "API Key updated successfully!" });
+      setTestResult({
+        success: true,
+        message: "API Key updated successfully!",
+      });
     }
   };
 
@@ -116,7 +129,9 @@ export const SettingsModal: React.FC = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
                 className={`flex items-center gap-2 px-3 py-2 text-left font-bold transition-colors ${
-                  isCurrent ? "bg-black text-white" : "hover:bg-gray-300 text-gray-800"
+                  isCurrent
+                    ? "bg-black text-white"
+                    : "hover:bg-gray-300 text-gray-800"
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -139,7 +154,10 @@ export const SettingsModal: React.FC = () => {
                   type="checkbox"
                   checked={settings.launch_at_login}
                   onChange={(e) =>
-                    updateSettings({ ...settings, launch_at_login: e.target.checked })
+                    updateSettings({
+                      ...settings,
+                      launch_at_login: e.target.checked,
+                    })
                   }
                   className="accent-black"
                 />
@@ -149,7 +167,12 @@ export const SettingsModal: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={settings.always_on_top}
-                  onChange={(e) => updateSettings({ ...settings, always_on_top: e.target.checked })}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      always_on_top: e.target.checked,
+                    })
+                  }
                   className="accent-black"
                 />
                 <span>Keep Moose window always on top</span>
@@ -159,7 +182,10 @@ export const SettingsModal: React.FC = () => {
                   type="checkbox"
                   checked={settings.restore_position}
                   onChange={(e) =>
-                    updateSettings({ ...settings, restore_position: e.target.checked })
+                    updateSettings({
+                      ...settings,
+                      restore_position: e.target.checked,
+                    })
                   }
                   className="accent-black"
                 />
@@ -179,17 +205,24 @@ export const SettingsModal: React.FC = () => {
                   type="checkbox"
                   checked={settings.unsolicited_comments}
                   onChange={(e) =>
-                    updateSettings({ ...settings, unsolicited_comments: e.target.checked })
+                    updateSettings({
+                      ...settings,
+                      unsolicited_comments: e.target.checked,
+                    })
                   }
                   className="accent-black"
                 />
-                <span className="font-bold">Enable unsolicited ambient remarks</span>
+                <span className="font-bold">
+                  Enable unsolicited ambient remarks
+                </span>
               </label>
 
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <span>Talkativeness</span>
-                  <span className="font-bold">{(settings.talkativeness * 100).toFixed(0)}%</span>
+                  <span className="font-bold">
+                    {(settings.talkativeness * 100).toFixed(0)}%
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -198,7 +231,10 @@ export const SettingsModal: React.FC = () => {
                   step="0.05"
                   value={settings.talkativeness}
                   onChange={(e) =>
-                    updateSettings({ ...settings, talkativeness: parseFloat(e.target.value) })
+                    updateSettings({
+                      ...settings,
+                      talkativeness: parseFloat(e.target.value),
+                    })
                   }
                   className="w-full accent-black"
                 />
@@ -207,7 +243,9 @@ export const SettingsModal: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <span>Maximum Ambient Comments Per Hour</span>
-                  <span className="font-bold">{settings.max_comments_per_hour}</span>
+                  <span className="font-bold">
+                    {settings.max_comments_per_hour}
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -231,15 +269,19 @@ export const SettingsModal: React.FC = () => {
                     type="checkbox"
                     checked={settings.quiet_hours_enabled}
                     onChange={(e) =>
-                      updateSettings({ ...settings, quiet_hours_enabled: e.target.checked })
+                      updateSettings({
+                        ...settings,
+                        quiet_hours_enabled: e.target.checked,
+                      })
                     }
                     className="accent-black"
                   />
                   <span>Quiet Hours</span>
                 </label>
                 <p className="text-gray-600 text-[11px]">
-                  Silence all unsolicited remarks between {settings.quiet_hours_start}:00 and{" "}
-                  {settings.quiet_hours_end}:00.
+                  Silence all unsolicited remarks between{" "}
+                  {settings.quiet_hours_start}:00 and {settings.quiet_hours_end}
+                  :00.
                 </p>
               </div>
             </div>
@@ -253,11 +295,16 @@ export const SettingsModal: React.FC = () => {
               </h3>
 
               <div>
-                <label className="block mb-1 font-bold">Microphone Input Device</label>
+                <label className="block mb-1 font-bold">
+                  Microphone Input Device
+                </label>
                 <select
                   value={settings.input_device || ""}
                   onChange={(e) =>
-                    updateSettings({ ...settings, input_device: e.target.value || null })
+                    updateSettings({
+                      ...settings,
+                      input_device: e.target.value || null,
+                    })
                   }
                   className="w-full p-1.5 border border-black rounded bg-white"
                 >
@@ -271,11 +318,16 @@ export const SettingsModal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">Audio Output Device</label>
+                <label className="block mb-1 font-bold">
+                  Audio Output Device
+                </label>
                 <select
                   value={settings.output_device || ""}
                   onChange={(e) =>
-                    updateSettings({ ...settings, output_device: e.target.value || null })
+                    updateSettings({
+                      ...settings,
+                      output_device: e.target.value || null,
+                    })
                   }
                   className="w-full p-1.5 border border-black rounded bg-white"
                 >
@@ -290,17 +342,25 @@ export const SettingsModal: React.FC = () => {
 
               <div className="space-y-2">
                 <div>
-                  <label className="block mb-1 font-bold">Moose Voice Preset</label>
+                  <label className="block mb-1 font-bold">
+                    Moose Voice Preset
+                  </label>
                   <select
                     value={settings.tts_voice}
-                    onChange={(e) => updateSettings({ ...settings, tts_voice: e.target.value })}
+                    onChange={(e) =>
+                      updateSettings({ ...settings, tts_voice: e.target.value })
+                    }
                     className="w-full p-1.5 border border-black rounded bg-white font-bold"
                   >
                     <option value="Fenrir">
                       Fenrir (Deeper, Gravelly Cartoon Moose - Recommended)
                     </option>
-                    <option value="Charon">Charon (Deep, Slow & Deadpan)</option>
-                    <option value="Orus">Orus (Warm, Low-Pitched & Relaxed)</option>
+                    <option value="Charon">
+                      Charon (Deep, Slow & Deadpan)
+                    </option>
+                    <option value="Orus">
+                      Orus (Warm, Low-Pitched & Relaxed)
+                    </option>
                     <option value="Kore">Kore (Smooth & Natural)</option>
                     <option value="Puck">Puck (High-Pitched & Squeaky)</option>
                     <option value="Aoede">Aoede (Higher Register)</option>
@@ -342,14 +402,21 @@ export const SettingsModal: React.FC = () => {
                 { key: "sarcastic", label: "Sarcasm & Snark" },
                 { key: "friendly", label: "Warmth & Friendliness" },
                 { key: "absurd", label: "Absurdity & Goofiness" },
-                { key: "helpful", label: "Helpfulness (Keep low for classic Moose!)" },
+                {
+                  key: "helpful",
+                  label: "Helpfulness (Keep low for classic Moose!)",
+                },
                 { key: "verbosity", label: "Verbosity (Response length)" },
               ].map((slider) => (
                 <div key={slider.key} className="space-y-1">
                   <div className="flex justify-between text-[11px]">
                     <span>{slider.label}</span>
                     <span className="font-bold">
-                      {((settings[slider.key as keyof typeof settings] as number) * 100).toFixed(0)}
+                      {(
+                        (settings[
+                          slider.key as keyof typeof settings
+                        ] as number) * 100
+                      ).toFixed(0)}
                       %
                     </span>
                   </div>
@@ -358,7 +425,9 @@ export const SettingsModal: React.FC = () => {
                     min="0"
                     max="1"
                     step="0.05"
-                    value={settings[slider.key as keyof typeof settings] as number}
+                    value={
+                      settings[slider.key as keyof typeof settings] as number
+                    }
                     onChange={(e) =>
                       updateSettings({
                         ...settings,
@@ -380,7 +449,9 @@ export const SettingsModal: React.FC = () => {
               </h3>
 
               <div className="space-y-2">
-                <label className="block font-bold">Google Gemini API Key (BYOK)</label>
+                <label className="block font-bold">
+                  Google Gemini API Key (BYOK)
+                </label>
                 <div className="flex gap-2">
                   <input
                     type="password"
@@ -397,27 +468,37 @@ export const SettingsModal: React.FC = () => {
                   </button>
                 </div>
                 <p className="text-[10px] text-gray-500">
-                  Your key is stored securely in native Rust memory / encrypted settings and never
-                  exposed to logs.
+                  Your key is stored securely in native Rust memory / encrypted
+                  settings and never exposed to logs.
                 </p>
               </div>
 
               <div className="pt-2 border-t border-gray-200">
                 <div className="space-y-3 mb-3">
                   <div>
-                    <label className="block mb-1 font-bold">Realtime Live Voice Model</label>
+                    <label className="block mb-1 font-bold">
+                      Realtime Live Voice Model
+                    </label>
                     <select
                       value={settings.live_model}
-                      onChange={(e) => updateSettings({ ...settings, live_model: e.target.value })}
+                      onChange={(e) =>
+                        updateSettings({
+                          ...settings,
+                          live_model: e.target.value,
+                        })
+                      }
                       className="w-full p-1.5 border border-black rounded bg-white font-bold"
                     >
                       <option value="gemini-2.5-flash-native-audio-latest">
-                        gemini-2.5-flash-native-audio-latest (Recommended Live Voice)
+                        gemini-2.5-flash-native-audio-latest (Recommended Live
+                        Voice)
                       </option>
                       <option value="gemini-3.1-flash-live-preview">
                         gemini-3.1-flash-live-preview (Gemini 3 Live Preview)
                       </option>
-                      <option value="gemini-flash-latest">gemini-flash-latest</option>
+                      <option value="gemini-flash-latest">
+                        gemini-flash-latest
+                      </option>
                       <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                       <option value="gemini-2.5-pro">gemini-2.5-pro</option>
                       <option value="gemini-3.7-flash">gemini-3.7-flash</option>
@@ -425,16 +506,31 @@ export const SettingsModal: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block mb-1 font-bold">Text & Ambient Remark Model</label>
+                    <label className="block mb-1 font-bold">
+                      Text & Ambient Remark Model
+                    </label>
                     <select
                       value={settings.text_model}
-                      onChange={(e) => updateSettings({ ...settings, text_model: e.target.value })}
+                      onChange={(e) =>
+                        updateSettings({
+                          ...settings,
+                          text_model: e.target.value,
+                        })
+                      }
                       className="w-full p-1.5 border border-black rounded bg-white font-bold"
                     >
-                      <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Responsive)</option>
-                      <option value="gemini-flash-latest">gemini-flash-latest</option>
-                      <option value="gemini-2.5-pro">gemini-2.5-pro (High Intelligence)</option>
-                      <option value="gemini-3.7-flash">gemini-3.7-flash (Gemini 3.7)</option>
+                      <option value="gemini-2.5-flash">
+                        gemini-2.5-flash (Fast & Responsive)
+                      </option>
+                      <option value="gemini-flash-latest">
+                        gemini-flash-latest
+                      </option>
+                      <option value="gemini-2.5-pro">
+                        gemini-2.5-pro (High Intelligence)
+                      </option>
+                      <option value="gemini-3.7-flash">
+                        gemini-3.7-flash (Gemini 3.7)
+                      </option>
                     </select>
                   </div>
                 </div>
@@ -444,7 +540,11 @@ export const SettingsModal: React.FC = () => {
                   disabled={isTesting}
                   className="px-3 py-1.5 bg-white border-2 border-black rounded font-bold hover:bg-gray-100 flex items-center gap-1.5"
                 >
-                  <span>{isTesting ? "Testing Connection..." : "Test Gemini Connection"}</span>
+                  <span>
+                    {isTesting
+                      ? "Testing Connection..."
+                      : "Test Gemini Connection"}
+                  </span>
                 </button>
 
                 {testResult && (
@@ -478,7 +578,10 @@ export const SettingsModal: React.FC = () => {
                   type="checkbox"
                   checked={settings.active_app_observation}
                   onChange={(e) =>
-                    updateSettings({ ...settings, active_app_observation: e.target.checked })
+                    updateSettings({
+                      ...settings,
+                      active_app_observation: e.target.checked,
+                    })
                   }
                   className="accent-black"
                 />
@@ -490,7 +593,10 @@ export const SettingsModal: React.FC = () => {
                   type="checkbox"
                   checked={settings.memory_enabled}
                   onChange={(e) =>
-                    updateSettings({ ...settings, memory_enabled: e.target.checked })
+                    updateSettings({
+                      ...settings,
+                      memory_enabled: e.target.checked,
+                    })
                   }
                   className="accent-black"
                 />
@@ -502,7 +608,10 @@ export const SettingsModal: React.FC = () => {
                   type="checkbox"
                   checked={settings.save_transcripts}
                   onChange={(e) =>
-                    updateSettings({ ...settings, save_transcripts: e.target.checked })
+                    updateSettings({
+                      ...settings,
+                      save_transcripts: e.target.checked,
+                    })
                   }
                   className="accent-black"
                 />
@@ -511,8 +620,14 @@ export const SettingsModal: React.FC = () => {
 
               <div className="p-3 bg-gray-50 border border-gray-300 rounded text-[11px] text-gray-700 space-y-1">
                 <p className="font-bold">Zero Cloud Data Retention Promise:</p>
-                <p>- Raw microphone audio is streamed only during active conversation.</p>
-                <p>- Screen contents, OCR, keystrokes, and files are never collected.</p>
+                <p>
+                  - Raw microphone audio is streamed only during active
+                  conversation.
+                </p>
+                <p>
+                  - Screen contents, OCR, keystrokes, and files are never
+                  collected.
+                </p>
               </div>
             </div>
           )}
@@ -521,7 +636,9 @@ export const SettingsModal: React.FC = () => {
           {activeTab === "data" && (
             <div className="space-y-4">
               <div className="flex justify-between items-center border-b border-black pb-1">
-                <h3 className="font-bold text-sm">Stored Memories ({memories.length})</h3>
+                <h3 className="font-bold text-sm">
+                  Stored Memories ({memories.length})
+                </h3>
                 <button
                   onClick={forgetEverything}
                   className="px-2 py-1 bg-red-600 text-white rounded font-bold text-[11px] hover:bg-red-700 flex items-center gap-1"
@@ -544,7 +661,9 @@ export const SettingsModal: React.FC = () => {
                     >
                       <div>
                         <p className="font-bold">{m.fact}</p>
-                        <p className="text-[10px] text-gray-500">{m.created_at}</p>
+                        <p className="text-[10px] text-gray-500">
+                          {m.created_at}
+                        </p>
                       </div>
                       <button
                         onClick={() => deleteMemory(m.id)}
@@ -598,7 +717,9 @@ export const SettingsModal: React.FC = () => {
 
       {/* Footer */}
       <div className="px-4 py-2 bg-[#ded9cf] border-t-2 border-black flex justify-between items-center select-none">
-        <span className="text-[11px] text-gray-600">The Talking Moose AI • Version 0.1.0</span>
+        <span className="text-[11px] text-gray-600">
+          The Talking Moose AI • Version 0.1.0
+        </span>
         <button
           onClick={() => toggleSettings(false)}
           className="px-4 py-1.5 bg-black text-white rounded font-bold hover:bg-gray-800 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5"

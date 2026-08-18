@@ -33,14 +33,12 @@ impl SecretStore {
         *self.google_api_key.write() = None;
     }
 
-    /// Redact any occurrence of the stored key in a log or string
+    /// Redact any occurrence of the stored key in a log or string.
     pub fn redact(&self, input: &str) -> String {
-        if let Some(ref key) = *self.google_api_key.read() {
-            if !key.is_empty() {
-                return input.replace(key, "[REDACTED_API_KEY]");
-            }
-        }
-        input.to_string()
+        self.google_api_key.read().as_deref().map_or_else(
+            || input.to_string(),
+            |key| crate::secrets::redact_secret(input, key),
+        )
     }
 }
 
@@ -64,7 +62,7 @@ mod tests {
         let redacted = store.redact(log_msg);
         assert_eq!(
             redacted,
-            "Error connecting with key [REDACTED_API_KEY]: 403 Forbidden"
+            "Error connecting with key [REDACTED_SECRET]: 403 Forbidden"
         );
 
         store.clear();
