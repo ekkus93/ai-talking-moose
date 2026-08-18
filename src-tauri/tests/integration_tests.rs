@@ -30,7 +30,7 @@ async fn test_app_state_and_database_persistence() {
 
 #[tokio::test]
 async fn test_fake_live_conversation_flow() {
-    let provider = FakeConversationProvider::default();
+    let provider = FakeConversationProvider;
     let (tx, mut rx) = mpsc::channel(32);
 
     let mut session = provider
