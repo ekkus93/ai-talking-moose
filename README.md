@@ -1,5 +1,7 @@
 # Talking Moose AI 🫎
 
+[![CI](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml/badge.svg)](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml)
+
 > A modern reimagining of the classic 1986 Macintosh desktop character, powered by Tauri 2, React, TypeScript, Rust, and Google Gemini Live.
 
 ---
@@ -48,6 +50,8 @@ npm run tauri dev
 npm run build
 cargo build --manifest-path src-tauri/Cargo.toml --release
 ```
+
+GitHub Actions runs the frontend, Rust, and macOS Tauri bundle checks on pushes to `master`, pull requests, tags, and manual runs. Build artifacts are retained only for tagged commits.
 
 ---
 
