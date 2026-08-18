@@ -164,7 +164,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fake_tts() {
-        let tts = FakeSpeechSynthesizer::default();
+        let tts = FakeSpeechSynthesizer;
         let res = tts
             .synthesize(TtsRequest {
                 text: "Hello".to_string(),
@@ -181,7 +181,7 @@ mod tests {
     #[tokio::test]
     async fn test_fake_live_conversation() {
         let (tx, mut rx) = mpsc::channel(16);
-        let provider = FakeConversationProvider::default();
+        let provider = FakeConversationProvider;
         let _session = provider
             .connect(
                 LiveSessionConfig {
