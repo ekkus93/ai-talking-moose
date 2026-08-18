@@ -1,0 +1,81 @@
+export type CharacterState =
+  | "hidden"
+  | "appearing"
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "talking"
+  | "interrupted"
+  | "annoyed"
+  | "sleeping"
+  | "dismissed"
+  | "muted"
+  | "error";
+
+export type MouthShape = "closed" | "small" | "medium" | "wide";
+
+export interface AudioDeviceInfo {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
+export interface AppSettings {
+  launch_at_login: boolean;
+  show_in_menu_bar: boolean;
+  always_on_top: boolean;
+  restore_position: boolean;
+
+  unsolicited_comments: boolean;
+  talkativeness: number;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: number;
+  quiet_hours_end: number;
+  max_comments_per_hour: number;
+  hide_delay_seconds: number;
+
+  input_device: string | null;
+  output_device: string | null;
+  volume: number;
+  tts_voice: string;
+  speaking_rate: number;
+  pitch: number;
+
+  provider: "google" | "fake";
+  live_model: string;
+  text_model: string;
+  tts_model: string;
+
+  microphone_permission_granted: boolean;
+  active_app_observation: boolean;
+  window_title_observation: boolean;
+  memory_enabled: boolean;
+  save_transcripts: boolean;
+
+  dry: number;
+  sarcastic: number;
+  friendly: number;
+  absurd: number;
+  helpful: number;
+  verbosity: number;
+}
+
+export interface MemoryRecord {
+  id: number;
+  fact: string;
+  category: string;
+  created_at: string;
+}
+
+export interface TranscriptRecord {
+  id: number;
+  session_id: string;
+  role: "user" | "moose";
+  text: string;
+  created_at: string;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+}

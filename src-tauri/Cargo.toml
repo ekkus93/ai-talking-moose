@@ -1,0 +1,39 @@
+[package]
+name = "talking-moose-ai"
+version = "0.1.0"
+description = "Talking Moose AI Desktop Character"
+authors = ["Talking Moose Team"]
+edition = "2021"
+
+[lib]
+name = "talking_moose_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.1", features = [] }
+
+[dependencies]
+tauri = { version = "2.1", features = ["tray-icon"] }
+tauri-plugin-opener = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.38", features = ["full"] }
+cpal = "0.15"
+rusqlite = { version = "0.31", features = ["bundled"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio-tungstenite = { version = "0.23", features = ["rustls-tls-native-roots", "connect"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+futures-util = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1.0"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+rand = "0.8"
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3.10"

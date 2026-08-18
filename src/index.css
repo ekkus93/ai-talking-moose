@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+    background-color: #dcd6cd;
+    color: #1a1a1a;
+    font-family: "Courier New", Courier, monospace;
+  }
+}
+
+/* Crisp pixelated image rendering for low-res Moose art */
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
