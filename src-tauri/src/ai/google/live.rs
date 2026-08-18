@@ -98,14 +98,12 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
             self.auth.api_key
         );
 
-        let (ws_stream, _) = connect_async(&url)
-            .await
-            .map_err(|e| {
-                format!(
-                    "WebSocket connection failed: {}",
-                    self.auth.redact(&e.to_string())
-                )
-            })?;
+        let (ws_stream, _) = connect_async(&url).await.map_err(|e| {
+            format!(
+                "WebSocket connection failed: {}",
+                self.auth.redact(&e.to_string())
+            )
+        })?;
 
         let (mut write, mut read) = ws_stream.split();
         let (out_tx, mut out_rx) = mpsc::channel::<Message>(64);

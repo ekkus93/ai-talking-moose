@@ -20,7 +20,11 @@ async fn test_gemini_live_asr() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     assert!(
-        live_api_enabled(std::env::var("TALKING_MOOSE_ALLOW_LIVE_API").ok().as_deref()),
+        live_api_enabled(
+            std::env::var("TALKING_MOOSE_ALLOW_LIVE_API")
+                .ok()
+                .as_deref()
+        ),
         "set TALKING_MOOSE_ALLOW_LIVE_API=1 to opt in to the live Gemini test"
     );
     let api_key = std::env::var("TALKING_MOOSE_GOOGLE_API_KEY")

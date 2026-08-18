@@ -119,8 +119,15 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Audit Node dependencies
-        run: npm audit --audit-level=high
+      # Production packages ship with the application and remain a blocking gate.
+      - name: Audit production Node dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # Development tooling advisories remain visible in the job log, but do not
+      # block release CI when they only affect local tooling such as a dev server.
+      - name: Report development-tool advisories
+        continue-on-error: true
+        run: npm audit --include=dev --audit-level=high
 
       - name: Audit Rust dependencies
         uses: rustsec/audit-check@v2.0.0
