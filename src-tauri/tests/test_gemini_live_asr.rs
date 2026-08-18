@@ -4,19 +4,12 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 #[tokio::test]
+#[ignore = "live Google API test; run explicitly with TALKING_MOOSE_GOOGLE_API_KEY"]
 async fn test_gemini_live_asr() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let db =
-        rusqlite::Connection::open("/home/phil/.local/share/com.talkingmoose.ai/talking_moose.db")
-            .unwrap();
-    let api_key: String = db
-        .query_row(
-            "SELECT value FROM settings WHERE key='google_api_key'",
-            [],
-            |r| r.get(0),
-        )
-        .unwrap();
+    let api_key = std::env::var("TALKING_MOOSE_GOOGLE_API_KEY")
+        .expect("set TALKING_MOOSE_GOOGLE_API_KEY to run the live Gemini test");
 
     let url = format!(
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={}",
