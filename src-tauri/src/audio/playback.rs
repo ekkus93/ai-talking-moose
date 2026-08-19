@@ -414,6 +414,14 @@ impl AudioPlayback {
     pub fn dropped_samples(&self) -> u64 {
         self.dropped_samples.load(Ordering::SeqCst)
     }
+
+    #[cfg(test)]
+    pub(crate) fn seed_buffer_for_tests(&self, samples: &[f32], output_level: f32) {
+        self.buffer.lock().extend(samples.iter().copied());
+        self.is_playing.store(!samples.is_empty(), Ordering::SeqCst);
+        self.output_level
+            .store(output_level.to_bits(), Ordering::Relaxed);
+    }
 }
 
 impl Default for AudioPlayback {

@@ -24,6 +24,20 @@ fn transition_and_emit<R: Runtime>(
     Ok(())
 }
 
+fn show_character<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+) -> Result<(), String> {
+    let current = *state.character_state.read();
+    if matches!(current, CharacterState::Dismissed) {
+        transition_and_emit(state, app, CharacterState::Hidden)?;
+    }
+    if matches!(*state.character_state.read(), CharacterState::Hidden) {
+        transition_and_emit(state, app, CharacterState::Appearing)?;
+    }
+    transition_and_emit(state, app, CharacterState::Idle)
+}
+
 async fn speak_standalone(
     text: &str,
     voice_name: Option<String>,
@@ -80,7 +94,7 @@ pub fn show_moose<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    transition_and_emit(state.inner(), &app, CharacterState::Idle)
+    show_character(state.inner(), &app)
 }
 
 #[tauri::command]
@@ -102,7 +116,8 @@ pub async fn dismiss_moose<R: Runtime>(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
-    transition_and_emit(state.inner(), &app, CharacterState::Dismissed)
+    transition_and_emit(state.inner(), &app, CharacterState::Dismissed)?;
+    transition_and_emit(state.inner(), &app, CharacterState::Hidden)
 }
 
 #[tauri::command]
@@ -199,6 +214,12 @@ pub async fn trigger_ambient_remark<R: Runtime>(
         return Ok(None);
     }
 
+    if matches!(
+        *state.character_state.read(),
+        CharacterState::Hidden | CharacterState::Dismissed
+    ) {
+        show_character(state.inner(), &app)?;
+    }
     transition_and_emit(state.inner(), &app, CharacterState::Thinking)?;
 
     let memory_enabled = state.settings.read().memory_enabled;
@@ -228,10 +249,12 @@ pub async fn trigger_ambient_remark<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::capture::AudioCapture;
     use crate::persistence::sqlite::Database;
     use serde_json::json;
     use std::sync::Arc;
     use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::Listener;
     use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
     use tauri::webview::InvokeRequest;
 
@@ -296,6 +319,174 @@ mod tests {
                 .deserialize::<CharacterState>()
                 .unwrap();
         assert_eq!(reported_state, CharacterState::Hidden);
+    }
+
+    struct InteractionTestFixture {
+        app: tauri::App<tauri::test::MockRuntime>,
+        webview: tauri::WebviewWindow<tauri::test::MockRuntime>,
+        authoritative_state: Arc<parking_lot::RwLock<CharacterState>>,
+        capture: Arc<parking_lot::Mutex<AudioCapture>>,
+        playback: Arc<crate::audio::playback::AudioPlayback>,
+        is_muted: Arc<parking_lot::RwLock<bool>>,
+        behavior_engine: Arc<parking_lot::Mutex<BehaviorEngine>>,
+    }
+
+    fn interaction_test_app(character_state: CharacterState) -> InteractionTestFixture {
+        let mut app_state = AppState::new_for_tests().unwrap();
+        app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
+        let authoritative_state = app_state.character_state.clone();
+        let capture = app_state.audio_capture.clone();
+        let playback = app_state.audio_playback.clone();
+        let is_muted = app_state.is_muted.clone();
+        let behavior_engine = app_state.behavior_engine.clone();
+
+        let (pcm_tx, _pcm_rx) = tokio::sync::mpsc::channel(1);
+        capture.lock().start(None, 16_000, pcm_tx, None).unwrap();
+        playback.seed_buffer_for_tests(&[0.25, -0.25, 0.5], 0.5);
+        let app = mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![
+                dismiss_moose,
+                set_character_state,
+                set_mute,
+                show_moose
+            ])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        get_ipc_response(
+            &webview,
+            ipc_request(
+                "set_character_state",
+                json!({ "newState": character_state }),
+            ),
+        )
+        .expect("interaction setup state should succeed through IPC");
+
+        InteractionTestFixture {
+            app,
+            webview,
+            authoritative_state,
+            capture,
+            playback,
+            is_muted,
+            behavior_engine,
+        }
+    }
+
+    fn capture_state_events(
+        app: &tauri::App<tauri::test::MockRuntime>,
+    ) -> Arc<parking_lot::Mutex<Vec<CharacterState>>> {
+        let events = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let events_for_listener = events.clone();
+        app.listen("moose://state", move |event| {
+            let state: CharacterState = serde_json::from_str(event.payload()).unwrap();
+            events_for_listener.lock().push(state);
+        });
+        events
+    }
+
+    #[test]
+    fn mute_ipc_tears_down_listening_and_talking_and_unmute_stays_passive() {
+        for initial_state in [CharacterState::Listening, CharacterState::Talking] {
+            let fixture = interaction_test_app(initial_state);
+            assert!(fixture.capture.lock().is_active());
+            assert!(fixture.playback.is_playing());
+            assert!(fixture.playback.queue_length() > 0);
+
+            get_ipc_response(
+                &fixture.webview,
+                ipc_request("set_mute", json!({ "muted": true })),
+            )
+            .expect("mute should succeed through IPC");
+
+            assert!(*fixture.is_muted.read());
+            assert_eq!(*fixture.authoritative_state.read(), CharacterState::Muted);
+            assert!(!fixture.capture.lock().is_active());
+            assert!(!fixture.playback.is_playing());
+            assert_eq!(fixture.playback.queue_length(), 0);
+            assert_eq!(fixture.playback.diagnostics().output_level, 0.0);
+            get_ipc_response(
+                &fixture.webview,
+                ipc_request("set_mute", json!({ "muted": false })),
+            )
+            .expect("unmute should succeed through IPC");
+
+            assert!(!*fixture.is_muted.read());
+            assert_eq!(*fixture.authoritative_state.read(), CharacterState::Idle);
+            assert!(!fixture.capture.lock().is_active());
+        }
+    }
+
+    #[test]
+    fn dismiss_ipc_tears_down_listening_and_talking_hides_and_records_cooldown() {
+        for initial_state in [CharacterState::Listening, CharacterState::Talking] {
+            let fixture = interaction_test_app(initial_state);
+            let state_events = capture_state_events(&fixture.app);
+            assert!(fixture.capture.lock().is_active());
+            assert!(fixture.playback.is_playing());
+            assert!(fixture.playback.queue_length() > 0);
+
+            get_ipc_response(&fixture.webview, ipc_request("dismiss_moose", json!({})))
+                .expect("dismiss should succeed through IPC");
+
+            assert_eq!(
+                state_events.lock().as_slice(),
+                &[CharacterState::Dismissed, CharacterState::Hidden]
+            );
+            assert_eq!(*fixture.authoritative_state.read(), CharacterState::Hidden);
+            assert!(!fixture.capture.lock().is_active());
+            assert!(!fixture.playback.is_playing());
+            assert_eq!(fixture.playback.queue_length(), 0);
+            assert_eq!(fixture.playback.diagnostics().output_level, 0.0);
+            let dismissal_time = fixture
+                .behavior_engine
+                .lock()
+                .cooldowns
+                .last_dismissal_time
+                .expect("dismissal should record a cooldown timestamp");
+            assert!(!fixture
+                .behavior_engine
+                .lock()
+                .cooldowns
+                .can_speak_ambient(dismissal_time, 0, 10, false, 22, 8));
+
+            get_ipc_response(&fixture.webview, ipc_request("show_moose", json!({})))
+                .expect("explicit user show should reappear through the state machine");
+            assert_eq!(*fixture.authoritative_state.read(), CharacterState::Idle);
+        }
+    }
+
+    #[test]
+    fn hidden_character_reappears_through_appearing_before_idle() {
+        let app_state = AppState::new_for_tests().unwrap();
+        let authoritative_state = app_state.character_state.clone();
+
+        let app = mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![hide_moose, show_moose])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        get_ipc_response(&webview, ipc_request("hide_moose", json!({})))
+            .expect("hide should succeed through IPC");
+        assert_eq!(*authoritative_state.read(), CharacterState::Hidden);
+
+        let state_events = capture_state_events(&app);
+        get_ipc_response(&webview, ipc_request("show_moose", json!({})))
+            .expect("show should accept a hidden character");
+
+        assert_eq!(
+            state_events.lock().as_slice(),
+            &[CharacterState::Appearing, CharacterState::Idle]
+        );
+        assert_eq!(*authoritative_state.read(), CharacterState::Idle);
     }
 
     #[test]

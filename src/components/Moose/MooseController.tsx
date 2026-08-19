@@ -38,6 +38,10 @@ export const MooseController: React.FC = () => {
     };
   }, [setBlinking]);
 
+  if (characterState === "hidden" || characterState === "dismissed") {
+    return null;
+  }
+
   const handleClick = async () => {
     if (characterState === "talking") {
       // Barge in / interrupt

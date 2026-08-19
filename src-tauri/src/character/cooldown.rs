@@ -1,6 +1,8 @@
 use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
+pub const DISMISSAL_COOLDOWN_SECONDS: i64 = 180;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnnoyanceBudget {
     pub score: f32,
@@ -148,7 +150,7 @@ impl CooldownTracker {
 
         // Check recent dismissal cooldown (at least 3 minutes)
         if let Some(dismissed) = self.last_dismissal_time {
-            if now - dismissed < Duration::seconds(180) {
+            if now - dismissed < Duration::seconds(DISMISSAL_COOLDOWN_SECONDS) {
                 return false;
             }
         }
