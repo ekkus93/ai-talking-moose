@@ -58,6 +58,14 @@ impl AudioResampler {
         samples.iter().map(|&s| s as f32 / 32768.0).collect()
     }
 
+    /// Convert unsigned 16-bit PCM samples to f32 (-1.0 to 1.0).
+    pub fn u16_to_f32(samples: &[u16]) -> Vec<f32> {
+        samples
+            .iter()
+            .map(|&sample| (sample as f32 / 65535.0) * 2.0 - 1.0)
+            .collect()
+    }
+
     /// Convert i16 samples to raw little-endian bytes
     pub fn i16_to_bytes(samples: &[i16]) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(samples.len() * 2);
@@ -93,6 +101,14 @@ mod tests {
         // Downsample 48kHz -> 24kHz (half length)
         let output = AudioResampler::resample_linear(48000, 24000, &input);
         assert_eq!(output.len(), 3);
+    }
+
+    #[test]
+    fn test_u16_to_f32_endpoints_and_midpoint() {
+        let converted = AudioResampler::u16_to_f32(&[u16::MIN, 32768, u16::MAX]);
+        assert!((converted[0] + 1.0).abs() < 0.0001);
+        assert!(converted[1].abs() < 0.0001);
+        assert!((converted[2] - 1.0).abs() < 0.0001);
     }
 
     #[test]
