@@ -93,35 +93,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   setMouthShape: (mouthShape) => set({ mouthShape }),
   setBlinking: (isBlinking) => set({ isBlinking }),
 
+  // Speech bubbles are presentation only. Audio playback and mouth/state changes are
+  // authoritative Rust/Tauri responsibilities and arrive through backend events.
   showSpeechBubble: (text, durationMs = 6000) => {
     const currentTimer = get().speechBubbleTimer;
     if (currentTimer) clearTimeout(currentTimer);
-
-    // Speak aloud with SpeechSynthesis if not muted
-    if (
-      typeof window !== "undefined" &&
-      "speechSynthesis" in window &&
-      !get().isMuted
-    ) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.pitch = 0.78;
-      utterance.rate = 0.92;
-      utterance.onstart = () => {
-        set({ characterState: "talking", mouthShape: "medium" });
-      };
-      utterance.onboundary = (e) => {
-        if (e.name === "word") {
-          const shapes: MouthShape[] = ["small", "medium", "wide"];
-          const randomShape = shapes[Math.floor(Math.random() * shapes.length)];
-          set({ mouthShape: randomShape });
-        }
-      };
-      utterance.onend = () => {
-        set({ characterState: "idle", mouthShape: "closed" });
-      };
-      window.speechSynthesis.speak(utterance);
-    }
 
     const timer = setTimeout(() => {
       set({
@@ -141,15 +117,10 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   hideSpeechBubble: () => {
     const currentTimer = get().speechBubbleTimer;
     if (currentTimer) clearTimeout(currentTimer);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
     set({
       speechBubbleVisible: false,
       speechBubbleText: null,
       speechBubbleTimer: null,
-      mouthShape: "closed",
-      characterState: "idle",
     });
   },
 
@@ -200,9 +171,6 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
   bargeIn: async () => {
     try {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
       await tauriBridge.bargeIn();
       set({ mouthShape: "closed", characterState: "interrupted" });
     } catch (e) {
@@ -212,13 +180,6 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
   toggleMute: async () => {
     const nextMute = !get().isMuted;
-    if (
-      nextMute &&
-      typeof window !== "undefined" &&
-      "speechSynthesis" in window
-    ) {
-      window.speechSynthesis.cancel();
-    }
     await tauriBridge.setMute(nextMute);
     set({ isMuted: nextMute, characterState: nextMute ? "muted" : "idle" });
   },
