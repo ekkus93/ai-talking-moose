@@ -1,4 +1,5 @@
 use crate::audio::levels::LevelMeter;
+#[cfg(target_os = "macos")]
 use crate::audio::permissions::{microphone_permission_state, MicrophonePermissionState};
 use crate::audio::resample::AudioResampler;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
