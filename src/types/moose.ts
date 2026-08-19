@@ -12,6 +12,14 @@ export type CharacterState =
   | "muted"
   | "error";
 
+export type ConversationLifecycle =
+  | "idle"
+  | "connecting"
+  | "listening"
+  | "responding"
+  | "stopping"
+  | "failed";
+
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
 export type AsrMode =
