@@ -279,12 +279,7 @@ impl AudioCapture {
         self.sample_format = None;
         self.channels = None;
 
-        let result = self.start_inner(
-            device_name,
-            target_sample_rate,
-            pcm_sender,
-            level_sender,
-        );
+        let result = self.start_inner(device_name, target_sample_rate, pcm_sender, level_sender);
         if let Err(ref error_value) = result {
             *self.last_error.lock() = Some(error_value.to_string());
         }
@@ -337,9 +332,7 @@ impl AudioCapture {
                         .map(|candidate| candidate == *requested_name)
                         .unwrap_or(false)
                 })
-                .ok_or_else(|| {
-                    AudioCaptureError::RequestedDeviceNotFound(requested_name.clone())
-                })?
+                .ok_or_else(|| AudioCaptureError::RequestedDeviceNotFound(requested_name.clone()))?
         } else {
             host.default_input_device()
                 .ok_or(AudioCaptureError::NoInputDevice)?

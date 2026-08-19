@@ -10,9 +10,9 @@ use crate::character::state::CharacterState;
 use crate::conversation::session::ConversationManager;
 use crate::memory::MemoryManager;
 use crate::persistence::sqlite::Database;
-use crate::secrets::SecretStore;
 #[cfg(test)]
 use crate::secrets::MemorySecretBackend;
+use crate::secrets::SecretStore;
 use crate::tools::builtin::BuiltinTools;
 use crate::tools::router::ToolRouter;
 use parking_lot::{Mutex, RwLock};

@@ -946,12 +946,7 @@ mod tests {
         *manager.lifecycle.write() = ConversationLifecycle::Listening;
 
         let cleaned = manager
-            .shutdown_if_generation_current(
-                7,
-                capture,
-                playback,
-                ConversationLifecycle::Idle,
-            )
+            .shutdown_if_generation_current(7, capture, playback, ConversationLifecycle::Idle)
             .await;
 
         assert!(!cleaned);
@@ -988,17 +983,19 @@ mod tests {
         assert!(manager.should_suppress_interrupted_response_event(
             &LiveServerEvent::ModelTranscript("stale transcript".to_string())
         ));
-        assert!(manager.should_suppress_interrupted_response_event(&LiveServerEvent::AudioData(
-            vec![1, 2, 3]
-        )));
-        assert!(manager.should_suppress_interrupted_response_event(
-            &LiveServerEvent::TurnComplete
-        ));
-        assert!(manager.should_suppress_interrupted_response_event(&LiveServerEvent::ToolCall {
-            id: "stale-tool".to_string(),
-            name: "remember".to_string(),
-            args: serde_json::json!({"fact": "stale"}),
-        }));
+        assert!(
+            manager.should_suppress_interrupted_response_event(&LiveServerEvent::AudioData(vec![
+                1, 2, 3
+            ]))
+        );
+        assert!(manager.should_suppress_interrupted_response_event(&LiveServerEvent::TurnComplete));
+        assert!(
+            manager.should_suppress_interrupted_response_event(&LiveServerEvent::ToolCall {
+                id: "stale-tool".to_string(),
+                name: "remember".to_string(),
+                args: serde_json::json!({"fact": "stale"}),
+            })
+        );
 
         assert!(!manager.should_suppress_interrupted_response_event(
             &LiveServerEvent::UserTranscript("new user turn".to_string())
