@@ -3,14 +3,19 @@ import {
   AppSettings,
   AudioDeviceInfo,
   CharacterState,
+  ConversationLifecycle,
   MemoryRecord,
   MouthShape,
   TranscriptRecord,
 } from "../types/moose";
 import { tauriBridge } from "../lib/tauriBridge";
 
+const lifecycleIsActive = (lifecycle: ConversationLifecycle) =>
+  lifecycle !== "idle" && lifecycle !== "failed";
+
 interface MooseStoreState {
   characterState: CharacterState;
+  conversationLifecycle: ConversationLifecycle;
   mouthShape: MouthShape;
   isBlinking: boolean;
   speechBubbleText: string | null;
@@ -33,7 +38,6 @@ interface MooseStoreState {
   settings: AppSettings | null;
   hasApiKey: boolean;
 
-  // Actions
   setCharacterState: (state: CharacterState) => void;
   setMouthShape: (mouth: MouthShape) => void;
   setBlinking: (blinking: boolean) => void;
@@ -67,6 +71,7 @@ interface MooseStoreState {
 
 export const useMooseStore = create<MooseStoreState>((set, get) => ({
   characterState: "idle",
+  conversationLifecycle: "idle",
   mouthShape: "closed",
   isBlinking: false,
   speechBubbleText: null,
@@ -147,23 +152,17 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
   startConversation: async () => {
     try {
-      set({ isConversationActive: true, characterState: "listening" });
+      // Rust owns Connecting/Listening and emits both lifecycle and character state.
       await tauriBridge.startConversation();
     } catch (e) {
       console.error("Failed to start conversation:", e);
-      set({ isConversationActive: false, characterState: "error" });
     }
   },
 
   stopConversation: async () => {
     try {
+      // Rust owns teardown and the final lifecycle/character state.
       await tauriBridge.stopConversation();
-      set({
-        isConversationActive: false,
-        characterState: "idle",
-        inputLevel: 0,
-        outputLevel: 0,
-      });
     } catch (e) {
       console.error("Failed to stop conversation:", e);
     }
@@ -171,8 +170,8 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
   bargeIn: async () => {
     try {
+      // Mouth and character transitions come from the backend playback/lifecycle path.
       await tauriBridge.bargeIn();
-      set({ mouthShape: "closed", characterState: "interrupted" });
     } catch (e) {
       console.error("Failed to barge in:", e);
     }
@@ -181,7 +180,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   toggleMute: async () => {
     const nextMute = !get().isMuted;
     await tauriBridge.setMute(nextMute);
-    set({ isMuted: nextMute, characterState: nextMute ? "muted" : "idle" });
+    set({ isMuted: nextMute });
   },
 
   triggerCanned: async (type: string) => {
@@ -199,12 +198,23 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   },
 
   loadSettings: async () => {
-    const settings = await tauriBridge.getSettings();
-    const isMuted = await tauriBridge.isMuted();
-    const hasKey = await tauriBridge.hasGoogleApiKey();
-    set({ settings, isMuted, hasApiKey: hasKey });
+    const [settings, isMuted, hasKey, conversationLifecycle, characterState] =
+      await Promise.all([
+        tauriBridge.getSettings(),
+        tauriBridge.isMuted(),
+        tauriBridge.hasGoogleApiKey(),
+        tauriBridge.getConversationLifecycle(),
+        tauriBridge.getCharacterState(),
+      ]);
+    set({
+      settings,
+      isMuted,
+      hasApiKey: hasKey,
+      conversationLifecycle,
+      characterState,
+      isConversationActive: lifecycleIsActive(conversationLifecycle),
+    });
 
-    // Open onboarding if no API key is configured yet
     if (!hasKey) {
       set({ isOnboardingOpen: true });
     }
@@ -252,6 +262,17 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
         set({ characterState: state });
       },
     );
+
+    const unlistenLifecycle =
+      await tauriBridge.listenEvent<ConversationLifecycle>(
+        "moose://conversation/lifecycle",
+        (conversationLifecycle) => {
+          set({
+            conversationLifecycle,
+            isConversationActive: lifecycleIsActive(conversationLifecycle),
+          });
+        },
+      );
 
     const unlistenMouth = await tauriBridge.listenEvent<MouthShape>(
       "moose://mouth",
@@ -311,6 +332,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
     return () => {
       unlistenState();
+      unlistenLifecycle();
       unlistenMouth();
       unlistenBubble();
       unlistenUserInput();
