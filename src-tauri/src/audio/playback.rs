@@ -63,8 +63,10 @@ impl PlaybackCallbackState {
             mono.push(buffer.pop_front().unwrap_or(0.0));
         }
         let has_non_silent_sample = mono.iter().any(|sample| sample.abs() > 0.001);
-        self.is_playing
-            .store(has_non_silent_sample || !buffer.is_empty(), Ordering::SeqCst);
+        self.is_playing.store(
+            has_non_silent_sample || !buffer.is_empty(),
+            Ordering::SeqCst,
+        );
         mono
     }
 
