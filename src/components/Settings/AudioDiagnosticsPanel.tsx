@@ -9,10 +9,12 @@ const valueOrDash = (value: string | number | null) =>
 
 const percentage = (value: number) => `${Math.round(value * 100)}%`;
 
-const DiagnosticRow: React.FC<{ label: string; value: React.ReactNode }> = ({
-  label,
-  value,
-}) => (
+interface DiagnosticRowProps {
+  label: string;
+  value: React.ReactNode;
+}
+
+const DiagnosticRow: React.FC<DiagnosticRowProps> = ({ label, value }) => (
   <div className="flex justify-between gap-4 border-b border-gray-200 py-1 last:border-b-0">
     <span className="text-gray-600">{label}</span>
     <span className="font-bold text-right break-all">{value}</span>
@@ -102,7 +104,10 @@ export const AudioDiagnosticsPanel: React.FC = () => {
       </div>
 
       {statusMessage && (
-        <p role="status" className="border border-gray-300 bg-gray-50 p-2 rounded text-[11px]">
+        <p
+          role="status"
+          className="border border-gray-300 bg-gray-50 p-2 rounded text-[11px]"
+        >
           {statusMessage}
         </p>
       )}
@@ -204,8 +209,9 @@ export const AudioDiagnosticsPanel: React.FC = () => {
       )}
 
       <p className="text-[10px] text-gray-500">
-        Microphone diagnostics remain local and do not contact Google. Audio tests
-        are disabled by the backend while a conversation owns the audio graph.
+        Microphone diagnostics remain local and do not contact Google. Audio
+        tests are disabled by the backend while a conversation owns the audio
+        graph.
       </p>
     </div>
   );
