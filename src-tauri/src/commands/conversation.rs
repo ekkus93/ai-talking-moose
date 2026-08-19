@@ -2,7 +2,9 @@ use crate::ai::types::{LiveSessionConfig, TtsRequest};
 use crate::app::state::AppState;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
-use crate::conversation::session::{ConversationCallbacks, ConversationLifecycle};
+use crate::conversation::session::{
+    ConversationCallbacks, ConversationLifecycle, ConversationStartRequest,
+};
 use crate::persistence::{Database, MemoryRecord, TranscriptRecord};
 use tauri::{Emitter, State};
 use tracing::{info, warn};
@@ -86,51 +88,48 @@ pub async fn start_conversation(
     let db_ref = state.db.clone();
     let save_transcripts = settings.save_transcripts;
 
-    let session_id = state
-        .conversation_mgr
-        .start_session(
-            provider,
-            config,
-            state.audio_capture.clone(),
-            settings.input_device.clone(),
-            state.audio_playback.clone(),
-            settings.output_device.clone(),
-            state.is_muted.clone(),
-            tool_router,
-            ConversationCallbacks::new(
-                move |new_state: CharacterState| {
-                    if let Err(error_value) =
-                        transition_character_state(&character_state, new_state)
-                    {
-                        warn!(error = %error_value, ?new_state, "Rejected conversation character transition");
-                        return;
-                    }
-                    let _ = app_state.emit("moose://state", new_state);
-                },
-                move |lifecycle: ConversationLifecycle| {
-                    let _ = app_lifecycle.emit("moose://conversation/lifecycle", lifecycle);
-                },
-                move |session_id: String, role: String, text: String| {
-                    let _ = app_transcript.emit(&format!("moose://transcript/{role}"), &text);
-                    if let Err(error_value) = persist_transcript_if_enabled(
-                        db_ref.as_ref(),
-                        save_transcripts,
-                        &session_id,
-                        &role,
-                        &text,
-                    ) {
-                        warn!(error = %error_value, "Failed to persist retained transcript");
-                    }
-                },
-                move |speech_text: String| {
-                    let _ = app_bubble.emit("moose://speech-bubble", &speech_text);
-                },
-                move |level: f32| {
-                    let _ = app_level.emit("moose://audio/input-level", level);
-                },
-            ),
-        )
-        .await?;
+    let request = ConversationStartRequest {
+        provider,
+        config,
+        capture: state.audio_capture.clone(),
+        input_device: settings.input_device.clone(),
+        playback: state.audio_playback.clone(),
+        output_device: settings.output_device.clone(),
+        muted: state.is_muted.clone(),
+        tool_router,
+        callbacks: ConversationCallbacks::new(
+            move |new_state: CharacterState| {
+                if let Err(error_value) = transition_character_state(&character_state, new_state) {
+                    warn!(error = %error_value, ?new_state, "Rejected conversation character transition");
+                    return;
+                }
+                let _ = app_state.emit("moose://state", new_state);
+            },
+            move |lifecycle: ConversationLifecycle| {
+                let _ = app_lifecycle.emit("moose://conversation/lifecycle", lifecycle);
+            },
+            move |session_id: String, role: String, text: String| {
+                let _ = app_transcript.emit(&format!("moose://transcript/{role}"), &text);
+                if let Err(error_value) = persist_transcript_if_enabled(
+                    db_ref.as_ref(),
+                    save_transcripts,
+                    &session_id,
+                    &role,
+                    &text,
+                ) {
+                    warn!(error = %error_value, "Failed to persist retained transcript");
+                }
+            },
+            move |speech_text: String| {
+                let _ = app_bubble.emit("moose://speech-bubble", &speech_text);
+            },
+            move |level: f32| {
+                let _ = app_level.emit("moose://audio/input-level", level);
+            },
+        ),
+    };
+
+    let session_id = state.conversation_mgr.start_session(request).await?;
 
     info!(session_id = %session_id, "Conversation session started");
     Ok(session_id)
