@@ -1,10 +1,13 @@
 import {
   AppSettings,
+  AudioDeviceInfo,
+  AudioDiagnostics,
   CharacterState,
   ConnectionTestResult,
   MemoryRecord,
+  MicrophonePermissionState,
+  MicrophoneTestResult,
   TranscriptRecord,
-  AudioDeviceInfo,
 } from "../types/moose";
 
 // Check if running inside native Tauri runtime
@@ -17,6 +20,34 @@ export const isTauri = () => {
     )
   );
 };
+
+const mockAudioDiagnostics = (): AudioDiagnostics => ({
+  configured_input_device: null,
+  configured_output_device: null,
+  microphone_permission: "unavailable",
+  capture: {
+    selected_device: null,
+    sample_rate_hz: null,
+    sample_format: null,
+    channels: null,
+    active: false,
+    input_level: 0,
+    dropped_chunks: 0,
+    last_error: null,
+  },
+  playback: {
+    selected_device: null,
+    sample_rate_hz: null,
+    sample_format: null,
+    channels: null,
+    playing: false,
+    output_level: 0,
+    queue_depth_samples: 0,
+    queue_limit_samples: 0,
+    dropped_samples: 0,
+    last_error: null,
+  },
+});
 
 export const tauriBridge = {
   async resizeWindow(width: number, height: number): Promise<void> {
@@ -57,7 +88,7 @@ export const tauriBridge = {
         live_model: "gemini-2.5-flash-native-audio-latest",
         text_model: "gemini-2.5-flash",
         tts_model: "en-US-Standard-B",
-        microphone_permission_granted: true,
+        microphone_permission_granted: false,
         active_app_observation: false,
         window_title_observation: false,
         memory_enabled: false,
@@ -107,25 +138,41 @@ export const tauriBridge = {
   },
 
   async listAudioDevices(): Promise<[AudioDeviceInfo[], AudioDeviceInfo[]]> {
-    if (!isTauri()) {
-      const inputs: AudioDeviceInfo[] = [
-        {
-          id: "mock_mic",
-          name: "Default Internal Microphone",
-          is_default: true,
-        },
-      ];
-      const outputs: AudioDeviceInfo[] = [
-        {
-          id: "mock_speakers",
-          name: "Default Internal Speakers",
-          is_default: true,
-        },
-      ];
-      return [inputs, outputs];
-    }
+    if (!isTauri()) return [[], []];
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<[AudioDeviceInfo[], AudioDeviceInfo[]]>("list_audio_devices");
+  },
+
+  async getMicrophonePermission(): Promise<MicrophonePermissionState> {
+    if (!isTauri()) return "unavailable";
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<MicrophonePermissionState>("get_microphone_permission");
+  },
+
+  async requestMicrophoneAccess(): Promise<MicrophonePermissionState> {
+    if (!isTauri()) return "unavailable";
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<MicrophonePermissionState>("request_microphone_access");
+  },
+
+  async getAudioDiagnostics(): Promise<AudioDiagnostics> {
+    if (!isTauri()) return mockAudioDiagnostics();
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<AudioDiagnostics>("get_audio_diagnostics");
+  },
+
+  async testMicrophone(): Promise<MicrophoneTestResult> {
+    if (!isTauri()) {
+      return { peak_level: 0, diagnostics: mockAudioDiagnostics() };
+    }
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<MicrophoneTestResult>("test_microphone");
+  },
+
+  async testAudioOutput(): Promise<AudioDiagnostics> {
+    if (!isTauri()) return mockAudioDiagnostics();
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<AudioDiagnostics>("test_audio_output");
   },
 
   async getCharacterState(): Promise<CharacterState> {
