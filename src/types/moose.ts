@@ -19,10 +19,53 @@ export type AsrMode =
   | "moonshine_small_streaming"
   | "gemini_live_audio";
 
+export type MicrophonePermissionState =
+  | "not_requested"
+  | "granted"
+  | "denied"
+  | "unavailable";
+
 export interface AudioDeviceInfo {
   id: string;
   name: string;
   is_default: boolean;
+}
+
+export interface AudioCaptureDiagnostics {
+  selected_device: string | null;
+  sample_rate_hz: number | null;
+  sample_format: string | null;
+  channels: number | null;
+  active: boolean;
+  input_level: number;
+  dropped_chunks: number;
+  last_error: string | null;
+}
+
+export interface AudioPlaybackDiagnostics {
+  selected_device: string | null;
+  sample_rate_hz: number | null;
+  sample_format: string | null;
+  channels: number | null;
+  playing: boolean;
+  output_level: number;
+  queue_depth_samples: number;
+  queue_limit_samples: number;
+  dropped_samples: number;
+  last_error: string | null;
+}
+
+export interface AudioDiagnostics {
+  configured_input_device: string | null;
+  configured_output_device: string | null;
+  microphone_permission: MicrophonePermissionState;
+  capture: AudioCaptureDiagnostics;
+  playback: AudioPlaybackDiagnostics;
+}
+
+export interface MicrophoneTestResult {
+  peak_level: number;
+  diagnostics: AudioDiagnostics;
 }
 
 export interface AppSettings {
@@ -54,6 +97,8 @@ export interface AppSettings {
   text_model: string;
   tts_model: string;
 
+  // Legacy compatibility cache. Runtime permission state is authoritative and is
+  // queried through getMicrophonePermission/getAudioDiagnostics.
   microphone_permission_granted: boolean;
   active_app_observation: boolean;
   window_title_observation: boolean;
