@@ -131,13 +131,15 @@ impl ConversationManager {
         target: ConversationLifecycle,
         callback: Option<&Arc<dyn Fn(ConversationLifecycle) + Send + Sync>>,
     ) {
-        let previous = *lifecycle.read();
+        let mut current = lifecycle.write();
+        let previous = *current;
         if !previous.can_transition_to(target) {
             warn!(?previous, ?target, "Rejected invalid conversation lifecycle transition");
             return;
         }
 
-        *lifecycle.write() = target;
+        *current = target;
+        drop(current);
         if let Some(callback) = callback {
             callback(target);
         }
@@ -314,14 +316,16 @@ impl ConversationManager {
                 let send_failed = {
                     let mut session_lock = manager_for_pcm.live_session.lock().await;
                     match session_lock.as_mut() {
-                        Some(live_session) => {
-                            if let Err(error_value) = live_session.send_audio_chunk(&chunk).await {
-                                warn!(error = %error_value, "Failed to stream microphone audio frame");
+                        Some(live_session) => match live_session.send_audio_chunk(&chunk).await {
+                            Ok(()) => false,
+                            Err(error_value) => {
+                                warn!(
+                                    error = %error_value,
+                                    "Failed to stream microphone audio frame"
+                                );
                                 true
-                            } else {
-                                false
                             }
-                        }
+                        },
                         None => true,
                     }
                 };
@@ -512,7 +516,6 @@ impl ConversationManager {
 
         playback.flush();
         self.output_suppressed.store(true, Ordering::SeqCst);
-        Self::set_lifecycle(&self.lifecycle, ConversationLifecycle::Listening, None);
         let mut session_lock = self.live_session.lock().await;
         if let Some(ref mut session) = *session_lock {
             session.interrupt().await?;
@@ -620,9 +623,11 @@ mod tests {
     fn lifecycle_transition_table_rejects_invalid_jumps() {
         assert!(ConversationLifecycle::Idle.can_transition_to(ConversationLifecycle::Connecting));
         assert!(ConversationLifecycle::Connecting.can_transition_to(ConversationLifecycle::Failed));
-        assert!(ConversationLifecycle::Responding.can_transition_to(ConversationLifecycle::Listening));
+        assert!(ConversationLifecycle::Responding
+            .can_transition_to(ConversationLifecycle::Listening));
         assert!(!ConversationLifecycle::Idle.can_transition_to(ConversationLifecycle::Responding));
-        assert!(!ConversationLifecycle::Failed.can_transition_to(ConversationLifecycle::Responding));
+        assert!(!ConversationLifecycle::Failed
+            .can_transition_to(ConversationLifecycle::Responding));
     }
 
     #[tokio::test]
@@ -703,7 +708,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn barge_in_suppresses_stale_output_until_provider_boundary() {
+    async fn barge_in_suppresses_stale_output_until_next_user_turn_boundary() {
         let manager = ConversationManager::new();
         let playback = Arc::new(AudioPlayback::new());
         let close_count = Arc::new(AtomicUsize::new(0));
@@ -719,6 +724,6 @@ mod tests {
 
         assert!(manager.output_suppressed.load(Ordering::SeqCst));
         assert_eq!(interrupt_count.load(AtomicOrdering::SeqCst), 1);
-        assert_eq!(manager.lifecycle(), ConversationLifecycle::Listening);
+        assert_eq!(manager.lifecycle(), ConversationLifecycle::Responding);
     }
 }
