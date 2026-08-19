@@ -1,4 +1,4 @@
-use crate::ai::types::TextRequest;
+use crate::ai::types::{TextRequest, TtsRequest};
 use crate::app::state::AppState;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
@@ -12,6 +12,43 @@ fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<St
     } else {
         Vec::new()
     }
+}
+
+async fn speak_standalone(
+    text: &str,
+    voice_name: Option<String>,
+    state: &AppState,
+) -> Result<(), String> {
+    let (configured_voice, rate, pitch, output_device) = {
+        let settings = state.settings.read();
+        (
+            settings.tts_voice.clone(),
+            settings.speaking_rate,
+            settings.pitch,
+            settings.output_device.clone(),
+        )
+    };
+    let synthesizer = state.get_speech_synthesizer();
+    let report = crate::audio::synthesize_and_queue(
+        synthesizer.as_ref(),
+        state.audio_playback.as_ref(),
+        TtsRequest {
+            text: text.to_string(),
+            voice_name: Some(voice_name.unwrap_or(configured_voice)),
+            speaking_rate: Some(rate),
+            pitch: Some(pitch),
+        },
+        output_device,
+    )
+    .await?;
+
+    if report.dropped_samples > 0 {
+        return Err(format!(
+            "audio playback queue overflowed and dropped {} samples",
+            report.dropped_samples
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -95,30 +132,7 @@ pub async fn audition_voice(
     let _ = app.emit("moose://state", CharacterState::Talking);
     let _ = app.emit("moose://speech-bubble", sample);
 
-    let (rate, pitch) = {
-        let s = state.settings.read();
-        (s.speaking_rate, s.pitch)
-    };
-
-    let tts = state.get_speech_synthesizer();
-    let audio_res = tts
-        .synthesize(crate::ai::types::TtsRequest {
-            text: sample.to_string(),
-            voice_name: Some(voice_name.clone()),
-            speaking_rate: Some(rate),
-            pitch: Some(pitch),
-        })
-        .await;
-
-    if let Ok(audio) = audio_res {
-        state
-            .audio_playback
-            .enqueue_pcm_bytes(&audio.pcm_bytes, audio.sample_rate, 24000);
-        crate::audio::play_pcm_audio(&audio.pcm_bytes, audio.sample_rate);
-    } else {
-        crate::audio::play_system_speech(sample);
-    }
-
+    speak_standalone(sample, Some(voice_name), state.inner()).await?;
     Ok(sample.to_string())
 }
 
@@ -143,8 +157,7 @@ pub async fn trigger_canned_reaction(
     let _ = app.emit("moose://state", CharacterState::Talking);
     let _ = app.emit("moose://speech-bubble", text);
 
-    crate::audio::play_system_speech(text);
-
+    speak_standalone(text, None, state.inner()).await?;
     Ok(text.to_string())
 }
 
@@ -158,7 +171,6 @@ pub async fn trigger_ambient_remark(
         return Ok(None);
     }
 
-    // Check behavior decision
     let should_speak = {
         let mut engine = state.behavior_engine.lock();
         engine
@@ -197,8 +209,7 @@ pub async fn trigger_ambient_remark(
     let _ = app.emit("moose://state", CharacterState::Talking);
     let _ = app.emit("moose://speech-bubble", &text);
 
-    crate::audio::play_system_speech(&text);
-
+    speak_standalone(&text, None, state.inner()).await?;
     Ok(Some(text))
 }
 
