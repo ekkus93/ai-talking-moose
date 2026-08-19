@@ -256,11 +256,8 @@ impl AudioPlayback {
             .output_sample_rate_hz()
             .ok_or(AudioPlaybackError::NotStarted)?;
         let f32_samples = AudioResampler::i16_to_f32(samples);
-        let resampled = AudioResampler::resample_linear(
-            source_sample_rate,
-            target_sample_rate,
-            &f32_samples,
-        );
+        let resampled =
+            AudioResampler::resample_linear(source_sample_rate, target_sample_rate, &f32_samples);
         let max_samples = target_sample_rate as usize * MAX_QUEUED_PLAYBACK_SECONDS;
         let mut buffer = self.buffer.lock();
         let available = max_samples.saturating_sub(buffer.len());
