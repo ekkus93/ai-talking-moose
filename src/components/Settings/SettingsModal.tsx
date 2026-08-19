@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
+import { AudioDiagnosticsPanel } from "./AudioDiagnosticsPanel";
+import { MicrophonePermissionCard } from "./MicrophonePermissionCard";
 import {
   Sliders,
   Volume2,
@@ -468,8 +470,8 @@ export const SettingsModal: React.FC = () => {
                   </button>
                 </div>
                 <p className="text-[10px] text-gray-500">
-                  Your key is stored securely in native Rust memory / encrypted
-                  settings and never exposed to logs.
+                  Your key is stored in the operating system secure credential
+                  store and is never returned to this settings screen.
                 </p>
               </div>
 
@@ -573,6 +575,9 @@ export const SettingsModal: React.FC = () => {
               <h3 className="font-bold text-sm border-b border-black pb-1">
                 Privacy & Permissions
               </h3>
+
+              <MicrophonePermissionCard />
+
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -619,10 +624,13 @@ export const SettingsModal: React.FC = () => {
               </label>
 
               <div className="p-3 bg-gray-50 border border-gray-300 rounded text-[11px] text-gray-700 space-y-1">
-                <p className="font-bold">Zero Cloud Data Retention Promise:</p>
+                <p className="font-bold">Microphone privacy:</p>
                 <p>
-                  - Raw microphone audio is streamed only during active
-                  conversation.
+                  - Moonshine local ASR keeps microphone audio on this computer.
+                </p>
+                <p>
+                  - Gemini Live cloud ASR sends microphone audio to Google only
+                  during an active conversation.
                 </p>
                 <p>
                   - Screen contents, OCR, keystrokes, and files are never
@@ -680,36 +688,45 @@ export const SettingsModal: React.FC = () => {
 
           {/* Diagnostics Tab */}
           {activeTab === "diagnostics" && (
-            <div className="space-y-4">
-              <h3 className="font-bold text-sm border-b border-black pb-1">
-                Offline Canned Utterance Tests
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => triggerCanned("greeting")}
-                  className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
-                >
-                  Test Greeting
-                </button>
-                <button
-                  onClick={() => triggerCanned("click")}
-                  className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
-                >
-                  Test Click Remark
-                </button>
-                <button
-                  onClick={() => triggerCanned("dismiss")}
-                  className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
-                >
-                  Test Dismiss Remark
-                </button>
-                <button
-                  onClick={() => triggerCanned("error")}
-                  className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
-                >
-                  Test Error Remark
-                </button>
-              </div>
+            <div className="space-y-6">
+              <section className="space-y-3">
+                <h3 className="font-bold text-sm border-b border-black pb-1">
+                  Audio Diagnostics
+                </h3>
+                <AudioDiagnosticsPanel />
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="font-bold text-sm border-b border-black pb-1">
+                  Offline Canned Utterance Tests
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => triggerCanned("greeting")}
+                    className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
+                  >
+                    Test Greeting
+                  </button>
+                  <button
+                    onClick={() => triggerCanned("click")}
+                    className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
+                  >
+                    Test Click Remark
+                  </button>
+                  <button
+                    onClick={() => triggerCanned("dismiss")}
+                    className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
+                  >
+                    Test Dismiss Remark
+                  </button>
+                  <button
+                    onClick={() => triggerCanned("error")}
+                    className="p-2 bg-white border border-black rounded font-bold hover:bg-gray-100"
+                  >
+                    Test Error Remark
+                  </button>
+                </div>
+              </section>
             </div>
           )}
         </div>
