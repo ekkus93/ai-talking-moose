@@ -3,10 +3,26 @@ use crate::app::state::AppState;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::CharacterState;
 use crate::conversation::session::ConversationCallbacks;
-use crate::persistence::{MemoryRecord, TranscriptRecord};
+use crate::persistence::{Database, MemoryRecord, TranscriptRecord};
 use tauri::{Emitter, State};
 use tokio::sync::mpsc;
 use tracing::info;
+
+fn persist_transcript_if_enabled(
+    db: &Database,
+    enabled: bool,
+    session_id: &str,
+    role: &str,
+    text: &str,
+) -> Result<(), String> {
+    if !enabled {
+        return Ok(());
+    }
+
+    db.add_transcript(session_id, role, text)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
 
 #[tauri::command]
 pub async fn start_conversation(
@@ -62,9 +78,13 @@ pub async fn start_conversation(
                 },
                 move |role: String, text: String| {
                     let _ = app_handle_2.emit(&format!("moose://transcript/{}", role), &text);
-                    if save_transcripts {
-                        let _ = db_ref.add_transcript("active_session", &role, &text);
-                    }
+                    let _ = persist_transcript_if_enabled(
+                        db_ref.as_ref(),
+                        save_transcripts,
+                        "active_session",
+                        &role,
+                        &text,
+                    );
                 },
                 move |speech_text: String| {
                     let _ = app_handle_3.emit("moose://speech-bubble", &speech_text);
@@ -164,11 +184,13 @@ pub async fn send_text_message(
 
     // 1. Emit user transcript and persist only when retention is enabled.
     let _ = app.emit("moose://transcript/user", &msg_trimmed);
-    if settings.save_transcripts {
-        let _ = state
-            .db
-            .add_transcript("debug_terminal", "user", &msg_trimmed);
-    }
+    let _ = persist_transcript_if_enabled(
+        state.db.as_ref(),
+        settings.save_transcripts,
+        "debug_terminal",
+        "user",
+        &msg_trimmed,
+    );
 
     // 2. Set character state to thinking
     *state.character_state.write() = CharacterState::Thinking;
@@ -206,11 +228,13 @@ pub async fn send_text_message(
     let _ = app.emit("moose://state", CharacterState::Talking);
     let _ = app.emit("moose://transcript/moose", &reply);
     let _ = app.emit("moose://speech-bubble", &reply);
-    if settings.save_transcripts {
-        let _ = state
-            .db
-            .add_transcript("debug_terminal", "moose", &reply);
-    }
+    let _ = persist_transcript_if_enabled(
+        state.db.as_ref(),
+        settings.save_transcripts,
+        "debug_terminal",
+        "moose",
+        &reply,
+    );
 
     // 5. Play speech output via system speech
     if !*state.is_muted.read() {
@@ -218,4 +242,30 @@ pub async fn send_text_message(
     }
 
     Ok(reply)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transcript_retention_off_writes_no_records() {
+        let db = Database::new_in_memory().unwrap();
+
+        persist_transcript_if_enabled(&db, false, "session", "user", "private input").unwrap();
+        persist_transcript_if_enabled(&db, false, "session", "moose", "private output").unwrap();
+
+        assert!(db.get_transcripts(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn transcript_retention_on_writes_records() {
+        let db = Database::new_in_memory().unwrap();
+
+        persist_transcript_if_enabled(&db, true, "session", "user", "retained input").unwrap();
+        persist_transcript_if_enabled(&db, true, "session", "moose", "retained output").unwrap();
+
+        let transcripts = db.get_transcripts(10).unwrap();
+        assert_eq!(transcripts.len(), 2);
+    }
 }
