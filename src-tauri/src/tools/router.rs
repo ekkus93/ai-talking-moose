@@ -72,6 +72,16 @@ mod tests {
             .await
             .unwrap();
         assert!(active_app.get("error").is_some());
+
+        // Permission changes are read from the shared settings object at dispatch
+        // time. Turning the permission back off must take effect immediately.
+        settings.write().active_app_observation = true;
+        settings.write().active_app_observation = false;
+        let denied_again = router
+            .dispatch("get_active_application", &json!({}))
+            .await
+            .unwrap();
+        assert!(denied_again.get("error").is_some());
         assert!(router
             .dispatch(
                 "remember_fact",

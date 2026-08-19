@@ -4,6 +4,7 @@ use crate::ai::traits::TextModel;
 use crate::ai::types::TextRequest;
 use crate::app::state::{AppSettings, AppState};
 use crate::audio::devices::{AudioDeviceInfo, AudioDeviceManager};
+use crate::character::behavior::BehaviorEngine;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -11,6 +12,10 @@ use tauri::State;
 pub struct ConnectionTestResult {
     pub success: bool,
     pub message: String,
+}
+
+fn synchronize_behavior_engine(settings: &AppSettings, engine: &mut BehaviorEngine) {
+    settings.apply_to_character_config(&mut engine.config);
 }
 
 #[tauri::command]
@@ -25,6 +30,10 @@ pub fn update_settings(
 ) -> Result<(), String> {
     new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
     *state.settings.write() = new_settings.clone();
+    {
+        let mut engine = state.behavior_engine.lock();
+        synchronize_behavior_engine(&new_settings, &mut engine);
+    }
 
     // Persist to SQLite
     if let Ok(json_str) = serde_json::to_string(&new_settings) {
@@ -94,4 +103,34 @@ pub fn list_audio_devices() -> Result<(Vec<AudioDeviceInfo>, Vec<AudioDeviceInfo
     let inputs = AudioDeviceManager::list_input_devices();
     let outputs = AudioDeviceManager::list_output_devices();
     Ok((inputs, outputs))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::character::personality::CharacterConfig;
+
+    #[test]
+    fn settings_updates_change_behavior_engine_without_restart() {
+        let mut engine = BehaviorEngine::new(CharacterConfig::default());
+        let mut settings = AppSettings::default();
+        settings.unsolicited_comments = false;
+        settings.talkativeness = 0.93;
+        settings.quiet_hours_enabled = false;
+        settings.quiet_hours_start = 3;
+        settings.quiet_hours_end = 7;
+        settings.max_comments_per_hour = 1;
+
+        synchronize_behavior_engine(&settings, &mut engine);
+
+        assert!(!engine.config.behavior.unsolicited_comments);
+        assert_eq!(engine.config.personality.talkativeness, 0.93);
+        assert!(!engine.config.behavior.quiet_hours_enabled);
+        assert_eq!(engine.config.behavior.quiet_hours_start, 3);
+        assert_eq!(engine.config.behavior.quiet_hours_end, 7);
+        assert_eq!(engine.config.behavior.max_comments_per_hour, 1);
+        assert!(engine
+            .evaluate_event("test", "runtime settings applied", 1.0)
+            .is_none());
+    }
 }

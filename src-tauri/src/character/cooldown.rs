@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Timelike, Utc};
+use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,7 +104,11 @@ impl CooldownTracker {
         self.speech_timestamps.retain(|&ts| ts > one_hour_ago);
     }
 
-    pub fn is_in_quiet_hours(now: DateTime<Utc>, start_hour: u8, end_hour: u8) -> bool {
+    pub fn is_in_quiet_hours<Tz: TimeZone>(
+        now: &DateTime<Tz>,
+        start_hour: u8,
+        end_hour: u8,
+    ) -> bool {
         let current_hour = now.hour() as u8;
         if start_hour == end_hour {
             return false;
@@ -127,8 +131,13 @@ impl CooldownTracker {
         quiet_hours_start: u8,
         quiet_hours_end: u8,
     ) -> bool {
-        // Check quiet hours
-        if quiet_hours_enabled && Self::is_in_quiet_hours(now, quiet_hours_start, quiet_hours_end) {
+        // Quiet hours are a user-facing wall-clock setting. Convert the UTC
+        // instant used for cooldown arithmetic into the machine's local timezone;
+        // chrono::Local applies the platform's current DST/offset rules.
+        let local_now = now.with_timezone(&Local);
+        if quiet_hours_enabled
+            && Self::is_in_quiet_hours(&local_now, quiet_hours_start, quiet_hours_end)
+        {
             return false;
         }
 
@@ -182,13 +191,49 @@ mod tests {
     }
 
     #[test]
-    fn test_quiet_hours() {
-        use chrono::TimeZone;
-        let dt = Utc.with_ymd_and_hms(2026, 8, 17, 23, 30, 0).unwrap(); // 11:30 PM
-        assert!(CooldownTracker::is_in_quiet_hours(dt, 22, 8));
+    fn test_quiet_hours_normal_and_overnight_ranges() {
+        use chrono::FixedOffset;
 
-        let dt_day = Utc.with_ymd_and_hms(2026, 8, 17, 14, 0, 0).unwrap(); // 2:00 PM
-        assert!(!CooldownTracker::is_in_quiet_hours(dt_day, 22, 8));
+        let zone = FixedOffset::east_opt(0).unwrap();
+        let late = zone.with_ymd_and_hms(2026, 8, 17, 23, 30, 0).unwrap();
+        let day = zone.with_ymd_and_hms(2026, 8, 17, 14, 0, 0).unwrap();
+        let early = zone.with_ymd_and_hms(2026, 8, 17, 2, 0, 0).unwrap();
+
+        assert!(CooldownTracker::is_in_quiet_hours(&late, 22, 8));
+        assert!(!CooldownTracker::is_in_quiet_hours(&day, 22, 8));
+        assert!(CooldownTracker::is_in_quiet_hours(&early, 1, 6));
+        assert!(!CooldownTracker::is_in_quiet_hours(&day, 1, 6));
+    }
+
+    #[test]
+    fn test_quiet_hours_boundaries() {
+        use chrono::FixedOffset;
+
+        let zone = FixedOffset::east_opt(0).unwrap();
+        let start = zone.with_ymd_and_hms(2026, 8, 17, 22, 0, 0).unwrap();
+        let end = zone.with_ymd_and_hms(2026, 8, 18, 8, 0, 0).unwrap();
+        let same = zone.with_ymd_and_hms(2026, 8, 17, 4, 0, 0).unwrap();
+
+        assert!(CooldownTracker::is_in_quiet_hours(&start, 22, 8));
+        assert!(!CooldownTracker::is_in_quiet_hours(&end, 22, 8));
+        assert!(!CooldownTracker::is_in_quiet_hours(&same, 4, 4));
+    }
+
+    #[test]
+    fn test_quiet_hours_with_pacific_offset_independent_of_host_timezone() {
+        use chrono::FixedOffset;
+
+        // 2026-08-18 05:30 UTC is 22:30 at a UTC-07:00 Pacific summer offset.
+        let utc = Utc.with_ymd_and_hms(2026, 8, 18, 5, 30, 0).unwrap();
+        let pacific_summer = FixedOffset::west_opt(7 * 60 * 60).unwrap();
+        let pacific_local = utc.with_timezone(&pacific_summer);
+
+        assert_eq!(pacific_local.hour(), 22);
+        assert!(CooldownTracker::is_in_quiet_hours(
+            &pacific_local,
+            22,
+            8
+        ));
     }
 
     #[test]

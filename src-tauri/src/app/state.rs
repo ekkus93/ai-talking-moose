@@ -138,6 +138,24 @@ impl AppSettings {
 
         Ok((settings, !had_asr_mode || !had_current_version))
     }
+
+    /// Apply user-editable behavior/personality settings to the live character config.
+    /// This keeps persisted/frontend settings and the Rust behavior/prompt policy in sync.
+    pub fn apply_to_character_config(&self, config: &mud CharacterConfig) {
+        config.personality.dry = self.dry;
+        config.personality.sarcastic = self.sarcastic;
+        config.personality.friendly = self.friendly;
+        config.personality.absurd = self.absurd;
+        config.personality.helpful = self.helpful;
+        config.personality.verbosity = self.verbosity;
+        config.personality.talkativeness = self.talkativeness;
+
+        config.behavior.unsolicited_comments = self.unsolicited_comments;
+        config.behavior.quiet_hours_enabled = self.quiet_hours_enabled;
+        config.behavior.quiet_hours_start = self.quiet_hours_start;
+        config.behavior.quiet_hours_end = self.quiet_hours_end;
+        config.behavior.max_comments_per_hour = self.max_comments_per_hour;
+    }
 }
 
 pub struct AppState {
@@ -196,11 +214,11 @@ impl AppState {
         let db = if let Some(path) = db_path {
             Arc::new(Database::new(path).unwrap_or_else(|_| Database::new_in_memory().unwrap()))
         } else {
-            Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
+            Arc::new(Database::new_in_memory().map_err(|error| error.to_string()?))
         };
 
         let memory = Arc::new(MemoryManager::new(db.clone()));
-        let secrets = Arc::new(secret_store);
+        let secrets = Arc::new(SecuretStore::from_secret_store(secret_store));
         migrate_legacy_google_api_key(&db, &secrets)?;
 
         let settings = Arc::new(RwLock::new(AppSettings::default()));
@@ -219,7 +237,10 @@ impl AppState {
             }
         }
 
-        let character_config = CharacterConfig::default();
+        let mut character_config = CharacterConfig::default();
+        settings
+            .read()
+            .apply_to_character_config(&mut character_config);
         let behavior_engine = Arc::new(Mutex::new(BehaviorEngine::new(character_config.clone())));
         let audio_capture = Arc::new(Mutex::new(AudioCapture::new()));
         let audio_playback = Arc::new(AudioPlayback::new());
@@ -341,6 +362,65 @@ mod tests {
         let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
         assert!(!migrated);
         assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
+    }
+
+    #[test]
+    fn settings_apply_to_live_character_config() {
+        let mut settings = AppSettings::default();
+        settings.dry = 0.11;
+        settings.sarcastic = 0.22;
+        settings.friendly = 0.33;
+        settings.absurd = 0.44;
+        settings.helpful = 0.55;
+        settings.verbosity = 0.66;
+        settings.talkativeness = 0.77;
+        settings.unsolicited_comments = false;
+        settings.quiet_hours_enabled = false;
+        settings.quiet_hours_start = 1;
+        settings.quiet_hours_end = 6;
+        settings.max_comments_per_hour = 2;
+
+        let mut config = CharacterConfig::default();
+        settings.apply_to_character_config(&mut config);
+
+        assert_eq!(config.personality.dry, 0.11);
+        assert_eq!(config.personality.sarcastic, 0.22);
+        assert_eq!(config.personality.friendly, 0.33);
+        assert_eq!(config.personality.absurd, 0.44);
+        assert_eq!(config.personality.helpful, 0.55);
+        assert_eq!(config.personality.verbosity, 0.66);
+        assert_eq!(config.personality.talkativeness, 0.77);
+        assert!(!config.behavior.unsolicited_comments);
+        assert!(!config.behavior.quiet_hours_enabled);
+        assert_eq!(config.behavior.quiet_hours_start, 1);
+        assert_eq!(config.behavior.quiet_hours_end, 6);
+        assert_eq!(config.behavior.max_comments_per_hour, 2);
+    }
+
+    #[test]
+    fn persisted_settings_seed_behavior_engine_on_startup() {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let db = Database::new(&path).unwrap();
+        let mut persisted = AppSettings::default();
+        persisted.talkativeness = 0.91;
+        persisted.unsolicited_comments = false;
+        persisted.quiet_hours_enabled = false;
+        db.set_setting(
+            "app_settings",
+            &serde_json::to_string(&persisted).unwrap(),
+        )
+        .unwrap();
+        drop(db);
+
+        let backend = Arc::new(MemorySecretBackend::default());
+        let secret_store = SecretStore::with_backend(backend).unwrap();
+        let state = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+        let engine = state.behavior_engine.lock();
+
+        assert_eq!(engine.config.personality.talkativeness, 0.91);
+        assert!(!engine.config.behavior.unsolicited_comments);
+        assert!(!engine.config.behavior.quiet_hours_enabled);
     }
 
     #[test]
