@@ -529,12 +529,7 @@ impl ConversationManager {
             ConversationLifecycle::Idle
         };
         let cleaned = self
-            .shutdown_if_generation_current(
-                generation,
-                capture,
-                playback,
-                final_lifecycle,
-            )
+            .shutdown_if_generation_current(generation, capture, playback, final_lifecycle)
             .await;
 
         if cleaned {
@@ -590,12 +585,8 @@ impl ConversationManager {
         playback: Arc<AudioPlayback>,
     ) {
         let _operation_guard = self.operation_lock.lock().await;
-        self.shutdown_locked(
-            capture,
-            playback.clone(),
-            ConversationLifecycle::Idle,
-        )
-        .await;
+        self.shutdown_locked(capture, playback.clone(), ConversationLifecycle::Idle)
+            .await;
         playback.stop();
     }
 }
@@ -711,11 +702,11 @@ mod tests {
     fn lifecycle_transition_table_rejects_invalid_jumps() {
         assert!(ConversationLifecycle::Idle.can_transition_to(ConversationLifecycle::Connecting));
         assert!(ConversationLifecycle::Connecting.can_transition_to(ConversationLifecycle::Failed));
-        assert!(ConversationLifecycle::Responding
-            .can_transition_to(ConversationLifecycle::Listening));
+        assert!(
+            ConversationLifecycle::Responding.can_transition_to(ConversationLifecycle::Listening)
+        );
         assert!(!ConversationLifecycle::Idle.can_transition_to(ConversationLifecycle::Responding));
-        assert!(!ConversationLifecycle::Failed
-            .can_transition_to(ConversationLifecycle::Responding));
+        assert!(!ConversationLifecycle::Failed.can_transition_to(ConversationLifecycle::Responding));
     }
 
     #[tokio::test]
@@ -916,7 +907,9 @@ mod tests {
         );
         let (event_tx, event_rx) = mpsc::channel(1);
         event_tx
-            .send(LiveServerEvent::Error("injected provider failure".to_string()))
+            .send(LiveServerEvent::Error(
+                "injected provider failure".to_string(),
+            ))
             .await
             .unwrap();
         drop(event_tx);
@@ -931,7 +924,10 @@ mod tests {
         assert_eq!(state_events.lock().as_slice(), &[CharacterState::Error]);
         assert_eq!(
             lifecycle_events.lock().as_slice(),
-            &[ConversationLifecycle::Stopping, ConversationLifecycle::Failed]
+            &[
+                ConversationLifecycle::Stopping,
+                ConversationLifecycle::Failed
+            ]
         );
     }
 
