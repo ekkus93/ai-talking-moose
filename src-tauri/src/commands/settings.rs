@@ -169,9 +169,7 @@ pub fn get_audio_diagnostics(state: State<'_, AppState>) -> Result<AudioDiagnost
 }
 
 #[tauri::command]
-pub async fn test_microphone(
-    state: State<'_, AppState>,
-) -> Result<MicrophoneTestResult, String> {
+pub async fn test_microphone(state: State<'_, AppState>) -> Result<MicrophoneTestResult, String> {
     if state.conversation_mgr.is_active() {
         return Err("stop the active conversation before testing the microphone".to_string());
     }
