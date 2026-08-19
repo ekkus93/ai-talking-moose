@@ -3,7 +3,16 @@ use crate::app::state::AppState;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::CharacterState;
+use crate::memory::MemoryManager;
 use tauri::{Emitter, State};
+
+fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<String> {
+    if memory_enabled {
+        memory.get_memory_strings()
+    } else {
+        Vec::new()
+    }
+}
 
 #[tauri::command]
 pub fn get_character_state(state: State<'_, AppState>) -> Result<CharacterState, String> {
@@ -164,7 +173,8 @@ pub async fn trigger_ambient_remark(
     *state.character_state.write() = CharacterState::Thinking;
     let _ = app.emit("moose://state", CharacterState::Thinking);
 
-    let memories = state.memory.get_memory_strings();
+    let memory_enabled = state.settings.read().memory_enabled;
+    let memories = model_prompt_memories(memory_enabled, state.memory.as_ref());
     let config = state.behavior_engine.lock().config.clone();
     let prompt = PromptBuilder::build_ambient_prompt(&config, &event_summary, &memories);
 
@@ -190,4 +200,26 @@ pub async fn trigger_ambient_remark(
     crate::audio::play_system_speech(&text);
 
     Ok(Some(text))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::persistence::sqlite::Database;
+    use std::sync::Arc;
+
+    #[test]
+    fn ambient_prompt_memories_obey_memory_setting_and_restore_on_reenable() {
+        let db = Arc::new(Database::new_in_memory().unwrap());
+        let memory = MemoryManager::new(db);
+        memory
+            .remember("User prefers local speech recognition", Some("conversation"))
+            .unwrap();
+
+        assert!(model_prompt_memories(false, &memory).is_empty());
+        assert_eq!(
+            model_prompt_memories(true, &memory),
+            vec!["User prefers local speech recognition".to_string()]
+        );
+    }
 }
