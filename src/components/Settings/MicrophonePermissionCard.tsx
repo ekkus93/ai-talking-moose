@@ -75,9 +75,9 @@ export const MicrophonePermissionCard: React.FC = () => {
 
       {permission === "denied" && (
         <p className="text-[11px] text-amber-900">
-          Access was denied or restricted. Open macOS System Settings → Privacy &
-          Security → Microphone, enable Talking Moose, then return here and press
-          Refresh Status.
+          Access was denied or restricted. Open macOS System Settings → Privacy
+          & Security → Microphone, enable Talking Moose, then return here and
+          press Refresh Status.
         </p>
       )}
 
