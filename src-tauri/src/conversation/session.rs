@@ -38,9 +38,18 @@ impl ConversationLifecycle {
         matches!(
             (self, target),
             (Self::Idle, Self::Connecting | Self::Stopping)
-                | (Self::Connecting, Self::Listening | Self::Stopping | Self::Failed)
-                | (Self::Listening, Self::Responding | Self::Stopping | Self::Failed)
-                | (Self::Responding, Self::Listening | Self::Stopping | Self::Failed)
+                | (
+                    Self::Connecting,
+                    Self::Listening | Self::Stopping | Self::Failed
+                )
+                | (
+                    Self::Listening,
+                    Self::Responding | Self::Stopping | Self::Failed
+                )
+                | (
+                    Self::Responding,
+                    Self::Listening | Self::Stopping | Self::Failed
+                )
                 | (Self::Stopping, Self::Idle | Self::Failed)
                 | (Self::Failed, Self::Stopping | Self::Idle)
         )
@@ -155,7 +164,11 @@ impl ConversationManager {
         let mut current = lifecycle.write();
         let previous = *current;
         if !previous.can_transition_to(target) {
-            warn!(?previous, ?target, "Rejected invalid conversation lifecycle transition");
+            warn!(
+                ?previous,
+                ?target,
+                "Rejected invalid conversation lifecycle transition"
+            );
             return;
         }
 
@@ -218,7 +231,8 @@ impl ConversationManager {
             return false;
         }
 
-        self.shutdown_locked(capture, playback, final_lifecycle).await;
+        self.shutdown_locked(capture, playback, final_lifecycle)
+            .await;
         true
     }
 
@@ -274,7 +288,9 @@ impl ConversationManager {
                     Some(&lifecycle_callback),
                 );
                 state_callback(CharacterState::Error);
-                return Err(format!("conversation provider connection failed: {error_value}"));
+                return Err(format!(
+                    "conversation provider connection failed: {error_value}"
+                ));
             }
         };
 
@@ -292,9 +308,10 @@ impl ConversationManager {
 
         let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(32);
         let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
-        let capture_result = capture
-            .lock()
-            .start(input_device, input_sample_rate, pcm_tx, Some(level_tx));
+        let capture_result =
+            capture
+                .lock()
+                .start(input_device, input_sample_rate, pcm_tx, Some(level_tx));
         if let Err(error_value) = capture_result {
             playback.flush();
             Self::close_provisional_session(&mut session).await;
