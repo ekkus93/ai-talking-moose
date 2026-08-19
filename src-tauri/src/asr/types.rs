@@ -37,21 +37,11 @@ pub struct AsrError {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AsrEvent {
-    SpeechStarted {
-        monotonic_ms: Option<u64>,
-    },
-    PartialTranscript {
-        text: String,
-    },
-    FinalTranscript {
-        text: String,
-    },
-    SpeechEnded {
-        monotonic_ms: Option<u64>,
-    },
-    Error {
-        error: AsrError,
-    },
+    SpeechStarted { monotonic_ms: Option<u64> },
+    PartialTranscript { text: String },
+    FinalTranscript { text: String },
+    SpeechEnded { monotonic_ms: Option<u64> },
+    Error { error: AsrError },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
