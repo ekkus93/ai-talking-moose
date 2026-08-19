@@ -2,7 +2,8 @@ use crate::ai::types::{TextRequest, TtsRequest};
 use crate::app::state::AppState;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
-use crate::character::state::CharacterState;
+use crate::character::state::{transition_character_state, CharacterState};
+use crate::conversation::session::ConversationLifecycle;
 use crate::memory::MemoryManager;
 use tauri::{Emitter, State};
 
@@ -12,6 +13,16 @@ fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<St
     } else {
         Vec::new()
     }
+}
+
+fn transition_and_emit(
+    state: &AppState,
+    app: &tauri::AppHandle,
+    target: CharacterState,
+) -> Result<(), String> {
+    transition_character_state(&state.character_state, target)?;
+    let _ = app.emit("moose://state", target);
+    Ok(())
 }
 
 async fn speak_standalone(
@@ -62,50 +73,61 @@ pub fn set_character_state(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    *state.character_state.write() = new_state;
-    let _ = app.emit("moose://state", new_state);
-    Ok(())
+    transition_and_emit(state.inner(), &app, new_state)
 }
 
 #[tauri::command]
 pub fn show_moose(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    *state.character_state.write() = CharacterState::Idle;
-    let _ = app.emit("moose://state", CharacterState::Idle);
-    Ok(())
+    transition_and_emit(state.inner(), &app, CharacterState::Idle)
 }
 
 #[tauri::command]
 pub fn hide_moose(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    *state.character_state.write() = CharacterState::Hidden;
-    let _ = app.emit("moose://state", CharacterState::Hidden);
-    Ok(())
+    transition_and_emit(state.inner(), &app, CharacterState::Hidden)
 }
 
 #[tauri::command]
-pub fn dismiss_moose(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn dismiss_moose(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     let now = chrono::Utc::now();
     state.behavior_engine.lock().cooldowns.record_dismissal(now);
-    state.audio_playback.flush();
-    *state.character_state.write() = CharacterState::Dismissed;
-    let _ = app.emit("moose://state", CharacterState::Dismissed);
-    Ok(())
+    state
+        .conversation_mgr
+        .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
+        .await;
+    let _ = app.emit(
+        "moose://conversation/lifecycle",
+        ConversationLifecycle::Idle,
+    );
+    transition_and_emit(state.inner(), &app, CharacterState::Dismissed)
 }
 
 #[tauri::command]
-pub fn set_mute(
+pub async fn set_mute(
     muted: bool,
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    *state.is_muted.write() = muted;
-    let new_state = if muted {
-        CharacterState::Muted
+    if muted {
+        // Set the privacy gate before awaiting teardown so a racing start request sees
+        // muted=true either before or inside the serialized manager startup lock.
+        *state.is_muted.write() = true;
+        state
+            .conversation_mgr
+            .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
+            .await;
+        let _ = app.emit(
+            "moose://conversation/lifecycle",
+            ConversationLifecycle::Idle,
+        );
+        transition_and_emit(state.inner(), &app, CharacterState::Muted)
     } else {
-        CharacterState::Idle
-    };
-    *state.character_state.write() = new_state;
-    let _ = app.emit("moose://state", new_state);
-    Ok(())
+        *state.is_muted.write() = false;
+        // Unmute is deliberately passive: it restores Idle but never starts capture.
+        transition_and_emit(state.inner(), &app, CharacterState::Idle)
+    }
 }
 
 #[tauri::command]
@@ -128,8 +150,7 @@ pub async fn audition_voice(
         _ => "Hello from your desktop moose.",
     };
 
-    *state.character_state.write() = CharacterState::Talking;
-    let _ = app.emit("moose://state", CharacterState::Talking);
+    transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
     let _ = app.emit("moose://speech-bubble", sample);
 
     speak_standalone(sample, Some(voice_name), state.inner()).await?;
@@ -153,8 +174,7 @@ pub async fn trigger_canned_reaction(
         _ => BehaviorEngine::get_canned_error_phrase(),
     };
 
-    *state.character_state.write() = CharacterState::Talking;
-    let _ = app.emit("moose://state", CharacterState::Talking);
+    transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
     let _ = app.emit("moose://speech-bubble", text);
 
     speak_standalone(text, None, state.inner()).await?;
@@ -182,8 +202,7 @@ pub async fn trigger_ambient_remark(
         return Ok(None);
     }
 
-    *state.character_state.write() = CharacterState::Thinking;
-    let _ = app.emit("moose://state", CharacterState::Thinking);
+    transition_and_emit(state.inner(), &app, CharacterState::Thinking)?;
 
     let memory_enabled = state.settings.read().memory_enabled;
     let memories = model_prompt_memories(memory_enabled, state.memory.as_ref());
@@ -191,7 +210,7 @@ pub async fn trigger_ambient_remark(
     let prompt = PromptBuilder::build_ambient_prompt(&config, &event_summary, &memories);
 
     let text_model = state.get_text_model();
-    let text_res = text_model
+    let text = text_model
         .generate(TextRequest {
             prompt,
             system_instruction: None,
@@ -199,14 +218,10 @@ pub async fn trigger_ambient_remark(
             max_tokens: Some(60),
         })
         .await
-        .unwrap_or_else(|_| crate::ai::types::TextResponse {
-            text: BehaviorEngine::get_canned_greeting().to_string(),
-            finish_reason: None,
-        });
+        .map_err(|error_value| state.secrets.redact(&error_value))?
+        .text;
 
-    let text = text_res.text;
-    *state.character_state.write() = CharacterState::Talking;
-    let _ = app.emit("moose://state", CharacterState::Talking);
+    transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
     let _ = app.emit("moose://speech-bubble", &text);
 
     speak_standalone(&text, None, state.inner()).await?;
