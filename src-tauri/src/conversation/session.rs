@@ -618,7 +618,10 @@ impl ConversationManager {
         self.output_suppressed.store(true, Ordering::SeqCst);
         let mut session_lock = self.live_session.lock().await;
         if let Some(ref mut session) = *session_lock {
-            session.interrupt().await.map_err(|error| error.to_string())?;
+            session
+                .interrupt()
+                .await
+                .map_err(|error| error.to_string())?;
         }
         Ok(())
     }

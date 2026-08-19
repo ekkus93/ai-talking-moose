@@ -15,7 +15,8 @@ pub trait SpeechSynthesizer: Send + Sync {
 #[async_trait]
 pub trait LiveSession: Send + Sync {
     async fn send_audio_chunk(&mut self, pcm_bytes: &[u8]) -> Result<(), ProviderError>;
-    async fn send_tool_response(&mut self, response: ToolCallResponse) -> Result<(), ProviderError>;
+    async fn send_tool_response(&mut self, response: ToolCallResponse)
+        -> Result<(), ProviderError>;
     async fn interrupt(&mut self) -> Result<(), ProviderError>;
     async fn close(&mut self) -> Result<(), ProviderError>;
 }

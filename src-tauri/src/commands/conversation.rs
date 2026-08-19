@@ -357,11 +357,8 @@ mod tests {
             .build()
             .unwrap();
 
-        let error = get_ipc_response(
-            &webview,
-            ipc_request("start_conversation", json!({})),
-        )
-        .expect_err("local ASR selection must fail closed until the worker exists");
+        let error = get_ipc_response(&webview, ipc_request("start_conversation", json!({})))
+            .expect_err("local ASR selection must fail closed until the worker exists");
 
         assert!(error
             .as_str()

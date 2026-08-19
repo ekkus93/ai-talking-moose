@@ -59,9 +59,7 @@ fn provider_error_from_server_payload(value: &serde_json::Value) -> Option<Provi
         ProviderErrorKind::Quota
     } else if code == Some(404) || status == "NOT_FOUND" {
         ProviderErrorKind::Model
-    } else if code == Some(400)
-        || matches!(status, "INVALID_ARGUMENT" | "FAILED_PRECONDITION")
-    {
+    } else if code == Some(400) || matches!(status, "INVALID_ARGUMENT" | "FAILED_PRECONDITION") {
         ProviderErrorKind::Setup
     } else {
         ProviderErrorKind::Protocol
@@ -297,8 +295,7 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
                                     continue;
                                 }
 
-                                if let Some(text) =
-                                    part.get("text").and_then(|text| text.as_str())
+                                if let Some(text) = part.get("text").and_then(|text| text.as_str())
                                 {
                                     let _ = ev_tx
                                         .send(LiveServerEvent::ModelTranscript(text.to_string()))
@@ -316,24 +313,25 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
                                             "Received model audio chunk: {} bytes",
                                             pcm_bytes.len()
                                         );
-                                        let _ = ev_tx
-                                            .send(LiveServerEvent::AudioData(pcm_bytes))
-                                            .await;
+                                        let _ =
+                                            ev_tx.send(LiveServerEvent::AudioData(pcm_bytes)).await;
                                     }
                                 }
                             }
                         }
 
-                        if let Some(true) =
-                            content.get("turnComplete").and_then(|complete| complete.as_bool())
+                        if let Some(true) = content
+                            .get("turnComplete")
+                            .and_then(|complete| complete.as_bool())
                         {
                             let _ = ev_tx.send(LiveServerEvent::TurnComplete).await;
                         }
                     }
 
                     if let Some(tool_call) = val.get("toolCall") {
-                        if let Some(calls) =
-                            tool_call.get("functionCalls").and_then(|calls| calls.as_array())
+                        if let Some(calls) = tool_call
+                            .get("functionCalls")
+                            .and_then(|calls| calls.as_array())
                         {
                             for call in calls {
                                 let id = call
