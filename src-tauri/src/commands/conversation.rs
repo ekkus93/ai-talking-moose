@@ -1,4 +1,4 @@
-use crate::ai::types::LiveSessionConfig;
+use crate::ai::types::{LiveSessionConfig, TtsRequest};
 use crate::app::state::AppState;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::CharacterState;
@@ -62,8 +62,10 @@ pub async fn start_conversation(
     let db_ref = state.db.clone();
     let save_transcripts = settings.save_transcripts;
 
-    // Start playback device if not already running
-    let _ = state.audio_playback.start(settings.output_device.clone());
+    state
+        .audio_playback
+        .start(settings.output_device.clone())
+        .map_err(|error_value| format!("Failed to start audio output: {error_value}"))?;
 
     let session_id = state
         .conversation_mgr
@@ -93,7 +95,6 @@ pub async fn start_conversation(
         )
         .await?;
 
-    // Start audio microphone capture and pipe to conversation manager
     let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(32);
     let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
 
@@ -182,7 +183,6 @@ pub async fn send_text_message(
     }
     let settings = state.settings.read().clone();
 
-    // 1. Emit user transcript and persist only when retention is enabled.
     let _ = app.emit("moose://transcript/user", &msg_trimmed);
     let _ = persist_transcript_if_enabled(
         state.db.as_ref(),
@@ -192,11 +192,9 @@ pub async fn send_text_message(
         &msg_trimmed,
     );
 
-    // 2. Set character state to thinking
     *state.character_state.write() = CharacterState::Thinking;
     let _ = app.emit("moose://state", CharacterState::Thinking);
 
-    // 3. Build prompt with personality, rules, memories
     let memories = if settings.memory_enabled {
         state.memory.get_memory_strings()
     } else {
@@ -222,8 +220,6 @@ pub async fn send_text_message(
 
     let reply = text_res.text;
 
-    // 4. Update state to Talking, emit speech bubble & transcript, and retain only
-    // when the user has explicitly enabled local transcript storage.
     *state.character_state.write() = CharacterState::Talking;
     let _ = app.emit("moose://state", CharacterState::Talking);
     let _ = app.emit("moose://transcript/moose", &reply);
@@ -236,9 +232,26 @@ pub async fn send_text_message(
         &reply,
     );
 
-    // 5. Play speech output via system speech
     if !*state.is_muted.read() {
-        crate::audio::play_system_speech(&reply);
+        let synthesizer = state.get_speech_synthesizer();
+        let report = crate::audio::synthesize_and_queue(
+            synthesizer.as_ref(),
+            state.audio_playback.as_ref(),
+            TtsRequest {
+                text: reply.clone(),
+                voice_name: Some(settings.tts_voice.clone()),
+                speaking_rate: Some(settings.speaking_rate),
+                pitch: Some(settings.pitch),
+            },
+            settings.output_device.clone(),
+        )
+        .await?;
+        if report.dropped_samples > 0 {
+            return Err(format!(
+                "audio playback queue overflowed and dropped {} samples",
+                report.dropped_samples
+            ));
+        }
     }
 
     Ok(reply)
