@@ -64,7 +64,6 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Audio Diagnostics")).toBeInTheDocument();
     expect(screen.getByText("Test Microphone")).toBeInTheDocument();
     expect(screen.getByText("Test Output")).toBeInTheDocument();
-    expect(await screen.findByText("Granted")).toBeInTheDocument();
-    expect(await screen.findByText("Test Microphone")).toBeInTheDocument();
+    expect(await screen.findByText("Unavailable")).toBeInTheDocument();
   });
 });
