@@ -1,7 +1,10 @@
 use crate::audio::levels::LevelMeter;
+use crate::audio::permissions::{microphone_permission_state, MicrophonePermissionState};
 use crate::audio::resample::AudioResampler;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -30,10 +33,16 @@ pub enum AudioCaptureMode {
 pub enum AudioCaptureError {
     #[error("failed to enumerate audio input devices: {0}")]
     DeviceEnumeration(String),
+    #[error("requested audio input device was not found: {0}")]
+    RequestedDeviceNotFound(String),
     #[error("no audio input device is available")]
     NoInputDevice,
-    #[error("microphone permission was denied or unavailable: {0}")]
+    #[error("microphone permission has not been requested; request access from Settings first")]
+    PermissionNotRequested,
+    #[error("microphone permission was denied or restricted: {0}")]
     PermissionDenied(String),
+    #[error("microphone permission state is unavailable")]
+    PermissionUnavailable,
     #[error("failed to read input-device configuration: {0}")]
     InputConfiguration(String),
     #[error("unsupported input sample format: {0:?}")]
@@ -42,6 +51,18 @@ pub enum AudioCaptureError {
     BuildStream(String),
     #[error("failed to start input stream: {0}")]
     StartStream(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AudioCaptureDiagnostics {
+    pub selected_device: Option<String>,
+    pub sample_rate_hz: Option<u32>,
+    pub sample_format: Option<String>,
+    pub channels: Option<u16>,
+    pub active: bool,
+    pub input_level: f32,
+    pub dropped_chunks: u64,
+    pub last_error: Option<String>,
 }
 
 fn looks_like_permission_denied(message: &str) -> bool {
@@ -78,21 +99,29 @@ fn start_error(message: String) -> AudioCaptureError {
 
 fn stream_error_handler(
     is_running: Arc<AtomicBool>,
+    last_error: Arc<Mutex<Option<String>>>,
 ) -> impl FnMut(cpal::StreamError) + Send + 'static {
     move |error_value| {
         is_running.store(false, Ordering::SeqCst);
+        *last_error.lock() = Some(format!("runtime microphone stream error: {error_value}"));
         error!(error = %error_value, "Microphone capture stream failed");
     }
 }
 
-struct CaptureProcessor {
+#[derive(Debug, Clone, Copy)]
+struct CaptureProcessorConfig {
     channels: usize,
     source_sample_rate: u32,
     target_sample_rate: u32,
+}
+
+struct CaptureProcessor {
+    config: CaptureProcessorConfig,
     chunk_samples: usize,
     pcm_sender: mpsc::Sender<Vec<u8>>,
     level_sender: Option<mpsc::Sender<f32>>,
     is_running: Arc<AtomicBool>,
+    input_level: Arc<AtomicU32>,
     dropped_chunks: Arc<AtomicU64>,
     level_meter: LevelMeter,
     accumulated_samples: Vec<f32>,
@@ -101,23 +130,21 @@ struct CaptureProcessor {
 
 impl CaptureProcessor {
     fn new(
-        channels: usize,
-        source_sample_rate: u32,
-        target_sample_rate: u32,
+        config: CaptureProcessorConfig,
         pcm_sender: mpsc::Sender<Vec<u8>>,
         level_sender: Option<mpsc::Sender<f32>>,
         is_running: Arc<AtomicBool>,
+        input_level: Arc<AtomicU32>,
         dropped_chunks: Arc<AtomicU64>,
     ) -> Self {
-        let chunk_samples = (target_sample_rate / 10).max(1) as usize;
+        let chunk_samples = (config.target_sample_rate / 10).max(1) as usize;
         Self {
-            channels,
-            source_sample_rate,
-            target_sample_rate,
+            config,
             chunk_samples,
             pcm_sender,
             level_sender,
             is_running,
+            input_level,
             dropped_chunks,
             level_meter: LevelMeter::new(),
             accumulated_samples: Vec::with_capacity(chunk_samples * 2),
@@ -130,15 +157,16 @@ impl CaptureProcessor {
             return;
         }
 
-        let mono = AudioResampler::downmix_to_mono(self.channels, interleaved_samples);
+        let mono = AudioResampler::downmix_to_mono(self.config.channels, interleaved_samples);
         let (rms, _) = self.level_meter.feed_samples(&mono);
+        self.input_level.store(rms.to_bits(), Ordering::Relaxed);
         if let Some(ref sender) = self.level_sender {
             let _ = sender.try_send(rms);
         }
 
         let resampled = AudioResampler::resample_linear(
-            self.source_sample_rate,
-            self.target_sample_rate,
+            self.config.source_sample_rate,
+            self.config.target_sample_rate,
             &mono,
         );
         self.accumulated_samples.extend(resampled);
@@ -172,8 +200,14 @@ impl CaptureProcessor {
 
 pub struct AudioCapture {
     is_running: Arc<AtomicBool>,
+    input_level: Arc<AtomicU32>,
     dropped_chunks: Arc<AtomicU64>,
+    last_error: Arc<Mutex<Option<String>>>,
     mode: AudioCaptureMode,
+    selected_device: Option<String>,
+    sample_rate_hz: Option<u32>,
+    sample_format: Option<String>,
+    channels: Option<u16>,
     _stream: Option<SafeStream>,
 }
 
@@ -189,8 +223,14 @@ impl AudioCapture {
     fn with_mode(mode: AudioCaptureMode) -> Self {
         Self {
             is_running: Arc::new(AtomicBool::new(false)),
+            input_level: Arc::new(AtomicU32::new(0.0_f32.to_bits())),
             dropped_chunks: Arc::new(AtomicU64::new(0)),
+            last_error: Arc::new(Mutex::new(None)),
             mode,
+            selected_device: None,
+            sample_rate_hz: None,
+            sample_format: None,
+            channels: None,
             _stream: None,
         }
     }
@@ -207,6 +247,19 @@ impl AudioCapture {
         self.mode
     }
 
+    pub fn diagnostics(&self) -> AudioCaptureDiagnostics {
+        AudioCaptureDiagnostics {
+            selected_device: self.selected_device.clone(),
+            sample_rate_hz: self.sample_rate_hz,
+            sample_format: self.sample_format.clone(),
+            channels: self.channels,
+            active: self.is_active(),
+            input_level: f32::from_bits(self.input_level.load(Ordering::Relaxed)),
+            dropped_chunks: self.dropped_chunks(),
+            last_error: self.last_error.lock().clone(),
+        }
+    }
+
     /// Start capturing audio. Streams resampled 16-bit mono PCM frames over the
     /// bounded channel supplied by the caller.
     pub fn start(
@@ -218,15 +271,61 @@ impl AudioCapture {
     ) -> Result<(), AudioCaptureError> {
         self.stop();
         self.dropped_chunks.store(0, Ordering::SeqCst);
+        self.input_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
+        *self.last_error.lock() = None;
+        self.selected_device = None;
+        self.sample_rate_hz = None;
+        self.sample_format = None;
+        self.channels = None;
 
+        let result = self.start_inner(
+            device_name,
+            target_sample_rate,
+            pcm_sender,
+            level_sender,
+        );
+        if let Err(ref error_value) = result {
+            *self.last_error.lock() = Some(error_value.to_string());
+        }
+        result
+    }
+
+    fn start_inner(
+        &mut self,
+        device_name: Option<String>,
+        target_sample_rate: u32,
+        pcm_sender: mpsc::Sender<Vec<u8>>,
+        level_sender: Option<mpsc::Sender<f32>>,
+    ) -> Result<(), AudioCaptureError> {
         if self.mode == AudioCaptureMode::Mock {
+            self.selected_device = Some("Explicit mock microphone".to_string());
+            self.sample_rate_hz = Some(target_sample_rate);
+            self.sample_format = Some("I16".to_string());
+            self.channels = Some(1);
             self.is_running.store(true, Ordering::SeqCst);
             info!("Explicit mock microphone capture started");
             return Ok(());
         }
 
+        #[cfg(target_os = "macos")]
+        match microphone_permission_state() {
+            MicrophonePermissionState::Granted => {}
+            MicrophonePermissionState::NotRequested => {
+                return Err(AudioCaptureError::PermissionNotRequested)
+            }
+            MicrophonePermissionState::Denied => {
+                return Err(AudioCaptureError::PermissionDenied(
+                    "grant microphone access in macOS System Settings > Privacy & Security > Microphone"
+                        .to_string(),
+                ))
+            }
+            MicrophonePermissionState::Unavailable => {
+                return Err(AudioCaptureError::PermissionUnavailable)
+            }
+        }
+
         let host = cpal::default_host();
-        let device = if let Some(ref name) = device_name {
+        let device = if let Some(ref requested_name) = device_name {
             host.input_devices()
                 .map_err(|error_value| {
                     AudioCaptureError::DeviceEnumeration(error_value.to_string())
@@ -234,32 +333,39 @@ impl AudioCapture {
                 .find(|device| {
                     device
                         .name()
-                        .map(|candidate| candidate == *name)
+                        .map(|candidate| candidate == *requested_name)
                         .unwrap_or(false)
                 })
-                .or_else(|| host.default_input_device())
+                .ok_or_else(|| {
+                    AudioCaptureError::RequestedDeviceNotFound(requested_name.clone())
+                })?
         } else {
             host.default_input_device()
-        }
-        .ok_or(AudioCaptureError::NoInputDevice)?;
+                .ok_or(AudioCaptureError::NoInputDevice)?
+        };
 
+        let selected_device = device.name().ok().or(device_name);
         let supported_config = device
             .default_input_config()
             .map_err(|error_value| configuration_error(error_value.to_string()))?;
         let sample_format = supported_config.sample_format();
         let stream_config: cpal::StreamConfig = supported_config.into();
         let sample_rate = stream_config.sample_rate.0;
-        let channels = usize::from(stream_config.channels);
+        let channels = stream_config.channels;
+        let processor_config = CaptureProcessorConfig {
+            channels: usize::from(channels),
+            source_sample_rate: sample_rate,
+            target_sample_rate,
+        };
 
         let stream_result = match sample_format {
             cpal::SampleFormat::F32 => {
                 let mut processor = CaptureProcessor::new(
-                    channels,
-                    sample_rate,
-                    target_sample_rate,
+                    processor_config,
                     pcm_sender.clone(),
                     level_sender.clone(),
                     self.is_running.clone(),
+                    self.input_level.clone(),
                     self.dropped_chunks.clone(),
                 );
                 device.build_input_stream(
@@ -267,18 +373,17 @@ impl AudioCapture {
                     move |data: &[f32], _: &cpal::InputCallbackInfo| {
                         processor.process_f32(data);
                     },
-                    stream_error_handler(self.is_running.clone()),
+                    stream_error_handler(self.is_running.clone(), self.last_error.clone()),
                     None,
                 )
             }
             cpal::SampleFormat::I16 => {
                 let mut processor = CaptureProcessor::new(
-                    channels,
-                    sample_rate,
-                    target_sample_rate,
+                    processor_config,
                     pcm_sender.clone(),
                     level_sender.clone(),
                     self.is_running.clone(),
+                    self.input_level.clone(),
                     self.dropped_chunks.clone(),
                 );
                 device.build_input_stream(
@@ -287,18 +392,17 @@ impl AudioCapture {
                         let converted = AudioResampler::i16_to_f32(data);
                         processor.process_f32(&converted);
                     },
-                    stream_error_handler(self.is_running.clone()),
+                    stream_error_handler(self.is_running.clone(), self.last_error.clone()),
                     None,
                 )
             }
             cpal::SampleFormat::U16 => {
                 let mut processor = CaptureProcessor::new(
-                    channels,
-                    sample_rate,
-                    target_sample_rate,
+                    processor_config,
                     pcm_sender,
                     level_sender,
                     self.is_running.clone(),
+                    self.input_level.clone(),
                     self.dropped_chunks.clone(),
                 );
                 device.build_input_stream(
@@ -307,7 +411,7 @@ impl AudioCapture {
                         let converted = AudioResampler::u16_to_f32(data);
                         processor.process_f32(&converted);
                     },
-                    stream_error_handler(self.is_running.clone()),
+                    stream_error_handler(self.is_running.clone(), self.last_error.clone()),
                     None,
                 )
             }
@@ -318,6 +422,11 @@ impl AudioCapture {
         stream
             .play()
             .map_err(|error_value| start_error(error_value.to_string()))?;
+
+        self.selected_device = selected_device;
+        self.sample_rate_hz = Some(sample_rate);
+        self.sample_format = Some(format!("{sample_format:?}"));
+        self.channels = Some(channels);
         self._stream = Some(SafeStream(stream));
         self.is_running.store(true, Ordering::SeqCst);
         info!(
@@ -330,6 +439,7 @@ impl AudioCapture {
 
     pub fn stop(&mut self) {
         self.is_running.store(false, Ordering::SeqCst);
+        self.input_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
         self._stream = None;
     }
 }
@@ -349,6 +459,7 @@ mod tests {
         let capture = AudioCapture::new();
         assert_eq!(capture.mode(), AudioCaptureMode::Real);
         assert!(!capture.is_active());
+        assert!(!capture.diagnostics().active);
     }
 
     #[test]
@@ -358,8 +469,20 @@ mod tests {
         capture.start(None, 16_000, tx, None).unwrap();
         assert_eq!(capture.mode(), AudioCaptureMode::Mock);
         assert!(capture.is_active());
+
+        let diagnostics = capture.diagnostics();
+        assert_eq!(
+            diagnostics.selected_device.as_deref(),
+            Some("Explicit mock microphone")
+        );
+        assert_eq!(diagnostics.sample_rate_hz, Some(16_000));
+        assert_eq!(diagnostics.sample_format.as_deref(), Some("I16"));
+        assert_eq!(diagnostics.channels, Some(1));
+        assert!(diagnostics.active);
+
         capture.stop();
         assert!(!capture.is_active());
+        assert_eq!(capture.diagnostics().input_level, 0.0);
     }
 
     #[test]
