@@ -113,13 +113,15 @@ mod tests {
     #[test]
     fn settings_updates_change_behavior_engine_without_restart() {
         let mut engine = BehaviorEngine::new(CharacterConfig::default());
-        let mut settings = AppSettings::default();
-        settings.unsolicited_comments = false;
-        settings.talkativeness = 0.93;
-        settings.quiet_hours_enabled = false;
-        settings.quiet_hours_start = 3;
-        settings.quiet_hours_end = 7;
-        settings.max_comments_per_hour = 1;
+        let settings = AppSettings {
+            unsolicited_comments: false,
+            talkativeness: 0.93,
+            quiet_hours_enabled: false,
+            quiet_hours_start: 3,
+            quiet_hours_end: 7,
+            max_comments_per_hour: 1,
+            ..Default::default()
+        };
 
         synchronize_behavior_engine(&settings, &mut engine);
 
