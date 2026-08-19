@@ -31,7 +31,7 @@ describe("SettingsModal Component", () => {
         live_model: "gemini-2.5-flash-native-audio-latest",
         text_model: "gemini-2.5-flash",
         tts_model: "en-US-Standard-B",
-        microphone_permission_granted: true,
+        microphone_permission_granted: false,
         active_app_observation: false,
         window_title_observation: false,
         memory_enabled: false,
@@ -55,5 +55,16 @@ describe("SettingsModal Component", () => {
 
     expect(screen.getByText("Moose Character Persona")).toBeInTheDocument();
     expect(screen.getByText("Dry Wit & Deadpan")).toBeInTheDocument();
+  });
+
+  it("exposes audio diagnostics and local microphone test controls", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Diagnostics"));
+
+    expect(screen.getByText("Audio Diagnostics")).toBeInTheDocument();
+    expect(screen.getByText("Test Microphone")).toBeInTheDocument();
+    expect(screen.getByText("Test Output")).toBeInTheDocument();
+    expect(await screen.findByText("Granted")).toBeInTheDocument();
+    expect(await screen.findByText("Test Microphone")).toBeInTheDocument();
   });
 });
