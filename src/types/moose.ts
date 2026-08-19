@@ -15,6 +15,22 @@ export type CharacterState =
 export type ConversationLifecycle =
   "idle" | "connecting" | "listening" | "responding" | "stopping" | "failed";
 
+export type ProviderErrorKind =
+  | "auth"
+  | "quota"
+  | "network"
+  | "protocol"
+  | "setup"
+  | "model"
+  | "closed"
+  | "internal";
+
+export interface ProviderError {
+  kind: ProviderErrorKind;
+  message: string;
+  retryable: boolean;
+}
+
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
 export type AsrMode =

@@ -1,12 +1,13 @@
 use crate::ai::types::{LiveSessionConfig, TtsRequest};
 use crate::app::state::AppState;
+use crate::asr::AsrMode;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
 use crate::conversation::session::{
     ConversationCallbacks, ConversationLifecycle, ConversationStartRequest,
 };
 use crate::persistence::{Database, MemoryRecord, TranscriptRecord};
-use tauri::{Emitter, State};
+use tauri::{Emitter, Runtime, State};
 use tracing::{info, warn};
 
 fn persist_transcript_if_enabled(
@@ -25,9 +26,9 @@ fn persist_transcript_if_enabled(
         .map_err(|error| error.to_string())
 }
 
-fn transition_and_emit(
+fn transition_and_emit<R: Runtime>(
     character_state: &parking_lot::RwLock<CharacterState>,
-    app: &tauri::AppHandle,
+    app: &tauri::AppHandle<R>,
     target: CharacterState,
 ) -> Result<(), String> {
     transition_character_state(character_state, target)?;
@@ -35,9 +36,9 @@ fn transition_and_emit(
     Ok(())
 }
 
-fn prepare_character_for_conversation(
+fn prepare_character_for_conversation<R: Runtime>(
     state: &AppState,
-    app: &tauri::AppHandle,
+    app: &tauri::AppHandle<R>,
 ) -> Result<(), String> {
     let current = *state.character_state.read();
     if current.can_transition_to(&CharacterState::Listening) {
@@ -46,18 +47,28 @@ fn prepare_character_for_conversation(
     transition_and_emit(&state.character_state, app, CharacterState::Idle)
 }
 
+fn validate_asr_mode_for_conversation(mode: AsrMode) -> Result<(), String> {
+    match mode {
+        AsrMode::GeminiLiveAudio => Ok(()),
+        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => Err(
+            "Local Moonshine speech recognition is selected, but the local ASR worker is not integrated yet. Choose Gemini Live Cloud Audio to continue. No microphone audio was sent."
+                .to_string(),
+        ),
+    }
+}
+
 #[tauri::command]
-pub async fn start_conversation(
+pub async fn start_conversation<R: Runtime>(
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
     if *state.is_muted.read() {
         return Err("Moose is currently muted".to_string());
     }
 
-    prepare_character_for_conversation(state.inner(), &app)?;
-
     let settings = state.settings.read().clone();
+    validate_asr_mode_for_conversation(settings.asr_mode)?;
+    prepare_character_for_conversation(state.inner(), &app)?;
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
 
@@ -82,6 +93,7 @@ pub async fn start_conversation(
     let character_state = state.character_state.clone();
     let app_state = app.clone();
     let app_lifecycle = app.clone();
+    let app_provider_error = app.clone();
     let app_transcript = app.clone();
     let app_bubble = app.clone();
     let app_level = app.clone();
@@ -125,6 +137,9 @@ pub async fn start_conversation(
             },
             move |level: f32| {
                 let _ = app_level.emit("moose://audio/input-level", level);
+            },
+            move |provider_error| {
+                let _ = app_provider_error.emit("moose://conversation/error", provider_error);
             },
         ),
     };
@@ -280,6 +295,30 @@ pub async fn send_text_message(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::capture::AudioCapture;
+    use serde_json::json;
+    use std::sync::Arc;
+    use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
+    use tauri::webview::InvokeRequest;
+
+    fn ipc_request(command: &str, body: serde_json::Value) -> InvokeRequest {
+        InvokeRequest {
+            cmd: command.to_string(),
+            callback: CallbackFn(0),
+            error: CallbackFn(1),
+            url: if cfg!(any(windows, target_os = "android")) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
+            body: InvokeBody::Json(body),
+            headers: Default::default(),
+            invoke_key: INVOKE_KEY.to_string(),
+        }
+    }
 
     #[test]
     fn transcript_retention_off_writes_no_records() {
@@ -289,6 +328,46 @@ mod tests {
         persist_transcript_if_enabled(&db, false, "session", "moose", "private output").unwrap();
 
         assert!(db.get_transcripts(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn local_asr_modes_fail_closed_until_worker_integration_exists() {
+        for mode in [
+            AsrMode::MoonshineTinyStreaming,
+            AsrMode::MoonshineSmallStreaming,
+        ] {
+            let error = validate_asr_mode_for_conversation(mode).unwrap_err();
+            assert!(error.contains("No microphone audio was sent"));
+        }
+        assert!(validate_asr_mode_for_conversation(AsrMode::GeminiLiveAudio).is_ok());
+    }
+
+    #[test]
+    fn moonshine_start_ipc_fails_before_microphone_capture() {
+        let mut app_state = AppState::new_for_tests().unwrap();
+        app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
+        let capture = app_state.audio_capture.clone();
+
+        let app = mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![start_conversation])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        let error = get_ipc_response(
+            &webview,
+            ipc_request("start_conversation", json!({})),
+        )
+        .expect_err("local ASR selection must fail closed until the worker exists");
+
+        assert!(error
+            .as_str()
+            .unwrap()
+            .contains("No microphone audio was sent"));
+        assert!(!capture.lock().is_active());
     }
 
     #[test]

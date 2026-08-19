@@ -6,6 +6,7 @@ import {
   ConversationLifecycle,
   MemoryRecord,
   MouthShape,
+  ProviderError,
   TranscriptRecord,
 } from "../types/moose";
 import { tauriBridge } from "../lib/tauriBridge";
@@ -274,6 +275,13 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
         },
       );
 
+    const unlistenProviderError = await tauriBridge.listenEvent<ProviderError>(
+      "moose://conversation/error",
+      (error) => {
+        get().showSpeechBubble(error.message, 8000);
+      },
+    );
+
     const unlistenMouth = await tauriBridge.listenEvent<MouthShape>(
       "moose://mouth",
       (mouth) => {
@@ -333,6 +341,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     return () => {
       unlistenState();
       unlistenLifecycle();
+      unlistenProviderError();
       unlistenMouth();
       unlistenBubble();
       unlistenUserInput();

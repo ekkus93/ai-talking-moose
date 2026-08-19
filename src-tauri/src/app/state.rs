@@ -304,7 +304,7 @@ impl AppState {
 
     pub fn get_live_provider(&self) -> Arc<dyn RealtimeConversationProvider> {
         let settings = self.settings.read();
-        if settings.provider == "fake" || !self.secrets.has_google_api_key() {
+        if settings.provider == "fake" {
             Arc::new(FakeConversationProvider)
         } else {
             let key = self.secrets.get_google_api_key().unwrap_or_default();
@@ -372,6 +372,29 @@ mod tests {
         let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
         assert!(!migrated);
         assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
+    }
+
+    #[tokio::test]
+    async fn configured_google_live_without_secret_fails_auth_instead_of_using_fake_provider() {
+        let state = AppState::new_for_tests().unwrap();
+        let provider = state.get_live_provider();
+        let (event_tx, _event_rx) = tokio::sync::mpsc::channel(1);
+        let error = provider
+            .connect(
+                crate::ai::types::LiveSessionConfig {
+                    model: "test-model".to_string(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                },
+                event_tx,
+            )
+            .await
+            .err()
+            .expect("configured Google provider without a key must fail closed");
+
+        assert_eq!(error.kind, crate::ai::types::ProviderErrorKind::Auth);
     }
 
     #[test]

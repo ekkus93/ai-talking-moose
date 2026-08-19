@@ -1,5 +1,6 @@
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
+use crate::asr::lifecycle::LocalAsrLifecycle;
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
 use crate::character::state::CharacterState;
@@ -25,6 +26,7 @@ pub enum ConversationLifecycle {
 
 type StateCallback = Arc<dyn Fn(CharacterState) + Send + Sync>;
 type LifecycleCallback = Arc<dyn Fn(ConversationLifecycle) + Send + Sync>;
+type ProviderErrorCallback = Arc<dyn Fn(ProviderError) + Send + Sync>;
 type TranscriptCallback = Arc<dyn Fn(String, String, String) + Send + Sync>;
 type SpeechBubbleCallback = Arc<dyn Fn(String) + Send + Sync>;
 type InputLevelCallback = Arc<dyn Fn(f32) + Send + Sync>;
@@ -59,18 +61,20 @@ impl ConversationLifecycle {
 pub struct ConversationCallbacks {
     state: StateCallback,
     lifecycle: LifecycleCallback,
+    provider_error: ProviderErrorCallback,
     transcript: TranscriptCallback,
     speech_bubble: SpeechBubbleCallback,
     input_level: InputLevelCallback,
 }
 
 impl ConversationCallbacks {
-    pub fn new<S, L, T, B, I>(
+    pub fn new<S, L, T, B, I, E>(
         state: S,
         lifecycle: L,
         transcript: T,
         speech_bubble: B,
         input_level: I,
+        provider_error: E,
     ) -> Self
     where
         S: Fn(CharacterState) + Send + Sync + 'static,
@@ -78,10 +82,12 @@ impl ConversationCallbacks {
         T: Fn(String, String, String) + Send + Sync + 'static,
         B: Fn(String) + Send + Sync + 'static,
         I: Fn(f32) + Send + Sync + 'static,
+        E: Fn(ProviderError) + Send + Sync + 'static,
     {
         Self {
             state: Arc::new(state),
             lifecycle: Arc::new(lifecycle),
+            provider_error: Arc::new(provider_error),
             transcript: Arc::new(transcript),
             speech_bubble: Arc::new(speech_bubble),
             input_level: Arc::new(input_level),
@@ -110,6 +116,7 @@ struct ConversationEventLoopContext {
     tool_router: Arc<ToolRouter>,
     state_callback: StateCallback,
     lifecycle_callback: LifecycleCallback,
+    provider_error_callback: ProviderErrorCallback,
     transcript_callback: TranscriptCallback,
     speech_bubble_callback: SpeechBubbleCallback,
 }
@@ -123,6 +130,7 @@ pub struct ConversationManager {
     generation: Arc<AtomicU64>,
     output_suppressed: Arc<AtomicBool>,
     lifecycle_callback: Arc<SyncMutex<Option<LifecycleCallback>>>,
+    local_asr: Arc<LocalAsrLifecycle>,
     operation_lock: Arc<AsyncMutex<()>>,
 }
 
@@ -136,6 +144,7 @@ impl ConversationManager {
             generation: Arc::new(AtomicU64::new(0)),
             output_suppressed: Arc::new(AtomicBool::new(false)),
             lifecycle_callback: Arc::new(SyncMutex::new(None)),
+            local_asr: Arc::new(LocalAsrLifecycle::default()),
             operation_lock: Arc::new(AsyncMutex::new(())),
         }
     }
@@ -154,6 +163,16 @@ impl ConversationManager {
         } else {
             None
         }
+    }
+
+    pub fn local_asr_lifecycle(&self) -> Arc<LocalAsrLifecycle> {
+        self.local_asr.clone()
+    }
+
+    pub async fn local_asr_callback_is_current(&self, generation: u64) -> bool {
+        self.is_active()
+            && self.generation.load(Ordering::SeqCst) == generation
+            && self.local_asr.accepts_callback(generation).await
     }
 
     fn set_lifecycle(
@@ -181,7 +200,10 @@ impl ConversationManager {
 
     async fn close_provisional_session(session: &mut Box<dyn LiveSession>) {
         if let Err(error_value) = session.close().await {
-            warn!(error = %error_value, "Failed to close provisional conversation session");
+            warn!(
+                kind = ?error_value.kind,
+                "Failed to close provisional conversation session"
+            );
         }
     }
 
@@ -203,11 +225,20 @@ impl ConversationManager {
 
         capture.lock().stop();
         playback.flush();
+        if let Err(error_value) = self.local_asr.stop_and_clear().await {
+            warn!(
+                kind = ?error_value.kind,
+                "Local ASR resource teardown reported an error"
+            );
+        }
 
         let mut session_lock = self.live_session.lock().await;
         if let Some(mut session) = session_lock.take() {
             if let Err(error_value) = session.close().await {
-                warn!(error = %error_value, "Failed to close conversation session");
+                warn!(
+                    kind = ?error_value.kind,
+                    "Failed to close conversation session"
+                );
             }
         }
         *self.active_session_id.lock() = None;
@@ -263,6 +294,7 @@ impl ConversationManager {
         let ConversationCallbacks {
             state: state_callback,
             lifecycle: lifecycle_callback,
+            provider_error: provider_error_callback,
             transcript: transcript_callback,
             speech_bubble: speech_bubble_callback,
             input_level: input_level_callback,
@@ -287,10 +319,9 @@ impl ConversationManager {
                     ConversationLifecycle::Failed,
                     Some(&lifecycle_callback),
                 );
+                provider_error_callback(error_value.clone());
                 state_callback(CharacterState::Error);
-                return Err(format!(
-                    "conversation provider connection failed: {error_value}"
-                ));
+                return Err(error_value.to_string());
             }
         };
 
@@ -340,6 +371,7 @@ impl ConversationManager {
         let capture_for_pcm = capture.clone();
         let playback_for_pcm = playback.clone();
         let state_for_pcm = state_callback.clone();
+        let provider_error_for_pcm = provider_error_callback.clone();
         tauri::async_runtime::spawn(async move {
             while let Some(chunk) = pcm_rx.recv().await {
                 if !manager_for_pcm.is_in_conversation.load(Ordering::SeqCst)
@@ -348,24 +380,15 @@ impl ConversationManager {
                     break;
                 }
 
-                let send_failed = {
+                let send_error = {
                     let mut session_lock = manager_for_pcm.live_session.lock().await;
                     match session_lock.as_mut() {
-                        Some(live_session) => match live_session.send_audio_chunk(&chunk).await {
-                            Ok(()) => false,
-                            Err(error_value) => {
-                                warn!(
-                                    error = %error_value,
-                                    "Failed to stream microphone audio frame"
-                                );
-                                true
-                            }
-                        },
-                        None => true,
+                        Some(live_session) => live_session.send_audio_chunk(&chunk).await.err(),
+                        None => Some(ProviderError::from_kind(ProviderErrorKind::Closed)),
                     }
                 };
 
-                if send_failed {
+                if let Some(error_value) = send_error {
                     let cleaned = manager_for_pcm
                         .shutdown_if_generation_current(
                             generation,
@@ -375,6 +398,11 @@ impl ConversationManager {
                         )
                         .await;
                     if cleaned {
+                        warn!(
+                            kind = ?error_value.kind,
+                            "Failed to stream microphone audio frame"
+                        );
+                        provider_error_for_pcm(error_value);
                         state_for_pcm(CharacterState::Error);
                     }
                     break;
@@ -405,6 +433,7 @@ impl ConversationManager {
             tool_router,
             state_callback,
             lifecycle_callback,
+            provider_error_callback,
             transcript_callback,
             speech_bubble_callback,
         };
@@ -431,6 +460,7 @@ impl ConversationManager {
             tool_router,
             state_callback,
             lifecycle_callback,
+            provider_error_callback,
             transcript_callback,
             speech_bubble_callback,
         } = context;
@@ -515,6 +545,7 @@ impl ConversationManager {
                     let router = tool_router.clone();
                     let live_ref = self.live_session.clone();
                     let generation_ref = self.generation.clone();
+                    let provider_error_for_tool = provider_error_callback.clone();
 
                     tauri::async_runtime::spawn(async move {
                         let result = router.dispatch(&name, &args).await.unwrap_or_else(
@@ -526,13 +557,19 @@ impl ConversationManager {
                         }
                         let mut session_lock = live_ref.lock().await;
                         if let Some(ref mut live_session) = *session_lock {
-                            let _ = live_session
+                            if let Err(error_value) = live_session
                                 .send_tool_response(ToolCallResponse { id, output: result })
-                                .await;
+                                .await
+                            {
+                                if generation_ref.load(Ordering::SeqCst) == generation {
+                                    provider_error_for_tool(error_value);
+                                }
+                            }
                         }
                     });
                 }
-                LiveServerEvent::Error(_error_value) => {
+                LiveServerEvent::Error(error_value) => {
+                    provider_error_callback(error_value);
                     terminal_failed = true;
                     break;
                 }
@@ -581,7 +618,7 @@ impl ConversationManager {
         self.output_suppressed.store(true, Ordering::SeqCst);
         let mut session_lock = self.live_session.lock().await;
         if let Some(ref mut session) = *session_lock {
-            session.interrupt().await?;
+            session.interrupt().await.map_err(|error| error.to_string())?;
         }
         Ok(())
     }
@@ -628,8 +665,8 @@ mod tests {
             &self,
             _config: LiveSessionConfig,
             _event_sender: mpsc::Sender<LiveServerEvent>,
-        ) -> Result<Box<dyn LiveSession>, String> {
-            Err("injected connect failure".to_string())
+        ) -> Result<Box<dyn LiveSession>, ProviderError> {
+            Err(ProviderError::from_kind(ProviderErrorKind::Network))
         }
     }
 
@@ -640,23 +677,56 @@ mod tests {
 
     #[async_trait]
     impl LiveSession for CountingSession {
-        async fn send_audio_chunk(&mut self, _pcm_bytes: &[u8]) -> Result<(), String> {
+        async fn send_audio_chunk(&mut self, _pcm_bytes: &[u8]) -> Result<(), ProviderError> {
             Ok(())
         }
 
-        async fn send_tool_response(&mut self, _response: ToolCallResponse) -> Result<(), String> {
+        async fn send_tool_response(
+            &mut self,
+            _response: ToolCallResponse,
+        ) -> Result<(), ProviderError> {
             Ok(())
         }
 
-        async fn interrupt(&mut self) -> Result<(), String> {
+        async fn interrupt(&mut self) -> Result<(), ProviderError> {
             self.interrupt_count.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
         }
 
-        async fn close(&mut self) -> Result<(), String> {
+        async fn close(&mut self) -> Result<(), ProviderError> {
             self.close_count.fetch_add(1, AtomicOrdering::SeqCst);
             Ok(())
         }
+    }
+
+    struct CountingLocalAsrResource {
+        stop_count: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl crate::asr::lifecycle::LocalAsrResource for CountingLocalAsrResource {
+        async fn stop(&mut self) -> Result<(), crate::asr::AsrError> {
+            self.stop_count.fetch_add(1, AtomicOrdering::SeqCst);
+            Ok(())
+        }
+    }
+
+    async fn attach_counting_local_asr(
+        manager: &ConversationManager,
+        generation: u64,
+    ) -> Arc<AtomicUsize> {
+        let stop_count = Arc::new(AtomicUsize::new(0));
+        manager
+            .local_asr_lifecycle()
+            .attach(
+                generation,
+                Box::new(CountingLocalAsrResource {
+                    stop_count: stop_count.clone(),
+                }),
+            )
+            .await
+            .unwrap();
+        stop_count
     }
 
     fn test_tool_router() -> Arc<ToolRouter> {
@@ -689,7 +759,14 @@ mod tests {
             output_device: None,
             muted: Arc::new(RwLock::new(muted)),
             tool_router: test_tool_router(),
-            callbacks: ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}),
+            callbacks: ConversationCallbacks::new(
+                |_| {},
+                |_| {},
+                |_, _, _| {},
+                |_| {},
+                |_| {},
+                |_| {},
+            ),
         }
     }
 
@@ -710,6 +787,7 @@ mod tests {
             tool_router: test_tool_router(),
             state_callback: Arc::new(move |state| state_events.lock().push(state)),
             lifecycle_callback,
+            provider_error_callback: Arc::new(|_| {}),
             transcript_callback: Arc::new(|_, _, _| {}),
             speech_bubble_callback: Arc::new(|_| {}),
         }
@@ -764,6 +842,7 @@ mod tests {
         *manager.active_session_id.lock() = Some("test-session".to_string());
         manager.is_in_conversation.store(true, Ordering::SeqCst);
         *manager.lifecycle.write() = ConversationLifecycle::Listening;
+        let local_asr_stop_count = attach_counting_local_asr(&manager, 0).await;
 
         manager
             .stop_session(capture.clone(), playback.clone())
@@ -771,6 +850,8 @@ mod tests {
         manager.stop_session(capture.clone(), playback).await;
 
         assert_eq!(close_count.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 1);
+        assert!(!manager.local_asr_lifecycle().is_active().await);
         assert!(!capture.lock().is_active());
         assert!(!manager.is_active());
         assert_eq!(manager.current_session_id(), None);
@@ -794,6 +875,7 @@ mod tests {
         *manager.active_session_id.lock() = Some("shutdown-session".to_string());
         manager.is_in_conversation.store(true, Ordering::SeqCst);
         *manager.lifecycle.write() = ConversationLifecycle::Listening;
+        let local_asr_stop_count = attach_counting_local_asr(&manager, 0).await;
 
         manager
             .shutdown_application(capture.clone(), playback.clone())
@@ -803,6 +885,8 @@ mod tests {
             .await;
 
         assert_eq!(close_count.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 1);
+        assert!(!manager.local_asr_lifecycle().is_active().await);
         assert!(!capture.lock().is_active());
         assert!(!manager.is_active());
         assert_eq!(manager.current_session_id(), None);
@@ -854,6 +938,7 @@ mod tests {
         manager.is_in_conversation.store(true, Ordering::SeqCst);
         *manager.active_session_id.lock() = Some(session_id.to_string());
         *manager.lifecycle.write() = ConversationLifecycle::Listening;
+        let local_asr_stop_count = attach_counting_local_asr(&manager, generation).await;
 
         let lifecycle_events = Arc::new(SyncMutex::new(Vec::new()));
         let lifecycle_events_for_callback = lifecycle_events.clone();
@@ -876,6 +961,8 @@ mod tests {
         manager.run_event_loop(event_rx, context).await;
 
         assert_eq!(close_count.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 1);
+        assert!(!manager.local_asr_lifecycle().is_active().await);
         assert!(!capture.lock().is_active());
         assert!(!manager.is_active());
         assert_eq!(manager.current_session_id(), None);
@@ -907,6 +994,7 @@ mod tests {
         manager.is_in_conversation.store(true, Ordering::SeqCst);
         *manager.active_session_id.lock() = Some(session_id.to_string());
         *manager.lifecycle.write() = ConversationLifecycle::Listening;
+        let local_asr_stop_count = attach_counting_local_asr(&manager, generation).await;
 
         let lifecycle_events = Arc::new(SyncMutex::new(Vec::new()));
         let lifecycle_events_for_callback = lifecycle_events.clone();
@@ -914,7 +1002,7 @@ mod tests {
             Arc::new(move |lifecycle| lifecycle_events_for_callback.lock().push(lifecycle));
         *manager.lifecycle_callback.lock() = Some(lifecycle_callback.clone());
         let state_events = Arc::new(SyncMutex::new(Vec::new()));
-        let context = test_event_loop_context(
+        let mut context = test_event_loop_context(
             generation,
             session_id,
             capture.clone(),
@@ -922,11 +1010,16 @@ mod tests {
             state_events.clone(),
             lifecycle_callback,
         );
+        let provider_errors = Arc::new(SyncMutex::new(Vec::new()));
+        let provider_errors_for_callback = provider_errors.clone();
+        context.provider_error_callback = Arc::new(move |error| {
+            provider_errors_for_callback.lock().push(error);
+        });
         let (event_tx, event_rx) = mpsc::channel(1);
         event_tx
-            .send(LiveServerEvent::Error(
-                "injected provider failure".to_string(),
-            ))
+            .send(LiveServerEvent::Error(ProviderError::from_kind(
+                ProviderErrorKind::Protocol,
+            )))
             .await
             .unwrap();
         drop(event_tx);
@@ -934,11 +1027,15 @@ mod tests {
         manager.run_event_loop(event_rx, context).await;
 
         assert_eq!(close_count.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 1);
+        assert!(!manager.local_asr_lifecycle().is_active().await);
         assert!(!capture.lock().is_active());
         assert!(!manager.is_active());
         assert_eq!(manager.current_session_id(), None);
         assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
         assert_eq!(state_events.lock().as_slice(), &[CharacterState::Error]);
+        assert_eq!(provider_errors.lock().len(), 1);
+        assert_eq!(provider_errors.lock()[0].kind, ProviderErrorKind::Protocol);
         assert_eq!(
             lifecycle_events.lock().as_slice(),
             &[
@@ -946,6 +1043,37 @@ mod tests {
                 ConversationLifecycle::Failed
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn starting_a_new_provider_tears_down_previous_local_asr_before_connect() {
+        let manager = ConversationManager::new();
+        manager.generation.store(30, Ordering::SeqCst);
+        manager.is_in_conversation.store(true, Ordering::SeqCst);
+        *manager.active_session_id.lock() = Some("old-session".to_string());
+        *manager.lifecycle.write() = ConversationLifecycle::Listening;
+        let local_asr_stop_count = attach_counting_local_asr(&manager, 30).await;
+
+        let result = manager.start_session(test_request(false)).await;
+
+        assert!(result.is_err());
+        assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 1);
+        assert!(!manager.local_asr_lifecycle().is_active().await);
+        assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
+    }
+
+    #[tokio::test]
+    async fn stale_local_asr_callback_cannot_mutate_newer_generation() {
+        let manager = ConversationManager::new();
+        manager.generation.store(40, Ordering::SeqCst);
+        manager.is_in_conversation.store(true, Ordering::SeqCst);
+        *manager.lifecycle.write() = ConversationLifecycle::Listening;
+        let _stop_count = attach_counting_local_asr(&manager, 40).await;
+
+        assert!(manager.local_asr_callback_is_current(40).await);
+        manager.generation.store(41, Ordering::SeqCst);
+        assert!(!manager.local_asr_callback_is_current(40).await);
+        assert!(!manager.local_asr_callback_is_current(41).await);
     }
 
     #[tokio::test]
@@ -978,13 +1106,17 @@ mod tests {
             close_count,
             interrupt_count: interrupt_count.clone(),
         }));
+        manager.generation.store(21, Ordering::SeqCst);
         manager.is_in_conversation.store(true, Ordering::SeqCst);
         *manager.lifecycle.write() = ConversationLifecycle::Responding;
+        let local_asr_stop_count = attach_counting_local_asr(&manager, 21).await;
 
         manager.barge_in(playback).await.unwrap();
 
         assert!(manager.output_suppressed.load(Ordering::SeqCst));
         assert_eq!(interrupt_count.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 0);
+        assert!(manager.local_asr_callback_is_current(21).await);
         assert_eq!(manager.lifecycle(), ConversationLifecycle::Responding);
     }
 

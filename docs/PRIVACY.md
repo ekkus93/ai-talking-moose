@@ -49,7 +49,7 @@ Normal application logs may contain operational metadata such as component names
 - window titles or desktop observation text;
 - sensitive tool arguments or tool results.
 
-Provider errors must be redacted before they cross a boundary where a credential-bearing URL could be present. Tool logging is limited to the registered tool name and success/failure metadata rather than arguments, results, or raw error payloads.
+Provider failures cross application boundaries as structured, provider-neutral categories with fixed user-safe messages; raw provider payloads, credential-bearing URLs, and transport error strings are not forwarded to the frontend or normal logs. Tool logging is limited to the registered tool name and success/failure metadata rather than arguments, results, or raw error payloads.
 
 ## 5. Local persistence
 

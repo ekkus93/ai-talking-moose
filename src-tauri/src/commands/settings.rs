@@ -10,9 +10,10 @@ use crate::audio::permissions::{
 };
 use crate::audio::playback::AudioPlaybackDiagnostics;
 use crate::character::behavior::BehaviorEngine;
+use crate::character::state::{transition_character_state, CharacterState};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use tauri::State;
+use tauri::{Emitter, Runtime, State};
 use tokio::sync::mpsc;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,12 +72,23 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
 }
 
 #[tauri::command]
-pub fn update_settings(
+pub async fn update_settings<R: Runtime>(
     mut new_settings: AppSettings,
     state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
     new_settings.microphone_permission_granted = microphone_permission_state().is_granted();
+
+    let previous_asr_mode = state.settings.read().asr_mode;
+    if previous_asr_mode != new_settings.asr_mode && state.conversation_mgr.is_active() {
+        state
+            .conversation_mgr
+            .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
+            .await;
+        transition_character_state(&state.character_state, CharacterState::Idle)?;
+        let _ = app.emit("moose://state", CharacterState::Idle);
+    }
 
     let json_str = serde_json::to_string(&new_settings).map_err(|error| error.to_string())?;
     state

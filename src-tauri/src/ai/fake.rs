@@ -60,21 +60,24 @@ pub struct FakeLiveSession {
 
 #[async_trait]
 impl LiveSession for FakeLiveSession {
-    async fn send_audio_chunk(&mut self, _pcm_bytes: &[u8]) -> Result<(), String> {
+    async fn send_audio_chunk(&mut self, _pcm_bytes: &[u8]) -> Result<(), ProviderError> {
         // In fake mode, we simply accept audio chunks
         Ok(())
     }
 
-    async fn send_tool_response(&mut self, _response: ToolCallResponse) -> Result<(), String> {
+    async fn send_tool_response(
+        &mut self,
+        _response: ToolCallResponse,
+    ) -> Result<(), ProviderError> {
         Ok(())
     }
 
-    async fn interrupt(&mut self) -> Result<(), String> {
+    async fn interrupt(&mut self) -> Result<(), ProviderError> {
         self.is_active.store(false, Ordering::SeqCst);
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), String> {
+    async fn close(&mut self) -> Result<(), ProviderError> {
         self.is_active.store(false, Ordering::SeqCst);
         Ok(())
     }
@@ -89,7 +92,7 @@ impl RealtimeConversationProvider for FakeConversationProvider {
         &self,
         _config: LiveSessionConfig,
         event_sender: mpsc::Sender<LiveServerEvent>,
-    ) -> Result<Box<dyn LiveSession>, String> {
+    ) -> Result<Box<dyn LiveSession>, ProviderError> {
         let is_active = Arc::new(AtomicBool::new(true));
         let active_clone = is_active.clone();
 
