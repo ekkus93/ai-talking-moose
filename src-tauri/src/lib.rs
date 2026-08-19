@@ -13,15 +13,15 @@ pub mod tools;
 
 use app::state::AppState;
 use commands::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 use tracing::info;
 
 pub fn run() {
-    // Install Rustls crypto provider
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    // Initialize tracing subscriber
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
@@ -31,10 +31,9 @@ pub fn run() {
 
     info!("Starting Talking Moose AI Application");
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // Locate app data directory for SQLite database
             let app_data_dir = app.path().app_data_dir().ok();
             let db_path = if let Some(dir) = app_data_dir {
                 std::fs::create_dir_all(&dir).ok();
@@ -45,11 +44,9 @@ pub fn run() {
 
             let app_state = AppState::new(db_path.as_deref()).map_err(std::io::Error::other)?;
 
-            // Set up channels for mouth shapes and output audio levels from playback
             let (mouth_tx, mut mouth_rx) = mpsc::channel(64);
             let (out_lvl_tx, mut out_lvl_rx) = mpsc::channel(64);
 
-            // AudioPlayback setup
             app_state.audio_playback.set_mouth_sender(mouth_tx);
             app_state.audio_playback.set_output_level_sender(out_lvl_tx);
 
@@ -85,6 +82,7 @@ pub fn run() {
             test_microphone,
             test_audio_output,
             get_character_state,
+            get_conversation_lifecycle,
             set_character_state,
             show_moose,
             hide_moose,
@@ -103,6 +101,39 @@ pub fn run() {
             get_transcripts,
             send_text_message,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    let shutdown_started = Arc::new(AtomicBool::new(false));
+    app.run(move |app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+            if shutdown_started.swap(true, Ordering::SeqCst) {
+                return;
+            }
+
+            // Keep the event loop alive long enough to close microphone/session resources.
+            // AppHandle::exit below triggers a second ExitRequested event, which is allowed
+            // through because shutdown_started is already true.
+            api.prevent_exit();
+            let handle = app_handle.clone();
+            let exit_code = code.unwrap_or(0);
+            tauri::async_runtime::spawn(async move {
+                let resources = handle.try_state::<AppState>().map(|state| {
+                    (
+                        state.conversation_mgr.clone(),
+                        state.audio_capture.clone(),
+                        state.audio_playback.clone(),
+                    )
+                });
+
+                if let Some((conversation_mgr, audio_capture, audio_playback)) = resources {
+                    conversation_mgr
+                        .stop_session(audio_capture, audio_playback)
+                        .await;
+                }
+
+                handle.exit(exit_code);
+            });
+        }
+    });
 }
