@@ -55,10 +55,8 @@ const _: [(); 32] = [(); std::mem::offset_of!(MoonshineTranscriptLine, id)];
 #[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
 const _: [(); 40] = [(); std::mem::offset_of!(MoonshineTranscriptLine, is_complete)];
 #[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
-const _: [(); 64] = [(); std::mem::offset_of!(
-    MoonshineTranscriptLine,
-    last_transcription_latency_ms
-)];
+const _: [(); 64] =
+    [(); std::mem::offset_of!(MoonshineTranscriptLine, last_transcription_latency_ms)];
 #[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
 const _: [(); 8] = [(); std::mem::offset_of!(MoonshineTranscript, line_count)];
 
@@ -291,7 +289,8 @@ impl MoonshineApi for NativeMoonshineApi {
         {
             // SAFETY: both handles are owned by the RAII wrapper and the parent
             // transcriber is retained until after this stream has been freed.
-            return self.status(unsafe { moonshine_free_stream(transcriber_handle, stream_handle) });
+            return self
+                .status(unsafe { moonshine_free_stream(transcriber_handle, stream_handle) });
         }
         #[cfg(not(moonshine_native_linked))]
         {
@@ -318,7 +317,8 @@ impl MoonshineApi for NativeMoonshineApi {
         #[cfg(moonshine_native_linked)]
         {
             // SAFETY: both handles are valid for this owned parent/child pair.
-            return self.status(unsafe { moonshine_stop_stream(transcriber_handle, stream_handle) });
+            return self
+                .status(unsafe { moonshine_stop_stream(transcriber_handle, stream_handle) });
         }
         #[cfg(not(moonshine_native_linked))]
         {
