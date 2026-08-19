@@ -272,11 +272,7 @@ mod tests {
             self.create_stream_result.lock().clone()
         }
 
-        fn free_stream(
-            &self,
-            transcriber_handle: i32,
-            stream_handle: i32,
-        ) -> Result<(), FfiError> {
+        fn free_stream(&self, transcriber_handle: i32, stream_handle: i32) -> Result<(), FfiError> {
             self.record(format!("free_stream:{transcriber_handle}:{stream_handle}"));
             Ok(())
         }
@@ -290,11 +286,7 @@ mod tests {
             Ok(())
         }
 
-        fn stop_stream(
-            &self,
-            transcriber_handle: i32,
-            stream_handle: i32,
-        ) -> Result<(), FfiError> {
+        fn stop_stream(&self, transcriber_handle: i32, stream_handle: i32) -> Result<(), FfiError> {
             self.record(format!("stop:{transcriber_handle}:{stream_handle}"));
             Ok(())
         }
