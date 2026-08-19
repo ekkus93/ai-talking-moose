@@ -355,8 +355,10 @@ mod tests {
 
     #[test]
     fn current_settings_keep_selected_asr_mode() {
-        let mut original = AppSettings::default();
-        original.asr_mode = AsrMode::MoonshineSmallStreaming;
+        let original = AppSettings {
+            asr_mode: AsrMode::MoonshineSmallStreaming,
+            ..Default::default()
+        };
         let json = serde_json::to_string(&original).unwrap();
 
         let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
@@ -366,19 +368,21 @@ mod tests {
 
     #[test]
     fn settings_apply_to_live_character_config() {
-        let mut settings = AppSettings::default();
-        settings.dry = 0.11;
-        settings.sarcastic = 0.22;
-        settings.friendly = 0.33;
-        settings.absurd = 0.44;
-        settings.helpful = 0.55;
-        settings.verbosity = 0.66;
-        settings.talkativeness = 0.77;
-        settings.unsolicited_comments = false;
-        settings.quiet_hours_enabled = false;
-        settings.quiet_hours_start = 1;
-        settings.quiet_hours_end = 6;
-        settings.max_comments_per_hour = 2;
+        let settings = AppSettings {
+            dry: 0.11,
+            sarcastic: 0.22,
+            friendly: 0.33,
+            absurd: 0.44,
+            helpful: 0.55,
+            verbosity: 0.66,
+            talkativeness: 0.77,
+            unsolicited_comments: false,
+            quiet_hours_enabled: false,
+            quiet_hours_start: 1,
+            quiet_hours_end: 6,
+            max_comments_per_hour: 2,
+            ..Default::default()
+        };
 
         let mut config = CharacterConfig::default();
         settings.apply_to_character_config(&mut config);
@@ -402,10 +406,12 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let path = file.path().to_string_lossy().to_string();
         let db = Database::new(&path).unwrap();
-        let mut persisted = AppSettings::default();
-        persisted.talkativeness = 0.91;
-        persisted.unsolicited_comments = false;
-        persisted.quiet_hours_enabled = false;
+        let persisted = AppSettings {
+            talkativeness: 0.91,
+            unsolicited_comments: false,
+            quiet_hours_enabled: false,
+            ..Default::default()
+        };
         db.set_setting("app_settings", &serde_json::to_string(&persisted).unwrap())
             .unwrap();
         drop(db);
