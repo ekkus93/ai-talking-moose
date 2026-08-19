@@ -24,10 +24,7 @@ fn transition_and_emit<R: Runtime>(
     Ok(())
 }
 
-fn show_character<R: Runtime>(
-    state: &AppState,
-    app: &tauri::AppHandle<R>,
-) -> Result<(), String> {
+fn show_character<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) -> Result<(), String> {
     let current = *state.character_state.read();
     if matches!(current, CharacterState::Dismissed) {
         transition_and_emit(state, app, CharacterState::Hidden)?;
@@ -254,9 +251,9 @@ mod tests {
     use serde_json::json;
     use std::sync::Arc;
     use tauri::ipc::{CallbackFn, InvokeBody};
-    use tauri::Listener;
     use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
     use tauri::webview::InvokeRequest;
+    use tauri::Listener;
 
     fn ipc_request(command: &str, body: serde_json::Value) -> InvokeRequest {
         InvokeRequest {
@@ -448,11 +445,14 @@ mod tests {
                 .cooldowns
                 .last_dismissal_time
                 .expect("dismissal should record a cooldown timestamp");
-            assert!(!fixture
-                .behavior_engine
-                .lock()
-                .cooldowns
-                .can_speak_ambient(dismissal_time, 0, 10, false, 22, 8));
+            assert!(!fixture.behavior_engine.lock().cooldowns.can_speak_ambient(
+                dismissal_time,
+                0,
+                10,
+                false,
+                22,
+                8
+            ));
 
             get_ipc_response(&fixture.webview, ipc_request("show_moose", json!({})))
                 .expect("explicit user show should reappear through the state machine");
