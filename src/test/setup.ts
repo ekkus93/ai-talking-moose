@@ -1,11 +1,41 @@
 import "@testing-library/jest-dom";
 import { vi } from "vitest";
 
+const mockAudioDiagnostics = {
+  configured_input_device: null,
+  configured_output_device: null,
+  microphone_permission: "granted",
+  capture: {
+    selected_device: "Test Microphone",
+    sample_rate_hz: 48_000,
+    sample_format: "F32",
+    channels: 1,
+    active: false,
+    input_level: 0,
+    dropped_chunks: 0,
+    last_error: null,
+  },
+  playback: {
+    selected_device: "Test Speakers",
+    sample_rate_hz: 48_000,
+    sample_format: "F32",
+    channels: 2,
+    playing: false,
+    output_level: 0,
+    queue_depth_samples: 0,
+    queue_limit_samples: 480_000,
+    dropped_samples: 0,
+    last_error: null,
+  },
+};
+
 // Mock Tauri internals in test environment
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string) => {
     if (cmd === "get_settings") {
       return {
+        settings_version: 1,
+        asr_mode: "moonshine_tiny_streaming",
         launch_at_login: false,
         show_in_menu_bar: true,
         always_on_top: false,
@@ -28,10 +58,10 @@ vi.mock("@tauri-apps/api/core", () => ({
         text_model: "gemini-2.5-flash",
         tts_model: "en-US-Standard-B",
         microphone_permission_granted: true,
-        active_app_observation: true,
+        active_app_observation: false,
         window_title_observation: false,
-        memory_enabled: true,
-        save_transcripts: true,
+        memory_enabled: false,
+        save_transcripts: false,
         dry: 0.85,
         sarcastic: 0.7,
         friendly: 0.55,
@@ -40,6 +70,13 @@ vi.mock("@tauri-apps/api/core", () => ({
         verbosity: 0.3,
       };
     }
+    if (cmd === "get_microphone_permission") return "granted";
+    if (cmd === "request_microphone_access") return "granted";
+    if (cmd === "get_audio_diagnostics") return mockAudioDiagnostics;
+    if (cmd === "test_microphone") {
+      return { peak_level: 0.42, diagnostics: mockAudioDiagnostics };
+    }
+    if (cmd === "test_audio_output") return mockAudioDiagnostics;
     if (cmd === "get_character_state") return "idle";
     if (cmd === "is_muted") return false;
     if (cmd === "has_google_api_key") return true;
@@ -55,37 +92,3 @@ vi.mock("@tauri-apps/api/event", () => ({
     return () => {};
   }),
 }));
-
-// Mock SpeechSynthesis
-if (typeof window !== "undefined") {
-  window.speechSynthesis = {
-    speak: vi.fn(),
-    cancel: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    getVoices: vi.fn(() => []),
-    pending: false,
-    speaking: false,
-    paused: false,
-    onvoiceschanged: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  } as unknown as SpeechSynthesis;
-
-  window.SpeechSynthesisUtterance = vi.fn().mockImplementation((text) => ({
-    text,
-    pitch: 1,
-    rate: 1,
-    volume: 1,
-    voice: null,
-    lang: "en-US",
-    onstart: null,
-    onend: null,
-    onerror: null,
-    onpause: null,
-    onresume: null,
-    onmark: null,
-    onboundary: null,
-  })) as unknown as typeof SpeechSynthesisUtterance;
-}
