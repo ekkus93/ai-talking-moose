@@ -229,11 +229,7 @@ mod tests {
         let pacific_local = utc.with_timezone(&pacific_summer);
 
         assert_eq!(pacific_local.hour(), 22);
-        assert!(CooldownTracker::is_in_quiet_hours(
-            &pacific_local,
-            22,
-            8
-        ));
+        assert!(CooldownTracker::is_in_quiet_hours(&pacific_local, 22, 8));
     }
 
     #[test]
