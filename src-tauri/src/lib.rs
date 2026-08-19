@@ -128,7 +128,7 @@ pub fn run() {
 
                 if let Some((conversation_mgr, audio_capture, audio_playback)) = resources {
                     conversation_mgr
-                        .stop_session(audio_capture, audio_playback)
+                        .shutdown_application(audio_capture, audio_playback)
                         .await;
                 }
 

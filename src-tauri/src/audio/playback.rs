@@ -391,6 +391,17 @@ impl AudioPlayback {
         }
     }
 
+    /// Fully stop playback ownership, including the negotiated CPAL stream.
+    /// This is used for application shutdown; ordinary conversation interruption only flushes.
+    pub fn stop(&self) {
+        self.flush();
+        *self._stream.lock() = None;
+        self.output_sample_rate_hz.store(0, Ordering::SeqCst);
+        self.output_channels.store(0, Ordering::SeqCst);
+        *self.selected_device.lock() = None;
+        *self.sample_format.lock() = None;
+    }
+
     pub fn is_playing(&self) -> bool {
         self.is_playing.load(Ordering::SeqCst)
     }
@@ -420,6 +431,27 @@ mod tests {
             .output_sample_rate_hz
             .store(sample_rate, Ordering::SeqCst);
         playback
+    }
+
+    #[test]
+    fn stop_flushes_and_resets_negotiated_output_state() {
+        let playback = playback_with_rate(48_000);
+        playback.output_channels.store(2, Ordering::SeqCst);
+        *playback.selected_device.lock() = Some("test-output".to_string());
+        *playback.sample_format.lock() = Some("F32".to_string());
+        playback.buffer.lock().extend([0.25, -0.25]);
+        playback.is_playing.store(true, Ordering::SeqCst);
+
+        playback.stop();
+
+        let diagnostics = playback.diagnostics();
+        assert_eq!(diagnostics.sample_rate_hz, None);
+        assert_eq!(diagnostics.channels, None);
+        assert_eq!(diagnostics.selected_device, None);
+        assert_eq!(diagnostics.sample_format, None);
+        assert!(!diagnostics.playing);
+        assert_eq!(diagnostics.queue_depth_samples, 0);
+        assert_eq!(diagnostics.output_level, 0.0);
     }
 
     #[test]

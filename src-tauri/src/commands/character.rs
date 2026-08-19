@@ -3,7 +3,6 @@ use crate::app::state::AppState;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
-use crate::conversation::session::ConversationLifecycle;
 use crate::memory::MemoryManager;
 use tauri::{Emitter, State};
 
@@ -97,10 +96,6 @@ pub async fn dismiss_moose(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
-    let _ = app.emit(
-        "moose://conversation/lifecycle",
-        ConversationLifecycle::Idle,
-    );
     transition_and_emit(state.inner(), &app, CharacterState::Dismissed)
 }
 
@@ -118,10 +113,6 @@ pub async fn set_mute(
             .conversation_mgr
             .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
             .await;
-        let _ = app.emit(
-            "moose://conversation/lifecycle",
-            ConversationLifecycle::Idle,
-        );
         transition_and_emit(state.inner(), &app, CharacterState::Muted)
     } else {
         *state.is_muted.write() = false;

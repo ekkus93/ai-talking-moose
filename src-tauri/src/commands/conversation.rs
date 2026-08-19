@@ -146,10 +146,6 @@ pub async fn stop_conversation(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
-    let _ = app.emit(
-        "moose://conversation/lifecycle",
-        ConversationLifecycle::Idle,
-    );
 
     let target = if *state.is_muted.read() {
         CharacterState::Muted

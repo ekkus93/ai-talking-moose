@@ -1,5 +1,16 @@
 export type CharacterState =
-  "hidden" | "appearing" | "idle" | "listening" | "thinking" | "talking" | "interrupted" | "annoyed" | "sleeping" | "dismissed" | "muted" | "error";
+  | "hidden"
+  | "appearing"
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "talking"
+  | "interrupted"
+  | "annoyed"
+  | "sleeping"
+  | "dismissed"
+  | "muted"
+  | "error";
 
 export type ConversationLifecycle =
   "idle" | "connecting" | "listening" | "responding" | "stopping" | "failed";
@@ -7,7 +18,9 @@ export type ConversationLifecycle =
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
 export type AsrMode =
-  "moonshine_tiny_streaming" | "moonshine_small_streaming" | "gemini_live_audio";
+  | "moonshine_tiny_streaming"
+  | "moonshine_small_streaming"
+  | "gemini_live_audio";
 
 export type MicrophonePermissionState =
   "not_requested" | "granted" | "denied" | "unavailable";
