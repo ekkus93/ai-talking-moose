@@ -160,19 +160,22 @@ pub async fn send_text_message(
     if msg_trimmed.is_empty() {
         return Ok(String::new());
     }
+    let settings = state.settings.read().clone();
 
-    // 1. Emit user transcript and save
+    // 1. Emit user transcript and persist only when retention is enabled.
     let _ = app.emit("moose://transcript/user", &msg_trimmed);
-    let _ = state
-        .db
-        .add_transcript("debug_terminal", "user", &msg_trimmed);
+    if settings.save_transcripts {
+        let _ = state
+            .db
+            .add_transcript("debug_terminal", "user", &msg_trimmed);
+    }
 
     // 2. Set character state to thinking
     *state.character_state.write() = CharacterState::Thinking;
     let _ = app.emit("moose://state", CharacterState::Thinking);
 
     // 3. Build prompt with personality, rules, memories
-    let memories = if state.settings.read().memory_enabled {
+    let memories = if settings.memory_enabled {
         state.memory.get_memory_strings()
     } else {
         vec![]
@@ -197,12 +200,17 @@ pub async fn send_text_message(
 
     let reply = text_res.text;
 
-    // 4. Update state to Talking, emit speech bubble & transcript
+    // 4. Update state to Talking, emit speech bubble & transcript, and retain only
+    // when the user has explicitly enabled local transcript storage.
     *state.character_state.write() = CharacterState::Talking;
     let _ = app.emit("moose://state", CharacterState::Talking);
     let _ = app.emit("moose://transcript/moose", &reply);
     let _ = app.emit("moose://speech-bubble", &reply);
-    let _ = state.db.add_transcript("debug_terminal", "moose", &reply);
+    if settings.save_transcripts {
+        let _ = state
+            .db
+            .add_transcript("debug_terminal", "moose", &reply);
+    }
 
     // 5. Play speech output via system speech
     if !*state.is_muted.read() {

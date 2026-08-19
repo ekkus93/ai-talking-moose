@@ -1,15 +1,17 @@
+use crate::app::state::AppSettings;
 use crate::character::personality::CharacterConfig;
 use crate::desktop::macos::SystemDesktopMonitor;
 use crate::memory::MemoryManager;
 use crate::tools::policy::{ToolDeclaration, ToolPermissionLevel};
 use chrono::Local;
+use parking_lot::RwLock;
 use serde_json::json;
 use std::sync::Arc;
 
 pub struct BuiltinTools {
     pub memory_manager: Arc<MemoryManager>,
     pub character_config: CharacterConfig,
-    pub active_app_permitted: bool,
+    pub settings: Arc<RwLock<AppSettings>>,
 }
 
 impl BuiltinTools {
@@ -81,7 +83,7 @@ impl BuiltinTools {
                 }))
             }
             "get_active_application" => {
-                if !self.active_app_permitted {
+                if !self.settings.read().active_app_observation {
                     return Ok(json!({
                         "error": "Active application observation permission is disabled by user"
                     }));
@@ -91,6 +93,9 @@ impl BuiltinTools {
                 Ok(json!({ "active_application": app }))
             }
             "remember_fact" => {
+                if !self.settings.read().memory_enabled {
+                    return Err("Memory is disabled by user settings".to_string());
+                }
                 let fact = args["fact"]
                     .as_str()
                     .ok_or_else(|| "Missing required parameter 'fact'".to_string())?;

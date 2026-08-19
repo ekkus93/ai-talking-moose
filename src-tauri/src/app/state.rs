@@ -102,10 +102,10 @@ impl Default for AppSettings {
             tts_model: "en-US-Standard-B".to_string(),
 
             microphone_permission_granted: true,
-            active_app_observation: true,
+            active_app_observation: false,
             window_title_observation: false,
-            memory_enabled: true,
-            save_transcripts: true,
+            memory_enabled: false,
+            save_transcripts: false,
 
             dry: 0.85,
             sarcastic: 0.70,
@@ -228,7 +228,7 @@ impl AppState {
         let builtin_tools = Arc::new(BuiltinTools {
             memory_manager: memory.clone(),
             character_config,
-            active_app_permitted: true,
+            settings: settings.clone(),
         });
         let tool_router = Arc::new(ToolRouter::new(builtin_tools));
 
@@ -313,6 +313,9 @@ mod tests {
         let settings = AppSettings::default();
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+        assert!(!settings.active_app_observation);
+        assert!(!settings.memory_enabled);
+        assert!(!settings.save_transcripts);
     }
 
     #[test]
