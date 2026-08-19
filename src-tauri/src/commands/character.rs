@@ -224,7 +224,10 @@ mod tests {
         let db = Arc::new(Database::new_in_memory().unwrap());
         let memory = MemoryManager::new(db);
         memory
-            .remember("User prefers local speech recognition", Some("conversation"))
+            .remember(
+                "User prefers local speech recognition",
+                Some("conversation"),
+            )
             .unwrap();
 
         assert!(model_prompt_memories(false, &memory).is_empty());
