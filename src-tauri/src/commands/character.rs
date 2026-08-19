@@ -4,7 +4,7 @@ use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
 use crate::memory::MemoryManager;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Runtime, State};
 
 fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<String> {
     if memory_enabled {
@@ -14,9 +14,9 @@ fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<St
     }
 }
 
-fn transition_and_emit(
+fn transition_and_emit<R: Runtime>(
     state: &AppState,
-    app: &tauri::AppHandle,
+    app: &tauri::AppHandle<R>,
     target: CharacterState,
 ) -> Result<(), String> {
     transition_character_state(&state.character_state, target)?;
@@ -67,28 +67,34 @@ pub fn get_character_state(state: State<'_, AppState>) -> Result<CharacterState,
 }
 
 #[tauri::command]
-pub fn set_character_state(
+pub fn set_character_state<R: Runtime>(
     new_state: CharacterState,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     transition_and_emit(state.inner(), &app, new_state)
 }
 
 #[tauri::command]
-pub fn show_moose(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+pub fn show_moose<R: Runtime>(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<(), String> {
     transition_and_emit(state.inner(), &app, CharacterState::Idle)
 }
 
 #[tauri::command]
-pub fn hide_moose(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+pub fn hide_moose<R: Runtime>(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<(), String> {
     transition_and_emit(state.inner(), &app, CharacterState::Hidden)
 }
 
 #[tauri::command]
-pub async fn dismiss_moose(
+pub async fn dismiss_moose<R: Runtime>(
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     let now = chrono::Utc::now();
     state.behavior_engine.lock().cooldowns.record_dismissal(now);
@@ -100,10 +106,10 @@ pub async fn dismiss_moose(
 }
 
 #[tauri::command]
-pub async fn set_mute(
+pub async fn set_mute<R: Runtime>(
     muted: bool,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     if muted {
         // Set the privacy gate before awaiting teardown so a racing start request sees
@@ -127,10 +133,10 @@ pub fn is_muted(state: State<'_, AppState>) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn audition_voice(
+pub async fn audition_voice<R: Runtime>(
     voice_name: String,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
     let sample = match voice_name.as_str() {
         "Fenrir" => "Hey pal, I'm Moose. Deep, gravelly, and living in your computer.",
@@ -149,10 +155,10 @@ pub async fn audition_voice(
 }
 
 #[tauri::command]
-pub async fn trigger_canned_reaction(
+pub async fn trigger_canned_reaction<R: Runtime>(
     reaction_type: String,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
     if *state.is_muted.read() {
         return Ok(String::new());
@@ -173,10 +179,10 @@ pub async fn trigger_canned_reaction(
 }
 
 #[tauri::command]
-pub async fn trigger_ambient_remark(
+pub async fn trigger_ambient_remark<R: Runtime>(
     event_summary: String,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<Option<String>, String> {
     if *state.is_muted.read() || !state.settings.read().unsolicited_comments {
         return Ok(None);
