@@ -381,7 +381,8 @@ impl AudioPlayback {
     pub fn flush(&self) {
         self.buffer.lock().clear();
         self.is_playing.store(false, Ordering::SeqCst);
-        self.output_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
+        self.output_level
+            .store(0.0_f32.to_bits(), Ordering::Relaxed);
         self.level_meter.lock().reset();
         if let Some(ref sender) = *self.mouth_sender.lock() {
             let _ = sender.try_send(MouthShape::Closed);
