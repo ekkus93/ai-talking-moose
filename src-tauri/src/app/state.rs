@@ -229,8 +229,8 @@ impl AppState {
             if let Ok((loaded, migrated)) = AppSettings::from_persisted_json(&json_str) {
                 *settings.write() = loaded.clone();
                 if migrated {
-                    let normalized = serde_json::to_string(&loaded)
-                        .map_err(|error| error.to_string())?;
+                    let normalized =
+                        serde_json::to_string(&loaded).map_err(|error| error.to_string())?;
                     db.set_setting("app_settings", &normalized)
                         .map_err(|error| error.to_string())?;
                 }
@@ -406,11 +406,8 @@ mod tests {
         persisted.talkativeness = 0.91;
         persisted.unsolicited_comments = false;
         persisted.quiet_hours_enabled = false;
-        db.set_setting(
-            "app_settings",
-            &serde_json::to_string(&persisted).unwrap(),
-        )
-        .unwrap();
+        db.set_setting("app_settings", &serde_json::to_string(&persisted).unwrap())
+            .unwrap();
         drop(db);
 
         let backend = Arc::new(MemorySecretBackend::default());
@@ -460,11 +457,8 @@ mod tests {
     #[test]
     fn failed_secure_migration_preserves_legacy_plaintext_row() {
         let db = Database::new_in_memory().unwrap();
-        db.seed_legacy_setting_for_test(
-            LEGACY_GOOGLE_API_KEY_SETTING,
-            "AIzaSyOnlyCopyMustSurvive",
-        )
-        .unwrap();
+        db.seed_legacy_setting_for_test(LEGACY_GOOGLE_API_KEY_SETTING, "AIzaSyOnlyCopyMustSurvive")
+            .unwrap();
 
         let secret_store = SecretStore::with_backend(Arc::new(RejectWriteBackend)).unwrap();
         let result = migrate_legacy_google_api_key(&db, &secret_store);
