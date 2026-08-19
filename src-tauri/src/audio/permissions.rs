@@ -18,8 +18,8 @@ impl MicrophonePermissionState {
 #[cfg(target_os = "macos")]
 fn macos_microphone_permission_state() -> MicrophonePermissionState {
     use av_foundation::capture_device::{
-        AVCaptureDevice, AVAuthorizationStatusAuthorized, AVAuthorizationStatusDenied,
-        AVAuthorizationStatusNotDetermined, AVAuthorizationStatusRestricted,
+        AVAuthorizationStatusAuthorized, AVAuthorizationStatusDenied,
+        AVAuthorizationStatusNotDetermined, AVAuthorizationStatusRestricted, AVCaptureDevice,
     };
     use av_foundation::media_format::AVMediaTypeAudio;
 
