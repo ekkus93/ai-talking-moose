@@ -284,13 +284,11 @@ mod tests {
         );
         assert_eq!(*authoritative_state.read(), CharacterState::Hidden);
 
-        let reported_state = get_ipc_response(
-            &webview,
-            ipc_request("get_character_state", json!({})),
-        )
-        .expect("authoritative state query should still succeed")
-        .deserialize::<CharacterState>()
-        .unwrap();
+        let reported_state =
+            get_ipc_response(&webview, ipc_request("get_character_state", json!({})))
+                .expect("authoritative state query should still succeed")
+                .deserialize::<CharacterState>()
+                .unwrap();
         assert_eq!(reported_state, CharacterState::Hidden);
     }
 
