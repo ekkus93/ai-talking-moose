@@ -99,9 +99,7 @@ pub async fn start_conversation(
         tool_router,
         callbacks: ConversationCallbacks::new(
             move |new_state: CharacterState| {
-                if let Err(error_value) =
-                    transition_character_state(&character_state, new_state)
-                {
+                if let Err(error_value) = transition_character_state(&character_state, new_state) {
                     warn!(error = %error_value, ?new_state, "Rejected conversation character transition");
                     return;
                 }
