@@ -3,6 +3,7 @@ use crate::audio::resample::AudioResampler;
 use crate::character::state::MouthShape;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -27,6 +28,8 @@ pub enum AudioPlaybackError {
     NoOutputDevice,
     #[error("failed to enumerate audio output devices: {0}")]
     DeviceEnumeration(String),
+    #[error("requested audio output device was not found: {0}")]
+    RequestedDeviceNotFound(String),
     #[error("failed to read output-device configuration: {0}")]
     OutputConfiguration(String),
     #[error("unsupported output sample format: {0:?}")]
@@ -45,10 +48,25 @@ pub struct PlaybackEnqueueReport {
     pub dropped_samples: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AudioPlaybackDiagnostics {
+    pub selected_device: Option<String>,
+    pub sample_rate_hz: Option<u32>,
+    pub sample_format: Option<String>,
+    pub channels: Option<u16>,
+    pub playing: bool,
+    pub output_level: f32,
+    pub queue_depth_samples: usize,
+    pub queue_limit_samples: usize,
+    pub dropped_samples: u64,
+    pub last_error: Option<String>,
+}
+
 #[derive(Clone)]
 struct PlaybackCallbackState {
     buffer: Arc<Mutex<VecDeque<f32>>>,
     is_playing: Arc<AtomicBool>,
+    output_level: Arc<AtomicU32>,
     level_meter: Arc<Mutex<LevelMeter>>,
     mouth_sender: Arc<Mutex<Option<mpsc::Sender<MouthShape>>>>,
     output_level_sender: Arc<Mutex<Option<mpsc::Sender<f32>>>>,
@@ -72,6 +90,7 @@ impl PlaybackCallbackState {
 
     fn publish_level_and_mouth(&self, mono: &[f32]) {
         let (rms, mouth) = self.level_meter.lock().feed_samples(mono);
+        self.output_level.store(rms.to_bits(), Ordering::Relaxed);
         if let Some(ref sender) = *self.mouth_sender.lock() {
             let _ = sender.try_send(mouth);
         }
@@ -113,19 +132,33 @@ fn f32_to_u16_sample(sample: f32) -> u16 {
     (((sample.clamp(-1.0, 1.0) + 1.0) * 0.5) * u16::MAX as f32).round() as u16
 }
 
-fn log_stream_error(error_value: cpal::StreamError) {
-    error!("Audio playback error: {}", error_value);
+fn stream_error_handler(
+    is_playing: Arc<AtomicBool>,
+    output_level: Arc<AtomicU32>,
+    last_error: Arc<Mutex<Option<String>>>,
+) -> impl FnMut(cpal::StreamError) + Send + 'static {
+    move |error_value| {
+        is_playing.store(false, Ordering::SeqCst);
+        output_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
+        *last_error.lock() = Some(format!("runtime audio output stream error: {error_value}"));
+        error!(error = %error_value, "Audio playback stream failed");
+    }
 }
 
 pub struct AudioPlayback {
     buffer: Arc<Mutex<VecDeque<f32>>>,
     is_playing: Arc<AtomicBool>,
+    output_level: Arc<AtomicU32>,
     level_meter: Arc<Mutex<LevelMeter>>,
     _stream: Mutex<Option<SafeStream>>,
     mouth_sender: Arc<Mutex<Option<mpsc::Sender<MouthShape>>>>,
     output_level_sender: Arc<Mutex<Option<mpsc::Sender<f32>>>>,
     output_sample_rate_hz: AtomicU32,
+    output_channels: AtomicU32,
+    selected_device: Mutex<Option<String>>,
+    sample_format: Mutex<Option<String>>,
     dropped_samples: AtomicU64,
+    last_error: Arc<Mutex<Option<String>>>,
 }
 
 impl AudioPlayback {
@@ -133,12 +166,17 @@ impl AudioPlayback {
         Self {
             buffer: Arc::new(Mutex::new(VecDeque::new())),
             is_playing: Arc::new(AtomicBool::new(false)),
+            output_level: Arc::new(AtomicU32::new(0.0_f32.to_bits())),
             level_meter: Arc::new(Mutex::new(LevelMeter::new())),
             _stream: Mutex::new(None),
             mouth_sender: Arc::new(Mutex::new(None)),
             output_level_sender: Arc::new(Mutex::new(None)),
             output_sample_rate_hz: AtomicU32::new(0),
+            output_channels: AtomicU32::new(0),
+            selected_device: Mutex::new(None),
+            sample_format: Mutex::new(None),
             dropped_samples: AtomicU64::new(0),
+            last_error: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -154,9 +192,21 @@ impl AudioPlayback {
         self.flush();
         *self._stream.lock() = None;
         self.output_sample_rate_hz.store(0, Ordering::SeqCst);
+        self.output_channels.store(0, Ordering::SeqCst);
+        *self.selected_device.lock() = None;
+        *self.sample_format.lock() = None;
+        *self.last_error.lock() = None;
 
+        let result = self.start_inner(device_name);
+        if let Err(ref error_value) = result {
+            *self.last_error.lock() = Some(error_value.to_string());
+        }
+        result
+    }
+
+    fn start_inner(&self, device_name: Option<String>) -> Result<(), AudioPlaybackError> {
         let host = cpal::default_host();
-        let device = if let Some(ref name) = device_name {
+        let device = if let Some(ref requested_name) = device_name {
             host.output_devices()
                 .map_err(|error_value| {
                     AudioPlaybackError::DeviceEnumeration(error_value.to_string())
@@ -164,30 +214,34 @@ impl AudioPlayback {
                 .find(|device| {
                     device
                         .name()
-                        .map(|candidate| candidate == *name)
+                        .map(|candidate| candidate == *requested_name)
                         .unwrap_or(false)
                 })
-                .or_else(|| host.default_output_device())
+                .ok_or_else(|| {
+                    AudioPlaybackError::RequestedDeviceNotFound(requested_name.clone())
+                })?
         } else {
             host.default_output_device()
-        }
-        .ok_or(AudioPlaybackError::NoOutputDevice)?;
+                .ok_or(AudioPlaybackError::NoOutputDevice)?
+        };
 
+        let selected_device = device.name().ok().or(device_name);
         let supported_config = device.default_output_config().map_err(|error_value| {
             AudioPlaybackError::OutputConfiguration(error_value.to_string())
         })?;
         let sample_format = supported_config.sample_format();
         let stream_config: cpal::StreamConfig = supported_config.into();
         let sample_rate_hz = stream_config.sample_rate.0;
-        let channels = usize::from(stream_config.channels);
+        let channels = stream_config.channels;
 
         let callback_state = PlaybackCallbackState {
             buffer: self.buffer.clone(),
             is_playing: self.is_playing.clone(),
+            output_level: self.output_level.clone(),
             level_meter: self.level_meter.clone(),
             mouth_sender: self.mouth_sender.clone(),
             output_level_sender: self.output_level_sender.clone(),
-            channels,
+            channels: usize::from(channels),
         };
 
         let stream = match sample_format {
@@ -196,7 +250,11 @@ impl AudioPlayback {
                 device.build_output_stream(
                     &stream_config,
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| state.render_f32(data),
-                    log_stream_error,
+                    stream_error_handler(
+                        self.is_playing.clone(),
+                        self.output_level.clone(),
+                        self.last_error.clone(),
+                    ),
                     None,
                 )
             }
@@ -205,7 +263,11 @@ impl AudioPlayback {
                 device.build_output_stream(
                     &stream_config,
                     move |data: &mut [i16], _: &cpal::OutputCallbackInfo| state.render_i16(data),
-                    log_stream_error,
+                    stream_error_handler(
+                        self.is_playing.clone(),
+                        self.output_level.clone(),
+                        self.last_error.clone(),
+                    ),
                     None,
                 )
             }
@@ -214,7 +276,11 @@ impl AudioPlayback {
                 device.build_output_stream(
                     &stream_config,
                     move |data: &mut [u16], _: &cpal::OutputCallbackInfo| state.render_u16(data),
-                    log_stream_error,
+                    stream_error_handler(
+                        self.is_playing.clone(),
+                        self.output_level.clone(),
+                        self.last_error.clone(),
+                    ),
                     None,
                 )
             }
@@ -226,6 +292,10 @@ impl AudioPlayback {
             .play()
             .map_err(|error_value| AudioPlaybackError::StartStream(error_value.to_string()))?;
         *self._stream.lock() = Some(SafeStream(stream));
+        *self.selected_device.lock() = selected_device;
+        *self.sample_format.lock() = Some(format!("{sample_format:?}"));
+        self.output_channels
+            .store(u32::from(channels), Ordering::SeqCst);
         self.output_sample_rate_hz
             .store(sample_rate_hz, Ordering::SeqCst);
         info!(sample_rate_hz, ?sample_format, "Audio playback initialized");
@@ -241,6 +311,22 @@ impl AudioPlayback {
         self.output_sample_rate_hz().map_or(0, |sample_rate| {
             sample_rate as usize * MAX_QUEUED_PLAYBACK_SECONDS
         })
+    }
+
+    pub fn diagnostics(&self) -> AudioPlaybackDiagnostics {
+        let channels = self.output_channels.load(Ordering::SeqCst);
+        AudioPlaybackDiagnostics {
+            selected_device: self.selected_device.lock().clone(),
+            sample_rate_hz: self.output_sample_rate_hz(),
+            sample_format: self.sample_format.lock().clone(),
+            channels: (channels != 0).then_some(channels as u16),
+            playing: self.is_playing(),
+            output_level: f32::from_bits(self.output_level.load(Ordering::Relaxed)),
+            queue_depth_samples: self.queue_length(),
+            queue_limit_samples: self.max_queued_samples(),
+            dropped_samples: self.dropped_samples(),
+            last_error: self.last_error.lock().clone(),
+        }
     }
 
     /// Enqueue incoming raw PCM i16 mono samples. The source sample rate is the
@@ -295,6 +381,7 @@ impl AudioPlayback {
     pub fn flush(&self) {
         self.buffer.lock().clear();
         self.is_playing.store(false, Ordering::SeqCst);
+        self.output_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
         self.level_meter.lock().reset();
         if let Some(ref sender) = *self.mouth_sender.lock() {
             let _ = sender.try_send(MouthShape::Closed);
@@ -374,6 +461,11 @@ mod tests {
         assert_eq!(report.queued_samples, max_samples);
         assert_eq!(report.dropped_samples, 250);
         assert_eq!(playback.dropped_samples(), 250);
+
+        let diagnostics = playback.diagnostics();
+        assert_eq!(diagnostics.queue_depth_samples, max_samples);
+        assert_eq!(diagnostics.queue_limit_samples, max_samples);
+        assert_eq!(diagnostics.dropped_samples, 250);
     }
 
     #[test]
@@ -386,6 +478,7 @@ mod tests {
         playback.flush();
         assert_eq!(playback.queue_length(), 0);
         assert!(!playback.is_playing());
+        assert_eq!(playback.diagnostics().output_level, 0.0);
     }
 
     #[test]
