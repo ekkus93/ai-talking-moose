@@ -223,7 +223,76 @@ pub async fn trigger_ambient_remark(
 mod tests {
     use super::*;
     use crate::persistence::sqlite::Database;
+    use serde_json::json;
     use std::sync::Arc;
+    use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
+    use tauri::webview::InvokeRequest;
+
+    fn ipc_request(command: &str, body: serde_json::Value) -> InvokeRequest {
+        InvokeRequest {
+            cmd: command.to_string(),
+            callback: CallbackFn(0),
+            error: CallbackFn(1),
+            url: if cfg!(any(windows, target_os = "android")) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
+            body: InvokeBody::Json(body),
+            headers: Default::default(),
+            invoke_key: INVOKE_KEY.to_string(),
+        }
+    }
+
+    #[test]
+    fn set_character_state_ipc_rejects_invalid_transition_without_mutating_state() {
+        let app_state = AppState::new_for_tests().unwrap();
+        let authoritative_state = app_state.character_state.clone();
+
+        let app = mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![
+                get_character_state,
+                hide_moose,
+                set_character_state
+            ])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        get_ipc_response(&webview, ipc_request("hide_moose", json!({})))
+            .expect("Idle -> Hidden setup transition should succeed through IPC");
+        assert_eq!(*authoritative_state.read(), CharacterState::Hidden);
+
+        let error = get_ipc_response(
+            &webview,
+            ipc_request(
+                "set_character_state",
+                json!({ "newState": CharacterState::Talking }),
+            ),
+        )
+        .expect_err("Hidden -> Talking must be rejected at the IPC command boundary");
+
+        assert_eq!(
+            error,
+            json!("invalid character state transition: Hidden -> Talking")
+        );
+        assert_eq!(*authoritative_state.read(), CharacterState::Hidden);
+
+        let reported_state = get_ipc_response(
+            &webview,
+            ipc_request("get_character_state", json!({})),
+        )
+        .expect("authoritative state query should still succeed")
+        .deserialize::<CharacterState>()
+        .unwrap();
+        assert_eq!(reported_state, CharacterState::Hidden);
+    }
 
     #[test]
     fn ambient_prompt_memories_obey_memory_setting_and_restore_on_reenable() {

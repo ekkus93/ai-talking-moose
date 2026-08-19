@@ -11,6 +11,8 @@ use crate::conversation::session::ConversationManager;
 use crate::memory::MemoryManager;
 use crate::persistence::sqlite::Database;
 use crate::secrets::SecretStore;
+#[cfg(test)]
+use crate::secrets::MemorySecretBackend;
 use crate::tools::builtin::BuiltinTools;
 use crate::tools::router::ToolRouter;
 use parking_lot::{Mutex, RwLock};
@@ -205,6 +207,12 @@ fn migrate_legacy_google_api_key(db: &Database, secrets: &SecretStore) -> Result
 impl AppState {
     pub fn new(db_path: Option<&str>) -> Result<Self, String> {
         Self::new_with_secret_store(db_path, SecretStore::new()?)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_tests() -> Result<Self, String> {
+        let secret_store = SecretStore::with_backend(Arc::new(MemorySecretBackend::default()))?;
+        Self::new_with_secret_store(None, secret_store)
     }
 
     fn new_with_secret_store(
