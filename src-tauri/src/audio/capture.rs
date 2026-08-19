@@ -231,7 +231,12 @@ impl AudioCapture {
                 .map_err(|error_value| {
                     AudioCaptureError::DeviceEnumeration(error_value.to_string())
                 })?
-                .find(|device| device.name().map(|candidate| candidate == *name).unwrap_or(false))
+                .find(|device| {
+                    device
+                        .name()
+                        .map(|candidate| candidate == *name)
+                        .unwrap_or(false)
+                })
                 .or_else(|| host.default_input_device())
         } else {
             host.default_input_device()
@@ -315,7 +320,11 @@ impl AudioCapture {
             .map_err(|error_value| start_error(error_value.to_string()))?;
         self._stream = Some(SafeStream(stream));
         self.is_running.store(true, Ordering::SeqCst);
-        info!(sample_rate, ?sample_format, "Microphone audio capture started");
+        info!(
+            sample_rate,
+            ?sample_format,
+            "Microphone audio capture started"
+        );
         Ok(())
     }
 
