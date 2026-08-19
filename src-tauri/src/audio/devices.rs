@@ -13,10 +13,12 @@ pub struct AudioDeviceManager;
 impl AudioDeviceManager {
     pub fn list_input_devices() -> Result<Vec<AudioDeviceInfo>, String> {
         let host = cpal::default_host();
-        let default_device_name = host.default_input_device().and_then(|device| device.name().ok());
-        let devices = host
-            .input_devices()
-            .map_err(|error_value| format!("failed to enumerate audio input devices: {error_value}"))?;
+        let default_device_name = host
+            .default_input_device()
+            .and_then(|device| device.name().ok());
+        let devices = host.input_devices().map_err(|error_value| {
+            format!("failed to enumerate audio input devices: {error_value}")
+        })?;
 
         let mut list = Vec::new();
         for device in devices {
@@ -37,9 +39,9 @@ impl AudioDeviceManager {
         let default_device_name = host
             .default_output_device()
             .and_then(|device| device.name().ok());
-        let devices = host
-            .output_devices()
-            .map_err(|error_value| format!("failed to enumerate audio output devices: {error_value}"))?;
+        let devices = host.output_devices().map_err(|error_value| {
+            format!("failed to enumerate audio output devices: {error_value}")
+        })?;
 
         let mut list = Vec::new();
         for device in devices {
