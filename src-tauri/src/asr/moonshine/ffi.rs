@@ -1,6 +1,6 @@
-use std::ffi::{CStr, CString};
 #[cfg(moonshine_native_linked)]
 use std::ffi::{c_char, c_void};
+use std::ffi::{CStr, CString};
 #[cfg(moonshine_native_linked)]
 use std::{ptr, slice};
 
