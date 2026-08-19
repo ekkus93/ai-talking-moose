@@ -99,7 +99,9 @@ pub async fn start_conversation(
     let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
 
     let mut capture = state.audio_capture.lock();
-    capture.start(settings.input_device.clone(), 16000, pcm_tx, Some(level_tx))?;
+    capture
+        .start(settings.input_device.clone(), 16000, pcm_tx, Some(level_tx))
+        .map_err(|error_value| format!("Failed to start microphone: {error_value}"))?;
 
     let conv_mgr = state.conversation_mgr.clone();
     tauri::async_runtime::spawn(async move {
