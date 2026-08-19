@@ -231,7 +231,9 @@ mod tests {
             db.get_setting("talkativeness").unwrap(),
             Some("0.8".to_string())
         );
-        assert!(db.set_setting("google_api_key", "must-not-persist").is_err());
+        assert!(db
+            .set_setting("google_api_key", "must-not-persist")
+            .is_err());
         assert_eq!(db.get_setting("google_api_key").unwrap(), None);
 
         db.set_setting("temporary", "value").unwrap();
