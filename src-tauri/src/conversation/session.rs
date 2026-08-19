@@ -62,7 +62,6 @@ impl ConversationManager {
         tool_router: Arc<ToolRouter>,
         callbacks: ConversationCallbacks,
     ) -> Result<String, String> {
-        // End any prior session
         self.stop_session(playback.clone()).await;
 
         let ConversationCallbacks {
@@ -110,7 +109,19 @@ impl ConversationManager {
                     }
                     LiveServerEvent::AudioData(pcm_bytes) => {
                         (state_callback)(CharacterState::Talking);
-                        playback.enqueue_pcm_bytes(&pcm_bytes, 24000, 24000);
+                        match playback.enqueue_pcm_bytes(&pcm_bytes, 24_000) {
+                            Ok(report) if report.dropped_samples > 0 => {
+                                warn!(
+                                    dropped_samples = report.dropped_samples,
+                                    "Gemini Live playback queue overflowed"
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(error_value) => {
+                                error!(error = %error_value, "Failed to enqueue Gemini Live audio");
+                                (state_callback)(CharacterState::Error);
+                            }
+                        }
                     }
                     LiveServerEvent::Interrupted => {
                         info!("Interruption triggered! Barge-in active.");
@@ -120,7 +131,6 @@ impl ConversationManager {
                         (state_callback)(CharacterState::Listening);
                     }
                     LiveServerEvent::TurnComplete => {
-                        // After talking finishes, return to listening
                         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
                         if is_running.load(Ordering::SeqCst) {
                             (state_callback)(CharacterState::Listening);
