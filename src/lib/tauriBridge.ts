@@ -4,6 +4,7 @@ import {
   AudioDiagnostics,
   CharacterState,
   ConnectionTestResult,
+  ConversationLifecycle,
   MemoryRecord,
   MicrophonePermissionState,
   MicrophoneTestResult,
@@ -179,6 +180,12 @@ export const tauriBridge = {
     if (!isTauri()) return "idle";
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<CharacterState>("get_character_state");
+  },
+
+  async getConversationLifecycle(): Promise<ConversationLifecycle> {
+    if (!isTauri()) return "idle";
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<ConversationLifecycle>("get_conversation_lifecycle");
   },
 
   async setCharacterState(newState: CharacterState): Promise<void> {
