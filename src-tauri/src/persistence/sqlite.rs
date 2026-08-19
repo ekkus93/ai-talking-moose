@@ -3,6 +3,12 @@ use std::path::Path;
 use std::sync::Mutex;
 use tracing::info;
 
+const SECRET_SETTING_KEYS: &[&str] = &["google_api_key"];
+
+fn is_secret_setting_key(key: &str) -> bool {
+    SECRET_SETTING_KEYS.contains(&key)
+}
+
 pub struct Database {
     conn: Mutex<Connection>,
 }
@@ -84,6 +90,10 @@ impl Database {
     // --- Settings CRUD ---
 
     pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        if is_secret_setting_key(key) {
+            return Err(rusqlite::Error::InvalidParameterName(key.to_string()));
+        }
+
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)
@@ -102,6 +112,23 @@ impl Database {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn delete_setting(&self, key: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let affected = conn.execute("DELETE FROM settings WHERE key = ?1", params![key])?;
+        Ok(affected > 0)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_legacy_setting_for_test(&self, key: &str, value: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = ?2",
+            params![key, value],
+        )?;
+        Ok(())
     }
 
     // --- Memories CRUD ---
@@ -204,6 +231,12 @@ mod tests {
             db.get_setting("talkativeness").unwrap(),
             Some("0.8".to_string())
         );
+        assert!(db.set_setting("google_api_key", "must-not-persist").is_err());
+        assert_eq!(db.get_setting("google_api_key").unwrap(), None);
+
+        db.set_setting("temporary", "value").unwrap();
+        assert!(db.delete_setting("temporary").unwrap());
+        assert_eq!(db.get_setting("temporary").unwrap(), None);
 
         // Memory
         let mem_id = db.add_memory("User likes coffee", "fact").unwrap();

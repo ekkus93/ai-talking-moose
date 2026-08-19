@@ -1,5 +1,10 @@
-pub mod stronghold;
-pub use stronghold::*;
+#[cfg(target_os = "macos")]
+mod macos_keychain;
+mod store;
+
+pub use store::SecretStore;
+#[cfg(test)]
+pub(crate) use store::{MemorySecretBackend, SecretBackend};
 
 const REDACTED_SECRET: &str = "[REDACTED_SECRET]";
 

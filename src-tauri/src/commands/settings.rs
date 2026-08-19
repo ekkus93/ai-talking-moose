@@ -20,9 +20,10 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
 
 #[tauri::command]
 pub fn update_settings(
-    new_settings: AppSettings,
+    mut new_settings: AppSettings,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
     *state.settings.write() = new_settings.clone();
 
     // Persist to SQLite
@@ -34,15 +35,17 @@ pub fn update_settings(
 
 #[tauri::command]
 pub fn set_google_api_key(api_key: String, state: State<'_, AppState>) -> Result<(), String> {
-    state.secrets.set_google_api_key(api_key.clone());
-    let _ = state.db.set_setting("google_api_key", &api_key);
-    Ok(())
+    state.secrets.set_google_api_key(api_key)
 }
 
 #[tauri::command]
 pub fn clear_google_api_key(state: State<'_, AppState>) -> Result<(), String> {
-    state.secrets.clear();
-    let _ = state.db.set_setting("google_api_key", "");
+    state.secrets.clear()?;
+    // Defensive cleanup for databases created before secure storage was introduced.
+    state
+        .db
+        .delete_setting("google_api_key")
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -81,7 +84,7 @@ pub async fn test_ai_connection(
         }),
         Err(e) => Ok(ConnectionTestResult {
             success: false,
-            message: format!("Connection failed: {}", e),
+            message: format!("Connection failed: {}", state.secrets.redact(&e)),
         }),
     }
 }

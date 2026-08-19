@@ -1,6 +1,7 @@
 use crate::ai::fake::{FakeConversationProvider, FakeSpeechSynthesizer, FakeTextModel};
 use crate::ai::google::{GoogleAuth, GoogleLiveProvider, GoogleSpeechSynthesizer, GoogleTextModel};
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
+use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
 use crate::character::behavior::BehaviorEngine;
@@ -17,7 +18,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppSettings {
+    pub settings_version: u32,
+    pub asr_mode: AsrMode,
+
     // General
     pub launch_at_login: bool,
     pub show_in_menu_bar: bool,
@@ -63,9 +68,14 @@ pub struct AppSettings {
     pub verbosity: f32,
 }
 
+pub const CURRENT_SETTINGS_VERSION: u32 = 1;
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            settings_version: CURRENT_SETTINGS_VERSION,
+            asr_mode: AsrMode::MoonshineTinyStreaming,
+
             launch_at_login: false,
             show_in_menu_bar: true,
             always_on_top: false,
@@ -107,6 +117,29 @@ impl Default for AppSettings {
     }
 }
 
+impl AppSettings {
+    /// Deserialize persisted settings while preserving the behavior of installations
+    /// created before an ASR selector existed. New profiles default to local
+    /// Moonshine Tiny Streaming, while legacy profiles migrate to Gemini Live audio
+    /// because that was the only microphone-recognition path they previously used.
+    pub fn from_persisted_json(json: &str) -> Result<(Self, bool), serde_json::Error> {
+        let value: serde_json::Value = serde_json::from_str(json)?;
+        let had_asr_mode = value.get("asr_mode").is_some();
+        let had_current_version = value
+            .get("settings_version")
+            .and_then(serde_json::Value::as_u64)
+            == Some(u64::from(CURRENT_SETTINGS_VERSION));
+
+        let mut settings: Self = serde_json::from_value(value)?;
+        if !had_asr_mode {
+            settings.asr_mode = AsrMode::GeminiLiveAudio;
+        }
+        settings.settings_version = CURRENT_SETTINGS_VERSION;
+
+        Ok((settings, !had_asr_mode || !had_current_version))
+    }
+}
+
 pub struct AppState {
     pub db: Arc<Database>,
     pub memory: Arc<MemoryManager>,
@@ -121,28 +154,69 @@ pub struct AppState {
     pub is_muted: Arc<RwLock<bool>>,
 }
 
+const LEGACY_GOOGLE_API_KEY_SETTING: &str = "google_api_key";
+
+fn migrate_legacy_google_api_key(db: &Database, secrets: &SecretStore) -> Result<(), String> {
+    let Some(legacy_key) = db
+        .get_setting(LEGACY_GOOGLE_API_KEY_SETTING)
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(());
+    };
+
+    let trimmed = legacy_key.trim();
+    if trimmed.is_empty() {
+        db.delete_setting(LEGACY_GOOGLE_API_KEY_SETTING)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    if !secrets.has_google_api_key() {
+        secrets.set_google_api_key(trimmed.to_string())?;
+        if secrets.get_google_api_key().as_deref() != Some(trimmed) {
+            return Err("secure credential verification failed during migration".to_string());
+        }
+    }
+
+    // Delete plaintext only after the secure store reports a usable credential.
+    db.delete_setting(LEGACY_GOOGLE_API_KEY_SETTING)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 impl AppState {
-    pub fn new(db_path: Option<&str>) -> Self {
+    pub fn new(db_path: Option<&str>) -> Result<Self, String> {
+        Self::new_with_secret_store(db_path, SecretStore::new()?)
+    }
+
+    fn new_with_secret_store(
+        db_path: Option<&str>,
+        secret_store: SecretStore,
+    ) -> Result<Self, String> {
         let db = if let Some(path) = db_path {
             Arc::new(Database::new(path).unwrap_or_else(|_| Database::new_in_memory().unwrap()))
         } else {
-            Arc::new(Database::new_in_memory().unwrap())
+            Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
         };
 
         let memory = Arc::new(MemoryManager::new(db.clone()));
-        let secrets = Arc::new(SecretStore::new());
+        let secrets = Arc::new(secret_store);
+        migrate_legacy_google_api_key(&db, &secrets)?;
+
         let settings = Arc::new(RwLock::new(AppSettings::default()));
 
-        // Load persisted settings from SQLite if present
+        // Load persisted settings from SQLite if present. Persist a normalized copy
+        // when a version migration occurs so future starts do not repeat it.
         if let Ok(Some(json_str)) = db.get_setting("app_settings") {
-            if let Ok(loaded) = serde_json::from_str::<AppSettings>(&json_str) {
-                *settings.write() = loaded;
+            if let Ok((loaded, migrated)) = AppSettings::from_persisted_json(&json_str) {
+                *settings.write() = loaded.clone();
+                if migrated {
+                    let normalized = serde_json::to_string(&loaded)
+                        .map_err(|error| error.to_string())?;
+                    db.set_setting("app_settings", &normalized)
+                        .map_err(|error| error.to_string())?;
+                }
             }
-        }
-
-        // Load stored API key if present
-        if let Ok(Some(key)) = db.get_setting("google_api_key") {
-            secrets.set_google_api_key(key);
         }
 
         let character_config = CharacterConfig::default();
@@ -158,7 +232,7 @@ impl AppState {
         });
         let tool_router = Arc::new(ToolRouter::new(builtin_tools));
 
-        Self {
+        Ok(Self {
             db,
             memory,
             secrets,
@@ -170,7 +244,7 @@ impl AppState {
             tool_router,
             settings,
             is_muted: Arc::new(RwLock::new(false)),
-        }
+        })
     }
 
     pub fn get_text_model(&self) -> Box<dyn TextModel> {
@@ -207,5 +281,118 @@ impl AppState {
             let key = self.secrets.get_google_api_key().unwrap_or_default();
             Arc::new(GoogleLiveProvider::new(GoogleAuth::new(key)))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::secrets::{MemorySecretBackend, SecretBackend};
+    use std::sync::Arc;
+    use tempfile::NamedTempFile;
+
+    #[derive(Default)]
+    struct RejectWriteBackend;
+
+    impl SecretBackend for RejectWriteBackend {
+        fn read_google_api_key(&self) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+
+        fn write_google_api_key(&self, _key: &str) -> Result<(), String> {
+            Err("injected secure-store write failure".to_string())
+        }
+
+        fn delete_google_api_key(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn new_settings_default_to_moonshine_tiny() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
+        assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+    }
+
+    #[test]
+    fn legacy_settings_migrate_to_gemini_live_audio() {
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("settings_version");
+        object.remove("asr_mode");
+        let json = serde_json::to_string(&value).unwrap();
+
+        let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
+        assert!(migrated);
+        assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
+        assert_eq!(settings.asr_mode, AsrMode::GeminiLiveAudio);
+    }
+
+    #[test]
+    fn current_settings_keep_selected_asr_mode() {
+        let mut original = AppSettings::default();
+        original.asr_mode = AsrMode::MoonshineSmallStreaming;
+        let json = serde_json::to_string(&original).unwrap();
+
+        let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
+        assert!(!migrated);
+        assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
+    }
+
+    #[test]
+    fn legacy_plaintext_google_key_moves_to_secure_backend_and_is_deleted() {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let db = Database::new(&path).unwrap();
+        db.seed_legacy_setting_for_test(
+            LEGACY_GOOGLE_API_KEY_SETTING,
+            "AIzaSyLegacyMigrationTestKey",
+        )
+        .unwrap();
+        drop(db);
+
+        let backend = Arc::new(MemorySecretBackend::default());
+        let secret_store = SecretStore::with_backend(backend).unwrap();
+        let state = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+
+        assert!(state.secrets.has_google_api_key());
+        assert_eq!(
+            state.secrets.get_google_api_key().as_deref(),
+            Some("AIzaSyLegacyMigrationTestKey")
+        );
+        assert_eq!(
+            state.db.get_setting(LEGACY_GOOGLE_API_KEY_SETTING).unwrap(),
+            None
+        );
+        drop(state);
+
+        let reopened = Database::new(&path).unwrap();
+        assert_eq!(
+            reopened.get_setting(LEGACY_GOOGLE_API_KEY_SETTING).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn failed_secure_migration_preserves_legacy_plaintext_row() {
+        let db = Database::new_in_memory().unwrap();
+        db.seed_legacy_setting_for_test(
+            LEGACY_GOOGLE_API_KEY_SETTING,
+            "AIzaSyOnlyCopyMustSurvive",
+        )
+        .unwrap();
+
+        let secret_store = SecretStore::with_backend(Arc::new(RejectWriteBackend)).unwrap();
+        let result = migrate_legacy_google_api_key(&db, &secret_store);
+
+        assert!(result.is_err());
+        assert_eq!(
+            db.get_setting(LEGACY_GOOGLE_API_KEY_SETTING)
+                .unwrap()
+                .as_deref(),
+            Some("AIzaSyOnlyCopyMustSurvive")
+        );
+        assert!(!secret_store.has_google_api_key());
     }
 }

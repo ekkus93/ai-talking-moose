@@ -34,6 +34,8 @@ export const tauriBridge = {
   async getSettings(): Promise<AppSettings> {
     if (!isTauri()) {
       return {
+        settings_version: 1,
+        asr_mode: "moonshine_tiny_streaming",
         launch_at_login: false,
         show_in_menu_bar: true,
         always_on_top: false,

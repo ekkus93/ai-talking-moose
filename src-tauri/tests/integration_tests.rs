@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 #[tokio::test]
 async fn test_app_state_and_database_persistence() {
-    let state = AppState::new(None);
+    let state = AppState::new(None).unwrap();
 
     // Test settings persistence
     let mut settings = state.settings.read().clone();

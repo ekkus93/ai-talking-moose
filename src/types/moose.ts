@@ -14,6 +14,11 @@ export type CharacterState =
 
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
+export type AsrMode =
+  | "moonshine_tiny_streaming"
+  | "moonshine_small_streaming"
+  | "gemini_live_audio";
+
 export interface AudioDeviceInfo {
   id: string;
   name: string;
@@ -21,6 +26,9 @@ export interface AudioDeviceInfo {
 }
 
 export interface AppSettings {
+  settings_version: number;
+  asr_mode: AsrMode;
+
   launch_at_login: boolean;
   show_in_menu_bar: boolean;
   always_on_top: boolean;

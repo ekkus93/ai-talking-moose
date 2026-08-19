@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod app;
+pub mod asr;
 pub mod audio;
 pub mod character;
 pub mod commands;
@@ -42,7 +43,7 @@ pub fn run() {
                 None
             };
 
-            let app_state = AppState::new(db_path.as_deref());
+            let app_state = AppState::new(db_path.as_deref()).map_err(std::io::Error::other)?;
 
             // Set up channels for mouth shapes and output audio levels from playback
             let (mouth_tx, mut mouth_rx) = mpsc::channel(64);
