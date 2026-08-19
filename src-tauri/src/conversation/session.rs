@@ -56,6 +56,18 @@ impl ConversationCallbacks {
     }
 }
 
+pub struct ConversationStartRequest {
+    pub provider: Arc<dyn RealtimeConversationProvider>,
+    pub config: LiveSessionConfig,
+    pub capture: Arc<SyncMutex<AudioCapture>>,
+    pub input_device: Option<String>,
+    pub playback: Arc<AudioPlayback>,
+    pub output_device: Option<String>,
+    pub muted: Arc<RwLock<bool>>,
+    pub tool_router: Arc<ToolRouter>,
+    pub callbacks: ConversationCallbacks,
+}
+
 pub struct ConversationManager {
     active_session_id: Arc<SyncMutex<Option<String>>>,
     live_session: Arc<AsyncMutex<Option<Box<dyn LiveSession>>>>,
@@ -132,27 +144,26 @@ impl ConversationManager {
         *self.lifecycle.write() = ConversationLifecycle::Idle;
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub async fn start_session(
-        &self,
-        provider: Arc<dyn RealtimeConversationProvider>,
-        config: LiveSessionConfig,
-        capture: Arc<SyncMutex<AudioCapture>>,
-        input_device: Option<String>,
-        playback: Arc<AudioPlayback>,
-        output_device: Option<String>,
-        muted: Arc<RwLock<bool>>,
-        tool_router: Arc<ToolRouter>,
-        callbacks: ConversationCallbacks,
-    ) -> Result<String, String> {
+    pub async fn start_session(&self, request: ConversationStartRequest) -> Result<String, String> {
         let _operation_guard = self.operation_lock.lock().await;
-        self.stop_session_locked(capture.clone(), playback.clone())
+        self.stop_session_locked(request.capture.clone(), request.playback.clone())
             .await;
 
-        if *muted.read() {
+        if *request.muted.read() {
             return Err("Moose is currently muted".to_string());
         }
 
+        let ConversationStartRequest {
+            provider,
+            config,
+            capture,
+            input_device,
+            playback,
+            output_device,
+            muted: _,
+            tool_router,
+            callbacks,
+        } = request;
         let ConversationCallbacks {
             state: state_callback,
             lifecycle: lifecycle_callback,
@@ -198,12 +209,10 @@ impl ConversationManager {
 
         let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(32);
         let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
-        let capture_result = capture.lock().start(
-            input_device,
-            input_sample_rate,
-            pcm_tx,
-            Some(level_tx),
-        );
+        let capture_result =
+            capture
+                .lock()
+                .start(input_device, input_sample_rate, pcm_tx, Some(level_tx));
         if let Err(error_value) = capture_result {
             playback.flush();
             Self::close_provisional_session(&mut session).await;
@@ -472,43 +481,44 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn failed_provider_connect_never_becomes_active() {
-        let manager = ConversationManager::new();
-        let capture = Arc::new(SyncMutex::new(AudioCapture::new_mock()));
-        let playback = Arc::new(AudioPlayback::new());
-        let muted = Arc::new(RwLock::new(false));
+    fn test_tool_router() -> Arc<ToolRouter> {
         let settings = Arc::new(RwLock::new(crate::app::state::AppSettings::default()));
         let memory = Arc::new(crate::memory::MemoryManager::new(Arc::new(
             crate::persistence::Database::new_in_memory().unwrap(),
         )));
-        let tool_router = Arc::new(ToolRouter::new(Arc::new(
+        Arc::new(ToolRouter::new(Arc::new(
             crate::tools::builtin::BuiltinTools {
                 memory_manager: memory,
                 character_config: crate::character::personality::CharacterConfig::default(),
                 settings,
             },
-        )));
+        )))
+    }
 
-        let result = manager
-            .start_session(
-                Arc::new(FailingProvider),
-                LiveSessionConfig {
-                    model: "fake".to_string(),
-                    voice_name: None,
-                    system_instruction: None,
-                    sample_rate_in: 16_000,
-                    sample_rate_out: 24_000,
-                },
-                capture,
-                None,
-                playback,
-                None,
-                muted,
-                tool_router,
-                ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}),
-            )
-            .await;
+    fn test_request(muted: bool) -> ConversationStartRequest {
+        ConversationStartRequest {
+            provider: Arc::new(FailingProvider),
+            config: LiveSessionConfig {
+                model: "fake".to_string(),
+                voice_name: None,
+                system_instruction: None,
+                sample_rate_in: 16_000,
+                sample_rate_out: 24_000,
+            },
+            capture: Arc::new(SyncMutex::new(AudioCapture::new_mock())),
+            input_device: None,
+            playback: Arc::new(AudioPlayback::new()),
+            output_device: None,
+            muted: Arc::new(RwLock::new(muted)),
+            tool_router: test_tool_router(),
+            callbacks: ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}),
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_provider_connect_never_becomes_active() {
+        let manager = ConversationManager::new();
+        let result = manager.start_session(test_request(false)).await;
 
         assert!(result.is_err());
         assert!(!manager.is_active());
@@ -519,40 +529,7 @@ mod tests {
     #[tokio::test]
     async fn muted_state_blocks_transactional_start_inside_operation_lock() {
         let manager = ConversationManager::new();
-        let capture = Arc::new(SyncMutex::new(AudioCapture::new_mock()));
-        let playback = Arc::new(AudioPlayback::new());
-        let muted = Arc::new(RwLock::new(true));
-        let settings = Arc::new(RwLock::new(crate::app::state::AppSettings::default()));
-        let memory = Arc::new(crate::memory::MemoryManager::new(Arc::new(
-            crate::persistence::Database::new_in_memory().unwrap(),
-        )));
-        let tool_router = Arc::new(ToolRouter::new(Arc::new(
-            crate::tools::builtin::BuiltinTools {
-                memory_manager: memory,
-                character_config: crate::character::personality::CharacterConfig::default(),
-                settings,
-            },
-        )));
-
-        let result = manager
-            .start_session(
-                Arc::new(FailingProvider),
-                LiveSessionConfig {
-                    model: "fake".to_string(),
-                    voice_name: None,
-                    system_instruction: None,
-                    sample_rate_in: 16_000,
-                    sample_rate_out: 24_000,
-                },
-                capture,
-                None,
-                playback,
-                None,
-                muted,
-                tool_router,
-                ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}),
-            )
-            .await;
+        let result = manager.start_session(test_request(true)).await;
 
         assert_eq!(result.unwrap_err(), "Moose is currently muted");
         assert!(!manager.is_active());
