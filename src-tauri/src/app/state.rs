@@ -141,7 +141,7 @@ impl AppSettings {
 
     /// Apply user-editable behavior/personality settings to the live character config.
     /// This keeps persisted/frontend settings and the Rust behavior/prompt policy in sync.
-    pub fn apply_to_character_config(&self, config: &mud CharacterConfig) {
+    pub fn apply_to_character_config(&self, config: &mut CharacterConfig) {
         config.personality.dry = self.dry;
         config.personality.sarcastic = self.sarcastic;
         config.personality.friendly = self.friendly;
@@ -214,11 +214,11 @@ impl AppState {
         let db = if let Some(path) = db_path {
             Arc::new(Database::new(path).unwrap_or_else(|_| Database::new_in_memory().unwrap()))
         } else {
-            Arc::new(Database::new_in_memory().map_err(|error| error.to_string()?))
+            Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
         };
 
         let memory = Arc::new(MemoryManager::new(db.clone()));
-        let secrets = Arc::new(SecuretStore::from_secret_store(secret_store));
+        let secrets = Arc::new(secret_store);
         migrate_legacy_google_api_key(&db, &secrets)?;
 
         let settings = Arc::new(RwLock::new(AppSettings::default()));
