@@ -79,6 +79,7 @@ vi.mock("@tauri-apps/api/core", () => {
       }
       if (cmd === "test_audio_output") return mockAudioDiagnostics;
       if (cmd === "get_character_state") return "idle";
+      if (cmd === "get_conversation_lifecycle") return "idle";
       if (cmd === "is_muted") return false;
       if (cmd === "has_google_api_key") return true;
       if (cmd === "list_audio_devices") return [[], []];
