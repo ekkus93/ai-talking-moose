@@ -49,7 +49,8 @@ export const MicrophonePermissionCard: React.FC = () => {
         <div>
           <p className="font-bold">Microphone Access</p>
           <p className="text-[11px] text-gray-600">
-            macOS permission is checked directly; this is not a saved preference.
+            macOS permission is checked directly; this is not a saved
+            preference.
           </p>
         </div>
         <div className="flex items-center gap-1.5 font-bold">
@@ -75,16 +76,16 @@ export const MicrophonePermissionCard: React.FC = () => {
 
       {permission === "denied" && (
         <p className="text-[11px] text-amber-900">
-          Access was denied or restricted. Open macOS System Settings → Privacy
-          & Security → Microphone, enable Talking Moose, then return here and
-          press Refresh Status.
+          Access was denied or restricted. Open macOS System Settings →
+          Privacy & Security → Microphone, enable Talking Moose, then return
+          here and press Refresh Status.
         </p>
       )}
 
       {permission === "unavailable" && (
         <p className="text-[11px] text-gray-600">
-          Native microphone permission status is unavailable on this platform or
-          runtime.
+          Native microphone permission status is unavailable on this platform
+          or runtime.
         </p>
       )}
 
