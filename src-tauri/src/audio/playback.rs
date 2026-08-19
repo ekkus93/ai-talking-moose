@@ -159,18 +159,21 @@ impl AudioPlayback {
                 .map_err(|error_value| {
                     AudioPlaybackError::DeviceEnumeration(error_value.to_string())
                 })?
-                .find(|device| device.name().map(|candidate| candidate == *name).unwrap_or(false))
+                .find(|device| {
+                    device
+                        .name()
+                        .map(|candidate| candidate == *name)
+                        .unwrap_or(false)
+                })
                 .or_else(|| host.default_output_device())
         } else {
             host.default_output_device()
         }
         .ok_or(AudioPlaybackError::NoOutputDevice)?;
 
-        let supported_config = device
-            .default_output_config()
-            .map_err(|error_value| {
-                AudioPlaybackError::OutputConfiguration(error_value.to_string())
-            })?;
+        let supported_config = device.default_output_config().map_err(|error_value| {
+            AudioPlaybackError::OutputConfiguration(error_value.to_string())
+        })?;
         let sample_format = supported_config.sample_format();
         let stream_config: cpal::StreamConfig = supported_config.into();
         let sample_rate_hz = stream_config.sample_rate.0;
@@ -223,11 +226,7 @@ impl AudioPlayback {
         *self._stream.lock() = Some(SafeStream(stream));
         self.output_sample_rate_hz
             .store(sample_rate_hz, Ordering::SeqCst);
-        info!(
-            sample_rate_hz,
-            ?sample_format,
-            "Audio playback initialized"
-        );
+        info!(sample_rate_hz, ?sample_format, "Audio playback initialized");
         Ok(())
     }
 
@@ -237,8 +236,9 @@ impl AudioPlayback {
     }
 
     pub fn max_queued_samples(&self) -> usize {
-        self.output_sample_rate_hz()
-            .map_or(0, |sample_rate| sample_rate as usize * MAX_QUEUED_PLAYBACK_SECONDS)
+        self.output_sample_rate_hz().map_or(0, |sample_rate| {
+            sample_rate as usize * MAX_QUEUED_PLAYBACK_SECONDS
+        })
     }
 
     /// Enqueue incoming raw PCM i16 mono samples. The source sample rate is the
