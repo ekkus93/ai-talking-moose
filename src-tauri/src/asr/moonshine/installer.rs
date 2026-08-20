@@ -1,0 +1,989 @@
+use super::manifest::{manifest_for_architecture, MoonshineModelFile, MoonshineModelManifest};
+use super::runtime::MoonshineModelArchitecture;
+use async_trait::async_trait;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
+use futures_util::StreamExt;
+use ring::digest::{Context as Sha256Context, SHA256};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::fmt;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufReader, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::sync::CancellationToken;
+use tracing::warn;
+use uuid::Uuid;
+
+const INSTALL_MARKER_FILE: &str = ".talking-moose-model.json";
+const INSTALL_MARKER_SCHEMA_VERSION: u32 = 1;
+const MAX_REDIRECTS: usize = 3;
+const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const VERIFY_BUFFER_BYTES: usize = 1024 * 1024;
+const DISK_SPACE_HEADROOM_BYTES: u64 = 8 * 1024 * 1024;
+const ALLOWED_MODEL_FILES: [&str; 7] = [
+    "adapter.ort",
+    "cross_kv.ort",
+    "decoder_kv.ort",
+    "encoder.ort",
+    "frontend.ort",
+    "streaming_config.json",
+    "tokenizer.bin",
+];
+
+/// A stable category for local model installation failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoonshineModelInstallErrorKind {
+    InvalidManifest,
+    UnsupportedArtifact,
+    InsufficientDiskSpace,
+    Network,
+    Http,
+    Io,
+    SizeMismatch,
+    Sha256Mismatch,
+    Crc32cMismatch,
+    Cancelled,
+    CorruptInstall,
+    Promotion,
+}
+
+/// Sanitized install error safe to surface to the desktop UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MoonshineModelInstallError {
+    pub kind: MoonshineModelInstallErrorKind,
+    pub message: String,
+    pub retryable: bool,
+}
+
+impl MoonshineModelInstallError {
+    fn new(
+        kind: MoonshineModelInstallErrorKind,
+        message: impl Into<String>,
+        retryable: bool,
+    ) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            retryable,
+        }
+    }
+
+    fn invalid_manifest() -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::InvalidManifest,
+            "The bundled Moonshine model manifest is invalid.",
+            false,
+        )
+    }
+
+    fn unsupported_artifact(name: &str) -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::UnsupportedArtifact,
+            format!("The Moonshine manifest contains an unsupported model artifact: {name}."),
+            false,
+        )
+    }
+
+    fn insufficient_disk_space(required: u64, available: u64) -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::InsufficientDiskSpace,
+            format!(
+                "Not enough free disk space to install the Moonshine model (need {required} bytes, have {available} bytes)."
+            ),
+            true,
+        )
+    }
+
+    fn network() -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::Network,
+            "The Moonshine model download failed because of a network error.",
+            true,
+        )
+    }
+
+    fn http(status: u16) -> Self {
+        let retryable = status == 408 || status == 429 || status >= 500;
+        Self::new(
+            MoonshineModelInstallErrorKind::Http,
+            format!("The Moonshine model server returned HTTP status {status}."),
+            retryable,
+        )
+    }
+
+    fn io(operation: &'static str) -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::Io,
+            format!("The Moonshine model installer could not {operation}."),
+            true,
+        )
+    }
+
+    fn size_mismatch(name: &str) -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::SizeMismatch,
+            format!("The downloaded Moonshine artifact has the wrong size: {name}."),
+            true,
+        )
+    }
+
+    fn sha256_mismatch(name: &str) -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::Sha256Mismatch,
+            format!("The downloaded Moonshine artifact failed SHA-256 verification: {name}."),
+            true,
+        )
+    }
+
+    fn crc32c_mismatch(name: &str) -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::Crc32cMismatch,
+            format!("The downloaded Moonshine artifact failed CRC32C verification: {name}."),
+            true,
+        )
+    }
+
+    fn cancelled() -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::Cancelled,
+            "The Moonshine model download was cancelled.",
+            true,
+        )
+    }
+
+    fn corrupt_install() -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::CorruptInstall,
+            "The installed Moonshine model is incomplete or corrupt.",
+            true,
+        )
+    }
+
+    fn promotion() -> Self {
+        Self::new(
+            MoonshineModelInstallErrorKind::Promotion,
+            "The verified Moonshine model could not be promoted into the install directory.",
+            true,
+        )
+    }
+}
+
+impl fmt::Display for MoonshineModelInstallError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for MoonshineModelInstallError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoonshineModelInstallDisposition {
+    Installed,
+    AlreadyInstalled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MoonshineModelInstallOutcome {
+    pub disposition: MoonshineModelInstallDisposition,
+    pub model_id: String,
+    pub revision: String,
+    pub installed_bytes: u64,
+    pub model_path: PathBuf,
+}
+
+/// Cooperative cancellation handle for one explicit model-install request.
+#[derive(Clone)]
+pub struct MoonshineModelInstallCancellation {
+    inner: CancellationToken,
+}
+
+impl Default for MoonshineModelInstallCancellation {
+    fn default() -> Self {
+        Self {
+            inner: CancellationToken::new(),
+        }
+    }
+}
+
+impl MoonshineModelInstallCancellation {
+    pub fn cancel(&self) {
+        self.inner.cancel();
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+
+    async fn cancelled(&self) {
+        self.inner.cancelled().await;
+    }
+
+    fn check(&self) -> Result<(), MoonshineModelInstallError> {
+        if self.is_cancelled() {
+            Err(MoonshineModelInstallError::cancelled())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DownloadMetadata {
+    content_length: Option<u64>,
+}
+
+trait DownloadSink: Send {
+    fn write_chunk(&mut self, chunk: &[u8]) -> Result<(), MoonshineModelInstallError>;
+}
+
+#[async_trait]
+trait ModelDownloadTransport: Send + Sync {
+    async fn stream(
+        &self,
+        url: &str,
+        cancellation: &MoonshineModelInstallCancellation,
+        sink: &mut dyn DownloadSink,
+    ) -> Result<DownloadMetadata, MoonshineModelInstallError>;
+}
+
+struct ReqwestModelDownloadTransport {
+    client: reqwest::Client,
+}
+
+impl ReqwestModelDownloadTransport {
+    fn new() -> Result<Self, MoonshineModelInstallError> {
+        let redirect_policy = reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= MAX_REDIRECTS || attempt.url().scheme() != "https" {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        });
+        let client = reqwest::Client::builder()
+            .connect_timeout(HTTP_CONNECT_TIMEOUT)
+            .timeout(HTTP_REQUEST_TIMEOUT)
+            .redirect(redirect_policy)
+            .user_agent("talking-moose-ai/0.1.0")
+            .build()
+            .map_err(|_| MoonshineModelInstallError::network())?;
+        Ok(Self { client })
+    }
+}
+
+#[async_trait]
+impl ModelDownloadTransport for ReqwestModelDownloadTransport {
+    async fn stream(
+        &self,
+        url: &str,
+        cancellation: &MoonshineModelInstallCancellation,
+        sink: &mut dyn DownloadSink,
+    ) -> Result<DownloadMetadata, MoonshineModelInstallError> {
+        if !url.starts_with("https://") {
+            return Err(MoonshineModelInstallError::invalid_manifest());
+        }
+        cancellation.check()?;
+
+        let response = tokio::select! {
+            () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
+            response = self.client.get(url).header(reqwest::header::ACCEPT_ENCODING, "identity").send() => response.map_err(|_| MoonshineModelInstallError::network())?,
+        };
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(MoonshineModelInstallError::http(status.as_u16()));
+        }
+        if response.url().scheme() != "https" {
+            return Err(MoonshineModelInstallError::network());
+        }
+
+        let content_length = response.content_length();
+        let mut stream = response.bytes_stream();
+        loop {
+            let next = tokio::select! {
+                () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
+                next = stream.next() => next,
+            };
+            let Some(chunk_result) = next else {
+                break;
+            };
+            let chunk = chunk_result.map_err(|_| MoonshineModelInstallError::network())?;
+            cancellation.check()?;
+            sink.write_chunk(&chunk)?;
+        }
+
+        Ok(DownloadMetadata { content_length })
+    }
+}
+
+trait DiskSpaceProbe: Send + Sync {
+    fn available_bytes(&self, path: &Path) -> std::io::Result<Option<u64>>;
+}
+
+struct SystemDiskSpaceProbe;
+
+impl DiskSpaceProbe for SystemDiskSpaceProbe {
+    fn available_bytes(&self, path: &Path) -> std::io::Result<Option<u64>> {
+        available_disk_space(path)
+    }
+}
+
+#[cfg(unix)]
+fn available_disk_space(path: &Path) -> std::io::Result<Option<u64>> {
+    use std::ffi::CString;
+    use std::mem::MaybeUninit;
+    use std::os::unix::ffi::OsStrExt;
+
+    let c_path = CString::new(path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "model install path contains an embedded NUL byte",
+        )
+    })?;
+    let mut stats = MaybeUninit::<libc::statvfs>::zeroed();
+    // SAFETY: `c_path` is NUL-terminated and lives across this call, while
+    // `stats` points to writable storage large enough for one `statvfs` value.
+    let result = unsafe { libc::statvfs(c_path.as_ptr(), stats.as_mut_ptr()) };
+    if result != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: a zero return from statvfs initializes the output structure.
+    let stats = unsafe { stats.assume_init() };
+    let available: u64 = stats.f_bavail.saturating_mul(stats.f_frsize);
+    Ok(Some(available))
+}
+
+#[cfg(not(unix))]
+fn available_disk_space(_path: &Path) -> std::io::Result<Option<u64>> {
+    Ok(None)
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+struct InstallMarker {
+    schema_version: u32,
+    model_id: String,
+    revision: String,
+    expected_bytes: u64,
+    runtime_release: String,
+    runtime_commit: String,
+    runtime_header_version: i32,
+}
+
+impl InstallMarker {
+    fn from_manifest(manifest: &MoonshineModelManifest) -> Self {
+        Self {
+            schema_version: INSTALL_MARKER_SCHEMA_VERSION,
+            model_id: manifest.id.to_string(),
+            revision: manifest.revision.to_string(),
+            expected_bytes: manifest.expected_bytes,
+            runtime_release: manifest.runtime.release.to_string(),
+            runtime_commit: manifest.runtime.source_commit.to_string(),
+            runtime_header_version: manifest.runtime.c_header_version,
+        }
+    }
+
+    fn matches_manifest(&self, manifest: &MoonshineModelManifest) -> bool {
+        self == &Self::from_manifest(manifest)
+    }
+}
+
+struct Crc32c {
+    state: u32,
+}
+
+impl Default for Crc32c {
+    fn default() -> Self {
+        Self { state: u32::MAX }
+    }
+}
+
+impl Crc32c {
+    fn update(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            let index = ((self.state ^ u32::from(byte)) & 0xff) as usize;
+            self.state = CRC32C_TABLE[index] ^ (self.state >> 8);
+        }
+    }
+
+    fn finalize(self) -> u32 {
+        !self.state
+    }
+}
+
+const fn crc32c_table() -> [u32; 256] {
+    let mut table = [0_u32; 256];
+    let mut index = 0_usize;
+    while index < table.len() {
+        let mut value = index as u32;
+        let mut bit = 0_u8;
+        while bit < 8 {
+            value = if value & 1 == 1 {
+                (value >> 1) ^ 0x82f6_3b78
+            } else {
+                value >> 1
+            };
+            bit += 1;
+        }
+        table[index] = value;
+        index += 1;
+    }
+    table
+}
+
+const CRC32C_TABLE: [u32; 256] = crc32c_table();
+
+fn crc32c_base64(value: u32) -> String {
+    BASE64_STANDARD.encode(value.to_be_bytes())
+}
+
+fn digest_hex(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(output, "{byte:02x}");
+    }
+    output
+}
+
+struct VerifyingFileSink<'a> {
+    file: File,
+    manifest_file: &'a MoonshineModelFile,
+    bytes_written: u64,
+    sha256: Sha256Context,
+    crc32c: Crc32c,
+}
+
+impl<'a> VerifyingFileSink<'a> {
+    fn create(
+        path: &Path,
+        manifest_file: &'a MoonshineModelFile,
+    ) -> Result<Self, MoonshineModelInstallError> {
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|_| MoonshineModelInstallError::io("create the staging file"))?;
+        Ok(Self {
+            file,
+            manifest_file,
+            bytes_written: 0,
+            sha256: Sha256Context::new(&SHA256),
+            crc32c: Crc32c::default(),
+        })
+    }
+
+    fn finish(mut self) -> Result<(), MoonshineModelInstallError> {
+        self.file
+            .flush()
+            .and_then(|()| self.file.sync_all())
+            .map_err(|_| MoonshineModelInstallError::io("flush the staging file"))?;
+        if self.bytes_written != self.manifest_file.bytes {
+            return Err(MoonshineModelInstallError::size_mismatch(
+                self.manifest_file.name,
+            ));
+        }
+
+        let sha256 = digest_hex(self.sha256.finish().as_ref());
+        if !sha256.eq_ignore_ascii_case(self.manifest_file.sha256) {
+            return Err(MoonshineModelInstallError::sha256_mismatch(
+                self.manifest_file.name,
+            ));
+        }
+        if crc32c_base64(self.crc32c.finalize()) != self.manifest_file.upstream_crc32c_base64 {
+            return Err(MoonshineModelInstallError::crc32c_mismatch(
+                self.manifest_file.name,
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl DownloadSink for VerifyingFileSink<'_> {
+    fn write_chunk(&mut self, chunk: &[u8]) -> Result<(), MoonshineModelInstallError> {
+        let chunk_bytes = u64::try_from(chunk.len())
+            .map_err(|_| MoonshineModelInstallError::size_mismatch(self.manifest_file.name))?;
+        let next_size = self.bytes_written.saturating_add(chunk_bytes);
+        if next_size > self.manifest_file.bytes {
+            return Err(MoonshineModelInstallError::size_mismatch(
+                self.manifest_file.name,
+            ));
+        }
+        self.file
+            .write_all(chunk)
+            .map_err(|_| MoonshineModelInstallError::io("write the staging file"))?;
+        self.sha256.update(chunk);
+        self.crc32c.update(chunk);
+        self.bytes_written = next_size;
+        Ok(())
+    }
+}
+
+struct StagingDirectory {
+    path: PathBuf,
+    keep: bool,
+}
+
+impl StagingDirectory {
+    fn create(path: PathBuf) -> Result<Self, MoonshineModelInstallError> {
+        fs::create_dir(&path)
+            .map_err(|_| MoonshineModelInstallError::io("create the staging directory"))?;
+        Ok(Self { path, keep: false })
+    }
+
+    fn mark_promoted(&mut self) {
+        self.keep = true;
+    }
+}
+
+impl Drop for StagingDirectory {
+    fn drop(&mut self) {
+        if !self.keep {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
+/// Explicit, serialized installer for pinned Moonshine model payloads.
+///
+/// Creating or querying this object performs no network activity. Network I/O
+/// only occurs when `install` is called by an explicit user action.
+pub struct MoonshineModelInstaller {
+    install_root: PathBuf,
+    transport: Arc<dyn ModelDownloadTransport>,
+    disk_space: Arc<dyn DiskSpaceProbe>,
+}
+
+static INSTALL_OPERATION_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
+
+fn install_operation_lock() -> &'static AsyncMutex<()> {
+    INSTALL_OPERATION_LOCK.get_or_init(|| AsyncMutex::new(()))
+}
+
+impl MoonshineModelInstaller {
+    pub fn new(install_root: impl Into<PathBuf>) -> Result<Self, MoonshineModelInstallError> {
+        Ok(Self {
+            install_root: install_root.into(),
+            transport: Arc::new(ReqwestModelDownloadTransport::new()?),
+            disk_space: Arc::new(SystemDiskSpaceProbe),
+        })
+    }
+
+    #[cfg(test)]
+    fn with_dependencies(
+        install_root: impl Into<PathBuf>,
+        transport: Arc<dyn ModelDownloadTransport>,
+        disk_space: Arc<dyn DiskSpaceProbe>,
+    ) -> Self {
+        Self {
+            install_root: install_root.into(),
+            transport,
+            disk_space,
+        }
+    }
+
+    pub fn model_path(&self, architecture: MoonshineModelArchitecture) -> PathBuf {
+        let manifest = manifest_for_architecture(architecture);
+        self.model_path_for_manifest(manifest)
+    }
+
+    pub fn verify_installed(
+        &self,
+        architecture: MoonshineModelArchitecture,
+    ) -> Result<Option<MoonshineModelInstallOutcome>, MoonshineModelInstallError> {
+        let manifest = manifest_for_architecture(architecture);
+        manifest
+            .validate()
+            .map_err(|_| MoonshineModelInstallError::invalid_manifest())?;
+        self.verify_installed_manifest(manifest)
+    }
+
+    pub async fn install(
+        &self,
+        architecture: MoonshineModelArchitecture,
+        cancellation: &MoonshineModelInstallCancellation,
+    ) -> Result<MoonshineModelInstallOutcome, MoonshineModelInstallError> {
+        let manifest = manifest_for_architecture(architecture);
+        self.install_manifest(manifest, cancellation).await
+    }
+
+    async fn install_manifest(
+        &self,
+        manifest: &'static MoonshineModelManifest,
+        cancellation: &MoonshineModelInstallCancellation,
+    ) -> Result<MoonshineModelInstallOutcome, MoonshineModelInstallError> {
+        let _operation_guard = tokio::select! {
+            () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
+            guard = install_operation_lock().lock() => guard,
+        };
+        cancellation.check()?;
+        self.validate_install_manifest(manifest)?;
+
+        fs::create_dir_all(&self.install_root)
+            .map_err(|_| MoonshineModelInstallError::io("create the model install root"))?;
+        let model_parent = self.install_root.join(manifest.id);
+        fs::create_dir_all(&model_parent)
+            .map_err(|_| MoonshineModelInstallError::io("create the model directory"))?;
+        self.cleanup_stale_partials(&model_parent, manifest.revision)?;
+
+        match self.verify_installed_manifest(manifest) {
+            Ok(Some(existing)) => {
+                return Ok(MoonshineModelInstallOutcome {
+                    disposition: MoonshineModelInstallDisposition::AlreadyInstalled,
+                    ..existing
+                });
+            }
+            Ok(None) => {}
+            Err(error) if error.kind == MoonshineModelInstallErrorKind::CorruptInstall => {
+                // A corrupt target may be repaired, but it remains in place until the
+                // replacement staging directory has passed every integrity check.
+            }
+            Err(error) => return Err(error),
+        }
+
+        let required_disk_bytes = manifest
+            .expected_bytes
+            .saturating_add(DISK_SPACE_HEADROOM_BYTES);
+        match self.disk_space.available_bytes(&model_parent) {
+            Ok(Some(available)) if available < required_disk_bytes => {
+                return Err(MoonshineModelInstallError::insufficient_disk_space(
+                    required_disk_bytes,
+                    available,
+                ));
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                warn!("Free-space preflight is unavailable on this platform");
+            }
+            Err(_) => {
+                return Err(MoonshineModelInstallError::io(
+                    "check free disk space for the model installation",
+                ));
+            }
+        }
+
+        let staging_path =
+            model_parent.join(format!(".{}.{}.partial", manifest.revision, Uuid::new_v4()));
+        let mut staging = StagingDirectory::create(staging_path)?;
+
+        for manifest_file in manifest.files {
+            cancellation.check()?;
+            let url = format!("{}/{}", manifest.base_url, manifest_file.name);
+            if !url.starts_with("https://") {
+                return Err(MoonshineModelInstallError::invalid_manifest());
+            }
+            let staged_file = staging.path.join(manifest_file.name);
+            let mut sink = VerifyingFileSink::create(&staged_file, manifest_file)?;
+            let metadata = self.transport.stream(&url, cancellation, &mut sink).await?;
+            if metadata
+                .content_length
+                .is_some_and(|length| length != manifest_file.bytes)
+            {
+                return Err(MoonshineModelInstallError::size_mismatch(
+                    manifest_file.name,
+                ));
+            }
+            sink.finish()?;
+        }
+
+        cancellation.check()?;
+        self.write_install_marker(&staging.path, manifest)?;
+        cancellation.check()?;
+        let final_path = self.model_path_for_manifest(manifest);
+        self.promote_staging(&mut staging, &final_path, manifest)?;
+        self.verify_manifest_at_path(&final_path, manifest)?;
+
+        Ok(MoonshineModelInstallOutcome {
+            disposition: MoonshineModelInstallDisposition::Installed,
+            model_id: manifest.id.to_string(),
+            revision: manifest.revision.to_string(),
+            installed_bytes: manifest.expected_bytes,
+            model_path: final_path,
+        })
+    }
+
+    fn validate_install_manifest(
+        &self,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<(), MoonshineModelInstallError> {
+        manifest
+            .validate()
+            .map_err(|_| MoonshineModelInstallError::invalid_manifest())?;
+        let base_url = reqwest::Url::parse(manifest.base_url)
+            .map_err(|_| MoonshineModelInstallError::invalid_manifest())?;
+        let revision_suffix = format!("/{}", manifest.revision);
+        if base_url.scheme() != "https"
+            || base_url.host_str() != Some("download.moonshine.ai")
+            || !base_url.username().is_empty()
+            || base_url.password().is_some()
+            || base_url.query().is_some()
+            || base_url.fragment().is_some()
+            || !base_url
+                .path()
+                .trim_end_matches('/')
+                .ends_with(&revision_suffix)
+        {
+            return Err(MoonshineModelInstallError::invalid_manifest());
+        }
+        for file in manifest.files {
+            if !ALLOWED_MODEL_FILES.contains(&file.name) {
+                return Err(MoonshineModelInstallError::unsupported_artifact(file.name));
+            }
+        }
+        Ok(())
+    }
+
+    fn model_path_for_manifest(&self, manifest: &MoonshineModelManifest) -> PathBuf {
+        self.install_root.join(manifest.id).join(manifest.revision)
+    }
+
+    fn verify_installed_manifest(
+        &self,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<Option<MoonshineModelInstallOutcome>, MoonshineModelInstallError> {
+        let path = self.model_path_for_manifest(manifest);
+        match fs::symlink_metadata(&path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => {
+                return Err(MoonshineModelInstallError::io(
+                    "inspect the installed Moonshine model",
+                ));
+            }
+        }
+        self.verify_manifest_at_path(&path, manifest)?;
+        Ok(Some(MoonshineModelInstallOutcome {
+            disposition: MoonshineModelInstallDisposition::AlreadyInstalled,
+            model_id: manifest.id.to_string(),
+            revision: manifest.revision.to_string(),
+            installed_bytes: manifest.expected_bytes,
+            model_path: path,
+        }))
+    }
+
+    fn verify_manifest_at_path(
+        &self,
+        path: &Path,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<(), MoonshineModelInstallError> {
+        let metadata = match fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            }
+            Err(_) => {
+                return Err(MoonshineModelInstallError::io(
+                    "inspect the installed Moonshine model directory",
+                ));
+            }
+        };
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(MoonshineModelInstallError::corrupt_install());
+        }
+
+        let expected_names: HashSet<&str> = manifest.files.iter().map(|file| file.name).collect();
+        for entry in fs::read_dir(path)
+            .map_err(|_| MoonshineModelInstallError::io("read the installed model directory"))?
+        {
+            let entry = entry.map_err(|_| {
+                MoonshineModelInstallError::io("read an installed model directory entry")
+            })?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            };
+            if name != INSTALL_MARKER_FILE && !expected_names.contains(name) {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            }
+        }
+
+        for manifest_file in manifest.files {
+            self.verify_file(&path.join(manifest_file.name), manifest_file)?;
+        }
+        self.verify_install_marker(path, manifest)
+    }
+
+    fn verify_file(
+        &self,
+        path: &Path,
+        manifest_file: &MoonshineModelFile,
+    ) -> Result<(), MoonshineModelInstallError> {
+        let metadata = match fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            }
+            Err(_) => {
+                return Err(MoonshineModelInstallError::io(
+                    "inspect an installed Moonshine model artifact",
+                ));
+            }
+        };
+        if !metadata.is_file()
+            || metadata.file_type().is_symlink()
+            || metadata.len() != manifest_file.bytes
+        {
+            return Err(MoonshineModelInstallError::corrupt_install());
+        }
+
+        let file = File::open(path)
+            .map_err(|_| MoonshineModelInstallError::io("open an installed model artifact"))?;
+        let mut reader = BufReader::with_capacity(VERIFY_BUFFER_BYTES, file);
+        let mut buffer = vec![0_u8; VERIFY_BUFFER_BYTES];
+        let mut sha256 = Sha256Context::new(&SHA256);
+        let mut crc32c = Crc32c::default();
+        loop {
+            let count = reader.read(&mut buffer).map_err(|_| {
+                MoonshineModelInstallError::io("verify an installed model artifact")
+            })?;
+            if count == 0 {
+                break;
+            }
+            sha256.update(&buffer[..count]);
+            crc32c.update(&buffer[..count]);
+        }
+        if !digest_hex(sha256.finish().as_ref()).eq_ignore_ascii_case(manifest_file.sha256)
+            || crc32c_base64(crc32c.finalize()) != manifest_file.upstream_crc32c_base64
+        {
+            return Err(MoonshineModelInstallError::corrupt_install());
+        }
+        Ok(())
+    }
+
+    fn write_install_marker(
+        &self,
+        staging_path: &Path,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<(), MoonshineModelInstallError> {
+        let marker_path = staging_path.join(INSTALL_MARKER_FILE);
+        let marker = InstallMarker::from_manifest(manifest);
+        let marker_bytes = serde_json::to_vec_pretty(&marker)
+            .map_err(|_| MoonshineModelInstallError::io("serialize the install marker"))?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(marker_path)
+            .map_err(|_| MoonshineModelInstallError::io("create the install marker"))?;
+        file.write_all(&marker_bytes)
+            .and_then(|()| file.flush())
+            .and_then(|()| file.sync_all())
+            .map_err(|_| MoonshineModelInstallError::io("write the install marker"))
+    }
+
+    fn verify_install_marker(
+        &self,
+        path: &Path,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<(), MoonshineModelInstallError> {
+        let marker_path = path.join(INSTALL_MARKER_FILE);
+        let metadata = match fs::symlink_metadata(&marker_path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            }
+            Err(_) => {
+                return Err(MoonshineModelInstallError::io(
+                    "inspect the Moonshine install marker",
+                ));
+            }
+        };
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
+            return Err(MoonshineModelInstallError::corrupt_install());
+        }
+        let marker_bytes = fs::read(marker_path)
+            .map_err(|_| MoonshineModelInstallError::io("read the Moonshine install marker"))?;
+        let marker: InstallMarker = serde_json::from_slice(&marker_bytes)
+            .map_err(|_| MoonshineModelInstallError::corrupt_install())?;
+        if !marker.matches_manifest(manifest) {
+            return Err(MoonshineModelInstallError::corrupt_install());
+        }
+        Ok(())
+    }
+
+    fn promote_staging(
+        &self,
+        staging: &mut StagingDirectory,
+        final_path: &Path,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<(), MoonshineModelInstallError> {
+        let parent = final_path
+            .parent()
+            .ok_or_else(MoonshineModelInstallError::promotion)?;
+        let backup_path = parent.join(format!(
+            ".{}.{}.replaced",
+            manifest.revision,
+            Uuid::new_v4()
+        ));
+        let had_existing = match fs::symlink_metadata(final_path) {
+            Ok(_) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(_) => return Err(MoonshineModelInstallError::promotion()),
+        };
+
+        if had_existing {
+            fs::rename(final_path, &backup_path)
+                .map_err(|_| MoonshineModelInstallError::promotion())?;
+        }
+
+        if fs::rename(&staging.path, final_path).is_err() {
+            if had_existing {
+                let _ = fs::rename(&backup_path, final_path);
+            }
+            return Err(MoonshineModelInstallError::promotion());
+        }
+        staging.mark_promoted();
+
+        if had_existing {
+            if let Err(error_value) = fs::remove_dir_all(&backup_path) {
+                warn!(
+                    error = %error_value,
+                    "Failed to remove replaced Moonshine model directory"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn cleanup_stale_partials(
+        &self,
+        model_parent: &Path,
+        revision: &str,
+    ) -> Result<(), MoonshineModelInstallError> {
+        let prefix = format!(".{revision}.");
+        for entry in fs::read_dir(model_parent)
+            .map_err(|_| MoonshineModelInstallError::io("inspect the model directory"))?
+        {
+            let entry =
+                entry.map_err(|_| MoonshineModelInstallError::io("inspect the model directory"))?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            if !name.starts_with(&prefix) || !name.ends_with(".partial") {
+                continue;
+            }
+            let metadata = entry
+                .file_type()
+                .map_err(|_| MoonshineModelInstallError::io("inspect a partial download"))?;
+            if metadata.is_dir() {
+                fs::remove_dir_all(entry.path()).map_err(|_| {
+                    MoonshineModelInstallError::io("remove an interrupted partial download")
+                })?;
+            } else {
+                fs::remove_file(entry.path()).map_err(|_| {
+                    MoonshineModelInstallError::io("remove an interrupted partial download")
+                })?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "installer_tests.rs"]
+mod tests;
