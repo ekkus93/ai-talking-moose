@@ -355,7 +355,8 @@ fn available_disk_space(path: &Path) -> std::io::Result<Option<u64>> {
     }
     // SAFETY: a zero return from statvfs initializes the output structure.
     let stats = unsafe { stats.assume_init() };
-    let available: u64 = stats.f_bavail.saturating_mul(stats.f_frsize);
+    let available = u128::from(stats.f_bavail).saturating_mul(u128::from(stats.f_frsize));
+    let available = u64::try_from(available).unwrap_or(u64::MAX);
     Ok(Some(available))
 }
 
