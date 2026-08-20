@@ -1,6 +1,7 @@
 use crate::ai::fake::{FakeConversationProvider, FakeSpeechSynthesizer, FakeTextModel};
 use crate::ai::google::{GoogleAuth, GoogleLiveProvider, GoogleSpeechSynthesizer, GoogleTextModel};
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
+use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
@@ -17,6 +18,7 @@ use crate::tools::builtin::BuiltinTools;
 use crate::tools::router::ToolRouter;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,12 +171,28 @@ pub struct AppState {
     pub audio_capture: Arc<Mutex<AudioCapture>>,
     pub audio_playback: Arc<AudioPlayback>,
     pub conversation_mgr: Arc<ConversationManager>,
+    pub moonshine_installer: Arc<MoonshineModelInstaller>,
     pub tool_router: Arc<ToolRouter>,
     pub settings: Arc<RwLock<AppSettings>>,
     pub is_muted: Arc<RwLock<bool>>,
 }
 
 const LEGACY_GOOGLE_API_KEY_SETTING: &str = "google_api_key";
+
+fn moonshine_model_root(db_path: Option<&str>) -> PathBuf {
+    let Some(db_path) = db_path else {
+        return std::env::temp_dir()
+            .join("talking-moose-ai-tests")
+            .join("models")
+            .join("moonshine");
+    };
+
+    Path::new(db_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("models")
+        .join("moonshine")
+}
 
 fn migrate_legacy_google_api_key(db: &Database, secrets: &SecretStore) -> Result<(), String> {
     let Some(legacy_key) = db
@@ -253,6 +271,10 @@ impl AppState {
         let audio_capture = Arc::new(Mutex::new(AudioCapture::new()));
         let audio_playback = Arc::new(AudioPlayback::new());
         let conversation_mgr = Arc::new(ConversationManager::new());
+        let moonshine_installer = Arc::new(
+            MoonshineModelInstaller::new(moonshine_model_root(db_path))
+                .map_err(|error| error.to_string())?,
+        );
 
         let builtin_tools = Arc::new(BuiltinTools {
             memory_manager: memory.clone(),
@@ -270,6 +292,7 @@ impl AppState {
             audio_capture,
             audio_playback,
             conversation_mgr,
+            moonshine_installer,
             tool_router,
             settings,
             is_muted: Arc::new(RwLock::new(false)),

@@ -1,6 +1,8 @@
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
 use crate::asr::lifecycle::LocalAsrLifecycle;
+use crate::asr::moonshine::MoonshineModelInstaller;
+use crate::asr::pipeline::{LocalAsrPipeline, LocalAsrPipelineEventCallback};
 use crate::asr::{AsrEvent, AsrMode};
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
@@ -102,6 +104,7 @@ pub struct ConversationStartRequest {
     pub provider: Arc<dyn RealtimeConversationProvider>,
     pub config: LiveSessionConfig,
     pub asr_mode: AsrMode,
+    pub moonshine_installer: Option<Arc<MoonshineModelInstaller>>,
     pub capture: Arc<SyncMutex<AudioCapture>>,
     pub input_device: Option<String>,
     pub playback: Arc<AudioPlayback>,
@@ -382,6 +385,18 @@ impl ConversationManager {
         Ok(true)
     }
 
+    async fn stop_provisional_local_asr(pipeline: &mut Option<LocalAsrPipeline>) {
+        let Some(mut pipeline) = pipeline.take() else {
+            return;
+        };
+        if let Err(error) = pipeline.stop_and_join().await {
+            warn!(
+                kind = ?error.kind,
+                "Failed to stop provisional local ASR pipeline"
+            );
+        }
+    }
+
     pub async fn start_session(&self, request: ConversationStartRequest) -> Result<String, String> {
         let _operation_guard = self.operation_lock.lock().await;
         self.shutdown_locked(
@@ -399,6 +414,7 @@ impl ConversationManager {
             provider,
             config,
             asr_mode,
+            moonshine_installer,
             capture,
             input_device,
             playback,
@@ -416,7 +432,21 @@ impl ConversationManager {
             input_level: input_level_callback,
         } = callbacks;
 
+        if asr_mode == AsrMode::MoonshineSmallStreaming {
+            Self::set_lifecycle(
+                &self.lifecycle,
+                ConversationLifecycle::Failed,
+                Some(&lifecycle_callback),
+            );
+            state_callback(CharacterState::Error);
+            return Err(
+                "Moonshine Small Streaming is not integrated yet. No microphone audio was sent."
+                    .to_string(),
+            );
+        }
+
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let session_id = Uuid::new_v4().to_string();
         self.output_suppressed.store(false, Ordering::SeqCst);
         Self::set_lifecycle(
             &self.lifecycle,
@@ -424,12 +454,100 @@ impl ConversationManager {
             Some(&lifecycle_callback),
         );
 
+        // Local ASR is prepared before opening the cloud Live session. This fails closed for a
+        // missing/corrupt model or unavailable native runtime before microphone capture starts and
+        // avoids opening an unnecessary provider session when the local prerequisite is invalid.
+        let mut local_pipeline = if asr_mode == AsrMode::MoonshineTinyStreaming {
+            let installer = match moonshine_installer {
+                Some(installer) => installer,
+                None => {
+                    Self::set_lifecycle(
+                        &self.lifecycle,
+                        ConversationLifecycle::Failed,
+                        Some(&lifecycle_callback),
+                    );
+                    state_callback(CharacterState::Error);
+                    return Err(
+                        "Moonshine Tiny is selected, but the local model installer is unavailable. No microphone audio was sent."
+                            .to_string(),
+                    );
+                }
+            };
+            let manager_for_asr = self.clone();
+            let session_id_for_asr = session_id.clone();
+            let capture_for_asr = capture.clone();
+            let playback_for_asr = playback.clone();
+            let state_for_asr = state_callback.clone();
+            let provider_error_for_asr = provider_error_callback.clone();
+            let event_callback: LocalAsrPipelineEventCallback = Arc::new(move |event| {
+                let manager = manager_for_asr.clone();
+                let session_id = session_id_for_asr.clone();
+                let capture = capture_for_asr.clone();
+                let playback = playback_for_asr.clone();
+                let state_callback = state_for_asr.clone();
+                let provider_error_callback = provider_error_for_asr.clone();
+                tauri::async_runtime::spawn(async move {
+                    match event {
+                        AsrEvent::Error { error } => {
+                            let cleaned = manager
+                                .shutdown_if_generation_current(
+                                    generation,
+                                    capture,
+                                    playback,
+                                    ConversationLifecycle::Failed,
+                                )
+                                .await;
+                            if cleaned {
+                                warn!(kind = ?error.kind, "Local ASR inference terminated");
+                                state_callback(CharacterState::Error);
+                            }
+                        }
+                        event => {
+                            if let Err(error) = manager
+                                .handle_local_asr_event(generation, &session_id, event)
+                                .await
+                            {
+                                let cleaned = manager
+                                    .shutdown_if_generation_current(
+                                        generation,
+                                        capture,
+                                        playback,
+                                        ConversationLifecycle::Failed,
+                                    )
+                                    .await;
+                                if cleaned {
+                                    provider_error_callback(error);
+                                    state_callback(CharacterState::Error);
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+
+            match LocalAsrPipeline::start_tiny(installer, event_callback).await {
+                Ok(pipeline) => Some(pipeline),
+                Err(error) => {
+                    Self::set_lifecycle(
+                        &self.lifecycle,
+                        ConversationLifecycle::Failed,
+                        Some(&lifecycle_callback),
+                    );
+                    state_callback(CharacterState::Error);
+                    return Err(error.message);
+                }
+            }
+        } else {
+            None
+        };
+
         let input_sample_rate = config.sample_rate_in;
         let output_sample_rate = config.sample_rate_out;
         let (server_ev_tx, server_ev_rx) = mpsc::channel::<LiveServerEvent>(64);
         let mut session = match provider.connect(config, server_ev_tx).await {
             Ok(session) => session,
             Err(error_value) => {
+                Self::stop_provisional_local_asr(&mut local_pipeline).await;
                 Self::set_lifecycle(
                     &self.lifecycle,
                     ConversationLifecycle::Failed,
@@ -443,6 +561,7 @@ impl ConversationManager {
 
         if let Err(error_value) = playback.start(output_device) {
             Self::close_provisional_session(&mut session).await;
+            Self::stop_provisional_local_asr(&mut local_pipeline).await;
             playback.flush();
             Self::set_lifecycle(
                 &self.lifecycle,
@@ -453,25 +572,57 @@ impl ConversationManager {
             return Err(format!("failed to start audio output: {error_value}"));
         }
 
-        let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(32);
         let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
-        let capture_result =
-            capture
-                .lock()
-                .start(input_device, input_sample_rate, pcm_tx, Some(level_tx));
+        let mut cloud_pcm_rx = None;
+        let capture_result = match asr_mode {
+            AsrMode::MoonshineTinyStreaming => local_pipeline
+                .as_ref()
+                .expect("Tiny mode must have a provisional local ASR pipeline")
+                .start_capture(&mut capture.lock(), input_device, Some(level_tx))
+                .map_err(|error| error.message),
+            AsrMode::GeminiLiveAudio => {
+                let (pcm_tx, pcm_rx) = mpsc::channel::<Vec<u8>>(32);
+                let result = capture
+                    .lock()
+                    .start(input_device, input_sample_rate, pcm_tx, Some(level_tx))
+                    .map_err(|error| format!("failed to start microphone: {error}"));
+                if result.is_ok() {
+                    cloud_pcm_rx = Some(pcm_rx);
+                }
+                result
+            }
+            AsrMode::MoonshineSmallStreaming => unreachable!("Small mode rejected above"),
+        };
+
         if let Err(error_value) = capture_result {
+            capture.lock().stop();
             playback.flush();
             Self::close_provisional_session(&mut session).await;
+            Self::stop_provisional_local_asr(&mut local_pipeline).await;
             Self::set_lifecycle(
                 &self.lifecycle,
                 ConversationLifecycle::Failed,
                 Some(&lifecycle_callback),
             );
             state_callback(CharacterState::Error);
-            return Err(format!("failed to start microphone: {error_value}"));
+            return Err(error_value);
         }
 
-        let session_id = Uuid::new_v4().to_string();
+        if let Some(pipeline) = local_pipeline.take() {
+            if let Err(error) = self.local_asr.attach(generation, Box::new(pipeline)).await {
+                capture.lock().stop();
+                playback.flush();
+                Self::close_provisional_session(&mut session).await;
+                Self::set_lifecycle(
+                    &self.lifecycle,
+                    ConversationLifecycle::Failed,
+                    Some(&lifecycle_callback),
+                );
+                state_callback(CharacterState::Error);
+                return Err(error.message);
+            }
+        }
+
         *self.live_session.lock().await = Some(session);
         *self.active_session_id.lock() = Some(session_id.clone());
         *self.active_asr_mode.lock() = Some(asr_mode);
@@ -486,45 +637,47 @@ impl ConversationManager {
         );
         state_callback(CharacterState::Listening);
 
-        let manager_for_pcm = self.clone();
-        let capture_for_pcm = capture.clone();
-        let playback_for_pcm = playback.clone();
-        let state_for_pcm = state_callback.clone();
-        let provider_error_for_pcm = provider_error_callback.clone();
-        tauri::async_runtime::spawn(async move {
-            while let Some(chunk) = pcm_rx.recv().await {
-                if !manager_for_pcm.is_in_conversation.load(Ordering::SeqCst)
-                    || manager_for_pcm.generation.load(Ordering::SeqCst) != generation
-                {
-                    break;
-                }
-
-                let send_error = manager_for_pcm
-                    .forward_microphone_chunk(asr_mode, &chunk)
-                    .await
-                    .err();
-
-                if let Some(error_value) = send_error {
-                    let cleaned = manager_for_pcm
-                        .shutdown_if_generation_current(
-                            generation,
-                            capture_for_pcm.clone(),
-                            playback_for_pcm.clone(),
-                            ConversationLifecycle::Failed,
-                        )
-                        .await;
-                    if cleaned {
-                        warn!(
-                            kind = ?error_value.kind,
-                            "Failed to stream microphone audio frame"
-                        );
-                        provider_error_for_pcm(error_value);
-                        state_for_pcm(CharacterState::Error);
+        if let Some(mut pcm_rx) = cloud_pcm_rx {
+            let manager_for_pcm = self.clone();
+            let capture_for_pcm = capture.clone();
+            let playback_for_pcm = playback.clone();
+            let state_for_pcm = state_callback.clone();
+            let provider_error_for_pcm = provider_error_callback.clone();
+            tauri::async_runtime::spawn(async move {
+                while let Some(chunk) = pcm_rx.recv().await {
+                    if !manager_for_pcm.is_in_conversation.load(Ordering::SeqCst)
+                        || manager_for_pcm.generation.load(Ordering::SeqCst) != generation
+                    {
+                        break;
                     }
-                    break;
+
+                    let send_error = manager_for_pcm
+                        .forward_microphone_chunk(asr_mode, &chunk)
+                        .await
+                        .err();
+
+                    if let Some(error_value) = send_error {
+                        let cleaned = manager_for_pcm
+                            .shutdown_if_generation_current(
+                                generation,
+                                capture_for_pcm.clone(),
+                                playback_for_pcm.clone(),
+                                ConversationLifecycle::Failed,
+                            )
+                            .await;
+                        if cleaned {
+                            warn!(
+                                kind = ?error_value.kind,
+                                "Failed to stream microphone audio frame"
+                            );
+                            provider_error_for_pcm(error_value);
+                            state_for_pcm(CharacterState::Error);
+                        }
+                        break;
+                    }
                 }
-            }
-        });
+            });
+        }
 
         let is_running_for_level = self.is_in_conversation.clone();
         let generation_for_level = self.generation.clone();

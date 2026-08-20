@@ -49,9 +49,9 @@ fn prepare_character_for_conversation<R: Runtime>(
 
 fn validate_asr_mode_for_conversation(mode: AsrMode) -> Result<(), String> {
     match mode {
-        AsrMode::GeminiLiveAudio => Ok(()),
-        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => Err(
-            "Local Moonshine speech recognition is selected, but the local ASR worker is not integrated yet. Choose Gemini Live Cloud Audio to continue. No microphone audio was sent."
+        AsrMode::GeminiLiveAudio | AsrMode::MoonshineTinyStreaming => Ok(()),
+        AsrMode::MoonshineSmallStreaming => Err(
+            "Moonshine Small Streaming is selected, but the Small engine is not integrated yet. Choose Moonshine Tiny Streaming or Gemini Live Cloud Audio. No microphone audio was sent."
                 .to_string(),
         ),
     }
@@ -104,6 +104,7 @@ pub async fn start_conversation<R: Runtime>(
         provider,
         config,
         asr_mode: settings.asr_mode,
+        moonshine_installer: Some(state.moonshine_installer.clone()),
         capture: state.audio_capture.clone(),
         input_device: settings.input_device.clone(),
         playback: state.audio_playback.clone(),
@@ -332,19 +333,17 @@ mod tests {
     }
 
     #[test]
-    fn local_asr_modes_fail_closed_until_worker_integration_exists() {
-        for mode in [
-            AsrMode::MoonshineTinyStreaming,
-            AsrMode::MoonshineSmallStreaming,
-        ] {
-            let error = validate_asr_mode_for_conversation(mode).unwrap_err();
-            assert!(error.contains("No microphone audio was sent"));
-        }
+    fn tiny_and_cloud_modes_are_supported_while_small_fails_closed() {
+        assert!(validate_asr_mode_for_conversation(AsrMode::MoonshineTinyStreaming).is_ok());
         assert!(validate_asr_mode_for_conversation(AsrMode::GeminiLiveAudio).is_ok());
+
+        let error = validate_asr_mode_for_conversation(AsrMode::MoonshineSmallStreaming)
+            .expect_err("Small must remain unavailable until ASR-008 is integrated");
+        assert!(error.contains("No microphone audio was sent"));
     }
 
     #[test]
-    fn moonshine_start_ipc_fails_before_microphone_capture() {
+    fn missing_moonshine_tiny_model_fails_before_microphone_capture() {
         let mut app_state = AppState::new_for_tests().unwrap();
         app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
         let capture = app_state.audio_capture.clone();
@@ -359,7 +358,7 @@ mod tests {
             .unwrap();
 
         let error = get_ipc_response(&webview, ipc_request("start_conversation", json!({})))
-            .expect_err("local ASR selection must fail closed until the worker exists");
+            .expect_err("missing Tiny model must fail closed before microphone capture");
 
         assert!(error
             .as_str()
