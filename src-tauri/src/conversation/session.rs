@@ -1,6 +1,7 @@
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
 use crate::asr::lifecycle::LocalAsrLifecycle;
+use crate::asr::{AsrEvent, AsrMode};
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
 use crate::character::state::CharacterState;
@@ -100,6 +101,7 @@ impl ConversationCallbacks {
 pub struct ConversationStartRequest {
     pub provider: Arc<dyn RealtimeConversationProvider>,
     pub config: LiveSessionConfig,
+    pub asr_mode: AsrMode,
     pub capture: Arc<SyncMutex<AudioCapture>>,
     pub input_device: Option<String>,
     pub playback: Arc<AudioPlayback>,
@@ -126,12 +128,15 @@ struct ConversationEventLoopContext {
 #[derive(Clone)]
 pub struct ConversationManager {
     active_session_id: Arc<SyncMutex<Option<String>>>,
+    active_asr_mode: Arc<SyncMutex<Option<AsrMode>>>,
     live_session: Arc<AsyncMutex<Option<Box<dyn LiveSession>>>>,
     lifecycle: Arc<RwLock<ConversationLifecycle>>,
     is_in_conversation: Arc<AtomicBool>,
     generation: Arc<AtomicU64>,
     output_suppressed: Arc<AtomicBool>,
+    state_callback: Arc<SyncMutex<Option<StateCallback>>>,
     lifecycle_callback: Arc<SyncMutex<Option<LifecycleCallback>>>,
+    transcript_callback: Arc<SyncMutex<Option<TranscriptCallback>>>,
     local_asr: Arc<LocalAsrLifecycle>,
     operation_lock: Arc<AsyncMutex<()>>,
 }
@@ -140,12 +145,15 @@ impl ConversationManager {
     pub fn new() -> Self {
         Self {
             active_session_id: Arc::new(SyncMutex::new(None)),
+            active_asr_mode: Arc::new(SyncMutex::new(None)),
             live_session: Arc::new(AsyncMutex::new(None)),
             lifecycle: Arc::new(RwLock::new(ConversationLifecycle::Idle)),
             is_in_conversation: Arc::new(AtomicBool::new(false)),
             generation: Arc::new(AtomicU64::new(0)),
             output_suppressed: Arc::new(AtomicBool::new(false)),
+            state_callback: Arc::new(SyncMutex::new(None)),
             lifecycle_callback: Arc::new(SyncMutex::new(None)),
+            transcript_callback: Arc::new(SyncMutex::new(None)),
             local_asr: Arc::new(LocalAsrLifecycle::default()),
             operation_lock: Arc::new(AsyncMutex::new(())),
         }
@@ -244,12 +252,15 @@ impl ConversationManager {
             }
         }
         *self.active_session_id.lock() = None;
+        *self.active_asr_mode.lock() = None;
         Self::set_lifecycle(
             &self.lifecycle,
             final_lifecycle,
             lifecycle_callback.as_ref(),
         );
+        *self.state_callback.lock() = None;
         *self.lifecycle_callback.lock() = None;
+        *self.transcript_callback.lock() = None;
     }
 
     async fn shutdown_if_generation_current(
@@ -269,6 +280,108 @@ impl ConversationManager {
         true
     }
 
+    async fn forward_microphone_chunk(
+        &self,
+        asr_mode: AsrMode,
+        chunk: &[u8],
+    ) -> Result<(), ProviderError> {
+        if asr_mode != AsrMode::GeminiLiveAudio {
+            return Ok(());
+        }
+
+        let mut session_lock = self.live_session.lock().await;
+        match session_lock.as_mut() {
+            Some(live_session) => live_session.send_audio_chunk(chunk).await,
+            None => Err(ProviderError::from_kind(ProviderErrorKind::Closed)),
+        }
+    }
+
+    fn accept_user_transcript(
+        &self,
+        session_id: &str,
+        text: String,
+        state_callback: &StateCallback,
+        lifecycle_callback: &LifecycleCallback,
+        transcript_callback: &TranscriptCallback,
+    ) {
+        self.output_suppressed.store(false, Ordering::SeqCst);
+        transcript_callback(session_id.to_string(), "user".to_string(), text);
+        Self::set_lifecycle(
+            &self.lifecycle,
+            ConversationLifecycle::Responding,
+            Some(lifecycle_callback),
+        );
+        state_callback(CharacterState::Thinking);
+    }
+
+    /// Route one provider-neutral local-ASR event into the active Gemini Live conversation.
+    ///
+    /// Only finalized local transcript text crosses the provider boundary. Partial transcript
+    /// text and speech lifecycle events remain local. The generation and session-id checks make
+    /// this handoff fail closed when a callback belongs to an older conversation.
+    pub async fn handle_local_asr_event(
+        &self,
+        generation: u64,
+        expected_session_id: &str,
+        event: AsrEvent,
+    ) -> Result<bool, ProviderError> {
+        let AsrEvent::FinalTranscript { text } = event else {
+            return Ok(false);
+        };
+        let text = text.trim().to_string();
+        if text.is_empty() {
+            return Ok(false);
+        }
+
+        // Serialize the final-turn handoff with start/stop/barge-in so a callback that was
+        // current at admission cannot race teardown and land in a replacement Live session.
+        let _operation_guard = self.operation_lock.lock().await;
+        if !self.is_in_conversation.load(Ordering::SeqCst)
+            || self.generation.load(Ordering::SeqCst) != generation
+            || !self.local_asr.accepts_callback(generation).await
+            || self.active_session_id.lock().as_deref() != Some(expected_session_id)
+            || !matches!(
+                *self.active_asr_mode.lock(),
+                Some(AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming)
+            )
+        {
+            return Ok(false);
+        }
+
+        let state_callback = self
+            .state_callback
+            .lock()
+            .clone()
+            .ok_or(ProviderError::from_kind(ProviderErrorKind::Internal))?;
+        let lifecycle_callback = self
+            .lifecycle_callback
+            .lock()
+            .clone()
+            .ok_or(ProviderError::from_kind(ProviderErrorKind::Internal))?;
+        let transcript_callback = self
+            .transcript_callback
+            .lock()
+            .clone()
+            .ok_or(ProviderError::from_kind(ProviderErrorKind::Internal))?;
+
+        let mut session_lock = self.live_session.lock().await;
+        let Some(live_session) = session_lock.as_mut() else {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
+        };
+
+        // Accept the user turn before sending it so local and cloud transcript paths expose the
+        // same Responding/Thinking transition and a fast provider reply cannot overtake it.
+        self.accept_user_transcript(
+            expected_session_id,
+            text.clone(),
+            &state_callback,
+            &lifecycle_callback,
+            &transcript_callback,
+        );
+        live_session.send_text_turn(&text).await?;
+        Ok(true)
+    }
+
     pub async fn start_session(&self, request: ConversationStartRequest) -> Result<String, String> {
         let _operation_guard = self.operation_lock.lock().await;
         self.shutdown_locked(
@@ -285,6 +398,7 @@ impl ConversationManager {
         let ConversationStartRequest {
             provider,
             config,
+            asr_mode,
             capture,
             input_device,
             playback,
@@ -360,7 +474,10 @@ impl ConversationManager {
         let session_id = Uuid::new_v4().to_string();
         *self.live_session.lock().await = Some(session);
         *self.active_session_id.lock() = Some(session_id.clone());
+        *self.active_asr_mode.lock() = Some(asr_mode);
+        *self.state_callback.lock() = Some(state_callback.clone());
         *self.lifecycle_callback.lock() = Some(lifecycle_callback.clone());
+        *self.transcript_callback.lock() = Some(transcript_callback.clone());
         self.is_in_conversation.store(true, Ordering::SeqCst);
         Self::set_lifecycle(
             &self.lifecycle,
@@ -382,13 +499,10 @@ impl ConversationManager {
                     break;
                 }
 
-                let send_error = {
-                    let mut session_lock = manager_for_pcm.live_session.lock().await;
-                    match session_lock.as_mut() {
-                        Some(live_session) => live_session.send_audio_chunk(&chunk).await.err(),
-                        None => Some(ProviderError::from_kind(ProviderErrorKind::Closed)),
-                    }
-                };
+                let send_error = manager_for_pcm
+                    .forward_microphone_chunk(asr_mode, &chunk)
+                    .await
+                    .err();
 
                 if let Some(error_value) = send_error {
                     let cleaned = manager_for_pcm

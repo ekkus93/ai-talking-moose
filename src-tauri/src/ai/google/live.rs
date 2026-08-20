@@ -73,6 +73,14 @@ pub struct GoogleLiveSession {
     is_active: Arc<AtomicBool>,
 }
 
+fn text_turn_message(text: &str) -> serde_json::Value {
+    json!({
+        "realtimeInput": {
+            "text": text
+        }
+    })
+}
+
 #[async_trait]
 impl LiveSession for GoogleLiveSession {
     async fn send_audio_chunk(&mut self, pcm_bytes: &[u8]) -> Result<(), ProviderError> {
@@ -94,6 +102,17 @@ impl LiveSession for GoogleLiveSession {
 
         self.sender
             .send(Message::Text(msg.to_string()))
+            .await
+            .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Closed))
+    }
+
+    async fn send_text_turn(&mut self, text: &str) -> Result<(), ProviderError> {
+        if !self.is_active.load(Ordering::SeqCst) {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
+        }
+
+        self.sender
+            .send(Message::Text(text_turn_message(text).to_string()))
             .await
             .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Closed))
     }
@@ -423,6 +442,22 @@ mod tests {
         let error = provider_error_from_server_payload(&value).unwrap();
         assert_eq!(error.kind, ProviderErrorKind::Protocol);
         assert!(!error.message.contains("sensitive provider detail"));
+    }
+
+    #[test]
+    fn text_turn_uses_realtime_input_without_audio_payload() {
+        let message = text_turn_message("hello from Moonshine");
+        assert_eq!(
+            message,
+            serde_json::json!({
+                "realtimeInput": {
+                    "text": "hello from Moonshine"
+                }
+            })
+        );
+        assert!(message["realtimeInput"].get("mediaChunks").is_none());
+        assert!(message["realtimeInput"].get("audio").is_none());
+        assert!(message["realtimeInput"].get("video").is_none());
     }
 
     #[tokio::test]
