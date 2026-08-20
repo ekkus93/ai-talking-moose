@@ -46,7 +46,7 @@ Moonshine model verification, native transcriber/stream construction, and every 
 
 Pipeline startup uses an async one-shot readiness handshake. A missing/corrupt model or native startup failure is returned before microphone capture is started.
 
-Transcript updates are delivered through a lightweight callback as `LocalAsrPipelineEvent::Transcript`. ASR-010 owns the higher-level partial/final utterance state machine.
+Native Moonshine line updates are consumed by the ASR-010 transcript state machine inside the worker. The callback boundary exposes only provider-neutral `AsrEvent` values; partial/final replacement and speech lifecycle semantics are documented in `MOONSHINE_TRANSCRIPT_STATE.md`.
 
 ## Shutdown and cancellation
 

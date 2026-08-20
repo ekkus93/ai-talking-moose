@@ -3,7 +3,8 @@ use crate::asr::moonshine::{
     MoonshineModelInstaller, MoonshineTinyEngine, MoonshineTinyTranscriptUpdate,
     MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
 };
-use crate::asr::{AsrError, AsrErrorKind};
+use crate::asr::transcript_state::{StreamingTranscriptUpdate, TranscriptStateMachine};
+use crate::asr::{AsrError, AsrErrorKind, AsrEvent};
 use crate::audio::capture::AudioCapture;
 use crate::audio::resample::AudioResampler;
 use async_trait::async_trait;
@@ -25,12 +26,8 @@ pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 8;
 
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
-/// Event emitted by the dedicated local-ASR inference worker.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LocalAsrPipelineEvent {
-    Transcript(MoonshineTinyTranscriptUpdate),
-    Error(AsrError),
-}
+/// Provider-neutral event emitted by the dedicated local-ASR inference worker.
+pub type LocalAsrPipelineEvent = AsrEvent;
 
 /// Bounded-worker diagnostics used by later ASR diagnostics/UI work.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,7 +39,7 @@ pub struct LocalAsrPipelineDiagnostics {
     pub last_error: Option<AsrError>,
 }
 
-pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(LocalAsrPipelineEvent) + Send + Sync>;
+pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(AsrEvent) + Send + Sync>;
 
 trait PipelineEngine: Send {
     fn input_sample_rate_hz(&self) -> u32;
@@ -282,6 +279,7 @@ fn run_worker(
     event_callback: &LocalAsrPipelineEventCallback,
 ) -> Result<(), AsrError> {
     let mut terminal_error = None;
+    let mut transcript_state = TranscriptStateMachine::default();
     while !stop_requested.load(Ordering::SeqCst) {
         let bytes = match pcm_rx.try_recv() {
             Ok(bytes) => bytes,
@@ -309,7 +307,9 @@ fn run_worker(
         match engine.push_pcm(&pcm) {
             Ok(updates) => {
                 for update in updates {
-                    event_callback(LocalAsrPipelineEvent::Transcript(update));
+                    for event in transcript_state.apply(map_transcript_update(update)) {
+                        event_callback(event);
+                    }
                 }
             }
             Err(error) => {
@@ -352,7 +352,26 @@ fn record_terminal_error(
     error: &AsrError,
 ) {
     *last_error.lock() = Some(error.clone());
-    event_callback(LocalAsrPipelineEvent::Error(error.clone()));
+    event_callback(AsrEvent::Error {
+        error: error.clone(),
+    });
+}
+
+fn map_transcript_update(update: MoonshineTinyTranscriptUpdate) -> StreamingTranscriptUpdate {
+    match update {
+        MoonshineTinyTranscriptUpdate::Partial { line_id, text, .. } => {
+            StreamingTranscriptUpdate::Partial {
+                segment_id: line_id,
+                text,
+            }
+        }
+        MoonshineTinyTranscriptUpdate::Final { line_id, text, .. } => {
+            StreamingTranscriptUpdate::Final {
+                segment_id: line_id,
+                text,
+            }
+        }
+    }
 }
 
 fn invalid_state_error(message: &str) -> AsrError {

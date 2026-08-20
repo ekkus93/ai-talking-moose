@@ -160,10 +160,12 @@ async fn malformed_pcm_is_typed_terminal_audio_error() {
     );
     assert!(matches!(
         events.lock().unwrap().as_slice(),
-        [LocalAsrPipelineEvent::Error(AsrError {
-            kind: AsrErrorKind::AudioInput,
-            ..
-        })]
+        [AsrEvent::Error {
+            error: AsrError {
+                kind: AsrErrorKind::AudioInput,
+                ..
+            }
+        }]
     ));
     assert_eq!(
         pipeline.stop_and_join().await.unwrap_err().kind,
@@ -200,10 +202,12 @@ async fn inference_error_is_preserved_and_emitted() {
     );
     assert!(matches!(
         events.lock().unwrap().as_slice(),
-        [LocalAsrPipelineEvent::Error(AsrError {
-            kind: AsrErrorKind::Inference,
-            ..
-        })]
+        [AsrEvent::Error {
+            error: AsrError {
+                kind: AsrErrorKind::Inference,
+                ..
+            }
+        }]
     ));
     assert_eq!(
         pipeline.stop_and_join().await.unwrap_err().kind,
@@ -239,16 +243,61 @@ async fn transcript_updates_cross_worker_boundary() {
     .unwrap();
     pipeline.test_sender().try_send(vec![0, 0]).unwrap();
     wait_until(|| !events.lock().unwrap().is_empty());
-    assert_eq!(
-        events.lock().unwrap().as_slice(),
-        [LocalAsrPipelineEvent::Transcript(
-            MoonshineTinyTranscriptUpdate::Partial {
-                line_id: 7,
-                text: "hello".to_string(),
-                latency_ms: 9,
-            }
-        )]
-    );
+    {
+        let events = events.lock().unwrap();
+        assert_eq!(
+            events.as_slice(),
+            [
+                AsrEvent::SpeechStarted { monotonic_ms: None },
+                AsrEvent::PartialTranscript {
+                    text: "hello".to_string(),
+                },
+            ]
+        );
+    }
+    pipeline.stop_and_join().await.unwrap();
+}
+
+#[tokio::test]
+async fn final_transcript_crosses_worker_as_provider_neutral_lifecycle() {
+    let state = Arc::new(FakeState::default());
+    state
+        .updates
+        .lock()
+        .unwrap()
+        .push(MoonshineTinyTranscriptUpdate::Final {
+            line_id: 8,
+            text: "complete".to_string(),
+            latency_ms: 10,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_with_factory(
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+            }))
+        },
+        callback,
+    )
+    .await
+    .unwrap();
+    pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+    wait_until(|| events.lock().unwrap().len() == 3);
+    {
+        let events = events.lock().unwrap();
+        assert_eq!(
+            events.as_slice(),
+            [
+                AsrEvent::SpeechStarted { monotonic_ms: None },
+                AsrEvent::FinalTranscript {
+                    text: "complete".to_string(),
+                },
+                AsrEvent::SpeechEnded { monotonic_ms: None },
+            ]
+        );
+    }
     pipeline.stop_and_join().await.unwrap();
 }
 
