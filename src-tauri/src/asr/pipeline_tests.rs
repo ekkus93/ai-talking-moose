@@ -127,12 +127,13 @@ async fn converts_capture_i16_le_to_engine_f32() {
     pipeline.test_sender().try_send(bytes).unwrap();
     wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
 
-    let received = state.received_pcm.lock().unwrap();
-    assert_eq!(received.len(), 1);
-    assert!((received[0][0] + 1.0).abs() < 0.0001);
-    assert!(received[0][1].abs() < 0.0001);
-    assert!((received[0][2] - (32767.0 / 32768.0)).abs() < 0.0001);
-    drop(received);
+    {
+        let received = state.received_pcm.lock().unwrap();
+        assert_eq!(received.len(), 1);
+        assert!((received[0][0] + 1.0).abs() < 0.0001);
+        assert!(received[0][1].abs() < 0.0001);
+        assert!((received[0][2] - (32767.0 / 32768.0)).abs() < 0.0001);
+    }
     pipeline.stop_and_join().await.unwrap();
 }
 
