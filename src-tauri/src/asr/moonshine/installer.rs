@@ -355,6 +355,48 @@ impl MoonshineModelInstaller {
         self.install_manifest(manifest, cancellation).await
     }
 
+    /// Delete only the selected pinned model revision. This is serialized with
+    /// installs so a delete cannot race model promotion. Callers that expose
+    /// this to the UI must additionally refuse deletion while that model is active.
+    pub async fn delete_installed(
+        &self,
+        architecture: MoonshineModelArchitecture,
+    ) -> Result<bool, MoonshineModelInstallError> {
+        let _operation_guard = install_operation_lock().lock().await;
+        let manifest = manifest_for_architecture(architecture);
+        manifest
+            .validate()
+            .map_err(|_| MoonshineModelInstallError::invalid_manifest())?;
+        let path = self.model_path_for_manifest(manifest);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(_) => {
+                return Err(MoonshineModelInstallError::io(
+                    "inspect the installed Moonshine model before deletion",
+                ));
+            }
+        };
+
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            fs::remove_dir_all(&path)
+                .map_err(|_| MoonshineModelInstallError::io("delete the Moonshine model"))?;
+        } else {
+            fs::remove_file(&path)
+                .map_err(|_| MoonshineModelInstallError::io("delete the Moonshine model"))?;
+        }
+
+        if let Some(parent) = path.parent() {
+            if fs::read_dir(parent)
+                .map(|mut entries| entries.next().is_none())
+                .unwrap_or(false)
+            {
+                let _ = fs::remove_dir(parent);
+            }
+        }
+        Ok(true)
+    }
+
     async fn install_manifest(
         &self,
         manifest: &'static MoonshineModelManifest,

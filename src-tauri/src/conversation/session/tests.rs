@@ -212,6 +212,35 @@ async fn missing_tiny_model_fails_before_provider_connect_or_microphone_capture(
 }
 
 #[tokio::test]
+async fn missing_small_model_fails_before_provider_connect_or_microphone_capture() {
+    let manager = ConversationManager::new();
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let temp = tempfile::tempdir().unwrap();
+    let mut request = test_request(false);
+    request.asr_mode = AsrMode::MoonshineSmallStreaming;
+    request.provider = Arc::new(ConnectCountingProvider {
+        connect_count: connect_count.clone(),
+    });
+    request.moonshine_installer =
+        Some(Arc::new(MoonshineModelInstaller::new(temp.path()).unwrap()));
+    let capture = request.capture.clone();
+
+    let error = manager
+        .start_session(request)
+        .await
+        .expect_err("missing Small model must fail before provider or microphone startup");
+
+    assert!(error.contains("Moonshine Small"));
+    assert!(error.contains("not installed"));
+    assert!(error.contains("No microphone audio was sent"));
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(!capture.lock().is_active());
+    assert!(!manager.local_asr_lifecycle().is_active().await);
+    assert!(!manager.is_active());
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
+}
+
+#[tokio::test]
 async fn centralized_shutdown_is_idempotent_and_closes_session_once() {
     let manager = ConversationManager::new();
     let capture = Arc::new(SyncMutex::new(AudioCapture::new_mock()));

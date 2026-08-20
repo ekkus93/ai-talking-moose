@@ -1,6 +1,6 @@
 # Moonshine Local ASR Pipeline
 
-Status: **V1R-ASR-009 implementation contract; V1R-ASR-012 production lifecycle integrated**
+Status: **V1R-ASR-008/009/012 Tiny + Small production lifecycle integrated**
 Recorded: 2026-08-20
 
 ## Ownership
@@ -18,7 +18,7 @@ Cloud Gemini Live audio and local Moonshine are separate modes. The local pipeli
 3. Interleaved input is downmixed to mono.
 4. Mono input is linearly resampled to **16,000 Hz**.
 5. Capture emits **100 ms** chunks as signed **16-bit little-endian mono PCM**.
-6. The dedicated local-ASR worker converts each accepted chunk to mono `f32` before calling `MoonshineTinyEngine::push_pcm`.
+6. The dedicated local-ASR worker converts each accepted chunk to mono `f32` before calling `MoonshineStreamingEngine::push_pcm`.
 
 The Moonshine engine boundary therefore remains exactly **mono `f32`, 16 kHz**. ASR-009 does not perform a second resample in the inference worker.
 
@@ -38,7 +38,7 @@ Dropping newest audio matches the existing production microphone overload policy
 
 ## Worker model
 
-Moonshine model verification, native transcriber/stream construction, and every `push_pcm` inference call run on a named dedicated OS thread (`moonshine-tiny-asr`). Long native inference therefore does not run on:
+Moonshine model verification, native transcriber/stream construction, and every `push_pcm` inference call run on a named dedicated OS thread (`moonshine-tiny-asr` or `moonshine-small-asr`). Long native inference therefore does not run on:
 
 - the CPAL callback thread;
 - a Tokio async-runtime worker;
@@ -55,7 +55,7 @@ Native Moonshine line updates are consumed by the ASR-010 transcript state machi
 1. sets the cooperative stop flag;
 2. closes the pipeline-owned ingress sender;
 3. causes queued-but-not-yet-inferred audio to be discarded rather than drained;
-4. asks the Tiny engine to stop after the currently executing native call returns;
+4. asks the selected Tiny/Small engine to stop after the currently executing native call returns;
 5. joins the OS worker through `tokio::task::spawn_blocking`, so joining cannot block a Tokio runtime worker;
 6. is idempotent.
 
@@ -65,9 +65,9 @@ A native inference function already executing cannot be preempted safely by Rust
 
 ## Production conversation integration
 
-`ConversationManager::start_session` now owns the ASR-012 Tiny startup transaction:
+`ConversationManager::start_session` now owns the ASR-012 local Moonshine startup transaction:
 
-1. verify/open the Tiny pipeline before opening the Gemini Live session;
+1. verify/open the selected Tiny or Small pipeline before opening the Gemini Live session;
 2. fail closed before microphone capture if the model is missing/corrupt or the native runtime cannot load;
 3. open the provider and output only after local-ASR prerequisites are valid;
 4. start the one authoritative `AudioCapture` directly on the pipeline's bounded ingress queue;
@@ -75,14 +75,15 @@ A native inference function already executing cannot be preempted safely by Rust
 6. publish the session as active/Listening only after microphone startup and lifecycle attachment succeed;
 7. route final local transcripts through `ConversationManager::handle_local_asr_event`, which sends exactly one Gemini text turn after generation/session checks.
 
-Gemini cloud-audio mode retains its separate microphone-to-provider queue. Tiny mode never creates that queue, so there is no accidental provider audio-upload path to fall back to. `shutdown_locked` stops microphone capture first and then stops/joins the attached local-ASR worker for Stop, Mute, Dismiss, provider loss, mode replacement, and application exit. Barge-in flushes/suppresses the stale Moose response while deliberately leaving the current local recognizer attached.
+Gemini cloud-audio mode retains its separate microphone-to-provider queue. Tiny and Small modes never create that queue, so there is no accidental provider audio-upload path to fall back to. `shutdown_locked` stops microphone capture first and then stops/joins the attached local-ASR worker for Stop, Mute, Dismiss, provider loss, mode replacement, and application exit. Barge-in flushes/suppresses the stale Moose response while deliberately leaving the current local recognizer attached.
 
-Moonshine Small remains fail-closed until V1R-ASR-008 supplies a production Small engine/pipeline path.
+Moonshine Tiny and Small now share the same bounded local pipeline and lifecycle contract. Each resolves its own verified install directory and native architecture; neither mode creates the Gemini microphone-audio upload queue.
 
 ## Diagnostics
 
 `LocalAsrPipelineDiagnostics` exposes:
 
+- selected Tiny/Small architecture;
 - required input sample rate;
 - current queue depth;
 - hard queue capacity;
@@ -90,4 +91,4 @@ Moonshine Small remains fail-closed until V1R-ASR-008 supplies a production Smal
 - worker running state;
 - last typed terminal ASR error.
 
-ASR-015 will aggregate these values into the user-facing diagnostics surface.
+ASR-015 will aggregate these values into the user-facing diagnostics surface and add measured CPU utilization, real-time factor, and peak/steady memory. ASR-008 only makes the existing pipeline diagnostics architecture-aware so those measurements can be attributed to Tiny versus Small without inventing benchmark numbers.

@@ -653,3 +653,32 @@ async fn content_length_mismatch_is_rejected_and_staging_is_removed() {
     let model_parent = temp.path().join(TEST_MANIFEST.id);
     assert!(FakeTransport::partial_entries(&model_parent).is_empty());
 }
+
+#[tokio::test]
+async fn public_delete_is_architecture_scoped_and_idempotent() {
+    let temp = TempDir::new().unwrap();
+    let installer = MoonshineModelInstaller::new(temp.path()).unwrap();
+    let tiny = installer.model_path(MoonshineModelArchitecture::TinyStreaming);
+    let small = installer.model_path(MoonshineModelArchitecture::SmallStreaming);
+    std::fs::create_dir_all(&tiny).unwrap();
+    std::fs::create_dir_all(&small).unwrap();
+    std::fs::write(tiny.join("sentinel"), b"tiny").unwrap();
+    std::fs::write(small.join("sentinel"), b"small").unwrap();
+
+    assert!(installer
+        .delete_installed(MoonshineModelArchitecture::SmallStreaming)
+        .await
+        .unwrap());
+    assert!(tiny.join("sentinel").is_file());
+    assert!(!small.exists());
+    assert!(!installer
+        .delete_installed(MoonshineModelArchitecture::SmallStreaming)
+        .await
+        .unwrap());
+
+    assert!(installer
+        .delete_installed(MoonshineModelArchitecture::TinyStreaming)
+        .await
+        .unwrap());
+    assert!(!tiny.exists());
+}
