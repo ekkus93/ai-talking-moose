@@ -1,9 +1,7 @@
 use super::manifest::{manifest_for_architecture, MoonshineModelFile, MoonshineModelManifest};
 use super::runtime::MoonshineModelArchitecture;
+#[cfg(test)]
 use async_trait::async_trait;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use base64::Engine;
-use futures_util::StreamExt;
 use ring::digest::{Context as Sha256Context, SHA256};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -12,17 +10,23 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 use uuid::Uuid;
 
+mod disk;
+mod integrity;
+mod transport;
+
+use disk::{DiskSpaceProbe, SystemDiskSpaceProbe};
+use integrity::{crc32c_base64, digest_hex, Crc32c, VerifyingFileSink};
+#[cfg(test)]
+use transport::{DownloadMetadata, DownloadSink};
+use transport::{ModelDownloadTransport, ReqwestModelDownloadTransport};
+
 const INSTALL_MARKER_FILE: &str = ".talking-moose-model.json";
 const INSTALL_MARKER_SCHEMA_VERSION: u32 = 1;
-const MAX_REDIRECTS: usize = 3;
-const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const VERIFY_BUFFER_BYTES: usize = 1024 * 1024;
 const DISK_SPACE_HEADROOM_BYTES: u64 = 8 * 1024 * 1024;
 const ALLOWED_MODEL_FILES: [&str; 7] = [
@@ -234,137 +238,6 @@ impl MoonshineModelInstallCancellation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct DownloadMetadata {
-    content_length: Option<u64>,
-}
-
-trait DownloadSink: Send {
-    fn write_chunk(&mut self, chunk: &[u8]) -> Result<(), MoonshineModelInstallError>;
-}
-
-#[async_trait]
-trait ModelDownloadTransport: Send + Sync {
-    async fn stream(
-        &self,
-        url: &str,
-        cancellation: &MoonshineModelInstallCancellation,
-        sink: &mut dyn DownloadSink,
-    ) -> Result<DownloadMetadata, MoonshineModelInstallError>;
-}
-
-struct ReqwestModelDownloadTransport {
-    client: reqwest::Client,
-}
-
-impl ReqwestModelDownloadTransport {
-    fn new() -> Result<Self, MoonshineModelInstallError> {
-        let redirect_policy = reqwest::redirect::Policy::custom(|attempt| {
-            if attempt.previous().len() >= MAX_REDIRECTS || attempt.url().scheme() != "https" {
-                attempt.stop()
-            } else {
-                attempt.follow()
-            }
-        });
-        let client = reqwest::Client::builder()
-            .connect_timeout(HTTP_CONNECT_TIMEOUT)
-            .timeout(HTTP_REQUEST_TIMEOUT)
-            .redirect(redirect_policy)
-            .user_agent("talking-moose-ai/0.1.0")
-            .build()
-            .map_err(|_| MoonshineModelInstallError::network())?;
-        Ok(Self { client })
-    }
-}
-
-#[async_trait]
-impl ModelDownloadTransport for ReqwestModelDownloadTransport {
-    async fn stream(
-        &self,
-        url: &str,
-        cancellation: &MoonshineModelInstallCancellation,
-        sink: &mut dyn DownloadSink,
-    ) -> Result<DownloadMetadata, MoonshineModelInstallError> {
-        if !url.starts_with("https://") {
-            return Err(MoonshineModelInstallError::invalid_manifest());
-        }
-        cancellation.check()?;
-
-        let response = tokio::select! {
-            () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
-            response = self.client.get(url).header(reqwest::header::ACCEPT_ENCODING, "identity").send() => response.map_err(|_| MoonshineModelInstallError::network())?,
-        };
-
-        let status = response.status();
-        if !status.is_success() {
-            return Err(MoonshineModelInstallError::http(status.as_u16()));
-        }
-        if response.url().scheme() != "https" {
-            return Err(MoonshineModelInstallError::network());
-        }
-
-        let content_length = response.content_length();
-        let mut stream = response.bytes_stream();
-        loop {
-            let next = tokio::select! {
-                () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
-                next = stream.next() => next,
-            };
-            let Some(chunk_result) = next else {
-                break;
-            };
-            let chunk = chunk_result.map_err(|_| MoonshineModelInstallError::network())?;
-            cancellation.check()?;
-            sink.write_chunk(&chunk)?;
-        }
-
-        Ok(DownloadMetadata { content_length })
-    }
-}
-
-trait DiskSpaceProbe: Send + Sync {
-    fn available_bytes(&self, path: &Path) -> std::io::Result<Option<u64>>;
-}
-
-struct SystemDiskSpaceProbe;
-
-impl DiskSpaceProbe for SystemDiskSpaceProbe {
-    fn available_bytes(&self, path: &Path) -> std::io::Result<Option<u64>> {
-        available_disk_space(path)
-    }
-}
-
-#[cfg(unix)]
-fn available_disk_space(path: &Path) -> std::io::Result<Option<u64>> {
-    use std::ffi::CString;
-    use std::mem::MaybeUninit;
-    use std::os::unix::ffi::OsStrExt;
-
-    let c_path = CString::new(path.as_os_str().as_bytes()).map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "model install path contains an embedded NUL byte",
-        )
-    })?;
-    let mut stats = MaybeUninit::<libc::statvfs>::zeroed();
-    // SAFETY: `c_path` is NUL-terminated and lives across this call, while
-    // `stats` points to writable storage large enough for one `statvfs` value.
-    let result = unsafe { libc::statvfs(c_path.as_ptr(), stats.as_mut_ptr()) };
-    if result != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    // SAFETY: a zero return from statvfs initializes the output structure.
-    let stats = unsafe { stats.assume_init() };
-    let available = u128::from(stats.f_bavail).saturating_mul(u128::from(stats.f_frsize));
-    let available = u64::try_from(available).unwrap_or(u64::MAX);
-    Ok(Some(available))
-}
-
-#[cfg(not(unix))]
-fn available_disk_space(_path: &Path) -> std::io::Result<Option<u64>> {
-    Ok(None)
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 struct InstallMarker {
     schema_version: u32,
@@ -391,137 +264,6 @@ impl InstallMarker {
 
     fn matches_manifest(&self, manifest: &MoonshineModelManifest) -> bool {
         self == &Self::from_manifest(manifest)
-    }
-}
-
-struct Crc32c {
-    state: u32,
-}
-
-impl Default for Crc32c {
-    fn default() -> Self {
-        Self { state: u32::MAX }
-    }
-}
-
-impl Crc32c {
-    fn update(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            let index = ((self.state ^ u32::from(byte)) & 0xff) as usize;
-            self.state = CRC32C_TABLE[index] ^ (self.state >> 8);
-        }
-    }
-
-    fn finalize(self) -> u32 {
-        !self.state
-    }
-}
-
-const fn crc32c_table() -> [u32; 256] {
-    let mut table = [0_u32; 256];
-    let mut index = 0_usize;
-    while index < table.len() {
-        let mut value = index as u32;
-        let mut bit = 0_u8;
-        while bit < 8 {
-            value = if value & 1 == 1 {
-                (value >> 1) ^ 0x82f6_3b78
-            } else {
-                value >> 1
-            };
-            bit += 1;
-        }
-        table[index] = value;
-        index += 1;
-    }
-    table
-}
-
-const CRC32C_TABLE: [u32; 256] = crc32c_table();
-
-fn crc32c_base64(value: u32) -> String {
-    BASE64_STANDARD.encode(value.to_be_bytes())
-}
-
-fn digest_hex(bytes: &[u8]) -> String {
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
-    }
-    output
-}
-
-struct VerifyingFileSink<'a> {
-    file: File,
-    manifest_file: &'a MoonshineModelFile,
-    bytes_written: u64,
-    sha256: Sha256Context,
-    crc32c: Crc32c,
-}
-
-impl<'a> VerifyingFileSink<'a> {
-    fn create(
-        path: &Path,
-        manifest_file: &'a MoonshineModelFile,
-    ) -> Result<Self, MoonshineModelInstallError> {
-        let file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|_| MoonshineModelInstallError::io("create the staging file"))?;
-        Ok(Self {
-            file,
-            manifest_file,
-            bytes_written: 0,
-            sha256: Sha256Context::new(&SHA256),
-            crc32c: Crc32c::default(),
-        })
-    }
-
-    fn finish(mut self) -> Result<(), MoonshineModelInstallError> {
-        self.file
-            .flush()
-            .and_then(|()| self.file.sync_all())
-            .map_err(|_| MoonshineModelInstallError::io("flush the staging file"))?;
-        if self.bytes_written != self.manifest_file.bytes {
-            return Err(MoonshineModelInstallError::size_mismatch(
-                self.manifest_file.name,
-            ));
-        }
-
-        let sha256 = digest_hex(self.sha256.finish().as_ref());
-        if !sha256.eq_ignore_ascii_case(self.manifest_file.sha256) {
-            return Err(MoonshineModelInstallError::sha256_mismatch(
-                self.manifest_file.name,
-            ));
-        }
-        if crc32c_base64(self.crc32c.finalize()) != self.manifest_file.upstream_crc32c_base64 {
-            return Err(MoonshineModelInstallError::crc32c_mismatch(
-                self.manifest_file.name,
-            ));
-        }
-        Ok(())
-    }
-}
-
-impl DownloadSink for VerifyingFileSink<'_> {
-    fn write_chunk(&mut self, chunk: &[u8]) -> Result<(), MoonshineModelInstallError> {
-        let chunk_bytes = u64::try_from(chunk.len())
-            .map_err(|_| MoonshineModelInstallError::size_mismatch(self.manifest_file.name))?;
-        let next_size = self.bytes_written.saturating_add(chunk_bytes);
-        if next_size > self.manifest_file.bytes {
-            return Err(MoonshineModelInstallError::size_mismatch(
-                self.manifest_file.name,
-            ));
-        }
-        self.file
-            .write_all(chunk)
-            .map_err(|_| MoonshineModelInstallError::io("write the staging file"))?;
-        self.sha256.update(chunk);
-        self.crc32c.update(chunk);
-        self.bytes_written = next_size;
-        Ok(())
     }
 }
 
