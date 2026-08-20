@@ -1,4 +1,5 @@
 mod ffi;
+mod manifest;
 mod runtime;
 
 pub use runtime::{
