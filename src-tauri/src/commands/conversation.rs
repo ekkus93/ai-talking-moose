@@ -1,5 +1,6 @@
 use crate::ai::types::{LiveSessionConfig, TtsRequest};
 use crate::app::state::AppState;
+#[cfg(test)]
 use crate::asr::AsrMode;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
