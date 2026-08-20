@@ -65,6 +65,10 @@ impl LiveSession for FakeLiveSession {
         Ok(())
     }
 
+    async fn send_text_turn(&mut self, _text: &str) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
     async fn send_tool_response(
         &mut self,
         _response: ToolCallResponse,

@@ -26,6 +26,10 @@ impl LiveSession for CountingSession {
         Ok(())
     }
 
+    async fn send_text_turn(&mut self, _text: &str) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
     async fn send_tool_response(
         &mut self,
         _response: ToolCallResponse,
@@ -98,6 +102,7 @@ fn test_request(muted: bool) -> ConversationStartRequest {
             sample_rate_in: 16_000,
             sample_rate_out: 24_000,
         },
+        asr_mode: AsrMode::GeminiLiveAudio,
         capture: Arc::new(SyncMutex::new(AudioCapture::new_mock())),
         input_device: None,
         playback: Arc::new(AudioPlayback::new()),

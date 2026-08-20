@@ -103,6 +103,7 @@ pub async fn start_conversation<R: Runtime>(
     let request = ConversationStartRequest {
         provider,
         config,
+        asr_mode: settings.asr_mode,
         capture: state.audio_capture.clone(),
         input_device: settings.input_device.clone(),
         playback: state.audio_playback.clone(),

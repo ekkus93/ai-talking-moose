@@ -43,14 +43,13 @@ impl ConversationManager {
                     info!(session_id = %session_id, "Conversation provider connected");
                 }
                 LiveServerEvent::UserTranscript(text) => {
-                    self.output_suppressed.store(false, Ordering::SeqCst);
-                    transcript_callback(session_id.clone(), "user".to_string(), text);
-                    Self::set_lifecycle(
-                        &self.lifecycle,
-                        ConversationLifecycle::Responding,
-                        Some(&lifecycle_callback),
+                    self.accept_user_transcript(
+                        &session_id,
+                        text,
+                        &state_callback,
+                        &lifecycle_callback,
+                        &transcript_callback,
                     );
-                    state_callback(CharacterState::Thinking);
                 }
                 LiveServerEvent::ModelTranscript(text) => {
                     transcript_callback(session_id.clone(), "moose".to_string(), text.clone());
@@ -171,3 +170,6 @@ impl ConversationManager {
             )
     }
 }
+
+#[cfg(test)]
+mod asr_handoff_tests;
