@@ -3,6 +3,7 @@ use super::ffi::{
     MOONSHINE_HEADER_VERSION, MOONSHINE_MODEL_ARCH_SMALL_STREAMING,
     MOONSHINE_MODEL_ARCH_TINY_STREAMING,
 };
+use super::manifest::manifest_for_architecture;
 use crate::asr::{AsrError, AsrErrorKind};
 use std::path::Path;
 use std::sync::Arc;
@@ -70,6 +71,16 @@ impl MoonshineTranscriber {
         architecture: MoonshineModelArchitecture,
         api: Arc<dyn MoonshineApi>,
     ) -> Result<Self, AsrError> {
+        manifest_for_architecture(architecture)
+            .validate()
+            .map_err(|_| AsrError {
+                kind: AsrErrorKind::Internal,
+                message:
+                    "Moonshine model metadata is invalid. Update or reinstall the application."
+                        .to_string(),
+                retryable: false,
+            })?;
+
         let runtime_version = api
             .runtime_version()
             .map_err(|error| map_ffi_error(AsrErrorKind::RuntimeUnavailable, error, true))?;
