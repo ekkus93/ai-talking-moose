@@ -36,7 +36,7 @@ describe("OnboardingModal ASR privacy", () => {
     render(<OnboardingModal />);
     fireEvent.click(screen.getByText("Next: Voice"));
 
-    expect(screen.getByText(/Gemini Live Cloud Audio/)).toBeInTheDocument();
+    expect(screen.getByText("Gemini Live Cloud Audio")).toBeInTheDocument();
     expect(
       screen.getByText(
         /sends microphone audio to Google during the active conversation/i,
