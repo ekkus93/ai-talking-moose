@@ -1,7 +1,7 @@
 use crate::asr::lifecycle::LocalAsrResource;
 use crate::asr::moonshine::{
-    MoonshineModelInstaller, MoonshineTinyEngine, MoonshineTinyTranscriptUpdate,
-    MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+    MoonshineModelArchitecture, MoonshineModelInstaller, MoonshineSmallEngine, MoonshineTinyEngine,
+    MoonshineTinyTranscriptUpdate, MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
 };
 use crate::asr::transcript_state::{StreamingTranscriptUpdate, TranscriptStateMachine};
 use crate::asr::{AsrError, AsrErrorKind, AsrEvent};
@@ -32,6 +32,7 @@ pub type LocalAsrPipelineEvent = AsrEvent;
 /// Bounded-worker diagnostics used by later ASR diagnostics/UI work.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalAsrPipelineDiagnostics {
+    pub architecture: MoonshineModelArchitecture,
     pub input_sample_rate_hz: u32,
     pub queue_depth: usize,
     pub queue_capacity: usize,
@@ -61,7 +62,7 @@ impl PipelineEngine for MoonshineTinyEngine {
     }
 }
 
-/// Bounded microphone-to-Moonshine Tiny pipeline.
+/// Bounded microphone-to-Moonshine Tiny/Small pipeline.
 ///
 /// The pipeline does not create another microphone. `start_capture` starts the
 /// caller-owned authoritative `AudioCapture` and gives it this pipeline's
@@ -70,6 +71,8 @@ impl PipelineEngine for MoonshineTinyEngine {
 /// The dedicated OS worker converts those bounded chunks to `f32` and performs
 /// all native Moonshine inference off Tokio and off the CPAL callback thread.
 pub struct LocalAsrPipeline {
+    architecture: MoonshineModelArchitecture,
+    input_sample_rate_hz: u32,
     pcm_sender: Option<mpsc::Sender<Vec<u8>>>,
     running: Arc<AtomicBool>,
     stop_requested: Arc<AtomicBool>,
@@ -84,9 +87,27 @@ impl LocalAsrPipeline {
         installer: Arc<MoonshineModelInstaller>,
         event_callback: LocalAsrPipelineEventCallback,
     ) -> Result<Self, AsrError> {
-        Self::start_with_factory(
+        Self::start_architecture(
+            MoonshineModelArchitecture::TinyStreaming,
             move || {
                 MoonshineTinyEngine::open(&installer)
+                    .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
+            },
+            event_callback,
+        )
+        .await
+    }
+
+    /// Start the production Moonshine Small worker with the same bounded queue,
+    /// transcript state machine, lifecycle, and local-only microphone contract.
+    pub async fn start_small(
+        installer: Arc<MoonshineModelInstaller>,
+        event_callback: LocalAsrPipelineEventCallback,
+    ) -> Result<Self, AsrError> {
+        Self::start_architecture(
+            MoonshineModelArchitecture::SmallStreaming,
+            move || {
+                MoonshineSmallEngine::open_small(&installer)
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
             },
             event_callback,
@@ -111,12 +132,7 @@ impl LocalAsrPipeline {
             invalid_state_error("Local ASR input is closed; microphone capture was not started.")
         })?;
         capture
-            .start(
-                device_name,
-                MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
-                sender,
-                level_sender,
-            )
+            .start(device_name, self.input_sample_rate_hz, sender, level_sender)
             .map_err(|error| AsrError {
                 kind: AsrErrorKind::AudioInput,
                 message: format!("Failed to start local-ASR microphone capture: {error}"),
@@ -126,7 +142,8 @@ impl LocalAsrPipeline {
 
     pub fn diagnostics(&self) -> LocalAsrPipelineDiagnostics {
         LocalAsrPipelineDiagnostics {
-            input_sample_rate_hz: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+            architecture: self.architecture,
+            input_sample_rate_hz: self.input_sample_rate_hz,
             queue_depth: self.pcm_sender.as_ref().map_or(0, |sender| {
                 LOCAL_ASR_QUEUE_CAPACITY_CHUNKS.saturating_sub(sender.capacity())
             }),
@@ -171,6 +188,22 @@ impl LocalAsrPipeline {
     where
         F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
     {
+        Self::start_architecture(
+            MoonshineModelArchitecture::TinyStreaming,
+            factory,
+            event_callback,
+        )
+        .await
+    }
+
+    async fn start_architecture<F>(
+        architecture: MoonshineModelArchitecture,
+        factory: F,
+        event_callback: LocalAsrPipelineEventCallback,
+    ) -> Result<Self, AsrError>
+    where
+        F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
+    {
         let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
         let running = Arc::new(AtomicBool::new(false));
         let stop_requested = Arc::new(AtomicBool::new(false));
@@ -182,7 +215,10 @@ impl LocalAsrPipeline {
         let worker_last_error = last_error.clone();
         let worker_callback = event_callback.clone();
         let worker = thread::Builder::new()
-            .name("moonshine-tiny-asr".to_string())
+            .name(match architecture {
+                MoonshineModelArchitecture::TinyStreaming => "moonshine-tiny-asr".to_string(),
+                MoonshineModelArchitecture::SmallStreaming => "moonshine-small-asr".to_string(),
+            })
             .spawn(move || {
                 let mut engine = match factory() {
                     Ok(engine) => engine,
@@ -195,8 +231,9 @@ impl LocalAsrPipeline {
                 if engine.input_sample_rate_hz() != MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ {
                     let error = AsrError {
                         kind: AsrErrorKind::Internal,
-                        message: "Moonshine Tiny reported an unexpected input sample rate."
-                            .to_string(),
+                        message:
+                            "Moonshine streaming engine reported an unexpected input sample rate."
+                                .to_string(),
                         retryable: false,
                     };
                     let _ = engine.stop();
@@ -222,12 +259,14 @@ impl LocalAsrPipeline {
             })
             .map_err(|_| AsrError {
                 kind: AsrErrorKind::Internal,
-                message: "Failed to start the Moonshine Tiny inference worker.".to_string(),
+                message: "Failed to start the Moonshine inference worker.".to_string(),
                 retryable: true,
             })?;
 
         match ready_rx.await {
             Ok(Ok(())) => Ok(Self {
+                architecture,
+                input_sample_rate_hz: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
                 pcm_sender: Some(pcm_tx),
                 running,
                 stop_requested,
@@ -385,7 +424,7 @@ fn invalid_state_error(message: &str) -> AsrError {
 fn worker_join_error() -> AsrError {
     AsrError {
         kind: AsrErrorKind::Internal,
-        message: "The Moonshine Tiny inference worker terminated unexpectedly.".to_string(),
+        message: "The Moonshine inference worker terminated unexpectedly.".to_string(),
         retryable: true,
     }
 }

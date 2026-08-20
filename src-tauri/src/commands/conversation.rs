@@ -47,16 +47,6 @@ fn prepare_character_for_conversation<R: Runtime>(
     transition_and_emit(&state.character_state, app, CharacterState::Idle)
 }
 
-fn validate_asr_mode_for_conversation(mode: AsrMode) -> Result<(), String> {
-    match mode {
-        AsrMode::GeminiLiveAudio | AsrMode::MoonshineTinyStreaming => Ok(()),
-        AsrMode::MoonshineSmallStreaming => Err(
-            "Moonshine Small Streaming is selected, but the Small engine is not integrated yet. Choose Moonshine Tiny Streaming or Gemini Live Cloud Audio. No microphone audio was sent."
-                .to_string(),
-        ),
-    }
-}
-
 #[tauri::command]
 pub async fn start_conversation<R: Runtime>(
     state: State<'_, AppState>,
@@ -67,7 +57,6 @@ pub async fn start_conversation<R: Runtime>(
     }
 
     let settings = state.settings.read().clone();
-    validate_asr_mode_for_conversation(settings.asr_mode)?;
     prepare_character_for_conversation(state.inner(), &app)?;
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
@@ -333,16 +322,6 @@ mod tests {
     }
 
     #[test]
-    fn tiny_and_cloud_modes_are_supported_while_small_fails_closed() {
-        assert!(validate_asr_mode_for_conversation(AsrMode::MoonshineTinyStreaming).is_ok());
-        assert!(validate_asr_mode_for_conversation(AsrMode::GeminiLiveAudio).is_ok());
-
-        let error = validate_asr_mode_for_conversation(AsrMode::MoonshineSmallStreaming)
-            .expect_err("Small must remain unavailable until ASR-008 is integrated");
-        assert!(error.contains("No microphone audio was sent"));
-    }
-
-    #[test]
     fn missing_moonshine_tiny_model_fails_before_microphone_capture() {
         let mut app_state = AppState::new_for_tests().unwrap();
         app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
@@ -364,6 +343,31 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("No microphone audio was sent"));
+        assert!(!capture.lock().is_active());
+    }
+
+    #[test]
+    fn missing_moonshine_small_model_fails_before_microphone_capture() {
+        let mut app_state = AppState::new_for_tests().unwrap();
+        app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
+        app_state.settings.write().asr_mode = AsrMode::MoonshineSmallStreaming;
+        let capture = app_state.audio_capture.clone();
+
+        let app = mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![start_conversation])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        let error = get_ipc_response(&webview, ipc_request("start_conversation", json!({})))
+            .expect_err("missing Small model must fail closed before microphone capture");
+
+        let error = error.as_str().unwrap();
+        assert!(error.contains("Moonshine Small"));
+        assert!(error.contains("No microphone audio was sent"));
         assert!(!capture.lock().is_active());
     }
 

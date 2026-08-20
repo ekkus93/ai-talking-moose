@@ -56,8 +56,16 @@ fn callback_events() -> (
 }
 
 async fn fake_pipeline(state: Arc<FakeState>) -> LocalAsrPipeline {
+    fake_pipeline_for_architecture(MoonshineModelArchitecture::TinyStreaming, state).await
+}
+
+async fn fake_pipeline_for_architecture(
+    architecture: MoonshineModelArchitecture,
+    state: Arc<FakeState>,
+) -> LocalAsrPipeline {
     let (callback, _) = callback_events();
-    LocalAsrPipeline::start_with_factory(
+    LocalAsrPipeline::start_architecture(
+        architecture,
         move || {
             Ok(Box::new(FakeEngine {
                 state,
@@ -420,10 +428,35 @@ async fn drop_stops_and_joins_worker_as_safety_net() {
 }
 
 #[tokio::test]
+async fn small_pipeline_uses_same_bounded_worker_and_reports_small_architecture() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline =
+        fake_pipeline_for_architecture(MoonshineModelArchitecture::SmallStreaming, state.clone())
+            .await;
+
+    let diagnostics = pipeline.diagnostics();
+    assert_eq!(
+        diagnostics.architecture,
+        MoonshineModelArchitecture::SmallStreaming
+    );
+    assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
+    assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+
+    pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn pipeline_diagnostics_report_bound_and_running_state() {
     let state = Arc::new(FakeState::default());
     let mut pipeline = fake_pipeline(state).await;
     let diagnostics = pipeline.diagnostics();
+    assert_eq!(
+        diagnostics.architecture,
+        MoonshineModelArchitecture::TinyStreaming
+    );
     assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
     assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
     assert_eq!(diagnostics.queue_depth, 0);

@@ -432,19 +432,6 @@ impl ConversationManager {
             input_level: input_level_callback,
         } = callbacks;
 
-        if asr_mode == AsrMode::MoonshineSmallStreaming {
-            Self::set_lifecycle(
-                &self.lifecycle,
-                ConversationLifecycle::Failed,
-                Some(&lifecycle_callback),
-            );
-            state_callback(CharacterState::Error);
-            return Err(
-                "Moonshine Small Streaming is not integrated yet. No microphone audio was sent."
-                    .to_string(),
-            );
-        }
-
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let session_id = Uuid::new_v4().to_string();
         self.output_suppressed.store(false, Ordering::SeqCst);
@@ -457,7 +444,10 @@ impl ConversationManager {
         // Local ASR is prepared before opening the cloud Live session. This fails closed for a
         // missing/corrupt model or unavailable native runtime before microphone capture starts and
         // avoids opening an unnecessary provider session when the local prerequisite is invalid.
-        let mut local_pipeline = if asr_mode == AsrMode::MoonshineTinyStreaming {
+        let mut local_pipeline = if matches!(
+            asr_mode,
+            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
+        ) {
             let installer = match moonshine_installer {
                 Some(installer) => installer,
                 None => {
@@ -468,7 +458,7 @@ impl ConversationManager {
                     );
                     state_callback(CharacterState::Error);
                     return Err(
-                        "Moonshine Tiny is selected, but the local model installer is unavailable. No microphone audio was sent."
+                        "Local Moonshine ASR is selected, but the model installer is unavailable. No microphone audio was sent."
                             .to_string(),
                     );
                 }
@@ -525,7 +515,17 @@ impl ConversationManager {
                 });
             });
 
-            match LocalAsrPipeline::start_tiny(installer, event_callback).await {
+            let pipeline_result = match asr_mode {
+                AsrMode::MoonshineTinyStreaming => {
+                    LocalAsrPipeline::start_tiny(installer, event_callback).await
+                }
+                AsrMode::MoonshineSmallStreaming => {
+                    LocalAsrPipeline::start_small(installer, event_callback).await
+                }
+                AsrMode::GeminiLiveAudio => unreachable!("cloud mode does not create local ASR"),
+            };
+
+            match pipeline_result {
                 Ok(pipeline) => Some(pipeline),
                 Err(error) => {
                     Self::set_lifecycle(
@@ -575,9 +575,9 @@ impl ConversationManager {
         let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
         let mut cloud_pcm_rx = None;
         let capture_result = match asr_mode {
-            AsrMode::MoonshineTinyStreaming => local_pipeline
+            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => local_pipeline
                 .as_ref()
-                .expect("Tiny mode must have a provisional local ASR pipeline")
+                .expect("local Moonshine mode must have a provisional ASR pipeline")
                 .start_capture(&mut capture.lock(), input_device, Some(level_tx))
                 .map_err(|error| error.message),
             AsrMode::GeminiLiveAudio => {
@@ -591,7 +591,6 @@ impl ConversationManager {
                 }
                 result
             }
-            AsrMode::MoonshineSmallStreaming => unreachable!("Small mode rejected above"),
         };
 
         if let Err(error_value) = capture_result {
