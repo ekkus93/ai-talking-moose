@@ -1,6 +1,6 @@
 # Moonshine Local ASR Pipeline
 
-Status: **V1R-ASR-009 implementation contract**  
+Status: **V1R-ASR-009 implementation contract; V1R-ASR-012 production lifecycle integrated**
 Recorded: 2026-08-20
 
 ## Ownership
@@ -62,6 +62,22 @@ Native Moonshine line updates are consumed by the ASR-010 transcript state machi
 `LocalAsrPipeline` implements `LocalAsrResource`, allowing ASR-012 to attach the real worker to the already-established authoritative conversation lifecycle. The conversation shutdown order remains microphone stop first, then local-ASR worker stop/join.
 
 A native inference function already executing cannot be preempted safely by Rust; cancellation is observed immediately before the next queue receive. This is preferable to abandoning a native worker or freeing its resources concurrently.
+
+## Production conversation integration
+
+`ConversationManager::start_session` now owns the ASR-012 Tiny startup transaction:
+
+1. verify/open the Tiny pipeline before opening the Gemini Live session;
+2. fail closed before microphone capture if the model is missing/corrupt or the native runtime cannot load;
+3. open the provider and output only after local-ASR prerequisites are valid;
+4. start the one authoritative `AudioCapture` directly on the pipeline's bounded ingress queue;
+5. attach the running pipeline to `LocalAsrLifecycle` for the current generation;
+6. publish the session as active/Listening only after microphone startup and lifecycle attachment succeed;
+7. route final local transcripts through `ConversationManager::handle_local_asr_event`, which sends exactly one Gemini text turn after generation/session checks.
+
+Gemini cloud-audio mode retains its separate microphone-to-provider queue. Tiny mode never creates that queue, so there is no accidental provider audio-upload path to fall back to. `shutdown_locked` stops microphone capture first and then stops/joins the attached local-ASR worker for Stop, Mute, Dismiss, provider loss, mode replacement, and application exit. Barge-in flushes/suppresses the stale Moose response while deliberately leaving the current local recognizer attached.
+
+Moonshine Small remains fail-closed until V1R-ASR-008 supplies a production Small engine/pipeline path.
 
 ## Diagnostics
 

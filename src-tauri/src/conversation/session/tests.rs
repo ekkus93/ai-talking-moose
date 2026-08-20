@@ -15,6 +15,22 @@ impl RealtimeConversationProvider for FailingProvider {
     }
 }
 
+struct ConnectCountingProvider {
+    connect_count: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl RealtimeConversationProvider for ConnectCountingProvider {
+    async fn connect(
+        &self,
+        _config: LiveSessionConfig,
+        _event_sender: mpsc::Sender<LiveServerEvent>,
+    ) -> Result<Box<dyn LiveSession>, ProviderError> {
+        self.connect_count.fetch_add(1, AtomicOrdering::SeqCst);
+        Err(ProviderError::from_kind(ProviderErrorKind::Network))
+    }
+}
+
 struct CountingSession {
     close_count: Arc<AtomicUsize>,
     interrupt_count: Arc<AtomicUsize>,
@@ -103,6 +119,7 @@ fn test_request(muted: bool) -> ConversationStartRequest {
             sample_rate_out: 24_000,
         },
         asr_mode: AsrMode::GeminiLiveAudio,
+        moonshine_installer: None,
         capture: Arc::new(SyncMutex::new(AudioCapture::new_mock())),
         input_device: None,
         playback: Arc::new(AudioPlayback::new()),
@@ -164,6 +181,34 @@ async fn muted_state_blocks_transactional_start_inside_operation_lock() {
     assert_eq!(result.unwrap_err(), "Moose is currently muted");
     assert!(!manager.is_active());
     assert_eq!(manager.lifecycle(), ConversationLifecycle::Idle);
+}
+
+#[tokio::test]
+async fn missing_tiny_model_fails_before_provider_connect_or_microphone_capture() {
+    let manager = ConversationManager::new();
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let temp = tempfile::tempdir().unwrap();
+    let mut request = test_request(false);
+    request.asr_mode = AsrMode::MoonshineTinyStreaming;
+    request.provider = Arc::new(ConnectCountingProvider {
+        connect_count: connect_count.clone(),
+    });
+    request.moonshine_installer =
+        Some(Arc::new(MoonshineModelInstaller::new(temp.path()).unwrap()));
+    let capture = request.capture.clone();
+
+    let error = manager
+        .start_session(request)
+        .await
+        .expect_err("missing Tiny model must fail before provider or microphone startup");
+
+    assert!(error.contains("not installed"));
+    assert!(error.contains("No microphone audio was sent"));
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(!capture.lock().is_active());
+    assert!(!manager.local_asr_lifecycle().is_active().await);
+    assert!(!manager.is_active());
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
 }
 
 #[tokio::test]
