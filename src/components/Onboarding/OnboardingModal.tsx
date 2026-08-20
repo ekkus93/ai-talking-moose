@@ -4,10 +4,20 @@ import { tauriBridge } from "../../lib/tauriBridge";
 import { Sparkles, Mic, Key, CheckCircle, ArrowRight, X } from "lucide-react";
 
 export const OnboardingModal: React.FC = () => {
-  const { isOnboardingOpen, toggleOnboarding, triggerCanned } = useMooseStore();
+  const { isOnboardingOpen, toggleOnboarding, triggerCanned, settings } =
+    useMooseStore();
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
   const [tested, setTested] = useState(false);
+
+  const asrMode = settings?.asr_mode ?? "moonshine_tiny_streaming";
+  const localAsr = asrMode !== "gemini_live_audio";
+  const selectedAsrName =
+    asrMode === "moonshine_small_streaming"
+      ? "Moonshine Small Streaming"
+      : asrMode === "gemini_live_audio"
+        ? "Gemini Live Cloud Audio"
+        : "Moonshine Tiny Streaming";
 
   if (!isOnboardingOpen) {
     return null;
@@ -78,12 +88,31 @@ export const OnboardingModal: React.FC = () => {
               <span>Click & Talk</span>
             </div>
             <p className="text-gray-800 leading-snug text-[11px]">
-              Click the Moose to speak with him in real time using Gemini Live.
-              You can interrupt him whenever he is talking.
+              Click the Moose to speak with him. Your selected speech
+              recognition mode is <strong>{selectedAsrName}</strong>. You can
+              interrupt him whenever he is talking.
             </p>
-            <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-700">
-              Microphone is only active when you click to talk. No hidden
-              continuous recording.
+            <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-700 space-y-1">
+              <p>
+                Microphone is only active when you click to talk. No hidden
+                continuous recording.
+              </p>
+              {localAsr ? (
+                <p>
+                  Moonshine processes microphone audio locally. Only finalized
+                  transcript text is sent to Gemini to generate the Moose&apos;s
+                  reply.
+                </p>
+              ) : (
+                <p>
+                  Gemini Live Cloud Audio sends microphone audio to Google
+                  during the active conversation.
+                </p>
+              )}
+              <p>
+                Local ASR errors never automatically switch to cloud microphone
+                upload.
+              </p>
             </div>
             <button
               onClick={() => setStep(3)}

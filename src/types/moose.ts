@@ -38,6 +38,36 @@ export type AsrMode =
   | "moonshine_small_streaming"
   | "gemini_live_audio";
 
+export type AsrModelInstallState =
+  | "not_installed"
+  | "downloading"
+  | "verifying"
+  | "installed"
+  | "corrupt"
+  | "incompatible"
+  | "failed";
+
+export interface AsrModelDescriptor {
+  id: string;
+  display_name: string;
+  mode: Exclude<AsrMode, "gemini_live_audio">;
+  install_state: AsrModelInstallState;
+  revision: string;
+  runtime_release: string;
+  installed_bytes: number | null;
+  expected_bytes: number;
+  active: boolean;
+  error_message: string | null;
+}
+
+export interface AsrModelProgressEvent {
+  mode: Exclude<AsrMode, "gemini_live_audio">;
+  install_state: Extract<AsrModelInstallState, "downloading" | "verifying">;
+  downloaded_bytes: number;
+  total_bytes: number;
+  current_file: string | null;
+}
+
 export type MicrophonePermissionState =
   "not_requested" | "granted" | "denied" | "unavailable";
 

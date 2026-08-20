@@ -166,6 +166,10 @@ impl ConversationManager {
         self.is_in_conversation.load(Ordering::SeqCst)
     }
 
+    pub fn active_asr_mode(&self) -> Option<AsrMode> {
+        *self.active_asr_mode.lock()
+    }
+
     pub fn lifecycle(&self) -> ConversationLifecycle {
         *self.lifecycle.read()
     }

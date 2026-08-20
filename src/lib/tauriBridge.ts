@@ -1,5 +1,8 @@
 import {
   AppSettings,
+  AsrMode,
+  AsrModelDescriptor,
+  AsrModelProgressEvent,
   AudioDeviceInfo,
   AudioDiagnostics,
   CharacterState,
@@ -49,6 +52,33 @@ const mockAudioDiagnostics = (): AudioDiagnostics => ({
     last_error: null,
   },
 });
+
+const mockAsrModels = (): AsrModelDescriptor[] => [
+  {
+    id: "moonshine-tiny-streaming-en",
+    display_name: "Moonshine Tiny Streaming (English)",
+    mode: "moonshine_tiny_streaming",
+    install_state: "not_installed",
+    revision: "quantized_26_07_30",
+    runtime_release: "v0.1.3",
+    installed_bytes: null,
+    expected_bytes: 51_441_771,
+    active: false,
+    error_message: null,
+  },
+  {
+    id: "moonshine-small-streaming-en",
+    display_name: "Moonshine Small Streaming (English)",
+    mode: "moonshine_small_streaming",
+    install_state: "not_installed",
+    revision: "quantized_26_07_30",
+    runtime_release: "v0.1.3",
+    installed_bytes: null,
+    expected_bytes: 165_489_086,
+    active: false,
+    error_message: null,
+  },
+];
 
 export const tauriBridge = {
   async resizeWindow(width: number, height: number): Promise<void> {
@@ -110,6 +140,55 @@ export const tauriBridge = {
     if (!isTauri()) return;
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("update_settings", { newSettings: settings });
+  },
+
+  async getAsrModels(): Promise<AsrModelDescriptor[]> {
+    if (!isTauri()) return mockAsrModels();
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<AsrModelDescriptor[]>("get_asr_models");
+  },
+
+  async installAsrModel(
+    mode: Exclude<AsrMode, "gemini_live_audio">,
+  ): Promise<AsrModelDescriptor> {
+    if (!isTauri()) {
+      const model = mockAsrModels().find(
+        (candidate) => candidate.mode === mode,
+      );
+      if (!model) throw new Error("Unknown local ASR model");
+      return {
+        ...model,
+        install_state: "installed",
+        installed_bytes: model.expected_bytes,
+      };
+    }
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<AsrModelDescriptor>("install_asr_model", { mode });
+  },
+
+  async deleteAsrModel(
+    mode: Exclude<AsrMode, "gemini_live_audio">,
+  ): Promise<AsrModelDescriptor> {
+    if (!isTauri()) {
+      const model = mockAsrModels().find(
+        (candidate) => candidate.mode === mode,
+      );
+      if (!model) throw new Error("Unknown local ASR model");
+      return model;
+    }
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<AsrModelDescriptor>("delete_asr_model", { mode });
+  },
+
+  async onAsrModelProgress(
+    callback: (progress: AsrModelProgressEvent) => void,
+  ): Promise<() => void> {
+    if (!isTauri()) return () => undefined;
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<AsrModelProgressEvent>(
+      "moose://asr/model-progress",
+      (event) => callback(event.payload),
+    );
   },
 
   async setGoogleApiKey(apiKey: string): Promise<void> {

@@ -15,12 +15,20 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 use uuid::Uuid;
 
+mod delete;
 mod disk;
 mod integrity;
+mod progress;
 mod transport;
 
+use delete::delete_model_path;
 use disk::{DiskSpaceProbe, SystemDiskSpaceProbe};
-use integrity::{crc32c_base64, digest_hex, Crc32c, VerifyingFileSink};
+use integrity::{crc32c_base64, digest_hex, Crc32c};
+use progress::InstallerFileSink;
+pub use progress::{
+    MoonshineModelInstallPhase, MoonshineModelInstallProgress,
+    MoonshineModelInstallProgressCallback,
+};
 #[cfg(test)]
 use transport::{DownloadMetadata, DownloadSink};
 use transport::{ModelDownloadTransport, ReqwestModelDownloadTransport};
@@ -352,12 +360,21 @@ impl MoonshineModelInstaller {
         cancellation: &MoonshineModelInstallCancellation,
     ) -> Result<MoonshineModelInstallOutcome, MoonshineModelInstallError> {
         let manifest = manifest_for_architecture(architecture);
-        self.install_manifest(manifest, cancellation).await
+        self.install_manifest_with_progress(manifest, cancellation, None)
+            .await
     }
 
-    /// Delete only the selected pinned model revision. This is serialized with
-    /// installs so a delete cannot race model promotion. Callers that expose
-    /// this to the UI must additionally refuse deletion while that model is active.
+    pub async fn install_with_progress(
+        &self,
+        architecture: MoonshineModelArchitecture,
+        cancellation: &MoonshineModelInstallCancellation,
+        progress: MoonshineModelInstallProgressCallback,
+    ) -> Result<MoonshineModelInstallOutcome, MoonshineModelInstallError> {
+        let manifest = manifest_for_architecture(architecture);
+        self.install_manifest_with_progress(manifest, cancellation, Some(progress))
+            .await
+    }
+
     pub async fn delete_installed(
         &self,
         architecture: MoonshineModelArchitecture,
@@ -367,40 +384,24 @@ impl MoonshineModelInstaller {
         manifest
             .validate()
             .map_err(|_| MoonshineModelInstallError::invalid_manifest())?;
-        let path = self.model_path_for_manifest(manifest);
-        let metadata = match fs::symlink_metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-            Err(_) => {
-                return Err(MoonshineModelInstallError::io(
-                    "inspect the installed Moonshine model before deletion",
-                ));
-            }
-        };
-
-        if metadata.is_dir() && !metadata.file_type().is_symlink() {
-            fs::remove_dir_all(&path)
-                .map_err(|_| MoonshineModelInstallError::io("delete the Moonshine model"))?;
-        } else {
-            fs::remove_file(&path)
-                .map_err(|_| MoonshineModelInstallError::io("delete the Moonshine model"))?;
-        }
-
-        if let Some(parent) = path.parent() {
-            if fs::read_dir(parent)
-                .map(|mut entries| entries.next().is_none())
-                .unwrap_or(false)
-            {
-                let _ = fs::remove_dir(parent);
-            }
-        }
-        Ok(true)
+        delete_model_path(&self.model_path_for_manifest(manifest))
     }
 
+    #[cfg(test)]
     async fn install_manifest(
         &self,
         manifest: &'static MoonshineModelManifest,
         cancellation: &MoonshineModelInstallCancellation,
+    ) -> Result<MoonshineModelInstallOutcome, MoonshineModelInstallError> {
+        self.install_manifest_with_progress(manifest, cancellation, None)
+            .await
+    }
+
+    async fn install_manifest_with_progress(
+        &self,
+        manifest: &'static MoonshineModelManifest,
+        cancellation: &MoonshineModelInstallCancellation,
+        progress: Option<MoonshineModelInstallProgressCallback>,
     ) -> Result<MoonshineModelInstallOutcome, MoonshineModelInstallError> {
         let _operation_guard = tokio::select! {
             () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
@@ -425,8 +426,7 @@ impl MoonshineModelInstaller {
             }
             Ok(None) => {}
             Err(error) if error.kind == MoonshineModelInstallErrorKind::CorruptInstall => {
-                // A corrupt target may be repaired, but it remains in place until the
-                // replacement staging directory has passed every integrity check.
+                // Keep the corrupt target until the verified replacement is ready.
             }
             Err(error) => return Err(error),
         }
@@ -456,6 +456,7 @@ impl MoonshineModelInstaller {
             model_parent.join(format!(".{}.{}.partial", manifest.revision, Uuid::new_v4()));
         let mut staging = StagingDirectory::create(staging_path)?;
 
+        let mut downloaded_bytes = 0_u64;
         for manifest_file in manifest.files {
             cancellation.check()?;
             let url = format!("{}/{}", manifest.base_url, manifest_file.name);
@@ -463,7 +464,13 @@ impl MoonshineModelInstaller {
                 return Err(MoonshineModelInstallError::invalid_manifest());
             }
             let staged_file = staging.path.join(manifest_file.name);
-            let mut sink = VerifyingFileSink::create(&staged_file, manifest_file)?;
+            let mut sink = InstallerFileSink::create(
+                &staged_file,
+                manifest_file,
+                downloaded_bytes,
+                manifest.expected_bytes,
+                progress.clone(),
+            )?;
             let metadata = self.transport.stream(&url, cancellation, &mut sink).await?;
             if metadata
                 .content_length
@@ -474,9 +481,18 @@ impl MoonshineModelInstaller {
                 ));
             }
             sink.finish()?;
+            downloaded_bytes = downloaded_bytes.saturating_add(manifest_file.bytes);
         }
 
         cancellation.check()?;
+        if let Some(progress) = progress.as_ref() {
+            progress(MoonshineModelInstallProgress {
+                phase: MoonshineModelInstallPhase::Verifying,
+                downloaded_bytes: manifest.expected_bytes,
+                total_bytes: manifest.expected_bytes,
+                current_file: None,
+            });
+        }
         self.write_install_marker(&staging.path, manifest)?;
         cancellation.check()?;
         let final_path = self.model_path_for_manifest(manifest);

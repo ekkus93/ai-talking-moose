@@ -283,6 +283,28 @@ pub(crate) const SMALL_STREAMING_MANIFEST: MoonshineModelManifest = MoonshineMod
     files: &SMALL_FILES,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MoonshineModelManifestInfo {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub revision: &'static str,
+    pub expected_bytes: u64,
+    pub runtime_release: &'static str,
+}
+
+pub(crate) fn model_manifest_info(
+    architecture: MoonshineModelArchitecture,
+) -> MoonshineModelManifestInfo {
+    let manifest = manifest_for_architecture(architecture);
+    MoonshineModelManifestInfo {
+        id: manifest.id,
+        display_name: manifest.display_name,
+        revision: manifest.revision,
+        expected_bytes: manifest.expected_bytes,
+        runtime_release: manifest.runtime.release,
+    }
+}
+
 pub(crate) fn manifest_for_architecture(
     architecture: MoonshineModelArchitecture,
 ) -> &'static MoonshineModelManifest {

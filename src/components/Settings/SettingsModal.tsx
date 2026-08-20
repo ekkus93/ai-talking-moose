@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { AudioDiagnosticsPanel } from "./AudioDiagnosticsPanel";
+import { AsrSettingsPanel } from "./AsrSettingsPanel";
 import { MicrophonePermissionCard } from "./MicrophonePermissionCard";
 import {
   Sliders,
   Volume2,
+  Mic,
   Brain,
   Shield,
   Key,
@@ -38,6 +40,7 @@ export const SettingsModal: React.FC = () => {
     | "general"
     | "behavior"
     | "voice"
+    | "speech"
     | "personality"
     | "ai"
     | "privacy"
@@ -118,6 +121,7 @@ export const SettingsModal: React.FC = () => {
             { id: "general", label: "General", icon: Sliders },
             { id: "behavior", label: "Behavior", icon: Sparkles },
             { id: "voice", label: "Voice & Audio", icon: Volume2 },
+            { id: "speech", label: "Speech Recognition", icon: Mic },
             { id: "personality", label: "Personality", icon: Brain },
             { id: "ai", label: "Gemini AI", icon: Key },
             { id: "privacy", label: "Privacy", icon: Shield },
@@ -392,6 +396,9 @@ export const SettingsModal: React.FC = () => {
             </div>
           )}
 
+          {/* Speech Recognition Tab */}
+          {activeTab === "speech" && <AsrSettingsPanel />}
+
           {/* Personality Tab */}
           {activeTab === "personality" && (
             <div className="space-y-3">
@@ -625,12 +632,21 @@ export const SettingsModal: React.FC = () => {
 
               <div className="p-3 bg-gray-50 border border-gray-300 rounded text-[11px] text-gray-700 space-y-1">
                 <p className="font-bold">Microphone privacy:</p>
+                {settings.asr_mode === "gemini_live_audio" ? (
+                  <p>
+                    - Gemini Live Cloud Audio is selected: microphone audio is
+                    sent to Google only during an active conversation.
+                  </p>
+                ) : (
+                  <p>
+                    - Moonshine local ASR is selected: microphone PCM stays on
+                    this computer; only finalized transcript text is sent to
+                    Gemini for a reply.
+                  </p>
+                )}
                 <p>
-                  - Moonshine local ASR keeps microphone audio on this computer.
-                </p>
-                <p>
-                  - Gemini Live cloud ASR sends microphone audio to Google only
-                  during an active conversation.
+                  - Local ASR failures never silently switch to cloud microphone
+                  upload.
                 </p>
                 <p>
                   - Screen contents, OCR, keystrokes, and files are never

@@ -12,9 +12,12 @@ pub use engine::{
 pub use installer::{
     MoonshineModelInstallCancellation, MoonshineModelInstallDisposition,
     MoonshineModelInstallError, MoonshineModelInstallErrorKind, MoonshineModelInstallOutcome,
-    MoonshineModelInstaller,
+    MoonshineModelInstallPhase, MoonshineModelInstallProgress,
+    MoonshineModelInstallProgressCallback, MoonshineModelInstaller,
 };
 pub use runtime::{
     MoonshineLine, MoonshineModelArchitecture, MoonshineStream, MoonshineTranscriber,
     MoonshineTranscript,
 };
+
+pub(crate) use manifest::model_manifest_info;

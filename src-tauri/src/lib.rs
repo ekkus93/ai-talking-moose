@@ -71,6 +71,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_settings,
             update_settings,
+            get_asr_models,
+            install_asr_model,
+            delete_asr_model,
             set_google_api_key,
             clear_google_api_key,
             has_google_api_key,

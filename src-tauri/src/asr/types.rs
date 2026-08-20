@@ -49,8 +49,10 @@ pub enum AsrEvent {
 pub enum AsrModelInstallState {
     NotInstalled,
     Downloading,
+    Verifying,
     Installed,
     Corrupt,
+    Incompatible,
     Failed,
 }
 
@@ -61,9 +63,12 @@ pub struct AsrModelDescriptor {
     pub display_name: String,
     pub mode: AsrMode,
     pub install_state: AsrModelInstallState,
-    pub installed_revision: Option<String>,
+    pub revision: String,
+    pub runtime_release: String,
     pub installed_bytes: Option<u64>,
-    pub expected_bytes: Option<u64>,
+    pub expected_bytes: u64,
+    pub active: bool,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
 import { SettingsModal } from "../components/Settings/SettingsModal";
 import { useMooseStore } from "../stores/mooseStore";
@@ -55,6 +55,35 @@ describe("SettingsModal Component", () => {
 
     expect(screen.getByText("Moose Character Persona")).toBeInTheDocument();
     expect(screen.getByText("Dry Wit & Deadpan")).toBeInTheDocument();
+  });
+
+  it("offers explicit local and cloud ASR modes with privacy copy", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Speech Recognition"));
+
+    const tiny = await screen.findByRole("radio", {
+      name: /Moonshine Tiny Streaming/,
+    });
+    expect(tiny).toBeChecked();
+    expect(
+      screen.getByText(/Only finalized transcript text is sent to Gemini/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Not installed")).toHaveLength(2);
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Gemini Live Cloud Audio/ }),
+    );
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.asr_mode).toBe(
+        "gemini_live_audio",
+      ),
+    );
+    expect(screen.getByText(/Cloud mode selected:/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /never switch to cloud microphone upload automatically/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("exposes audio diagnostics and local microphone test controls", async () => {

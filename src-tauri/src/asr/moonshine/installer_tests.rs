@@ -655,6 +655,43 @@ async fn content_length_mismatch_is_rejected_and_staging_is_removed() {
 }
 
 #[tokio::test]
+async fn install_progress_reports_download_bytes_then_verification() {
+    let temp = TempDir::new().unwrap();
+    let transport = FakeTransport::with_fixture_manifest();
+    let installer = installer(&temp, transport);
+    let observed = Arc::new(StdMutex::new(Vec::<MoonshineModelInstallProgress>::new()));
+    let observed_callback = observed.clone();
+    let progress: MoonshineModelInstallProgressCallback = Arc::new(move |update| {
+        observed_callback.lock().unwrap().push(update);
+    });
+
+    installer
+        .install_manifest_with_progress(
+            &TEST_MANIFEST,
+            &MoonshineModelInstallCancellation::default(),
+            Some(progress),
+        )
+        .await
+        .unwrap();
+
+    let observed = observed.lock().unwrap();
+    assert!(observed.iter().any(|update| {
+        update.phase == MoonshineModelInstallPhase::Downloading
+            && update.downloaded_bytes > 0
+            && update.downloaded_bytes <= TEST_MANIFEST.expected_bytes
+    }));
+    assert_eq!(
+        observed.last(),
+        Some(&MoonshineModelInstallProgress {
+            phase: MoonshineModelInstallPhase::Verifying,
+            downloaded_bytes: TEST_MANIFEST.expected_bytes,
+            total_bytes: TEST_MANIFEST.expected_bytes,
+            current_file: None,
+        })
+    );
+}
+
+#[tokio::test]
 async fn public_delete_is_architecture_scoped_and_idempotent() {
     let temp = TempDir::new().unwrap();
     let installer = MoonshineModelInstaller::new(temp.path()).unwrap();
