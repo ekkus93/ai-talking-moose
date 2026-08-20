@@ -157,7 +157,10 @@ impl ConversationManager {
         }
     }
 
-    pub(super) fn should_suppress_interrupted_response_event(&self, event: &LiveServerEvent) -> bool {
+    pub(super) fn should_suppress_interrupted_response_event(
+        &self,
+        event: &LiveServerEvent,
+    ) -> bool {
         self.output_suppressed.load(Ordering::SeqCst)
             && matches!(
                 event,

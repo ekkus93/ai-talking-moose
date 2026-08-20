@@ -104,14 +104,7 @@ fn test_request(muted: bool) -> ConversationStartRequest {
         output_device: None,
         muted: Arc::new(RwLock::new(muted)),
         tool_router: test_tool_router(),
-        callbacks: ConversationCallbacks::new(
-            |_| {},
-            |_| {},
-            |_, _, _| {},
-            |_| {},
-            |_| {},
-            |_| {},
-        ),
+        callbacks: ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}, |_| {}),
     }
 }
 
@@ -142,9 +135,7 @@ fn test_event_loop_context(
 fn lifecycle_transition_table_rejects_invalid_jumps() {
     assert!(ConversationLifecycle::Idle.can_transition_to(ConversationLifecycle::Connecting));
     assert!(ConversationLifecycle::Connecting.can_transition_to(ConversationLifecycle::Failed));
-    assert!(
-        ConversationLifecycle::Responding.can_transition_to(ConversationLifecycle::Listening)
-    );
+    assert!(ConversationLifecycle::Responding.can_transition_to(ConversationLifecycle::Listening));
     assert!(!ConversationLifecycle::Idle.can_transition_to(ConversationLifecycle::Responding));
     assert!(!ConversationLifecycle::Failed.can_transition_to(ConversationLifecycle::Responding));
 }
@@ -470,14 +461,13 @@ fn interrupted_response_suppression_rejects_stale_non_audio_callbacks() {
     let manager = ConversationManager::new();
     manager.output_suppressed.store(true, Ordering::SeqCst);
 
-    assert!(manager.should_suppress_interrupted_response_event(
-        &LiveServerEvent::ModelTranscript("stale transcript".to_string())
-    ));
     assert!(
-        manager.should_suppress_interrupted_response_event(&LiveServerEvent::AudioData(vec![
-            1, 2, 3
-        ]))
+        manager.should_suppress_interrupted_response_event(&LiveServerEvent::ModelTranscript(
+            "stale transcript".to_string()
+        ))
     );
+    assert!(manager
+        .should_suppress_interrupted_response_event(&LiveServerEvent::AudioData(vec![1, 2, 3])));
     assert!(manager.should_suppress_interrupted_response_event(&LiveServerEvent::TurnComplete));
     assert!(
         manager.should_suppress_interrupted_response_event(&LiveServerEvent::ToolCall {
@@ -487,9 +477,11 @@ fn interrupted_response_suppression_rejects_stale_non_audio_callbacks() {
         })
     );
 
-    assert!(!manager.should_suppress_interrupted_response_event(
-        &LiveServerEvent::UserTranscript("new user turn".to_string())
-    ));
+    assert!(
+        !manager.should_suppress_interrupted_response_event(&LiveServerEvent::UserTranscript(
+            "new user turn".to_string()
+        ))
+    );
     assert!(!manager.should_suppress_interrupted_response_event(&LiveServerEvent::Interrupted));
     assert!(!manager.should_suppress_interrupted_response_event(&LiveServerEvent::Closed));
 }
