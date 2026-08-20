@@ -181,6 +181,7 @@ impl LocalAsrPipeline {
         self.pcm_sender.take();
     }
 
+    #[cfg(test)]
     async fn start_with_factory<F>(
         factory: F,
         event_callback: LocalAsrPipelineEventCallback,
