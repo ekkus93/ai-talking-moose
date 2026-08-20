@@ -17,6 +17,9 @@ Talking Moose V1 uses the official Moonshine native runtime through its C API fo
 | C header blob | `fe36c81db4a13ca6b71f2f79dbf635fb1c0c807b` |
 | Model catalog blob | `253f783132fe27d592bb641a485e1472b250dda5` |
 | Model integrity metadata blob | `0a215c9ae67d5835f82e450ac29ff1fc7f880013` |
+| Asset archive | `moonshine-ai/moonshine-voice-assets` |
+| Asset archive commit | `35d84fc0eb2d7451da9973c990e8a77066abb105` |
+| Asset SHA-256 inventory | `TRANSFER_REPORT.tsv` at the pinned archive commit |
 | ONNX Runtime version in the pinned native tree | `1.23.2` on macOS |
 
 V1 shall build/package the native runtime from the pinned Moonshine source revision rather than resolving `main`, `latest`, or another moving reference. A future runtime upgrade is an explicit dependency update with a model/runtime compatibility review.
@@ -30,7 +33,7 @@ The FFI implementation must pass the pinned `MOONSHINE_HEADER_VERSION` and verif
 
 ## 2. Model policy
 
-Talking Moose V1 uses the English native streaming model payloads selected by Moonshine `v0.1.3`. The upstream catalog deliberately places each quantized revision in a dated directory rather than overwriting an existing payload. V1 pins `quantized_26_07_30`.
+Talking Moose V1 uses the English native streaming model payloads selected by Moonshine `v0.1.3`. The upstream catalog deliberately places each quantized revision in a dated directory rather than overwriting an existing payload. V1 pins `quantized_26_07_30`. The official `moonshine-ai/moonshine-voice-assets` archival mirror preserves the exact CDN paths and records an independently computed SHA-256 for each copied file; V1 pins archive commit `35d84fc0eb2d7451da9973c990e8a77066abb105` for those SHA-256 values.
 
 Word-level timestamps are **not required for V1**. Therefore the application model manager shall install the seven files listed below and shall not download `decoder_kv_with_attention.ort` unless a later feature explicitly enables word timestamps.
 
@@ -43,15 +46,15 @@ Native base path: `https://download.moonshine.ai/model/tiny-streaming-en/quantiz
 Source model: `UsefulSensors/moonshine-streaming-tiny`  
 Source model commit: `f8e9dfd8c562c257c151a907b7b7f2fe8ff8511a`
 
-| Required file | Bytes | Upstream CRC32C (base64) |
-| --- | ---: | --- |
-| `adapter.ort` | 1,319,664 | `kwQ+Bw==` |
-| `cross_kv.ort` | 1,287,544 | `76wzFQ==` |
-| `decoder_kv.ort` | 32,583,720 | `KJjeNw==` |
-| `encoder.ort` | 7,675,440 | `UjAIpQ==` |
-| `frontend.ort` | 8,324,920 | `AW9qsg==` |
-| `streaming_config.json` | 509 | `HGL0Ug==` |
-| `tokenizer.bin` | 249,974 | `B7s10Q==` |
+| Required file | Bytes | SHA-256 | Upstream CRC32C (base64) |
+| --- | ---: | --- | --- |
+| `adapter.ort` | 1,319,664 | `22ecc949e146c49667fda28d102d4e30749a107dc88a396292aa8f277ef1347c` | `kwQ+Bw==` |
+| `cross_kv.ort` | 1,287,544 | `143a36667b8d05fd9d04e8c337b7ee121f37ef299aea6b3d82bdb3d3401950b4` | `76wzFQ==` |
+| `decoder_kv.ort` | 32,583,720 | `8852553f312adb6c9aa4d17418015049b30f412209ee569d336548c0044627de` | `KJjeNw==` |
+| `encoder.ort` | 7,675,440 | `a8414e1a5dedf9f2093d7680601dd8a9b0433e7020260eafe0e370ead91134ca` | `UjAIpQ==` |
+| `frontend.ort` | 8,324,920 | `271a563251f11e6311949530f8025ed4d345c5d69d4ac1efa74093779927d636` | `AW9qsg==` |
+| `streaming_config.json` | 509 | `74fe5ddebd63b17caf59e8a3b18c17547ff7bce1642050edbb1c3962674f8950` | `HGL0Ug==` |
+| `tokenizer.bin` | 249,974 | `6884b35fd6377d4c4d32336a0bc152f36b64d1e45b6503683cdc238250a8472d` | `B7s10Q==` |
 
 Expected installed payload size, excluding filesystem metadata: **51,441,771 bytes** (~49.1 MiB).
 
@@ -68,15 +71,15 @@ Native base path: `https://download.moonshine.ai/model/small-streaming-en/quanti
 Source model: `UsefulSensors/moonshine-streaming-small`  
 Source model commit: `2c036506f23a09c18df5a50057599ba6d9280999`
 
-| Required file | Bytes | Upstream CRC32C (base64) |
-| --- | ---: | --- |
-| `adapter.ort` | 2,870,368 | `XlWjTg==` |
-| `cross_kv.ort` | 5,356,536 | `5ySK8g==` |
-| `decoder_kv.ort` | 81,878,600 | `Rn/VUA==` |
-| `encoder.ort` | 44,148,576 | `41D2jQ==` |
-| `frontend.ort` | 30,984,520 | `m6NCLA==` |
-| `streaming_config.json` | 512 | `dPbFiw==` |
-| `tokenizer.bin` | 249,974 | `B7s10Q==` |
+| Required file | Bytes | SHA-256 | Upstream CRC32C (base64) |
+| --- | ---: | --- | --- |
+| `adapter.ort` | 2,870,368 | `c665f742364febad597cc9ac1e0b341ffbee0e24a1466e2f3bde95e6e4771762` | `XlWjTg==` |
+| `cross_kv.ort` | 5,356,536 | `e2d3417144e9514055ebfefe8dcc4c0a55a55adcb8530435844c75c53e352bf6` | `5ySK8g==` |
+| `decoder_kv.ort` | 81,878,600 | `1a05465b1dd955858dfcbee039c0020fb5dd982b0f5094c34e61735d518d771b` | `Rn/VUA==` |
+| `encoder.ort` | 44,148,576 | `2d4d973e91e8aca08c51e7e7efa28a46ab265b63d809d5294d18b86bcd85b993` | `41D2jQ==` |
+| `frontend.ort` | 30,984,520 | `d1be8145bc9ef3e8625bb7bcb7a5b2930eeb828c91d6c1897bc215d7de6f2b93` | `m6NCLA==` |
+| `streaming_config.json` | 512 | `26f02b6afb22d60871a5efd85c3d38e569cc0ddb6c5eb6e93d3260152ae8a47a` | `dPbFiw==` |
+| `tokenizer.bin` | 249,974 | `6884b35fd6377d4c4d32336a0bc152f36b64d1e45b6503683cdc238250a8472d` | `B7s10Q==` |
 
 Expected installed payload size, excluding filesystem metadata: **165,489,086 bytes** (~157.8 MiB).
 
@@ -86,20 +89,21 @@ Optional upstream word-timestamp file, not part of the V1 manifest:
 
 ## 3. Integrity rules
 
-The upstream `v0.1.3` catalog exposes a byte count and CRC32C value for each native model component. The Talking Moose model manager shall treat those values as the minimum authoritative integrity metadata for this pinned payload.
+The upstream `v0.1.3` catalog exposes a byte count and CRC32C value for each native model component. The official Moonshine asset archive independently records SHA-256 for the exact CDN copies. Talking Moose pins all three values: SHA-256 is the application-owned cryptographic integrity check, while byte count and upstream CRC32C remain secondary cross-checks.
 
 Before V1 model downloading is considered complete:
 
 1. every download must use HTTPS;
 2. every component must be downloaded to a temporary path;
-3. byte count and CRC32C must match the pinned manifest before installation;
-4. a failed verification must never replace an existing known-good model;
-5. the verified directory must be promoted atomically where the platform/filesystem allows it;
-6. the installed revision must be recorded as `quantized_26_07_30`;
-7. partial files are never reported as installed;
-8. a production manifest update requires code review and a deliberate provenance change.
+3. SHA-256 must match the pinned manifest before installation;
+4. byte count and upstream CRC32C must also match the pinned manifest;
+5. a failed verification must never replace an existing known-good model;
+6. the verified directory must be promoted atomically where the platform/filesystem allows it;
+7. the installed revision must be recorded as `quantized_26_07_30`;
+8. partial files are never reported as installed;
+9. a production manifest update requires code review and a deliberate provenance change.
 
-A later hardening task may additionally record application-owned SHA-256 values for the downloaded payloads. That is additive; it must not weaken or replace the pinned upstream checks.
+The SHA-256 inventory is pinned to the official asset archive commit above. A future manifest update must re-verify the CDN catalog, archive transfer report, source-model provenance, and licenses together; changing only a URL or checksum is not sufficient.
 
 ## 4. Licensing and redistribution baseline
 
