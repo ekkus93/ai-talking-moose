@@ -205,6 +205,7 @@ impl MoonshineStreamingEngine {
         Self::open_with_architecture_components(architecture, installer, &NativeStreamFactory)
     }
 
+    #[cfg(test)]
     fn open_with_components(
         resolver: &dyn ModelResolver,
         factory: &dyn StreamFactory,
