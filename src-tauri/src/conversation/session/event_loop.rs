@@ -113,6 +113,7 @@ impl ConversationManager {
                         "moose_partial".to_string(),
                         String::new(),
                     );
+                    speech_bubble_callback(String::new());
                     self.output_suppressed.store(false, Ordering::SeqCst);
                     state_callback(CharacterState::Interrupted);
                     Self::set_lifecycle(
