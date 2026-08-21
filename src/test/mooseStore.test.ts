@@ -56,4 +56,24 @@ describe("mooseStore State Management", () => {
     expect(useMooseStore.getState().speechBubbleText).toContain("quota");
     cleanup();
   });
+
+  it("hides the bubble when the backend explicitly clears speech text", async () => {
+    useMooseStore.getState().showSpeechBubble("stale response");
+    expect(useMooseStore.getState().speechBubbleVisible).toBe(true);
+
+    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
+      async (eventName: string, handler: (payload: unknown) => void) => {
+        if (eventName === "moose://speech-bubble") {
+          handler("");
+        }
+        return () => {};
+      },
+    );
+
+    const cleanup = await useMooseStore.getState().initEventListeners();
+
+    expect(useMooseStore.getState().speechBubbleVisible).toBe(false);
+    expect(useMooseStore.getState().speechBubbleText).toBeNull();
+    cleanup();
+  });
 });
