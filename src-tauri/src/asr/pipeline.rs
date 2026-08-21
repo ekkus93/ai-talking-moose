@@ -280,8 +280,10 @@ impl LocalAsrPipeline {
                 debug!(
                     architecture = ?diagnostics.architecture,
                     input_sample_rate_hz = diagnostics.input_sample_rate_hz,
+                    queue_depth = diagnostics.queue_depth,
                     queue_capacity = diagnostics.queue_capacity,
                     running = diagnostics.running,
+                    has_last_error = diagnostics.last_error.is_some(),
                     "Local ASR inference worker started"
                 );
                 Ok(pipeline)
