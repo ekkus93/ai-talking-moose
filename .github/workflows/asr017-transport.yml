@@ -1,0 +1,51 @@
+name: ASR-017 exact-tree transport
+
+on:
+  push:
+    branches:
+      - asr017-transport
+    paths:
+      - .transport/asr017/trigger
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out transport branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify and apply ASR-017 checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat .transport/asr017/part-* > /tmp/asr017.patch.gz.b64
+          echo "b754aca09dcdcfd9d33a6cc185798fc5c92619d8e4114a5299a6b194d530bdeb  /tmp/asr017.patch.gz.b64" | sha256sum -c -
+          base64 -d /tmp/asr017.patch.gz.b64 > /tmp/asr017.patch.gz
+          echo "5f7b569e72e49707136a5d69e0067d2c384ed7ef54befb2425344d37a0de1a09  /tmp/asr017.patch.gz" | sha256sum -c -
+          gzip -dc /tmp/asr017.patch.gz > /tmp/asr017.patch
+          echo "d2a687382286ed82637f4a989afd3624021aea6227cfd0c2a5ead3aa7406e734  /tmp/asr017.patch" | sha256sum -c -
+
+          git fetch origin master
+          test "$(git rev-parse origin/master)" = "bd4d42666f68efc9034f216d69392a09e473ca22"
+          git checkout -B master origin/master
+
+          git apply --check /tmp/asr017.patch
+          git apply /tmp/asr017.patch
+          git add -A
+          git diff --cached --check
+
+          actual_tree="$(git write-tree)"
+          echo "ASR-017 candidate tree: $actual_tree"
+          test "$actual_tree" = "6af86e9f7c7caa2846e5b9753ff040853d52505b"
+
+          git config user.name "Phillip Chin"
+          git config user.email "ekkus93@gmail.com"
+          git commit -m "test: close ASR-017 regression checkpoint"
+          git push origin HEAD:master
