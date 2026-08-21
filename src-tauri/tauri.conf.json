@@ -39,12 +39,18 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "frameworks": [],
+      "frameworks": [
+        "native/macos/libmoonshine.dylib",
+        "native/macos/libonnxruntime.1.23.2.dylib"
+      ],
       "minimumSystemVersion": "10.15",
       "exceptionDomain": "",
       "signingIdentity": null,
       "providerShortName": null,
       "entitlements": null
-    }
+    },
+    "resources": [
+      "native/macos/notices/**"
+    ]
   }
 }

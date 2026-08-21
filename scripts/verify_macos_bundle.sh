@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+manifest="$repo_root/src-tauri/native/moonshine-runtime.json"
+app_path="${1:-}"
+arch="${2:-$(uname -m)}"
+require_signature="${3:-}"
+
+fail() {
+  printf 'verify_macos_bundle: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ "$(uname -s)" == "Darwin" ]] || fail "this script must run on macOS"
+[[ -n "$app_path" && -d "$app_path" ]] || fail "usage: $0 /path/to/App.app [arm64|x86_64] [--require-signature]"
+case "$arch" in arm64|x86_64) ;; *) fail "unsupported architecture: $arch" ;; esac
+
+ort_version="$(python3 - "$manifest" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["onnxruntime"]["version"])
+PY
+)"
+frameworks="$app_path/Contents/Frameworks"
+moonshine="$frameworks/libmoonshine.dylib"
+ort="$frameworks/libonnxruntime.$ort_version.dylib"
+[[ -f "$moonshine" ]] || fail "bundle is missing $moonshine"
+[[ -f "$ort" ]] || fail "bundle is missing $ort"
+
+executables=()
+while IFS= read -r executable_path; do
+  executables+=("$executable_path")
+done < <(find "$app_path/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print)
+[[ ${#executables[@]} -eq 1 ]] || fail "expected exactly one executable under Contents/MacOS"
+executable="${executables[0]}"
+
+for binary in "$executable" "$moonshine" "$ort"; do
+  archs="$(lipo -archs "$binary")"
+  [[ " $archs " == *" $arch "* ]] || fail "$binary does not contain architecture $arch"
+  if otool -L "$binary" | grep -E '/opt/homebrew|/usr/local|/Users/|/private/tmp|/var/folders' >/dev/null; then
+    otool -L "$binary" >&2
+    fail "$binary contains a developer-machine load path"
+  fi
+done
+
+otool -L "$executable" | grep -F '@rpath/libmoonshine.dylib' >/dev/null \
+  || fail "application executable does not load Moonshine through @rpath"
+otool -L "$moonshine" | grep -F "@rpath/libonnxruntime.$ort_version.dylib" >/dev/null \
+  || fail "Moonshine does not load ONNX Runtime through @rpath"
+
+notice_root="$app_path/Contents/Resources/native/macos/notices"
+[[ -f "$notice_root/THIRD_PARTY_NOTICES.md" ]] || fail "third-party notice inventory is missing from bundle"
+license_count="$(find "$notice_root/MoonshineRuntime" -type f 2>/dev/null | wc -l | tr -d ' ')"
+(( license_count >= 5 )) || fail "bundled native notice set is incomplete"
+
+smoke_output="$(
+  env -i \
+    HOME="${HOME:-/tmp}" \
+    PATH='/usr/bin:/bin:/usr/sbin:/sbin' \
+    "$executable" --moonshine-native-smoke-test
+)"
+printf '%s\n' "$smoke_output"
+grep -E '^moonshine-runtime-version=[0-9]+$' <<<"$smoke_output" >/dev/null \
+  || fail "bundled executable failed Moonshine native runtime smoke check"
+
+if codesign -dv "$app_path" >/dev/null 2>&1; then
+  codesign --verify --strict --deep "$app_path"
+  codesign --verify --strict "$moonshine"
+  codesign --verify --strict "$ort"
+elif [[ "$require_signature" == '--require-signature' ]]; then
+  fail "signed bundle required, but application is unsigned"
+else
+  printf 'Bundle is unsigned; nested-signature verification deferred to signed release workflow.\n'
+fi
+
+printf 'Verified self-contained Moonshine runtime bundle for macOS %s.\n' "$arch"

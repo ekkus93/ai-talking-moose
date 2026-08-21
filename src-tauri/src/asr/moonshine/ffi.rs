@@ -402,7 +402,9 @@ pub(super) fn path_to_cstring(path: &std::path::Path) -> Result<CString, FfiErro
 
 // SAFETY: declarations below are copied from Moonshine Voice v0.1.3
 // `core/moonshine-c-api.h` (header version 3.0.0). The build script only enables
-// this block when an explicit native library directory is supplied.
+// this block when the pinned native runtime staging directory is complete.
+// Production macOS bundles use `src-tauri/native/macos`; an explicit override
+// remains available only for controlled development/benchmark builds.
 #[cfg(moonshine_native_linked)]
 unsafe extern "C" {
     fn moonshine_get_version() -> i32;

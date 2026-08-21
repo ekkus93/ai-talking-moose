@@ -94,7 +94,13 @@ Install the Xcode Command Line Tools:
 xcode-select --install
 ```
 
-The macOS bundle job in CI is the authoritative packaged-app smoke test.
+Local native-ASR packaging also requires CMake, Git LFS, and Python 3 as build tools. They are used only to prepare the pinned Moonshine runtime; the finished application does not depend on Homebrew or another developer-machine library path. Before a local Tauri bundle build, run:
+
+```bash
+bash scripts/prepare_moonshine_macos.sh "$(uname -m)"
+```
+
+The script verifies the pinned Moonshine source revision and architecture-specific ONNX Runtime checksum, then stages the two dylibs that Tauri embeds under the application `Contents/Frameworks` directory. The macOS bundle jobs in CI run this preparation and the clean-environment native-load smoke check on both Apple Silicon and Intel runners.
 
 ---
 
@@ -146,7 +152,13 @@ cargo build --manifest-path src-tauri/Cargo.toml --release
 
 ### Tauri application bundle
 
-This is the normal packaged application build and matches the non-tagged macOS CI smoke build:
+On macOS, prepare the pinned native Moonshine runtime before invoking Tauri:
+
+```bash
+bash scripts/prepare_moonshine_macos.sh "$(uname -m)"
+```
+
+Then build the normal packaged application, matching the non-tagged macOS CI smoke build:
 
 ```bash
 npm run tauri build -- --bundles app

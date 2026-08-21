@@ -115,7 +115,34 @@ The SHA-256 inventory is pinned to the official asset archive commit above. A fu
 
 The current V1 model scope is English only. Do not assume Moonshine models for other languages carry the same license; evaluate each additional model separately before adding it to the product.
 
-## 5. Update procedure
+## 5. macOS application packaging contract
+
+Talking Moose packages Moonshine as application-owned native code rather than relying on Homebrew, `/usr/local`, a developer checkout, or shell startup files. The checked-in machine-readable source of truth is `src-tauri/native/moonshine-runtime.json`.
+
+V1 deliberately supports both macOS CPU architectures that Moonshine supports:
+
+| macOS architecture | Rust target | Pinned ONNX Runtime 1.23.2 dylib SHA-256 | Bytes |
+| --- | --- | --- | ---: |
+| Apple Silicon `arm64` | `aarch64-apple-darwin` | `480790a978a48ad3e06ce86b6025e037bd70221637f5c104a8dde19617364cf4` | 27,623,992 |
+| Intel `x86_64` | `x86_64-apple-darwin` | `8c9c78de65ea3786f987c0d980e9c1b13a3a5fbc6b3e2965ba05b450e6e4c054` | 39,742,608 |
+
+`scripts/prepare_moonshine_macos.sh` performs the reproducible native preparation step on the matching host architecture. It:
+
+1. checks out exactly Moonshine commit `db88bffd14574212b6094a2e230d4f328029c31b`;
+2. materializes only the architecture-specific ONNX Runtime dylib from Git LFS;
+3. verifies that dylib against the pinned byte count and SHA-256 above;
+4. builds the `moonshine` CMake target for the host architecture with deployment target 10.15;
+5. stages `libmoonshine.dylib` and `libonnxruntime.1.23.2.dylib` under `src-tauri/native/macos/`;
+6. normalizes their install names to `@rpath` and rejects Homebrew/developer-machine load paths; and
+7. copies the pinned runtime provenance plus license/notice files from the source tree into the generated notice staging directory.
+
+The generated dylibs are not committed. `src-tauri/tauri.conf.json` declares both as `bundle.macOS.frameworks`, so Tauri copies them to `Talking Moose AI.app/Contents/Frameworks` and supplies the executable Frameworks rpath. Tauri's framework/dylib bundle path is also the path covered by its macOS nested-code signing when signing is configured. The release signing/notarization credential workflow remains owned by V1R-131; ASR-016 ensures Moonshine and ONNX Runtime participate in that signing graph instead of living outside the app bundle.
+
+`bundle.resources` also includes the generated native notice directory. `scripts/verify_macos_bundle.sh` validates the produced `.app` by checking architecture, `@rpath` load commands, absence of developer-machine paths, the bundled notice set, nested signatures whenever the app is signed, and an actual executable smoke mode (`--moonshine-native-smoke-test`) launched with a minimal environment. The smoke mode calls `moonshine_get_version()` from the bundled dylib before Tauri starts, so it proves the installed application can load the native runtime without a model, Homebrew, or a developer library path.
+
+CI runs this preparation/build/verification path separately on current GitHub-hosted Apple Silicon and Intel macOS runners. Untagged commits retain no bundle artifact; tagged commits keep architecture-labelled application/DMG artifacts only, preserving the repository's existing release-asset policy.
+
+## 6. Update procedure
 
 A Moonshine runtime or model update is never automatic. An update PR must:
 

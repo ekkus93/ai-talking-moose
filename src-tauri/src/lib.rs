@@ -19,6 +19,10 @@ use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 use tracing::info;
 
+pub fn moonshine_native_smoke_check() -> Result<i32, String> {
+    asr::moonshine::native_runtime_smoke_check().map_err(|error| error.message)
+}
+
 pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 

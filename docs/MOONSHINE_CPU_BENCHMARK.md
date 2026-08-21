@@ -47,10 +47,15 @@ Do not use silence, synthetic random data, or a different corpus per model as re
 
 The hardware benchmark lives as ignored macOS tests in `src-tauri/src/asr/pipeline_benchmarks.rs`. It requires a build explicitly linked to the pinned Moonshine native runtime and pre-installed, verified model payloads.
 
-Example environment and invocation for Tiny:
+Prepare the pinned runtime first on the Mac that will run the benchmark:
 
 ```bash
-export TALKING_MOOSE_MOONSHINE_LIB_DIR=/absolute/path/to/pinned/moonshine/lib
+bash scripts/prepare_moonshine_macos.sh "$(uname -m)"
+```
+
+The ordinary packaged-runtime path is then used automatically by `build.rs`; no Homebrew path or developer checkout is required. `TALKING_MOOSE_MOONSHINE_LIB_DIR` remains an explicit development override only. Example environment and invocation for Tiny:
+
+```bash
 export TALKING_MOOSE_ASR_BENCHMARK=1
 export TALKING_MOOSE_ASR_BENCHMARK_MODEL_ROOT="$HOME/Library/Application Support/Talking Moose/models"
 export TALKING_MOOSE_ASR_BENCHMARK_PCM=/absolute/path/to/asr015-corpus.pcm

@@ -58,6 +58,26 @@ pub struct MoonshineTranscriber {
     inner: Arc<TranscriberInner>,
 }
 
+fn checked_runtime_version(api: &dyn MoonshineApi, retryable: bool) -> Result<i32, AsrError> {
+    let version = api
+        .runtime_version()
+        .map_err(|error| map_ffi_error(AsrErrorKind::RuntimeUnavailable, error, retryable))?;
+    if version < MOONSHINE_HEADER_VERSION {
+        return Err(AsrError {
+            kind: AsrErrorKind::RuntimeUnavailable,
+            message: format!(
+                "Moonshine runtime version {version} is older than required header version {MOONSHINE_HEADER_VERSION}"
+            ),
+            retryable: false,
+        });
+    }
+    Ok(version)
+}
+
+pub(crate) fn native_runtime_smoke_check() -> Result<i32, AsrError> {
+    checked_runtime_version(&NativeMoonshineApi, false)
+}
+
 impl MoonshineTranscriber {
     pub fn load(
         model_path: &Path,
@@ -81,18 +101,7 @@ impl MoonshineTranscriber {
                 retryable: false,
             })?;
 
-        let runtime_version = api
-            .runtime_version()
-            .map_err(|error| map_ffi_error(AsrErrorKind::RuntimeUnavailable, error, true))?;
-        if runtime_version < MOONSHINE_HEADER_VERSION {
-            return Err(AsrError {
-                kind: AsrErrorKind::RuntimeUnavailable,
-                message: format!(
-                    "Moonshine runtime version {runtime_version} is older than required header version {MOONSHINE_HEADER_VERSION}"
-                ),
-                retryable: false,
-            });
-        }
+        let runtime_version = checked_runtime_version(api.as_ref(), true)?;
 
         let model_path = path_to_cstring(model_path)
             .map_err(|error| map_ffi_error(AsrErrorKind::ModelLoadFailed, error, false))?;
@@ -327,6 +336,13 @@ mod tests {
             ));
             Ok(self.transcript.lock().clone())
         }
+    }
+
+    #[cfg(not(moonshine_native_linked))]
+    #[test]
+    fn native_smoke_check_fails_closed_without_linking() {
+        let error = native_runtime_smoke_check().expect_err("unlinked build must fail closed");
+        assert_eq!(error.kind, AsrErrorKind::RuntimeUnavailable);
     }
 
     #[cfg(not(moonshine_native_linked))]

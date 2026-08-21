@@ -45,8 +45,8 @@ These crates are thin Rust bindings around Apple's Security framework and are us
 
 Before producing a signed/notarized V1 distribution:
 
-- generate the actual third-party notice bundle from the dependency graph and pinned Moonshine tree;
-- include all license texts required for redistributed native libraries;
+- run `scripts/prepare_moonshine_macos.sh` so the package notice directory is regenerated from the pinned Moonshine source tree;
+- include the generated inventory plus license/notice texts under the application bundle's `Resources/native/macos/notices` path;
 - verify that no non-commercial Moonshine model has entered the release payload;
 - verify that model downloads remain limited to the explicitly approved English Tiny/Small manifests;
 - verify that the application bundle does not accidentally contain developer model caches or credentials.
