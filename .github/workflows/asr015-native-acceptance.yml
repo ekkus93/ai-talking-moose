@@ -41,14 +41,22 @@ jobs:
             asr015-${{ runner.os }}-${{ runner.arch }}-
             ${{ runner.os }}-${{ runner.arch }}-cargo-
 
-      - name: Validate pinned native/model provenance
-        run: |
-          python3 scripts/validate_moonshine_runtime_manifest.py
-          cargo test --manifest-path src-tauri/Cargo.toml \
-            asr::moonshine::manifest::tests::pinned_manifests_are_structurally_valid
+      - name: Validate pinned native runtime provenance
+        run: python3 scripts/validate_moonshine_runtime_manifest.py
 
+      # Any macOS Cargo build reads the Tauri framework list from tauri.conf.json.
+      # Stage the pinned dylibs before invoking Cargo so the build script can
+      # validate and link the declared runtime deterministically.
       - name: Prepare pinned Moonshine native runtime
         run: bash scripts/prepare_moonshine_macos.sh arm64
+
+      - name: Validate pinned model manifest Rust contract
+        env:
+          TALKING_MOOSE_MOONSHINE_LIB_DIR: ${{ github.workspace }}/src-tauri/native/macos
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/src-tauri/native/macos
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml \
+            asr::moonshine::manifest::tests::pinned_manifests_are_structurally_valid
 
       - name: Run Tiny and Small native acceptance benchmark
         id: benchmark
