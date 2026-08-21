@@ -37,8 +37,7 @@ impl GoogleTextModel {
         // Current Gemini 3.x models reject the legacy sampling controls. Keep
         // compatibility only for explicitly constructed older model IDs.
         if !model.starts_with("gemini-3.") {
-            generation_config["temperature"] =
-                json!(request.temperature.unwrap_or(0.8));
+            generation_config["temperature"] = json!(request.temperature.unwrap_or(0.8));
         }
 
         let mut body = json!({
@@ -109,6 +108,7 @@ impl TextModel for GoogleTextModel {
             return Err("Google API key is not configured".to_string());
         }
 
-        self.try_generate_with_model(&self.model_name, &request).await
+        self.try_generate_with_model(&self.model_name, &request)
+            .await
     }
 }
