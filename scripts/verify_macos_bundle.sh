@@ -77,14 +77,21 @@ printf '%s\n' "$smoke_output"
 grep -E '^moonshine-runtime-version=[0-9]+$' <<<"$smoke_output" >/dev/null \
   || fail "bundled executable failed Moonshine native runtime smoke check"
 
-if codesign -dv "$app_path" >/dev/null 2>&1; then
+# The linker can leave an ad-hoc signature on Contents/MacOS/<binary> even when
+# the .app bundle itself has never been resource-sealed. `codesign -dv App.app`
+# may therefore succeed for an otherwise unsigned bundle. Treat the bundle as
+# signed only when the resource seal exists; always verify the staged native
+# dylib signatures created by prepare_moonshine_macos.sh.
+codesign --verify --strict "$moonshine"
+codesign --verify --strict "$ort"
+
+bundle_seal="$app_path/Contents/_CodeSignature/CodeResources"
+if [[ -f "$bundle_seal" ]]; then
   codesign --verify --strict --deep "$app_path"
-  codesign --verify --strict "$moonshine"
-  codesign --verify --strict "$ort"
 elif [[ "$require_signature" == '--require-signature' ]]; then
-  fail "signed bundle required, but application is unsigned"
+  fail "signed bundle required, but application has no resource-sealed signature"
 else
-  printf 'Bundle is unsigned; nested-signature verification deferred to signed release workflow.\n'
+  printf 'Bundle has no resource-sealed signature; native dylib signatures verified for smoke CI.\n'
 fi
 
 printf 'Verified self-contained Moonshine runtime bundle for macOS %s.\n' "$arch"
