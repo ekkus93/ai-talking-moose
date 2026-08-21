@@ -1,0 +1,86 @@
+name: ASR015 Transport
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".transport/asr015/trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct ASR-015 checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat .transport/asr015/part-* > /tmp/asr015.tar.gz.b64
+          base64 --decode /tmp/asr015.tar.gz.b64 > /tmp/asr015.tar.gz
+          echo "c6323dc41661cba617eaf1f9ee849f513d7ba18315f9ee328b0c51c4af9fc77a  /tmp/asr015.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/asr015.tar.gz -C .
+
+          fetch_blob() {
+            local sha="$1"
+            local path="$2"
+            mkdir -p "$(dirname "$path")"
+            gh api "/repos/${GITHUB_REPOSITORY}/git/blobs/${sha}" --jq .content \
+              | tr -d '\n' \
+              | base64 --decode > "$path"
+          }
+
+          fetch_blob b2bc11f601f30e460859b4466771cd98a84d8733 src-tauri/src/asr/lifecycle.rs
+          fetch_blob 829315da7433e0b137a007b6c1f08411b5418906 src-tauri/src/asr/types.rs
+          fetch_blob b862ae0f1339e37bdf90b078d5e95a53de320c8e src-tauri/src/lib.rs
+          fetch_blob 17740bd305291aa88bd663d33d7cf52103ecb6cc src/components/Settings/AsrDiagnosticsPanel.tsx
+          fetch_blob b4d9fa0f85f99b2af23268919047a39976808d58 src/types/moose.ts
+          fetch_blob 7dfcee84efb1bc24c3c24c77a8d0a5e8f670e876 src/lib/tauriBridge.ts
+          fetch_blob f85db1c35fe8dab7546558068024eeb8201b0c68 src/components/Settings/AsrSettingsPanel.tsx
+
+          printf '%s\n' \
+            '0caca229919849ab26250f4bb75c47e9a6ec2888  src-tauri/src/commands/asr_models.rs' \
+            '37e0f878dc1917564ed77fdebd8ffc679a74c3f8  src-tauri/src/asr/pipeline.rs' \
+            '1a383a96a317e5a5628b1dbe9ab64de19f78ac75  src-tauri/src/asr/pipeline_tests.rs' \
+            'b2bc11f601f30e460859b4466771cd98a84d8733  src-tauri/src/asr/lifecycle.rs' \
+            '829315da7433e0b137a007b6c1f08411b5418906  src-tauri/src/asr/types.rs' \
+            'b862ae0f1339e37bdf90b078d5e95a53de320c8e  src-tauri/src/lib.rs' \
+            '17740bd305291aa88bd663d33d7cf52103ecb6cc  src/components/Settings/AsrDiagnosticsPanel.tsx' \
+            'b4d9fa0f85f99b2af23268919047a39976808d58  src/types/moose.ts' \
+            '7dfcee84efb1bc24c3c24c77a8d0a5e8f670e876  src/lib/tauriBridge.ts' \
+            'f85db1c35fe8dab7546558068024eeb8201b0c68  src/components/Settings/AsrSettingsPanel.tsx' \
+            > /tmp/asr015.expected
+          git hash-object --stdin-paths < <(cut -d' ' -f3- /tmp/asr015.expected) > /tmp/asr015.actual
+          paste <(cut -d' ' -f1 /tmp/asr015.expected) /tmp/asr015.actual | while read -r expected actual; do
+            test "$expected" = "$actual"
+          done
+
+          git diff --check
+
+          git rm -r .transport/asr015 .github/workflows/asr015-transport.yml
+          git add \
+            src-tauri/src/commands/asr_models.rs \
+            src-tauri/src/asr/pipeline.rs \
+            src-tauri/src/asr/pipeline_tests.rs \
+            src-tauri/src/asr/lifecycle.rs \
+            src-tauri/src/asr/types.rs \
+            src-tauri/src/lib.rs \
+            src/components/Settings/AsrDiagnosticsPanel.tsx \
+            src/components/Settings/AsrSettingsPanel.tsx \
+            src/types/moose.ts \
+            src/lib/tauriBridge.ts
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "asr: add local diagnostics"
+          git push origin HEAD:master
