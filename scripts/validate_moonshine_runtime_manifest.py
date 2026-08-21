@@ -70,7 +70,7 @@ def main() -> int:
     if not required_frameworks.issubset(set(frameworks)):
         fail("Tauri macOS framework list does not bundle both native dylibs")
     resources = config.get("bundle", {}).get("resources", [])
-    if "native/macos/notices/**" not in resources:
+    if "native/macos/notices/" not in resources:
         fail("Tauri resources do not include generated native notices")
 
     print("Moonshine native runtime provenance/configuration is internally consistent.")
