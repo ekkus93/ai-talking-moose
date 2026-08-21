@@ -34,11 +34,25 @@ done < <(find "$app_path/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print)
 [[ ${#executables[@]} -eq 1 ]] || fail "expected exactly one executable under Contents/MacOS"
 executable="${executables[0]}"
 
+developer_load_paths() {
+  local binary="$1"
+  {
+    # Exclude otool's first-line filename header; only dependency install names
+    # and LC_RPATH entries participate in runtime dynamic-library resolution.
+    otool -L "$binary" | awk 'NR > 1 { print $1 }'
+    otool -l "$binary" | awk '
+      $1 == "cmd" && $2 == "LC_RPATH" { want_path = 1; next }
+      want_path && $1 == "path" { print $2; want_path = 0 }
+    '
+  } | grep -E '/opt/homebrew|/usr/local|/Users/|/private/tmp|/var/folders' || true
+}
+
 for binary in "$executable" "$moonshine" "$ort"; do
   archs="$(lipo -archs "$binary")"
   [[ " $archs " == *" $arch "* ]] || fail "$binary does not contain architecture $arch"
-  if otool -L "$binary" | grep -E '/opt/homebrew|/usr/local|/Users/|/private/tmp|/var/folders' >/dev/null; then
-    otool -L "$binary" >&2
+  bad_load_paths="$(developer_load_paths "$binary")"
+  if [[ -n "$bad_load_paths" ]]; then
+    printf '%s\n' "$bad_load_paths" >&2
     fail "$binary contains a developer-machine load path"
   fi
 done
