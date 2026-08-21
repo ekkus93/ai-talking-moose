@@ -1,0 +1,57 @@
+name: ASR-015 Acceptance Transport
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    name: Apply verified acceptance harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify and apply exact acceptance patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="2c15663ce667cb0cb12d25ddbc12c264e2b77177"
+          expected_tree="eff5b72b885c1751f6f5919dfb24cf99204d5524"
+
+          git fetch origin master
+          git checkout --detach origin/master
+          test "$(git merge-base "$base_sha" HEAD)" = "$base_sha"
+          unexpected="$(git diff --name-only "$base_sha" HEAD | grep -Ev '^(\.transport/asr015-acceptance/|\.github/workflows/asr015-acceptance-transport\.yml$)' || true)"
+          test -z "$unexpected"
+
+          echo "578779cab48439edc416306346932770ef272c4597ea7aa8510e5649e83c8922  .transport/asr015-acceptance/part-00" | sha256sum -c -
+          echo "e2b66a984bfb80baa72dc036cbdfe04349ef5894a688b6c622a7749d7c1803b2  .transport/asr015-acceptance/part-01" | sha256sum -c -
+          echo "87786cdf7b9768509aa85e796315eed417595819fe94d6a8d9420cb265d3793f  .transport/asr015-acceptance/part-02" | sha256sum -c -
+
+          cat .transport/asr015-acceptance/part-* > /tmp/asr015-acceptance.patch.gz.b64
+          echo "85ac1e063e8e72274eef39215e425e2ed72a30985bfa56ebfb566417f9462db9  /tmp/asr015-acceptance.patch.gz.b64" | sha256sum -c -
+          base64 -d /tmp/asr015-acceptance.patch.gz.b64 > /tmp/asr015-acceptance.patch.gz
+          echo "3f6ea7e6726da601f386481665a21bb87b0664b7225bdd3c37622d7e4a21a88e  /tmp/asr015-acceptance.patch.gz" | sha256sum -c -
+          gzip -dc /tmp/asr015-acceptance.patch.gz > /tmp/asr015-acceptance.patch
+          echo "f4743af8446647e8cef8276b3ddd74b4ecba23e05754b496a0b993336bb849b7  /tmp/asr015-acceptance.patch" | sha256sum -c -
+
+          rm -rf .transport/asr015-acceptance
+          rm .github/workflows/asr015-acceptance-transport.yml
+          git apply --check /tmp/asr015-acceptance.patch
+          git apply /tmp/asr015-acceptance.patch
+          git add -A
+          test "$(git write-tree)" = "$expected_tree"
+
+          git config user.name "Phillip Chin"
+          git config user.email "ekkus93@gmail.com"
+          git commit -m "test: add supported Mac ASR acceptance harness"
+          test "$(git rev-parse HEAD^{tree})" = "$expected_tree"
+          git push origin HEAD:master
