@@ -137,13 +137,12 @@ async fn run_cpu_benchmark(architecture: MoonshineModelArchitecture) {
     assert_useful_transcript(&final_transcript);
 
     println!(
-        concat!(
-            "ASR015_BENCHMARK architecture={architecture:?} corpus={} ",
-            "accepted_chunks={} dropped_chunks={} diagnostics={diagnostics:#?}"
-        ),
+        "ASR015_BENCHMARK architecture={:?} corpus={} accepted_chunks={} dropped_chunks={} diagnostics={:#?}",
+        architecture,
         pcm_path.display(),
         accepted_chunks,
         dropped_chunks,
+        diagnostics,
     );
     assert_eq!(
         dropped_chunks, 0,
