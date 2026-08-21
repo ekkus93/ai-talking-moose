@@ -1,3 +1,4 @@
+# one-shot P4 closure reconciliation
 name: P4 closure reconciliation
 
 on:
@@ -35,7 +36,6 @@ jobs:
                   raise SystemExit(f"expected one anchor in {path}, found {text.count(old)}")
               p.write_text(text.replace(old, new, 1))
 
-          # V1R-043: interruption must clear both transcript partial state and the visible bubble.
           replace_once(
               "src-tauri/src/conversation/session/event_loop.rs",
               '''                LiveServerEvent::Interrupted => {
@@ -57,11 +57,9 @@ jobs:
                     self.output_suppressed.store(false, Ordering::SeqCst);''',
           )
 
-          # V1R-040: make typed model catalog serialization an explicit regression test.
           p = Path("src-tauri/src/ai/google/config.rs")
           text = p.read_text()
-          marker = "    #[test]\n    fn model_catalog_serializes_typed_capabilities()"
-          if marker not in text:
+          if "fn model_catalog_serializes_typed_capabilities()" not in text:
               insert = '''
 
     #[test]
@@ -78,7 +76,6 @@ jobs:
                   raise SystemExit("config.rs test module close not found")
               p.write_text(text[:idx] + insert + text[idx:])
 
-          # V1R-042/043/045/046/047: provider protocol corpus and deterministic retry-policy tests.
           p = Path("src-tauri/src/ai/google/live/tests.rs")
           text = p.read_text()
           if "representative_text_and_binary_frames_parse" not in text:
@@ -204,7 +201,6 @@ async fn fake_tool_call_frame_emits_provider_neutral_call_identity() {
 '''
               p.write_text(text)
 
-          # V1R-042/043: make the final-only persistence boundary explicit and testable.
           p = Path("src-tauri/src/commands/conversation.rs")
           text = p.read_text()
           if "fn transcript_role_is_retained" not in text:
@@ -239,7 +235,6 @@ async fn fake_tool_call_frame_emits_provider_neutral_call_identity() {
               text = text[:idx] + insert + text[idx:]
           p.write_text(text)
 
-          # V1R-043: exercise interruption through the real conversation event loop.
           p = Path("src-tauri/src/conversation/session/tests.rs")
           text = p.read_text()
           if "interrupted_event_clears_partial_moose_transcript_and_speech_bubble" not in text:
@@ -308,7 +303,6 @@ async fn interrupted_event_clears_partial_moose_transcript_and_speech_bubble() {
 '''
               p.write_text(text)
 
-          # Reconcile the stale P4 tracker only after the audited implementation/test patch above.
           p = Path("docs/TODO(20260818-163801).md")
           text = p.read_text()
           start = text.index("# P4 — Gemini Live correctness")
