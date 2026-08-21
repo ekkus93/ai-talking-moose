@@ -7,6 +7,8 @@ export const TranscriptDrawer: React.FC = () => {
     isTranscriptOpen,
     toggleTranscript,
     transcripts,
+    partialUserTranscript,
+    partialMooseTranscript,
     sendTextMessage,
     forgetEverything,
   } = useMooseStore();
@@ -134,6 +136,26 @@ export const TranscriptDrawer: React.FC = () => {
               </p>
             </div>
           ))
+        )}
+        {partialUserTranscript && (
+          <div className="p-2.5 rounded border border-dashed border-blue-700 bg-white/70 mr-2 opacity-80">
+            <div className="text-[10px] font-bold text-blue-900 mb-1">
+              👤 YOU · listening…
+            </div>
+            <p className="text-gray-700 leading-snug font-mono text-xs">
+              {partialUserTranscript}
+            </p>
+          </div>
+        )}
+        {partialMooseTranscript && (
+          <div className="p-2.5 rounded border border-dashed border-amber-800 bg-[#fff9e6]/70 ml-2 opacity-80">
+            <div className="text-[10px] font-bold text-amber-900 mb-1">
+              🫎 MOOSE · speaking…
+            </div>
+            <p className="text-gray-700 leading-snug font-mono text-xs">
+              {partialMooseTranscript}
+            </p>
+          </div>
         )}
       </div>
 

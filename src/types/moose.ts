@@ -174,6 +174,14 @@ export interface TranscriptRecord {
   created_at: string;
 }
 
+export type GoogleModelCapability = "live_audio" | "text_generation";
+
+export interface GoogleModelDescriptor {
+  id: string;
+  display_name: string;
+  capabilities: GoogleModelCapability[];
+}
+
 export interface ConnectionTestResult {
   success: boolean;
   message: string;

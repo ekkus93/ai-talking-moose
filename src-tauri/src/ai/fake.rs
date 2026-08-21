@@ -109,7 +109,10 @@ impl RealtimeConversationProvider for FakeConversationProvider {
                 return;
             }
             let _ = event_sender
-                .send(LiveServerEvent::UserTranscript("Hello Moose".to_string()))
+                .send(LiveServerEvent::UserTranscript(TranscriptUpdate {
+                    text: "Hello Moose".to_string(),
+                    is_final: true,
+                }))
                 .await;
 
             sleep(Duration::from_millis(500)).await;
@@ -119,7 +122,10 @@ impl RealtimeConversationProvider for FakeConversationProvider {
 
             let response_text = "Greetings, human. Still staring at the glowing glass box, I see.";
             let _ = event_sender
-                .send(LiveServerEvent::ModelTranscript(response_text.to_string()))
+                .send(LiveServerEvent::ModelTranscript(TranscriptUpdate {
+                    text: response_text.to_string(),
+                    is_final: true,
+                }))
                 .await;
 
             // Stream a few audio chunks (0.2s each)
@@ -197,6 +203,7 @@ mod tests {
                     system_instruction: None,
                     sample_rate_in: 16000,
                     sample_rate_out: 24000,
+                    tools: vec![],
                 },
                 tx,
             )

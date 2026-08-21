@@ -64,6 +64,37 @@ impl LiveSession for CountingSession {
     }
 }
 
+struct ToolRecordingSession {
+    responses: Arc<SyncMutex<Vec<ToolCallResponse>>>,
+}
+
+#[async_trait]
+impl LiveSession for ToolRecordingSession {
+    async fn send_audio_chunk(&mut self, _pcm_bytes: &[u8]) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn send_text_turn(&mut self, _text: &str) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn send_tool_response(
+        &mut self,
+        response: ToolCallResponse,
+    ) -> Result<(), ProviderError> {
+        self.responses.lock().push(response);
+        Ok(())
+    }
+
+    async fn interrupt(&mut self) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<(), ProviderError> {
+        Ok(())
+    }
+}
+
 struct CountingLocalAsrResource {
     stop_count: Arc<AtomicUsize>,
 }
@@ -117,6 +148,7 @@ fn test_request(muted: bool) -> ConversationStartRequest {
             system_instruction: None,
             sample_rate_in: 16_000,
             sample_rate_out: 24_000,
+            tools: vec![],
         },
         asr_mode: AsrMode::GeminiLiveAudio,
         moonshine_installer: None,
@@ -535,6 +567,69 @@ async fn barge_in_suppresses_stale_output_until_next_user_turn_boundary() {
     assert_eq!(manager.lifecycle(), ConversationLifecycle::Responding);
 }
 
+#[tokio::test]
+async fn tool_call_event_dispatches_through_router_and_preserves_call_identity() {
+    let manager = ConversationManager::new();
+    let generation = 60;
+    let session_id = "tool-session";
+    manager.generation.store(generation, Ordering::SeqCst);
+    manager.is_in_conversation.store(true, Ordering::SeqCst);
+    *manager.active_session_id.lock() = Some(session_id.to_string());
+    *manager.lifecycle.write() = ConversationLifecycle::Listening;
+
+    let responses = Arc::new(SyncMutex::new(Vec::<ToolCallResponse>::new()));
+    *manager.live_session.lock().await = Some(Box::new(ToolRecordingSession {
+        responses: responses.clone(),
+    }));
+
+    let capture = Arc::new(SyncMutex::new(AudioCapture::new_mock()));
+    let playback = Arc::new(AudioPlayback::new());
+    let states = Arc::new(SyncMutex::new(Vec::new()));
+    let lifecycle_callback: LifecycleCallback = Arc::new(|_| {});
+    let context = test_event_loop_context(
+        generation,
+        session_id,
+        capture,
+        playback,
+        states,
+        lifecycle_callback,
+    );
+    let (event_tx, event_rx) = mpsc::channel(4);
+    let manager_for_loop = manager.clone();
+    let loop_task = tokio::spawn(async move {
+        manager_for_loop.run_event_loop(event_rx, context).await;
+    });
+
+    event_tx
+        .send(LiveServerEvent::ToolCall {
+            id: "call-42".to_string(),
+            name: "get_current_time".to_string(),
+            args: serde_json::json!({}),
+        })
+        .await
+        .unwrap();
+
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            if !responses.lock().is_empty() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("tool response was not sent");
+
+    let response = responses.lock()[0].clone();
+    assert_eq!(response.id, "call-42");
+    assert_eq!(response.name, "get_current_time");
+    assert!(response.output.get("time").is_some());
+
+    event_tx.send(LiveServerEvent::Closed).await.unwrap();
+    drop(event_tx);
+    loop_task.await.unwrap();
+}
+
 #[test]
 fn interrupted_response_suppression_rejects_stale_non_audio_callbacks() {
     let manager = ConversationManager::new();
@@ -542,7 +637,10 @@ fn interrupted_response_suppression_rejects_stale_non_audio_callbacks() {
 
     assert!(
         manager.should_suppress_interrupted_response_event(&LiveServerEvent::ModelTranscript(
-            "stale transcript".to_string()
+            TranscriptUpdate {
+                text: "stale transcript".to_string(),
+                is_final: false,
+            }
         ))
     );
     assert!(manager
@@ -558,7 +656,10 @@ fn interrupted_response_suppression_rejects_stale_non_audio_callbacks() {
 
     assert!(
         !manager.should_suppress_interrupted_response_event(&LiveServerEvent::UserTranscript(
-            "new user turn".to_string()
+            TranscriptUpdate {
+                text: "new user turn".to_string(),
+                is_final: false,
+            }
         ))
     );
     assert!(!manager.should_suppress_interrupted_response_event(&LiveServerEvent::Interrupted));

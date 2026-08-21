@@ -70,6 +70,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            get_google_models,
             update_settings,
             get_asr_models,
             install_asr_model,

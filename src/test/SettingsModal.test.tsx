@@ -8,7 +8,7 @@ describe("SettingsModal Component", () => {
     useMooseStore.setState({
       isSettingsOpen: true,
       settings: {
-        settings_version: 1,
+        settings_version: 2,
         asr_mode: "moonshine_tiny_streaming",
         launch_at_login: false,
         show_in_menu_bar: true,
@@ -28,8 +28,8 @@ describe("SettingsModal Component", () => {
         speaking_rate: 0.95,
         pitch: -1.5,
         provider: "google",
-        live_model: "gemini-2.5-flash-native-audio-latest",
-        text_model: "gemini-2.5-flash",
+        live_model: "gemini-3.1-flash-live-preview",
+        text_model: "gemini-3.7-flash",
         tts_model: "en-US-Standard-B",
         microphone_permission_granted: false,
         active_app_observation: false,

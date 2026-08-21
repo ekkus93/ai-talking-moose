@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
+import type { GoogleModelDescriptor } from "../../types/moose";
 import { AudioDiagnosticsPanel } from "./AudioDiagnosticsPanel";
 import { AsrSettingsPanel } from "./AsrSettingsPanel";
 import { MicrophonePermissionCard } from "./MicrophonePermissionCard";
@@ -55,11 +56,15 @@ export const SettingsModal: React.FC = () => {
   } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isAuditioning, setIsAuditioning] = useState(false);
+  const [googleModels, setGoogleModels] = useState<GoogleModelDescriptor[]>([]);
 
   useEffect(() => {
     if (isSettingsOpen) {
       loadDevices();
       loadMemories();
+      void tauriBridge
+        .getGoogleModels()
+        .then((models) => setGoogleModels(models ?? []));
     }
   }, [isSettingsOpen, loadDevices, loadMemories]);
 
@@ -498,19 +503,15 @@ export const SettingsModal: React.FC = () => {
                       }
                       className="w-full p-1.5 border border-black rounded bg-white font-bold"
                     >
-                      <option value="gemini-2.5-flash-native-audio-latest">
-                        gemini-2.5-flash-native-audio-latest (Recommended Live
-                        Voice)
-                      </option>
-                      <option value="gemini-3.1-flash-live-preview">
-                        gemini-3.1-flash-live-preview (Gemini 3 Live Preview)
-                      </option>
-                      <option value="gemini-flash-latest">
-                        gemini-flash-latest
-                      </option>
-                      <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                      <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                      <option value="gemini-3.7-flash">gemini-3.7-flash</option>
+                      {googleModels
+                        .filter((model) =>
+                          model.capabilities.includes("live_audio"),
+                        )
+                        .map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.display_name} ({model.id})
+                          </option>
+                        ))}
                     </select>
                   </div>
 
@@ -528,18 +529,15 @@ export const SettingsModal: React.FC = () => {
                       }
                       className="w-full p-1.5 border border-black rounded bg-white font-bold"
                     >
-                      <option value="gemini-2.5-flash">
-                        gemini-2.5-flash (Fast & Responsive)
-                      </option>
-                      <option value="gemini-flash-latest">
-                        gemini-flash-latest
-                      </option>
-                      <option value="gemini-2.5-pro">
-                        gemini-2.5-pro (High Intelligence)
-                      </option>
-                      <option value="gemini-3.7-flash">
-                        gemini-3.7-flash (Gemini 3.7)
-                      </option>
+                      {googleModels
+                        .filter((model) =>
+                          model.capabilities.includes("text_generation"),
+                        )
+                        .map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.display_name} ({model.id})
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>

@@ -141,7 +141,6 @@ impl AppSettings {
         if !had_asr_mode {
             settings.asr_mode = AsrMode::GeminiLiveAudio;
         }
-
         let normalized_live_model = normalize_live_model(&settings.live_model).to_string();
         let normalized_text_model = normalize_text_model(&settings.text_model).to_string();
         let models_migrated = normalized_live_model != settings.live_model
@@ -423,6 +422,7 @@ mod tests {
                     system_instruction: None,
                     sample_rate_in: 16_000,
                     sample_rate_out: 24_000,
+                    tools: vec![],
                 },
                 event_tx,
             )

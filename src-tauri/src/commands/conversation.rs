@@ -78,6 +78,7 @@ pub async fn start_conversation<R: Runtime>(
         system_instruction: Some(system_instruction),
         sample_rate_in: 16_000,
         sample_rate_out: 24_000,
+        tools: tool_router.get_declarations(),
     };
 
     let character_state = state.character_state.clone();
@@ -114,14 +115,16 @@ pub async fn start_conversation<R: Runtime>(
             },
             move |session_id: String, role: String, text: String| {
                 let _ = app_transcript.emit(&format!("moose://transcript/{role}"), &text);
-                if let Err(error_value) = persist_transcript_if_enabled(
-                    db_ref.as_ref(),
-                    save_transcripts,
-                    &session_id,
-                    &role,
-                    &text,
-                ) {
-                    warn!(error = %error_value, "Failed to persist retained transcript");
+                if matches!(role.as_str(), "user" | "moose") {
+                    if let Err(error_value) = persist_transcript_if_enabled(
+                        db_ref.as_ref(),
+                        save_transcripts,
+                        &session_id,
+                        &role,
+                        &text,
+                    ) {
+                        warn!(error = %error_value, "Failed to persist retained transcript");
+                    }
                 }
             },
             move |speech_text: String| {

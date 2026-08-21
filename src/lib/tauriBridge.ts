@@ -7,6 +7,7 @@ import {
   AudioDiagnostics,
   CharacterState,
   ConnectionTestResult,
+  GoogleModelDescriptor,
   ConversationLifecycle,
   MemoryRecord,
   MicrophonePermissionState,
@@ -96,7 +97,7 @@ export const tauriBridge = {
   async getSettings(): Promise<AppSettings> {
     if (!isTauri()) {
       return {
-        settings_version: 1,
+        settings_version: 2,
         asr_mode: "moonshine_tiny_streaming",
         launch_at_login: false,
         show_in_menu_bar: true,
@@ -116,8 +117,8 @@ export const tauriBridge = {
         speaking_rate: 0.95,
         pitch: -1.5,
         provider: "google",
-        live_model: "gemini-2.5-flash-native-audio-latest",
-        text_model: "gemini-2.5-flash",
+        live_model: "gemini-3.1-flash-live-preview",
+        text_model: "gemini-3.7-flash",
         tts_model: "en-US-Standard-B",
         microphone_permission_granted: false,
         active_app_observation: false,
@@ -140,6 +141,30 @@ export const tauriBridge = {
     if (!isTauri()) return;
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("update_settings", { newSettings: settings });
+  },
+
+  async getGoogleModels(): Promise<GoogleModelDescriptor[]> {
+    if (!isTauri()) {
+      return [
+        {
+          id: "gemini-3.1-flash-live-preview",
+          display_name: "Gemini 3.1 Flash Live Preview",
+          capabilities: ["live_audio"],
+        },
+        {
+          id: "gemini-3.7-flash",
+          display_name: "Gemini 3.7 Flash",
+          capabilities: ["text_generation"],
+        },
+        {
+          id: "gemini-3.6-flash",
+          display_name: "Gemini 3.6 Flash",
+          capabilities: ["text_generation"],
+        },
+      ];
+    }
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<GoogleModelDescriptor[]>("get_google_models");
   },
 
   async getAsrModels(): Promise<AsrModelDescriptor[]> {

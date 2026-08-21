@@ -33,6 +33,8 @@ interface MooseStoreState {
   isTranscriptOpen: boolean;
 
   transcripts: TranscriptRecord[];
+  partialUserTranscript: string | null;
+  partialMooseTranscript: string | null;
   memories: MemoryRecord[];
   inputDevices: AudioDeviceInfo[];
   outputDevices: AudioDeviceInfo[];
@@ -89,6 +91,8 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   isTranscriptOpen: false,
 
   transcripts: [],
+  partialUserTranscript: null,
+  partialMooseTranscript: null,
   memories: [],
   inputDevices: [],
   outputDevices: [],
@@ -243,7 +247,12 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
   forgetEverything: async () => {
     await tauriBridge.forgetEverything();
-    set({ memories: [], transcripts: [] });
+    set({
+      memories: [],
+      transcripts: [],
+      partialUserTranscript: null,
+      partialMooseTranscript: null,
+    });
   },
 
   loadTranscripts: async () => {
@@ -271,6 +280,10 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           set({
             conversationLifecycle,
             isConversationActive: lifecycleIsActive(conversationLifecycle),
+            ...(conversationLifecycle === "idle" ||
+            conversationLifecycle === "failed"
+              ? { partialUserTranscript: null, partialMooseTranscript: null }
+              : {}),
           });
         },
       );
@@ -306,8 +319,16 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           text,
           created_at: new Date().toLocaleTimeString(),
         };
-        set((s) => ({ transcripts: [...s.transcripts, entry] }));
+        set((s) => ({
+          transcripts: [...s.transcripts, entry],
+          partialUserTranscript: null,
+        }));
       },
+    );
+
+    const unlistenUserPartial = await tauriBridge.listenEvent<string>(
+      "moose://transcript/user_partial",
+      (text) => set({ partialUserTranscript: text || null }),
     );
 
     const unlistenMooseOutput = await tauriBridge.listenEvent<string>(
@@ -320,8 +341,16 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           text,
           created_at: new Date().toLocaleTimeString(),
         };
-        set((s) => ({ transcripts: [...s.transcripts, entry] }));
+        set((s) => ({
+          transcripts: [...s.transcripts, entry],
+          partialMooseTranscript: null,
+        }));
       },
+    );
+
+    const unlistenMoosePartial = await tauriBridge.listenEvent<string>(
+      "moose://transcript/moose_partial",
+      (text) => set({ partialMooseTranscript: text || null }),
     );
 
     const unlistenInLvl = await tauriBridge.listenEvent<number>(
@@ -345,7 +374,9 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       unlistenMouth();
       unlistenBubble();
       unlistenUserInput();
+      unlistenUserPartial();
       unlistenMooseOutput();
+      unlistenMoosePartial();
       unlistenInLvl();
       unlistenOutLvl();
     };

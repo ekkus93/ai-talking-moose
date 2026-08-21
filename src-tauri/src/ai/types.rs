@@ -1,3 +1,4 @@
+use crate::tools::policy::ToolDeclaration;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,14 +108,22 @@ pub struct LiveSessionConfig {
     pub system_instruction: Option<String>,
     pub sample_rate_in: u32,
     pub sample_rate_out: u32,
+    #[serde(default)]
+    pub tools: Vec<ToolDeclaration>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptUpdate {
+    pub text: String,
+    pub is_final: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum LiveServerEvent {
     Connected,
-    UserTranscript(String),
-    ModelTranscript(String),
+    UserTranscript(TranscriptUpdate),
+    ModelTranscript(TranscriptUpdate),
     AudioData(Vec<u8>), // PCM bytes (usually 24kHz)
     Interrupted,
     TurnComplete,
@@ -137,6 +146,7 @@ pub struct ToolCallRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallResponse {
     pub id: String,
+    pub name: String,
     pub output: serde_json::Value,
 }
 

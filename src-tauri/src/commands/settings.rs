@@ -1,7 +1,9 @@
-use crate::ai::google::auth::GoogleAuth;
-use crate::ai::google::text::GoogleTextModel;
-use crate::ai::traits::TextModel;
-use crate::ai::types::TextRequest;
+use crate::ai::google::{
+    validate_live_model, validate_text_model, GoogleAuth, GoogleLiveProvider,
+    GoogleModelDescriptor, GOOGLE_MODELS,
+};
+use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
+use crate::ai::types::LiveSessionConfig;
 use crate::app::state::{AppSettings, AppState};
 use crate::audio::capture::AudioCaptureDiagnostics;
 use crate::audio::devices::{AudioDeviceInfo, AudioDeviceManager};
@@ -72,6 +74,11 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
 }
 
 #[tauri::command]
+pub fn get_google_models() -> Vec<GoogleModelDescriptor> {
+    GOOGLE_MODELS.to_vec()
+}
+
+#[tauri::command]
 pub async fn update_settings<R: Runtime>(
     mut new_settings: AppSettings,
     state: State<'_, AppState>,
@@ -79,9 +86,17 @@ pub async fn update_settings<R: Runtime>(
 ) -> Result<(), String> {
     new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
     new_settings.microphone_permission_granted = microphone_permission_state().is_granted();
+    if !matches!(new_settings.provider.as_str(), "google" | "fake") {
+        return Err("unsupported AI provider".to_string());
+    }
+    validate_live_model(&new_settings.live_model)?;
+    validate_text_model(&new_settings.text_model)?;
 
-    let previous_asr_mode = state.settings.read().asr_mode;
-    if previous_asr_mode != new_settings.asr_mode && state.conversation_mgr.is_active() {
+    let previous = state.settings.read().clone();
+    let requires_conversation_teardown = previous.asr_mode != new_settings.asr_mode
+        || previous.provider != new_settings.provider
+        || previous.live_model != new_settings.live_model;
+    if requires_conversation_teardown && state.conversation_mgr.is_active() {
         state
             .conversation_mgr
             .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
@@ -127,8 +142,15 @@ pub fn has_google_api_key(state: State<'_, AppState>) -> Result<bool, String> {
 pub async fn test_ai_connection(
     state: State<'_, AppState>,
 ) -> Result<ConnectionTestResult, String> {
+    if state.conversation_mgr.is_active() {
+        return Ok(ConnectionTestResult {
+            success: false,
+            message: "Stop the active conversation before testing Gemini connectivity.".to_string(),
+        });
+    }
+
     let key = match state.secrets.get_google_api_key() {
-        Some(k) if !k.trim().is_empty() => k,
+        Some(key) if !key.trim().is_empty() => key,
         _ => {
             return Ok(ConnectionTestResult {
                 success: false,
@@ -136,24 +158,35 @@ pub async fn test_ai_connection(
             });
         }
     };
-
-    let model = GoogleTextModel::new(GoogleAuth::new(key), "gemini-2.5-flash".to_string());
-    match model
-        .generate(TextRequest {
-            prompt: "Ping test. Reply with 'Pong'.".to_string(),
-            system_instruction: None,
-            temperature: Some(0.1),
-            max_tokens: Some(10),
-        })
-        .await
-    {
-        Ok(_) => Ok(ConnectionTestResult {
-            success: true,
-            message: "Successfully connected to Google Gemini API!".to_string(),
-        }),
-        Err(e) => Ok(ConnectionTestResult {
+    let settings = state.settings.read().clone();
+    if let Err(message) = validate_live_model(&settings.live_model) {
+        return Ok(ConnectionTestResult {
             success: false,
-            message: format!("Connection failed: {}", state.secrets.redact(&e)),
+            message,
+        });
+    }
+
+    let provider = GoogleLiveProvider::new(GoogleAuth::new(key));
+    let (event_tx, _event_rx) = mpsc::channel(8);
+    let config = LiveSessionConfig {
+        model: settings.live_model,
+        voice_name: Some(settings.tts_voice),
+        system_instruction: Some("Talking Moose connectivity test".to_string()),
+        sample_rate_in: 16_000,
+        sample_rate_out: 24_000,
+        tools: vec![],
+    };
+    match provider.connect(config, event_tx).await {
+        Ok(mut session) => {
+            let _ = session.close().await;
+            Ok(ConnectionTestResult {
+                success: true,
+                message: "Gemini Live setup handshake completed successfully.".to_string(),
+            })
+        }
+        Err(error) => Ok(ConnectionTestResult {
+            success: false,
+            message: error.message,
         }),
     }
 }

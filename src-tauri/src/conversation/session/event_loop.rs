@@ -42,18 +42,48 @@ impl ConversationManager {
                 LiveServerEvent::Connected => {
                     info!(session_id = %session_id, "Conversation provider connected");
                 }
-                LiveServerEvent::UserTranscript(text) => {
-                    self.accept_user_transcript(
-                        &session_id,
-                        text,
-                        &state_callback,
-                        &lifecycle_callback,
-                        &transcript_callback,
-                    );
+                LiveServerEvent::UserTranscript(update) => {
+                    if update.is_final {
+                        transcript_callback(
+                            session_id.clone(),
+                            "user_partial".to_string(),
+                            String::new(),
+                        );
+                        self.accept_user_transcript(
+                            &session_id,
+                            update.text,
+                            &state_callback,
+                            &lifecycle_callback,
+                            &transcript_callback,
+                        );
+                    } else {
+                        transcript_callback(
+                            session_id.clone(),
+                            "user_partial".to_string(),
+                            update.text,
+                        );
+                    }
                 }
-                LiveServerEvent::ModelTranscript(text) => {
-                    transcript_callback(session_id.clone(), "moose".to_string(), text.clone());
-                    speech_bubble_callback(text);
+                LiveServerEvent::ModelTranscript(update) => {
+                    if update.is_final {
+                        transcript_callback(
+                            session_id.clone(),
+                            "moose_partial".to_string(),
+                            String::new(),
+                        );
+                        transcript_callback(
+                            session_id.clone(),
+                            "moose".to_string(),
+                            update.text.clone(),
+                        );
+                    } else {
+                        transcript_callback(
+                            session_id.clone(),
+                            "moose_partial".to_string(),
+                            update.text.clone(),
+                        );
+                    }
+                    speech_bubble_callback(update.text);
                 }
                 LiveServerEvent::AudioData(pcm_bytes) => {
                     Self::set_lifecycle(
@@ -78,6 +108,11 @@ impl ConversationManager {
                 }
                 LiveServerEvent::Interrupted => {
                     playback.flush();
+                    transcript_callback(
+                        session_id.clone(),
+                        "moose_partial".to_string(),
+                        String::new(),
+                    );
                     self.output_suppressed.store(false, Ordering::SeqCst);
                     state_callback(CharacterState::Interrupted);
                     Self::set_lifecycle(
@@ -88,6 +123,16 @@ impl ConversationManager {
                     state_callback(CharacterState::Listening);
                 }
                 LiveServerEvent::TurnComplete => {
+                    transcript_callback(
+                        session_id.clone(),
+                        "user_partial".to_string(),
+                        String::new(),
+                    );
+                    transcript_callback(
+                        session_id.clone(),
+                        "moose_partial".to_string(),
+                        String::new(),
+                    );
                     if self.is_in_conversation.load(Ordering::SeqCst)
                         && self.generation.load(Ordering::SeqCst) == generation
                     {
@@ -117,7 +162,11 @@ impl ConversationManager {
                         let mut session_lock = live_ref.lock().await;
                         if let Some(ref mut live_session) = *session_lock {
                             if let Err(error_value) = live_session
-                                .send_tool_response(ToolCallResponse { id, output: result })
+                                .send_tool_response(ToolCallResponse {
+                                    id,
+                                    name,
+                                    output: result,
+                                })
                                 .await
                             {
                                 if generation_ref.load(Ordering::SeqCst) == generation {

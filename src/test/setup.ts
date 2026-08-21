@@ -35,7 +35,7 @@ vi.mock("@tauri-apps/api/core", () => {
     invoke: vi.fn(async (cmd: string) => {
       if (cmd === "get_settings") {
         return {
-          settings_version: 1,
+          settings_version: 2,
           asr_mode: "moonshine_tiny_streaming",
           launch_at_login: false,
           show_in_menu_bar: true,
@@ -55,8 +55,8 @@ vi.mock("@tauri-apps/api/core", () => {
           speaking_rate: 0.95,
           pitch: -1.5,
           provider: "google",
-          live_model: "gemini-2.5-flash-native-audio-latest",
-          text_model: "gemini-2.5-flash",
+          live_model: "gemini-3.1-flash-live-preview",
+          text_model: "gemini-3.7-flash",
           tts_model: "en-US-Standard-B",
           microphone_permission_granted: true,
           active_app_observation: false,
@@ -84,6 +84,19 @@ vi.mock("@tauri-apps/api/core", () => {
       if (cmd === "has_google_api_key") return true;
       if (cmd === "list_audio_devices") return [[], []];
       if (cmd === "get_memories") return [];
+      if (cmd === "get_google_models")
+        return [
+          {
+            id: "gemini-3.1-flash-live-preview",
+            display_name: "Gemini 3.1 Flash Live Preview",
+            capabilities: ["live_audio"],
+          },
+          {
+            id: "gemini-3.7-flash",
+            display_name: "Gemini 3.7 Flash",
+            capabilities: ["text_generation"],
+          },
+        ];
       if (cmd === "get_transcripts") return [];
       return null;
     }),

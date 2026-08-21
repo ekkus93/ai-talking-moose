@@ -41,6 +41,7 @@ async fn test_fake_live_conversation_flow() {
                 system_instruction: Some("Be a moose".to_string()),
                 sample_rate_in: 16000,
                 sample_rate_out: 24000,
+                tools: vec![],
             },
             tx,
         )
@@ -60,14 +61,14 @@ async fn test_fake_live_conversation_flow() {
     // Verify user transcript event
     let event2 = rx.recv().await.unwrap();
     match event2 {
-        LiveServerEvent::UserTranscript(t) => assert!(t.contains("Hello")),
+        LiveServerEvent::UserTranscript(t) => assert!(t.text.contains("Hello")),
         _ => panic!("Expected UserTranscript event"),
     }
 
     // Verify model transcript event
     let event3 = rx.recv().await.unwrap();
     match event3 {
-        LiveServerEvent::ModelTranscript(t) => assert!(t.contains("Greetings")),
+        LiveServerEvent::ModelTranscript(t) => assert!(t.text.contains("Greetings")),
         _ => panic!("Expected ModelTranscript event"),
     }
 
