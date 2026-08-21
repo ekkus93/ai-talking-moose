@@ -40,13 +40,9 @@ pub const GOOGLE_MODELS: &[GoogleModelDescriptor] = &[
 ];
 
 pub fn supports_capability(model_id: &str, capability: GoogleModelCapability) -> bool {
-    GOOGLE_MODELS.iter().any(|model| {
-        model.id == model_id
-            && model
-                .capabilities
-                .iter()
-                .any(|candidate| *candidate == capability)
-    })
+    GOOGLE_MODELS
+        .iter()
+        .any(|model| model.id == model_id && model.capabilities.contains(&capability))
 }
 
 pub fn validate_live_model(model_id: &str) -> Result<(), String> {
