@@ -305,7 +305,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     const unlistenBubble = await tauriBridge.listenEvent<string>(
       "moose://speech-bubble",
       (text) => {
-        get().showSpeechBubble(text);
+        if (text.trim()) {
+          get().showSpeechBubble(text);
+        } else {
+          get().hideSpeechBubble();
+        }
       },
     );
 
