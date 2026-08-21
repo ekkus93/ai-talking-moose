@@ -273,6 +273,43 @@ async fn missing_small_model_fails_before_provider_connect_or_microphone_capture
 }
 
 #[tokio::test]
+async fn corrupt_tiny_model_fails_before_provider_connect_or_microphone_capture() {
+    let manager = ConversationManager::new();
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let temp = tempfile::tempdir().unwrap();
+    let installer = Arc::new(MoonshineModelInstaller::new(temp.path()).unwrap());
+    let corrupt_model =
+        installer.model_path(crate::asr::moonshine::MoonshineModelArchitecture::TinyStreaming);
+    std::fs::create_dir_all(&corrupt_model).unwrap();
+    std::fs::write(
+        corrupt_model.join("corrupt-placeholder"),
+        b"not a verified model",
+    )
+    .unwrap();
+
+    let mut request = test_request(false);
+    request.asr_mode = AsrMode::MoonshineTinyStreaming;
+    request.provider = Arc::new(ConnectCountingProvider {
+        connect_count: connect_count.clone(),
+    });
+    request.moonshine_installer = Some(installer);
+    let capture = request.capture.clone();
+
+    let error = manager
+        .start_session(request)
+        .await
+        .expect_err("corrupt Tiny model must fail before provider or microphone startup");
+
+    assert!(error.contains("corrupt") || error.contains("incomplete"));
+    assert!(error.contains("No microphone audio was sent"));
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(!capture.lock().is_active());
+    assert!(!manager.local_asr_lifecycle().is_active().await);
+    assert!(!manager.is_active());
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
+}
+
+#[tokio::test]
 async fn centralized_shutdown_is_idempotent_and_closes_session_once() {
     let manager = ConversationManager::new();
     let capture = Arc::new(SyncMutex::new(AudioCapture::new_mock()));
@@ -507,6 +544,33 @@ async fn starting_a_new_provider_tears_down_previous_local_asr_before_connect() 
     assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 1);
     assert!(!manager.local_asr_lifecycle().is_active().await);
     assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
+}
+
+#[tokio::test]
+async fn barge_in_keeps_current_local_asr_active() {
+    let manager = ConversationManager::new();
+    let playback = Arc::new(AudioPlayback::new());
+    let generation = 35;
+    manager.generation.store(generation, Ordering::SeqCst);
+    manager.is_in_conversation.store(true, Ordering::SeqCst);
+    *manager.active_session_id.lock() = Some("local-barge-session".to_string());
+    *manager.active_asr_mode.lock() = Some(AsrMode::MoonshineTinyStreaming);
+    *manager.lifecycle.write() = ConversationLifecycle::Responding;
+
+    let local_asr_stop_count = attach_counting_local_asr(&manager, generation).await;
+    let close_count = Arc::new(AtomicUsize::new(0));
+    let interrupt_count = Arc::new(AtomicUsize::new(0));
+    *manager.live_session.lock().await = Some(Box::new(CountingSession {
+        close_count,
+        interrupt_count: interrupt_count.clone(),
+    }));
+
+    manager.barge_in(playback).await.unwrap();
+
+    assert_eq!(interrupt_count.load(AtomicOrdering::SeqCst), 1);
+    assert_eq!(local_asr_stop_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(manager.local_asr_lifecycle().is_active().await);
+    assert!(manager.local_asr_callback_is_current(generation).await);
 }
 
 #[tokio::test]

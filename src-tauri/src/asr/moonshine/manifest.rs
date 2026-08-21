@@ -435,6 +435,24 @@ mod tests {
     }
 
     #[test]
+    fn runtime_header_mismatch_is_rejected_as_incompatible() {
+        let manifest = MoonshineModelManifest {
+            runtime: MoonshineRuntimeCompatibility {
+                c_header_version: MOONSHINE_HEADER_VERSION - 1,
+                ..TINY_STREAMING_MANIFEST.runtime
+            },
+            ..TINY_STREAMING_MANIFEST
+        };
+        assert_eq!(
+            manifest.validate(),
+            Err(ManifestValidationError::RuntimeHeaderMismatch {
+                manifest: MOONSHINE_HEADER_VERSION - 1,
+                ffi: MOONSHINE_HEADER_VERSION,
+            })
+        );
+    }
+
+    #[test]
     fn total_size_mismatch_is_rejected() {
         let manifest = MoonshineModelManifest {
             expected_bytes: TINY_STREAMING_MANIFEST.expected_bytes + 1,
