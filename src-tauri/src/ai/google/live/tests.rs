@@ -118,3 +118,121 @@ fn malformed_known_frame_is_protocol_error_without_private_payload() {
     assert_eq!(error.kind, ProviderErrorKind::Protocol);
     assert!(!error.message.contains("private transcript"));
 }
+
+#[test]
+fn representative_text_and_binary_frames_parse() {
+    let setup = decode_server_frame(Message::Text(
+        r#"{"setupComplete":{},"futureEnvelopeField":true}"#.to_string(),
+    ))
+    .unwrap()
+    .unwrap();
+    assert!(setup.setup_complete.is_some());
+
+    let binary = decode_server_frame(Message::Binary(
+        br#"{"serverContent":{"outputTranscription":{"text":"binary hello"},"futureField":7}}"#
+            .to_vec(),
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        binary
+            .server_content
+            .unwrap()
+            .output_transcription
+            .unwrap()
+            .text,
+        "binary hello"
+    );
+}
+
+#[test]
+fn setup_rejection_is_typed_and_private_payload_is_discarded() {
+    let server = decode_server_frame(Message::Text(
+        r#"{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"private transcript and api material"}}"#
+            .to_string(),
+    ))
+    .unwrap()
+    .unwrap();
+    let error = provider_error_from_server_error(server.error.as_ref().unwrap());
+    assert_eq!(error.kind, ProviderErrorKind::Setup);
+    assert!(!error.retryable);
+    assert!(!error.message.contains("private transcript"));
+    assert!(!error.message.contains("api material"));
+}
+
+#[test]
+fn duplicate_transcript_fragments_are_suppressed_or_replaced() {
+    let mut buffer = String::new();
+    assert!(append_transcript(&mut buffer, "hello"));
+    assert!(!append_transcript(&mut buffer, "hello"));
+    assert!(append_transcript(&mut buffer, "hello human"));
+    assert_eq!(buffer, "hello human");
+    assert!(!append_transcript(&mut buffer, "human"));
+}
+
+#[test]
+fn retry_policy_has_hard_bounds_and_explicit_close_cancels_reconnect() {
+    assert_eq!(MAX_RECONNECT_ATTEMPTS, 3);
+    assert_eq!(MAX_RECONNECT_ELAPSED, Duration::from_secs(20));
+    assert_eq!(reconnect_delay(1, 0), Duration::from_millis(250));
+    assert_eq!(reconnect_delay(2, 0), Duration::from_millis(500));
+    assert_eq!(reconnect_delay(3, 0), Duration::from_millis(1_000));
+    assert!(reconnect_delay(8, u64::MAX) <= Duration::from_millis(2_125));
+
+    let active = AtomicBool::new(true);
+    let (tx, mut rx) = mpsc::channel(1);
+    tx.try_send(Message::Close(None)).unwrap();
+    assert!(!drain_disconnected_messages(&mut rx, &active));
+    assert!(!active.load(Ordering::SeqCst));
+}
+
+#[test]
+fn retryability_is_explicit_by_provider_error_category() {
+    for kind in [
+        ProviderErrorKind::Quota,
+        ProviderErrorKind::Network,
+        ProviderErrorKind::Closed,
+    ] {
+        assert!(ProviderError::from_kind(kind).retryable, "{kind:?}");
+    }
+    for kind in [
+        ProviderErrorKind::Auth,
+        ProviderErrorKind::Protocol,
+        ProviderErrorKind::Setup,
+        ProviderErrorKind::Model,
+        ProviderErrorKind::Internal,
+    ] {
+        assert!(!ProviderError::from_kind(kind).retryable, "{kind:?}");
+    }
+}
+
+#[tokio::test]
+async fn fake_tool_call_frame_emits_provider_neutral_call_identity() {
+    let server: LiveServerMessage = serde_json::from_value(json!({
+        "toolCall": {
+            "functionCalls": [{
+                "id": "call-42",
+                "name": "get_current_time",
+                "args": {}
+            }]
+        }
+    }))
+    .unwrap();
+    let (tx, mut rx) = mpsc::channel(2);
+    let mut input = String::new();
+    let mut output = String::new();
+    let mut resume = None;
+
+    assert!(matches!(
+        handle_server_message(server, &tx, &mut input, &mut output, &mut resume).await,
+        ServerAction::Continue
+    ));
+    match rx.recv().await {
+        Some(LiveServerEvent::ToolCall { id, name, args }) => {
+            assert_eq!(id, "call-42");
+            assert_eq!(name, "get_current_time");
+            assert_eq!(args, json!({}));
+        }
+        other => panic!("unexpected tool event: {other:?}"),
+    }
+}
