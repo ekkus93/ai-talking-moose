@@ -121,20 +121,27 @@ fn malformed_known_frame_is_protocol_error_without_private_payload() {
 
 #[test]
 fn representative_text_and_binary_frames_parse() {
-    let setup = decode_server_frame(Message::Text(
-        r#"{"setupComplete":{},"futureEnvelopeField":true}"#.replace("\\\"", "\"")
-    ))
-    .unwrap()
-    .unwrap();
+    let setup_frame = json!({
+        "setupComplete": {},
+        "futureEnvelopeField": true
+    })
+    .to_string();
+    let setup = decode_server_frame(Message::Text(setup_frame))
+        .unwrap()
+        .unwrap();
     assert!(setup.setup_complete.is_some());
 
-    let binary = decode_server_frame(Message::Binary(
-        r#"{"serverContent":{"outputTranscription":{"text":"binary hello"},"futureField":7}}"#
-            .replace("\\\"", "\"")
-            .into_bytes(),
-    ))
-    .unwrap()
-    .unwrap();
+    let binary_frame = json!({
+        "serverContent": {
+            "outputTranscription": { "text": "binary hello" },
+            "futureField": 7
+        }
+    })
+    .to_string()
+    .into_bytes();
+    let binary = decode_server_frame(Message::Binary(binary_frame))
+        .unwrap()
+        .unwrap();
     assert_eq!(
         binary
             .server_content
@@ -148,12 +155,15 @@ fn representative_text_and_binary_frames_parse() {
 
 #[test]
 fn setup_rejection_is_typed_and_private_payload_is_discarded() {
-    let server = decode_server_frame(Message::Text(
-        r#"{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"private transcript and api material"}}"#
-            .replace("\\\"", "\""),
-    ))
-    .unwrap()
-    .unwrap();
+    let frame = json!({
+        "error": {
+            "code": 400,
+            "status": "INVALID_ARGUMENT",
+            "message": "private transcript and api material"
+        }
+    })
+    .to_string();
+    let server = decode_server_frame(Message::Text(frame)).unwrap().unwrap();
     let error = provider_error_from_server_error(server.error.as_ref().unwrap());
     assert_eq!(error.kind, ProviderErrorKind::Setup);
     assert!(!error.retryable);
