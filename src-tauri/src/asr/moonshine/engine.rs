@@ -95,7 +95,10 @@ fn map_installer_error(
         },
         MoonshineModelInstallErrorKind::Cancelled => AsrError {
             kind: AsrErrorKind::Cancelled,
-            message: format!("{} model verification was cancelled.", model_display_name(architecture)),
+            message: format!(
+                "{} model verification was cancelled.",
+                model_display_name(architecture)
+            ),
             retryable: true,
         },
         MoonshineModelInstallErrorKind::InvalidManifest
@@ -182,6 +185,7 @@ impl StreamFactory for NativeStreamFactory {
 /// touched. No local failure is converted into a cloud recognition request.
 pub struct MoonshineStreamingEngine {
     architecture: MoonshineModelArchitecture,
+    #[cfg(test)]
     model_path: PathBuf,
     stream: Option<Box<dyn StreamBackend>>,
     emitted_lines: HashMap<u64, EmittedLineState>,
@@ -230,6 +234,7 @@ impl MoonshineStreamingEngine {
         let stream = factory.open(&model_path, architecture)?;
         Ok(Self {
             architecture,
+            #[cfg(test)]
             model_path,
             stream: Some(stream),
             emitted_lines: HashMap::new(),
@@ -237,10 +242,12 @@ impl MoonshineStreamingEngine {
         })
     }
 
+    #[cfg(test)]
     pub const fn architecture(&self) -> MoonshineModelArchitecture {
         self.architecture
     }
 
+    #[cfg(test)]
     pub fn model_path(&self) -> &Path {
         &self.model_path
     }
@@ -249,6 +256,7 @@ impl MoonshineStreamingEngine {
         MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ
     }
 
+    #[cfg(test)]
     pub fn is_active(&self) -> bool {
         self.stream.is_some() && !self.cancelled
     }
@@ -274,6 +282,7 @@ impl MoonshineStreamingEngine {
 
     /// Force the native streaming decoder to expose its latest transcript
     /// state without appending synthetic audio.
+    #[cfg(test)]
     pub fn flush(&mut self) -> Result<Vec<MoonshineTinyTranscriptUpdate>, AsrError> {
         self.ensure_active()?;
         let transcript = self.active_stream()?.transcribe(true)?;
@@ -290,6 +299,7 @@ impl MoonshineStreamingEngine {
 
     /// Cancel this engine and tear down its native stream. A cancelled engine
     /// cannot be reused; callers must construct a new engine for a new session.
+    #[cfg(test)]
     pub fn cancel(&mut self) -> Result<(), AsrError> {
         self.cancelled = true;
         self.stop()
