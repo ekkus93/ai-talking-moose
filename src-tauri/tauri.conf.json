@@ -50,7 +50,7 @@
       "entitlements": null
     },
     "resources": [
-      "native/macos/notices/**"
+      "native/macos/notices/"
     ]
   }
 }
