@@ -15,6 +15,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::{mpsc, oneshot};
+use tracing::debug;
 
 /// Hard bound for microphone chunks waiting on local Moonshine inference.
 ///
@@ -40,7 +41,7 @@ pub struct LocalAsrPipelineDiagnostics {
     pub last_error: Option<AsrError>,
 }
 
-pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(AsrEvent) + Send + Sync>;
+pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(LocalAsrPipelineEvent) + Send + Sync>;
 
 trait PipelineEngine: Send {
     fn input_sample_rate_hz(&self) -> u32;
@@ -265,15 +266,26 @@ impl LocalAsrPipeline {
             })?;
 
         match ready_rx.await {
-            Ok(Ok(())) => Ok(Self {
-                architecture,
-                input_sample_rate_hz: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
-                pcm_sender: Some(pcm_tx),
-                running,
-                stop_requested,
-                last_error,
-                worker: Some(worker),
-            }),
+            Ok(Ok(())) => {
+                let pipeline = Self {
+                    architecture,
+                    input_sample_rate_hz: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                    pcm_sender: Some(pcm_tx),
+                    running,
+                    stop_requested,
+                    last_error,
+                    worker: Some(worker),
+                };
+                let diagnostics = pipeline.diagnostics();
+                debug!(
+                    architecture = ?diagnostics.architecture,
+                    input_sample_rate_hz = diagnostics.input_sample_rate_hz,
+                    queue_capacity = diagnostics.queue_capacity,
+                    running = diagnostics.running,
+                    "Local ASR inference worker started"
+                );
+                Ok(pipeline)
+            }
             Ok(Err(error)) => {
                 join_finished_startup_worker(worker).await?;
                 Err(error)
