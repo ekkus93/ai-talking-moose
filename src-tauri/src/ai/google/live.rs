@@ -23,7 +23,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::{Error as WebSocketError, Message};
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tracing::{info, warn};
+use tracing::info;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 const SETUP_TIMEOUT: Duration = Duration::from_secs(8);

@@ -2,7 +2,7 @@ use crate::ai::google::{
     validate_live_model, validate_text_model, GoogleAuth, GoogleLiveProvider,
     GoogleModelDescriptor, GOOGLE_MODELS,
 };
-use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
+use crate::ai::traits::RealtimeConversationProvider;
 use crate::ai::types::LiveSessionConfig;
 use crate::app::state::{AppSettings, AppState};
 use crate::audio::capture::AudioCaptureDiagnostics;
