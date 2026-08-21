@@ -1,5 +1,5 @@
-pub mod session;
+pub(crate) mod session;
 pub mod transcript;
 
-pub use session::*;
+pub use session::{ConversationLifecycle, ConversationManager};
 pub use transcript::*;
