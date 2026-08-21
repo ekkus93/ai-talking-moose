@@ -50,7 +50,7 @@ jobs:
 
           printf '%s\n' \
             '0caca229919849ab26250f4bb75c47e9a6ec2888  src-tauri/src/commands/asr_models.rs' \
-            '37e0f878dc1917564ed77fdebd8ffc679a74c3f8  src-tauri/src/asr/pipeline.rs' \
+            '2e2955873be37757dc8bc56b67f0f903186ccdd5  src-tauri/src/asr/pipeline.rs' \
             '1a383a96a317e5a5628b1dbe9ab64de19f78ac75  src-tauri/src/asr/pipeline_tests.rs' \
             'b2bc11f601f30e460859b4466771cd98a84d8733  src-tauri/src/asr/lifecycle.rs' \
             '829315da7433e0b137a007b6c1f08411b5418906  src-tauri/src/asr/types.rs' \
