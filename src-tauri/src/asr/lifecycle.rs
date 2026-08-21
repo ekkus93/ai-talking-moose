@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 #[async_trait]
-pub trait LocalAsrResource: Send {
+pub(crate) trait LocalAsrResource: Send {
     async fn stop(&mut self) -> Result<(), AsrError>;
 
     fn diagnostics(&self) -> Option<LocalAsrRuntimeDiagnostics> {
@@ -24,7 +24,7 @@ pub struct LocalAsrLifecycle {
 }
 
 impl LocalAsrLifecycle {
-    pub async fn attach(
+    pub(crate) async fn attach(
         &self,
         generation: u64,
         mut resource: Box<dyn LocalAsrResource>,
@@ -57,7 +57,7 @@ impl LocalAsrLifecycle {
         self.active.lock().await.is_some()
     }
 
-    pub async fn diagnostics(&self) -> Option<LocalAsrRuntimeDiagnostics> {
+    pub(crate) async fn diagnostics(&self) -> Option<LocalAsrRuntimeDiagnostics> {
         self.active
             .lock()
             .await
