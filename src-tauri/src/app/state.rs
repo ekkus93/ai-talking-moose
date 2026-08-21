@@ -1,5 +1,8 @@
 use crate::ai::fake::{FakeConversationProvider, FakeSpeechSynthesizer, FakeTextModel};
-use crate::ai::google::{GoogleAuth, GoogleLiveProvider, GoogleSpeechSynthesizer, GoogleTextModel};
+use crate::ai::google::{
+    normalize_live_model, normalize_text_model, GoogleAuth, GoogleLiveProvider,
+    GoogleSpeechSynthesizer, GoogleTextModel, DEFAULT_LIVE_MODEL, DEFAULT_TEXT_MODEL,
+};
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::AsrMode;
@@ -72,7 +75,7 @@ pub struct AppSettings {
     pub verbosity: f32,
 }
 
-pub const CURRENT_SETTINGS_VERSION: u32 = 1;
+pub const CURRENT_SETTINGS_VERSION: u32 = 2;
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -101,8 +104,8 @@ impl Default for AppSettings {
             pitch: -1.5,
 
             provider: "google".to_string(),
-            live_model: "gemini-2.5-flash-native-audio-latest".to_string(),
-            text_model: "gemini-2.5-flash".to_string(),
+            live_model: DEFAULT_LIVE_MODEL.to_string(),
+            text_model: DEFAULT_TEXT_MODEL.to_string(),
             tts_model: "en-US-Standard-B".to_string(),
 
             microphone_permission_granted: true,
@@ -138,9 +141,19 @@ impl AppSettings {
         if !had_asr_mode {
             settings.asr_mode = AsrMode::GeminiLiveAudio;
         }
+
+        let normalized_live_model = normalize_live_model(&settings.live_model).to_string();
+        let normalized_text_model = normalize_text_model(&settings.text_model).to_string();
+        let models_migrated = normalized_live_model != settings.live_model
+            || normalized_text_model != settings.text_model;
+        settings.live_model = normalized_live_model;
+        settings.text_model = normalized_text_model;
         settings.settings_version = CURRENT_SETTINGS_VERSION;
 
-        Ok((settings, !had_asr_mode || !had_current_version))
+        Ok((
+            settings,
+            !had_asr_mode || !had_current_version || models_migrated,
+        ))
     }
 
     /// Apply user-editable behavior/personality settings to the live character config.

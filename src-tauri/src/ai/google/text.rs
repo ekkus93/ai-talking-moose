@@ -4,7 +4,7 @@ use crate::ai::types::{TextRequest, TextResponse};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 pub struct GoogleTextModel {
     auth: GoogleAuth,
@@ -31,6 +31,16 @@ impl GoogleTextModel {
             model, self.auth.api_key
         );
 
+        let mut generation_config = json!({
+            "maxOutputTokens": request.max_tokens.unwrap_or(1024)
+        });
+        // Current Gemini 3.x models reject the legacy sampling controls. Keep
+        // compatibility only for explicitly constructed older model IDs.
+        if !model.starts_with("gemini-3.") {
+            generation_config["temperature"] =
+                json!(request.temperature.unwrap_or(0.8));
+        }
+
         let mut body = json!({
             "contents": [
                 {
@@ -39,10 +49,7 @@ impl GoogleTextModel {
                     ]
                 }
             ],
-            "generationConfig": {
-                "temperature": request.temperature.unwrap_or(0.8),
-                "maxOutputTokens": request.max_tokens.unwrap_or(1024)
-            }
+            "generationConfig": generation_config
         });
 
         if let Some(ref sys) = request.system_instruction {
@@ -102,26 +109,6 @@ impl TextModel for GoogleTextModel {
             return Err("Google API key is not configured".to_string());
         }
 
-        // Try primary model name
-        match self
-            .try_generate_with_model(&self.model_name, &request)
-            .await
-        {
-            Ok(res) => Ok(res),
-            Err(e) if e.contains("404") => {
-                warn!("Primary model {} returned 404. Trying gemini-2.5-flash / gemini-flash-latest fallback...", self.model_name);
-                match self
-                    .try_generate_with_model("gemini-2.5-flash", &request)
-                    .await
-                {
-                    Ok(res) => Ok(res),
-                    Err(_) => {
-                        self.try_generate_with_model("gemini-flash-latest", &request)
-                            .await
-                    }
-                }
-            }
-            Err(e) => Err(e),
-        }
+        self.try_generate_with_model(&self.model_name, &request).await
     }
 }

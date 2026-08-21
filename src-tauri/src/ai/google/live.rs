@@ -1,4 +1,5 @@
 use crate::ai::google::auth::GoogleAuth;
+use crate::ai::google::config::{validate_live_model, LIVE_WEBSOCKET_ENDPOINT};
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
 use async_trait::async_trait;
@@ -165,10 +166,9 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
             return Err(ProviderError::from_kind(ProviderErrorKind::Auth));
         }
 
-        let url = format!(
-            "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key={}",
-            self.auth.api_key
-        );
+        validate_live_model(&config.model)
+            .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Model))?;
+        let url = format!("{LIVE_WEBSOCKET_ENDPOINT}?key={}", self.auth.api_key);
 
         let (ws_stream, _) = connect_async(&url)
             .await
@@ -182,13 +182,7 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
 
         // 1. Send Setup message
         let voice_name = config.voice_name.unwrap_or_else(|| "Puck".to_string());
-        let model_name = if config.model.is_empty() || config.model.contains("gemini-2.0") {
-            "models/gemini-2.5-flash-native-audio-latest".to_string()
-        } else if config.model.starts_with("models/") {
-            config.model.clone()
-        } else {
-            format!("models/{}", config.model)
-        };
+        let model_name = format!("models/{}", config.model);
 
         let setup_msg = json!({
             "setup": {
