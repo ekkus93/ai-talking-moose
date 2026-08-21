@@ -11,7 +11,7 @@ pub enum GoogleModelCapability {
     TextGeneration,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct GoogleModelDescriptor {
     pub id: &'static str,
     pub display_name: &'static str,
