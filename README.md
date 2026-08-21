@@ -2,65 +2,308 @@
 
 [![CI](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml/badge.svg)](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml)
 
-> A modern reimagining of the classic 1986 Macintosh desktop character, powered by Tauri 2, React, TypeScript, Rust, and Google Gemini Live.
+> A modern reimagining of the classic 1986 Macintosh desktop character, built with Tauri 2, React, TypeScript, Rust, local Moonshine ASR, and Google Gemini.
 
 ---
 
 ## Overview
 
-**Talking Moose AI** lives directly on your desktop inside a retro-styled Macintosh window. Rather than being a corporate support chatbot, the Moose is a dry-witted, humorous cartoon character:
-- **Ambient Reactions:** Observes permitted local computer events (like rapid application switching) and occasionally makes witty, deadpan remarks.
-- **Real-Time Spoken Conversation:** Click the Moose to engage in real-time voice conversations powered by **Google Gemini Live**.
-- **Instant Barge-In:** Speak while the Moose is talking and he will immediately stop, react, and listen.
-- **Retro Visuals:** Low-resolution integer-scaled pixel art sprite animation with amplitude-driven lip synchronization.
-- **Local Control & Privacy:** All memories and settings are stored locally in SQLite with granular opt-in permissions and a complete "Forget Everything" action.
+**Talking Moose AI** lives directly on your desktop inside a deliberately retro-styled Macintosh window. Rather than being a corporate support chatbot, the Moose is a dry-witted, humorous desktop character.
+
+- **Real-time spoken conversation:** Click the Moose to start a voice conversation.
+- **Local or cloud speech recognition:** Moonshine Tiny/Small provide local ASR; Gemini Live provides an explicitly selected cloud-audio mode.
+- **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
+- **Ambient reactions:** When explicitly enabled, the Moose can react to permitted local computer events.
+- **Retro visuals:** Low-resolution integer-scaled pixel art with amplitude-driven mouth animation.
+- **Local control and privacy:** Settings, optional memories, and optional transcripts are stored locally. Privacy-sensitive features default conservatively and local ASR does not silently fall back to cloud microphone upload.
 
 ---
 
 ## Architecture
 
 - **Frontend:** React 18, TypeScript, Tailwind CSS, Lucide icons, Zustand
-- **Desktop Shell & Backend:** Tauri 2, Rust, Tokio, CPAL (Audio I/O), Rusqlite, Tokio-Tungstenite
-- **AI Layer:** Google Gemini Live (WebSockets), Gemini Text (`gemini-2.0-flash-exp`), Google TTS / Puck Voice
+- **Desktop shell/backend:** Tauri 2, Rust, Tokio, CPAL, Rusqlite, Tokio-Tungstenite
+- **Speech recognition:** Local Moonshine streaming ASR plus optional Gemini Live cloud audio
+- **AI:** Google Gemini Live over WebSockets and Gemini text generation through the REST API
+- **Speech output:** Rust-owned TTS/audio playback pipeline
+- **Persistence:** SQLite for local application data and the platform secure credential store for the Google API key
+
+Gemini model IDs and capabilities are centralized in the Rust Google configuration layer rather than duplicated throughout the frontend.
 
 ---
 
-## Development & Build Commands
+## Development Environment
 
-### Prerequisites
-- Node.js >= 18
-- Rust & Cargo >= 1.75
-- Tauri 2 dependencies (WebKitGTK on Linux, Xcode Command Line Tools on macOS)
+CI is the reference environment. For the closest local match, use:
 
-### Quality & Verification Commands
+- **Node.js 22**
+- **npm** with the checked-in `package-lock.json`
+- **Rust stable** with the `rustfmt` and `clippy` components
+- **Tauri 2 system dependencies** for your operating system
+
+### Install Node.js
+
+Use any Node version manager you prefer, but select Node 22 before installing dependencies.
+
+Verify:
 
 ```bash
-# Complete ordinary quality gate: TypeScript, ESLint, Prettier, Vitest,
-# frontend production build, rustfmt, Clippy (-D warnings), and Rust tests.
-# Default tests do not require Google credentials or live APIs.
-npm run check:all
+node --version
+npm --version
+```
 
-# Run only one side when iterating locally.
-npm run check:frontend
-npm run check:rust
+### Install Rust
 
-# Start Tauri development app.
+Using `rustup`:
+
+```bash
+rustup toolchain install stable --component rustfmt --component clippy
+rustup default stable
+```
+
+Verify:
+
+```bash
+rustc --version
+cargo --version
+cargo fmt --version
+cargo clippy --version
+```
+
+### Linux system packages
+
+The GitHub Actions Rust job uses the following packages on Ubuntu:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+  build-essential \
+  libasound2-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  libssl-dev \
+  libwebkit2gtk-4.1-dev \
+  libxdo-dev
+```
+
+### macOS prerequisites
+
+Install the Xcode Command Line Tools:
+
+```bash
+xcode-select --install
+```
+
+The macOS bundle job in CI is the authoritative packaged-app smoke test.
+
+---
+
+## Clone and Install
+
+```bash
+git clone https://github.com/ekkus93/ai-talking-moose.git
+cd ai-talking-moose
+npm ci
+```
+
+`npm ci` is preferred over `npm install` for validation because CI uses the lockfile exactly.
+
+Cargo dependencies are resolved automatically by Cargo when running the Rust build/test commands.
+
+---
+
+## Run the Application
+
+Start the complete Tauri desktop application in development mode:
+
+```bash
 npm run tauri dev
+```
 
-# Production build.
+For frontend-only development with Vite:
+
+```bash
+npm run dev
+```
+
+---
+
+## Build
+
+### Frontend production build
+
+```bash
 npm run build
+```
+
+This runs TypeScript compilation followed by the Vite production build.
+
+### Rust release build
+
+```bash
 cargo build --manifest-path src-tauri/Cargo.toml --release
 ```
 
-The real Gemini Live integration test is intentionally excluded from ordinary test runs. To run it manually, opt in twice and provide a dedicated test credential:
+### Tauri application bundle
+
+This is the normal packaged application build and matches the non-tagged macOS CI smoke build:
+
+```bash
+npm run tauri build -- --bundles app
+```
+
+For a macOS application plus DMG, as used for tagged CI builds:
+
+```bash
+npm run tauri build -- --bundles app,dmg
+```
+
+GitHub Actions retains build artifacts only for tag-triggered workflows.
+
+---
+
+## Quality, Linting, Formatting, and Tests
+
+### Complete ordinary quality gate
+
+Run the same aggregate frontend/Rust validation intended for normal development:
+
+```bash
+npm run check:all
+```
+
+Default tests must not require a Google credential or contact live Google APIs.
+
+### Frontend quality gate
+
+```bash
+npm run check:frontend
+```
+
+Equivalent individual commands:
+
+```bash
+# TypeScript
+npm run typecheck
+
+# ESLint
+npm run lint
+
+# Prettier verification
+npm run format:check
+
+# Write Prettier formatting
+npm run format:write
+
+# Vitest
+npm test
+
+# Watch-mode Vitest
+npm run test:watch
+
+# Production frontend build
+npm run build
+```
+
+### Rust quality gate
+
+```bash
+npm run check:rust
+```
+
+Equivalent individual commands, matching CI:
+
+```bash
+# rustfmt
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+# Clippy; warnings are errors
+cargo clippy \
+  --manifest-path src-tauri/Cargo.toml \
+  --all-targets \
+  --all-features \
+  -- \
+  -D warnings
+
+# Rust tests
+cargo test \
+  --manifest-path src-tauri/Cargo.toml \
+  --all-targets \
+  --all-features
+```
+
+To apply Rust formatting before re-running the check:
+
+```bash
+cargo fmt --manifest-path src-tauri/Cargo.toml
+```
+
+---
+
+## Dependency Audits
+
+CI treats production dependency vulnerabilities as blocking.
+
+### Node production dependencies
+
+```bash
+npm audit --omit=dev --audit-level=high
+```
+
+Development-tool advisories are currently reported separately in CI:
+
+```bash
+npm audit --include=dev --audit-level=high
+```
+
+### Rust dependencies
+
+CI runs RustSec using `rustsec/audit-check`. Locally, if `cargo-audit` is installed:
+
+```bash
+cargo install cargo-audit
+cargo audit --file src-tauri/Cargo.lock
+```
+
+---
+
+## Optional Live Gemini Integration Test
+
+The real Gemini Live integration test is intentionally excluded from ordinary test runs. It must be explicitly enabled and supplied with a dedicated test credential:
 
 ```bash
 TALKING_MOOSE_ALLOW_LIVE_API=1 \
 TALKING_MOOSE_GOOGLE_API_KEY='...' \
-cargo test --manifest-path src-tauri/Cargo.toml --test test_gemini_live_asr -- --ignored
+cargo test \
+  --manifest-path src-tauri/Cargo.toml \
+  --test test_gemini_live_asr \
+  -- \
+  --ignored
 ```
 
-GitHub Actions runs the ordinary frontend and Rust gates, dependency audits, and a macOS Tauri smoke build. Build artifacts are retained only for tag-triggered workflows.
+Do not put a Google API key in source code, committed configuration, SQLite settings, ordinary test fixtures, or shell history intended for sharing.
+
+---
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on pushes to `master`, pull requests targeting `master`, tags, and manual dispatches.
+
+The normal CI gates include:
+
+- frontend type checking
+- ESLint
+- Prettier verification
+- Vitest
+- frontend production build
+- Rust formatting
+- Clippy with `-D warnings`
+- Rust tests
+- production Node dependency audit
+- RustSec dependency audit
+- macOS Tauri application bundle smoke build
+
+Tagged runs additionally build distributable macOS application/DMG bundles and retain those assets.
 
 ---
 
