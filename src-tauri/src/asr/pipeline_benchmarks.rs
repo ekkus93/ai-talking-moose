@@ -1,6 +1,29 @@
 use super::*;
+use crate::asr::moonshine::{model_manifest_info, MoonshineModelInstallCancellation};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+
+#[cfg(target_os = "macos")]
+fn benchmark_architecture_name(architecture: MoonshineModelArchitecture) -> &'static str {
+    match architecture {
+        MoonshineModelArchitecture::TinyStreaming => "tiny_streaming",
+        MoonshineModelArchitecture::SmallStreaming => "small_streaming",
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn assert_useful_transcript(text: &str) {
+    let normalized = text.to_ascii_lowercase();
+    let expected_words = ["fellow", "americans", "ask", "country", "you"];
+    let hits = expected_words
+        .iter()
+        .filter(|word| normalized.contains(*word))
+        .count();
+    assert!(
+        hits >= 3,
+        "native benchmark transcript is not recognizably derived from the pinned JFK corpus: {text:?}"
+    );
+}
 
 #[cfg(target_os = "macos")]
 async fn run_cpu_benchmark(architecture: MoonshineModelArchitecture) {
@@ -29,7 +52,27 @@ async fn run_cpu_benchmark(architecture: MoonshineModelArchitecture) {
     let installer = Arc::new(
         MoonshineModelInstaller::new(model_root).expect("failed to open benchmark model root"),
     );
-    let callback: LocalAsrPipelineEventCallback = Arc::new(|_| {});
+    if std::env::var("TALKING_MOOSE_ASR_BENCHMARK_INSTALL").as_deref() == Ok("1") {
+        let cancellation = MoonshineModelInstallCancellation::default();
+        let outcome = installer
+            .install(architecture, &cancellation)
+            .await
+            .expect("failed to install/verify the pinned Moonshine benchmark model");
+        println!(
+            "ASR015_MODEL_READY architecture={} model_id={} revision={} bytes={} disposition={:?}",
+            benchmark_architecture_name(architecture),
+            outcome.model_id,
+            outcome.revision,
+            outcome.installed_bytes,
+            outcome.disposition,
+        );
+    }
+
+    let events = Arc::new(Mutex::new(Vec::<AsrEvent>::new()));
+    let callback_events = events.clone();
+    let callback: LocalAsrPipelineEventCallback = Arc::new(move |event| {
+        callback_events.lock().push(event);
+    });
     let mut pipeline = match architecture {
         MoonshineModelArchitecture::TinyStreaming => {
             LocalAsrPipeline::start_tiny(installer, callback)
@@ -65,7 +108,34 @@ async fn run_cpu_benchmark(architecture: MoonshineModelArchitecture) {
         thread::sleep(Duration::from_millis(10));
     }
 
+    while !events
+        .lock()
+        .iter()
+        .any(|event| matches!(event, AsrEvent::FinalTranscript { .. }))
+    {
+        assert!(
+            pipeline.is_running(),
+            "benchmark pipeline stopped before a final transcript"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "benchmark final transcript timed out"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+
     let diagnostics = pipeline.diagnostics();
+    let final_transcript = events
+        .lock()
+        .iter()
+        .filter_map(|event| match event {
+            AsrEvent::FinalTranscript { text } if !text.trim().is_empty() => Some(text.trim()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_useful_transcript(&final_transcript);
+
     println!(
         concat!(
             "ASR015_BENCHMARK architecture={architecture:?} corpus={} ",
@@ -91,6 +161,39 @@ async fn run_cpu_benchmark(architecture: MoonshineModelArchitecture) {
     assert!(diagnostics.baseline_resident_memory_bytes.is_some());
     assert!(diagnostics.resident_memory_bytes.is_some());
     assert!(diagnostics.peak_resident_memory_bytes.is_some());
+
+    let model = model_manifest_info(architecture);
+    let phase = std::env::var("TALKING_MOOSE_ASR_BENCHMARK_PHASE")
+        .unwrap_or_else(|_| "unspecified".to_string());
+    let run = std::env::var("TALKING_MOOSE_ASR_BENCHMARK_RUN")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    let record = serde_json::json!({
+        "architecture": benchmark_architecture_name(architecture),
+        "phase": phase,
+        "run": run,
+        "model_id": model.id,
+        "model_revision": model.revision,
+        "model_expected_bytes": model.expected_bytes,
+        "runtime_release": model.runtime_release,
+        "accepted_chunks": accepted_chunks,
+        "dropped_chunks": dropped_chunks,
+        "first_partial_latency_ms": diagnostics.first_partial_latency_ms,
+        "first_final_latency_ms": diagnostics.first_final_latency_ms,
+        "last_transcription_latency_ms": diagnostics.last_transcription_latency_ms,
+        "processed_audio_ms": diagnostics.processed_audio_ms,
+        "inference_wall_time_ms": diagnostics.inference_wall_time_ms,
+        "real_time_factor": diagnostics.real_time_factor,
+        "process_cpu_time_ms": diagnostics.process_cpu_time_ms,
+        "average_cpu_utilization_percent": diagnostics.average_cpu_utilization_percent,
+        "baseline_resident_memory_bytes": diagnostics.baseline_resident_memory_bytes,
+        "resident_memory_bytes": diagnostics.resident_memory_bytes,
+        "peak_resident_memory_bytes": diagnostics.peak_resident_memory_bytes,
+        "last_error": diagnostics.last_error,
+        "final_transcript": final_transcript,
+    });
+    println!("ASR015_BENCHMARK_JSON={record}");
 
     pipeline.stop_and_join().await.unwrap();
 }

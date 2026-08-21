@@ -7,6 +7,8 @@ Recorded: 2026-08-21
 
 ASR-015 must measure local Moonshine behavior instead of inventing a minimum CPU requirement. Talking Moose therefore exposes the same bounded-pipeline measurements used by the application and provides an opt-in, hardware-dependent benchmark path for Moonshine Tiny Streaming and Small Streaming.
 
+The pinned Moonshine runtime intentionally ships ONNX Runtime's CPU execution provider only on every platform; its upstream execution-provider design explicitly states that shipped builds do not contain CoreML or NNAPI providers. The macOS acceptance measurements are therefore CPU-only rather than hidden Apple Neural Engine/CoreML results.
+
 Ordinary tests do **not** download a model, load the native Moonshine runtime, use a microphone, or contact Google.
 
 ## User-facing diagnostics
@@ -31,6 +33,8 @@ Memory is deliberately labeled **process RSS**. Moonshine/ONNX Runtime does not 
 RTF is `cumulative inference wall time / cumulative processed audio duration`. RTF below `1.0` means inference itself is faster than real time. Queue drops remain a separate acceptance signal because sustained recognition can still fail if the bounded eight-chunk ingress queue overloads.
 
 ## Representative corpus
+
+The supported-Mac acceptance automation uses `ggml-org/whisper.cpp` `samples/jfk.wav` pinned at commit `45f1593fd326b3435c04392e3151dff65967e523` and Git blob `3184d372cd2f8b804d3a540c70ec50d927b335d2`. The source is the 11-second English JFK excerpt already used by whisper.cpp for transcription/benchmark examples. `scripts/prepare_asr015_corpus.py` downloads that immutable source at acceptance time, verifies the Git blob identity, validates 16 kHz mono signed-16-bit PCM, strips the WAV container, appends exactly 2 seconds of silence for streaming finalization, and records both source and derived-corpus SHA-256 values. The audio is not stored in this repository.
 
 The supported-Mac acceptance run must use the same fixed speech corpus for Tiny and Small. The corpus must:
 
@@ -60,12 +64,14 @@ export TALKING_MOOSE_ASR_BENCHMARK=1
 export TALKING_MOOSE_ASR_BENCHMARK_MODEL_ROOT="$HOME/Library/Application Support/Talking Moose/models"
 export TALKING_MOOSE_ASR_BENCHMARK_PCM=/absolute/path/to/asr015-corpus.pcm
 
-cargo test --manifest-path src-tauri/Cargo.toml \
+cargo test --release --manifest-path src-tauri/Cargo.toml \
   asr015_cpu_benchmark_tiny_on_supported_mac \
   -- --ignored --nocapture
 ```
 
-Run the corresponding `asr015_cpu_benchmark_small_on_supported_mac` test for Small. The benchmark feeds one 100 ms chunk every 100 ms using the same non-blocking bounded ingress behavior as production and fails if the queue drops a chunk.
+Run the corresponding `asr015_cpu_benchmark_small_on_supported_mac` test for Small. The benchmark feeds one 100 ms chunk every 100 ms using the same non-blocking bounded ingress behavior as production and fails if the queue drops a chunk. Set `TALKING_MOOSE_ASR_BENCHMARK_INSTALL=1` when the benchmark should install or re-verify the pinned model through the production model installer before native startup.
+
+For reproducible project acceptance, use the opt-in `ASR-015 Native Acceptance` GitHub Actions workflow or run `scripts/run_asr015_macos_acceptance.sh "$(uname -m)"` on a supported Mac. The automation performs one warm-up plus five measured **release-mode** runs for Tiny, then the same for Small, using one verified model-install root and the fixed corpus above. It emits machine-readable `ASR015_BENCHMARK_JSON` records and renders a complete Markdown report with every run, medians, worst cases, hardware identity, corpus identity, CPU utilization, RTF, latency, RSS, and transcript evidence. Ordinary CI does not invoke this workflow and still downloads no model weights.
 
 ## Required report fields
 

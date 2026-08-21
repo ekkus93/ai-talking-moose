@@ -1,0 +1,61 @@
+name: ASR-015 Native Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - asr015-native-acceptance
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asr015-native-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  supported-mac-native-acceptance:
+    name: Tiny + Small native acceptance and CPU benchmark
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: asr015-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            asr015-${{ runner.os }}-${{ runner.arch }}-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-
+
+      - name: Validate pinned native/model provenance
+        run: |
+          python3 scripts/validate_moonshine_runtime_manifest.py
+          cargo test --manifest-path src-tauri/Cargo.toml \
+            asr::moonshine::manifest::tests::pinned_manifests_are_structurally_valid
+
+      - name: Prepare pinned Moonshine native runtime
+        run: bash scripts/prepare_moonshine_macos.sh arm64
+
+      - name: Run Tiny and Small native acceptance benchmark
+        id: benchmark
+        run: |
+          work_root="$RUNNER_TEMP/talking-moose-asr015"
+          bash scripts/run_asr015_macos_acceptance.sh arm64 "$work_root"
+          report="$work_root/ASR015_SUPPORTED_MAC_ACCEPTANCE.md"
+          test -s "$report"
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          echo "report=$report" >> "$GITHUB_OUTPUT"
