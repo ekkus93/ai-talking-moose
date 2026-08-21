@@ -122,15 +122,16 @@ fn malformed_known_frame_is_protocol_error_without_private_payload() {
 #[test]
 fn representative_text_and_binary_frames_parse() {
     let setup = decode_server_frame(Message::Text(
-        r#"{"setupComplete":{},"futureEnvelopeField":true}"#.to_string(),
+        r#"{"setupComplete":{},"futureEnvelopeField":true}"#.replace("\\\"", "\"")
     ))
     .unwrap()
     .unwrap();
     assert!(setup.setup_complete.is_some());
 
     let binary = decode_server_frame(Message::Binary(
-        br#"{"serverContent":{"outputTranscription":{"text":"binary hello"},"futureField":7}}"#
-            .to_vec(),
+        r#"{"serverContent":{"outputTranscription":{"text":"binary hello"},"futureField":7}}"#
+            .replace("\\\"", "\"")
+            .into_bytes(),
     ))
     .unwrap()
     .unwrap();
@@ -149,7 +150,7 @@ fn representative_text_and_binary_frames_parse() {
 fn setup_rejection_is_typed_and_private_payload_is_discarded() {
     let server = decode_server_frame(Message::Text(
         r#"{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"private transcript and api material"}}"#
-            .to_string(),
+            .replace("\\\"", "\""),
     ))
     .unwrap()
     .unwrap();
