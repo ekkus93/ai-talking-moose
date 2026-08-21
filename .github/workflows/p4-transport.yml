@@ -51,3 +51,5 @@ jobs:
 
           git commit -m "p4: complete Gemini Live protocol correctness"
           git push origin HEAD:master
+
+# Triggered via the Contents API so GitHub Actions receives a normal push event.
