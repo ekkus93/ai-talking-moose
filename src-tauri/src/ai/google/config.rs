@@ -41,7 +41,11 @@ pub const GOOGLE_MODELS: &[GoogleModelDescriptor] = &[
 
 pub fn supports_capability(model_id: &str, capability: GoogleModelCapability) -> bool {
     GOOGLE_MODELS.iter().any(|model| {
-        model.id == model_id && model.capabilities.iter().any(|candidate| *candidate == capability)
+        model.id == model_id
+            && model
+                .capabilities
+                .iter()
+                .any(|candidate| *candidate == capability)
     })
 }
 
