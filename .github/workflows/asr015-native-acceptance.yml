@@ -4,7 +4,20 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - asr015-native-acceptance
+      - master
+    paths:
+      - "src-tauri/src/asr/**"
+      - "src-tauri/build.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/native/**"
+      - "src-tauri/tauri.conf.json"
+      - "scripts/prepare_moonshine_macos.sh"
+      - "scripts/validate_moonshine_runtime_manifest.py"
+      - "scripts/prepare_asr015_corpus.py"
+      - "scripts/run_asr015_macos_acceptance.sh"
+      - "scripts/render_asr015_benchmark_report.py"
+      - ".github/workflows/asr015-native-acceptance.yml"
 
 permissions:
   contents: read
