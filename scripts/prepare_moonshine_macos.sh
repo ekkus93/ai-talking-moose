@@ -19,7 +19,7 @@ case "$arch" in
 esac
 [[ "$(uname -m)" == "$arch" ]] || fail "requested architecture $arch does not match host $(uname -m)"
 
-for command in git cmake python3 lipo otool install_name_tool; do
+for command in git cmake python3 lipo otool install_name_tool codesign; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 command -v git-lfs >/dev/null || git lfs version >/dev/null 2>&1 || fail "git-lfs is required"
@@ -96,11 +96,33 @@ done < <(otool -L "$stage_dir/libmoonshine.dylib" | awk '/libonnxruntime[^ ]*\.d
 install_name_tool -change "${ort_dependencies[0]}" "@rpath/libonnxruntime.$ort_version.dylib" "$stage_dir/libmoonshine.dylib"
 install_name_tool -id "@rpath/libonnxruntime.$ort_version.dylib" "$stage_dir/libonnxruntime.$ort_version.dylib"
 
+# install_name_tool invalidates any existing Mach-O signatures. Re-sign only after
+# every install-name/rpath mutation so the staged dylibs are valid for dlopen and
+# can later be replaced by the app's release signature during Tauri bundling.
+codesign --force --sign - "$stage_dir/libmoonshine.dylib"
+codesign --force --sign - "$stage_dir/libonnxruntime.$ort_version.dylib"
+
+developer_load_paths() {
+  local binary="$1"
+  {
+    # otool -L prints the inspected filename on line 1. That path is diagnostic
+    # output, not a Mach-O dependency, and on CI it naturally contains /Users/.
+    otool -L "$binary" | awk 'NR > 1 { print $1 }'
+    # Also inspect LC_RPATH entries, which are genuine runtime search paths but
+    # are not included in otool -L dependency output.
+    otool -l "$binary" | awk '
+      $1 == "cmd" && $2 == "LC_RPATH" { want_path = 1; next }
+      want_path && $1 == "path" { print $2; want_path = 0 }
+    '
+  } | grep -E '/opt/homebrew|/usr/local|/Users/|/private/tmp|/var/folders' || true
+}
+
 for dylib in "$stage_dir/libmoonshine.dylib" "$stage_dir/libonnxruntime.$ort_version.dylib"; do
   archs="$(lipo -archs "$dylib")"
   [[ " $archs " == *" $arch "* ]] || fail "$dylib does not contain architecture $arch"
-  if otool -L "$dylib" | grep -E '/opt/homebrew|/usr/local|/Users/|/private/tmp|/var/folders' >/dev/null; then
-    otool -L "$dylib" >&2
+  bad_load_paths="$(developer_load_paths "$dylib")"
+  if [[ -n "$bad_load_paths" ]]; then
+    printf '%s\n' "$bad_load_paths" >&2
     fail "$dylib contains a developer-machine load path"
   fi
 done
