@@ -121,4 +121,13 @@ mod tests {
         assert_eq!(normalize_text_model("gemini-2.5-flash"), DEFAULT_TEXT_MODEL);
         assert_eq!(normalize_text_model(DEFAULT_LIVE_MODEL), DEFAULT_TEXT_MODEL);
     }
+
+    #[test]
+    fn model_catalog_serializes_typed_capabilities() {
+        let value = serde_json::to_value(GOOGLE_MODELS).unwrap();
+        assert_eq!(value[0]["id"], DEFAULT_LIVE_MODEL);
+        assert_eq!(value[0]["capabilities"][0], "live_audio");
+        assert_eq!(value[1]["id"], DEFAULT_TEXT_MODEL);
+        assert_eq!(value[1]["capabilities"][0], "text_generation");
+    }
 }
