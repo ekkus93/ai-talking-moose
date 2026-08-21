@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { tauriBridge } from "../../lib/tauriBridge";
+import { AsrDiagnosticsPanel } from "./AsrDiagnosticsPanel";
 import { useMooseStore } from "../../stores/mooseStore";
 import {
   AsrMode,
@@ -374,6 +375,8 @@ export const AsrSettingsPanel: React.FC = () => {
           setting change.
         </p>
       </div>
+
+      <AsrDiagnosticsPanel key={settings.asr_mode} />
 
       {error && (
         <div

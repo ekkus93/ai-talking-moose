@@ -1,3 +1,4 @@
+use crate::asr::types::LocalAsrRuntimeDiagnostics;
 use crate::asr::AsrError;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
@@ -5,6 +6,10 @@ use tokio::sync::Mutex;
 #[async_trait]
 pub trait LocalAsrResource: Send {
     async fn stop(&mut self) -> Result<(), AsrError>;
+
+    fn diagnostics(&self) -> Option<LocalAsrRuntimeDiagnostics> {
+        None
+    }
 }
 
 struct ActiveLocalAsrResource {
@@ -50,6 +55,14 @@ impl LocalAsrLifecycle {
 
     pub async fn is_active(&self) -> bool {
         self.active.lock().await.is_some()
+    }
+
+    pub async fn diagnostics(&self) -> Option<LocalAsrRuntimeDiagnostics> {
+        self.active
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|active| active.resource.diagnostics())
     }
 
     pub async fn accepts_callback(&self, generation: u64) -> bool {

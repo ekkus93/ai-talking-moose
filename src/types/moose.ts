@@ -38,6 +38,23 @@ export type AsrMode =
   | "moonshine_small_streaming"
   | "gemini_live_audio";
 
+export type AsrErrorKind =
+  | "model_not_installed"
+  | "model_corrupt"
+  | "runtime_unavailable"
+  | "model_load_failed"
+  | "audio_input"
+  | "inference"
+  | "invalid_state"
+  | "cancelled"
+  | "internal";
+
+export interface AsrError {
+  kind: AsrErrorKind;
+  message: string;
+  retryable: boolean;
+}
+
 export type AsrModelInstallState =
   | "not_installed"
   | "downloading"
@@ -58,6 +75,33 @@ export interface AsrModelDescriptor {
   expected_bytes: number;
   active: boolean;
   error_message: string | null;
+}
+
+export interface AsrDiagnostics {
+  selected_mode: AsrMode;
+  engine_name: string;
+  model_id: string | null;
+  model_revision: string | null;
+  install_state: AsrModelInstallState | null;
+  input_sample_rate_hz: number;
+  streaming: boolean;
+  metrics_snapshot: boolean;
+  cpu_threads: number | null;
+  queue_depth: number;
+  queue_capacity: number;
+  dropped_chunks: number;
+  last_error: AsrError | null;
+  first_partial_latency_ms: number | null;
+  first_final_latency_ms: number | null;
+  last_transcription_latency_ms: number | null;
+  processed_audio_ms: number;
+  inference_wall_time_ms: number;
+  real_time_factor: number | null;
+  process_cpu_time_ms: number | null;
+  average_cpu_utilization_percent: number | null;
+  baseline_resident_memory_bytes: number | null;
+  resident_memory_bytes: number | null;
+  peak_resident_memory_bytes: number | null;
 }
 
 export interface AsrModelProgressEvent {

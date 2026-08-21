@@ -3,7 +3,9 @@ use crate::asr::moonshine::{
     MoonshineModelArchitecture, MoonshineModelInstaller, MoonshineSmallEngine, MoonshineTinyEngine,
     MoonshineTinyTranscriptUpdate, MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
 };
+use crate::asr::runtime_metrics::RuntimeMetrics;
 use crate::asr::transcript_state::{StreamingTranscriptUpdate, TranscriptStateMachine};
+use crate::asr::types::LocalAsrRuntimeDiagnostics;
 use crate::asr::{AsrError, AsrErrorKind, AsrEvent};
 use crate::audio::capture::AudioCapture;
 use crate::audio::resample::AudioResampler;
@@ -12,7 +14,7 @@ use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
@@ -30,8 +32,8 @@ const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 /// Provider-neutral event emitted by the dedicated local-ASR inference worker.
 pub type LocalAsrPipelineEvent = AsrEvent;
 
-/// Bounded-worker diagnostics used by later ASR diagnostics/UI work.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Bounded-worker diagnostics exposed to the ASR diagnostics command and tests.
+#[derive(Debug, Clone, PartialEq)]
 pub struct LocalAsrPipelineDiagnostics {
     pub architecture: MoonshineModelArchitecture,
     pub input_sample_rate_hz: u32,
@@ -39,6 +41,17 @@ pub struct LocalAsrPipelineDiagnostics {
     pub queue_capacity: usize,
     pub running: bool,
     pub last_error: Option<AsrError>,
+    pub first_partial_latency_ms: Option<u64>,
+    pub first_final_latency_ms: Option<u64>,
+    pub last_transcription_latency_ms: Option<u32>,
+    pub processed_audio_ms: u64,
+    pub inference_wall_time_ms: u64,
+    pub real_time_factor: Option<f32>,
+    pub process_cpu_time_ms: Option<u64>,
+    pub average_cpu_utilization_percent: Option<f32>,
+    pub baseline_resident_memory_bytes: Option<u64>,
+    pub resident_memory_bytes: Option<u64>,
+    pub peak_resident_memory_bytes: Option<u64>,
 }
 
 pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(LocalAsrPipelineEvent) + Send + Sync>;
@@ -77,7 +90,7 @@ pub struct LocalAsrPipeline {
     pcm_sender: Option<mpsc::Sender<Vec<u8>>>,
     running: Arc<AtomicBool>,
     stop_requested: Arc<AtomicBool>,
-    last_error: Arc<Mutex<Option<AsrError>>>,
+    metrics: Arc<Mutex<RuntimeMetrics>>,
     worker: Option<JoinHandle<Result<(), AsrError>>>,
 }
 
@@ -142,16 +155,38 @@ impl LocalAsrPipeline {
     }
 
     pub fn diagnostics(&self) -> LocalAsrPipelineDiagnostics {
+        let runtime = self.runtime_diagnostics();
         LocalAsrPipelineDiagnostics {
             architecture: self.architecture,
-            input_sample_rate_hz: self.input_sample_rate_hz,
-            queue_depth: self.pcm_sender.as_ref().map_or(0, |sender| {
-                LOCAL_ASR_QUEUE_CAPACITY_CHUNKS.saturating_sub(sender.capacity())
-            }),
-            queue_capacity: LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
-            running: self.is_running(),
-            last_error: self.last_error.lock().clone(),
+            input_sample_rate_hz: runtime.input_sample_rate_hz,
+            queue_depth: runtime.queue_depth,
+            queue_capacity: runtime.queue_capacity,
+            running: runtime.streaming,
+            last_error: runtime.last_error,
+            first_partial_latency_ms: runtime.first_partial_latency_ms,
+            first_final_latency_ms: runtime.first_final_latency_ms,
+            last_transcription_latency_ms: runtime.last_transcription_latency_ms,
+            processed_audio_ms: runtime.processed_audio_ms,
+            inference_wall_time_ms: runtime.inference_wall_time_ms,
+            real_time_factor: runtime.real_time_factor,
+            process_cpu_time_ms: runtime.process_cpu_time_ms,
+            average_cpu_utilization_percent: runtime.average_cpu_utilization_percent,
+            baseline_resident_memory_bytes: runtime.baseline_resident_memory_bytes,
+            resident_memory_bytes: runtime.resident_memory_bytes,
+            peak_resident_memory_bytes: runtime.peak_resident_memory_bytes,
         }
+    }
+
+    fn runtime_diagnostics(&self) -> LocalAsrRuntimeDiagnostics {
+        let queue_depth = self.pcm_sender.as_ref().map_or(0, |sender| {
+            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS.saturating_sub(sender.capacity())
+        });
+        self.metrics.lock().runtime_diagnostics(
+            self.input_sample_rate_hz,
+            queue_depth,
+            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            self.is_running(),
+        )
     }
 
     pub fn is_running(&self) -> bool {
@@ -209,12 +244,12 @@ impl LocalAsrPipeline {
         let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
         let running = Arc::new(AtomicBool::new(false));
         let stop_requested = Arc::new(AtomicBool::new(false));
-        let last_error = Arc::new(Mutex::new(None));
+        let metrics = Arc::new(Mutex::new(RuntimeMetrics::new()));
         let (ready_tx, ready_rx) = oneshot::channel::<Result<(), AsrError>>();
 
         let worker_running = running.clone();
         let worker_stop = stop_requested.clone();
-        let worker_last_error = last_error.clone();
+        let worker_metrics = metrics.clone();
         let worker_callback = event_callback.clone();
         let worker = thread::Builder::new()
             .name(match architecture {
@@ -229,6 +264,7 @@ impl LocalAsrPipeline {
                         return Err(error);
                     }
                 };
+                worker_metrics.lock().mark_engine_ready();
 
                 if engine.input_sample_rate_hz() != MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ {
                     let error = AsrError {
@@ -253,7 +289,7 @@ impl LocalAsrPipeline {
                     engine.as_mut(),
                     &mut pcm_rx,
                     &worker_stop,
-                    &worker_last_error,
+                    &worker_metrics,
                     &worker_callback,
                 );
                 worker_running.store(false, Ordering::SeqCst);
@@ -273,7 +309,7 @@ impl LocalAsrPipeline {
                     pcm_sender: Some(pcm_tx),
                     running,
                     stop_requested,
-                    last_error,
+                    metrics,
                     worker: Some(worker),
                 };
                 let diagnostics = pipeline.diagnostics();
@@ -313,6 +349,10 @@ impl LocalAsrResource for LocalAsrPipeline {
     async fn stop(&mut self) -> Result<(), AsrError> {
         self.stop_and_join().await
     }
+
+    fn diagnostics(&self) -> Option<LocalAsrRuntimeDiagnostics> {
+        Some(self.runtime_diagnostics())
+    }
 }
 
 impl Drop for LocalAsrPipeline {
@@ -329,7 +369,7 @@ fn run_worker(
     engine: &mut dyn PipelineEngine,
     pcm_rx: &mut mpsc::Receiver<Vec<u8>>,
     stop_requested: &AtomicBool,
-    last_error: &Mutex<Option<AsrError>>,
+    metrics: &Mutex<RuntimeMetrics>,
     event_callback: &LocalAsrPipelineEventCallback,
 ) -> Result<(), AsrError> {
     let mut terminal_error = None;
@@ -350,24 +390,36 @@ fn run_worker(
             continue;
         }
 
+        metrics.lock().record_audio_start_if_needed();
         let pcm = match decode_mono_i16_le(&bytes) {
             Ok(pcm) => pcm,
             Err(error) => {
-                record_terminal_error(last_error, event_callback, &error);
+                record_terminal_error(metrics, event_callback, &error);
                 terminal_error = Some(error);
                 break;
             }
         };
-        match engine.push_pcm(&pcm) {
+
+        let inference_started = Instant::now();
+        let inference_result = engine.push_pcm(&pcm);
+        metrics
+            .lock()
+            .record_inference(pcm.len(), inference_started.elapsed());
+
+        match inference_result {
             Ok(updates) => {
                 for update in updates {
-                    for event in transcript_state.apply(map_transcript_update(update)) {
+                    let emitted_events = transcript_state.apply(map_transcript_update(&update));
+                    metrics
+                        .lock()
+                        .record_transcript_events(&update, &emitted_events);
+                    for event in emitted_events {
                         event_callback(event);
                     }
                 }
             }
             Err(error) => {
-                record_terminal_error(last_error, event_callback, &error);
+                record_terminal_error(metrics, event_callback, &error);
                 terminal_error = Some(error);
                 break;
             }
@@ -376,7 +428,7 @@ fn run_worker(
 
     if let Err(stop_error) = engine.stop() {
         if terminal_error.is_none() {
-            record_terminal_error(last_error, event_callback, &stop_error);
+            record_terminal_error(metrics, event_callback, &stop_error);
             terminal_error = Some(stop_error);
         }
     }
@@ -401,28 +453,28 @@ fn decode_mono_i16_le(bytes: &[u8]) -> Result<Vec<f32>, AsrError> {
 }
 
 fn record_terminal_error(
-    last_error: &Mutex<Option<AsrError>>,
+    metrics: &Mutex<RuntimeMetrics>,
     event_callback: &LocalAsrPipelineEventCallback,
     error: &AsrError,
 ) {
-    *last_error.lock() = Some(error.clone());
+    metrics.lock().record_error(error);
     event_callback(AsrEvent::Error {
         error: error.clone(),
     });
 }
 
-fn map_transcript_update(update: MoonshineTinyTranscriptUpdate) -> StreamingTranscriptUpdate {
+fn map_transcript_update(update: &MoonshineTinyTranscriptUpdate) -> StreamingTranscriptUpdate {
     match update {
         MoonshineTinyTranscriptUpdate::Partial { line_id, text, .. } => {
             StreamingTranscriptUpdate::Partial {
-                segment_id: line_id,
-                text,
+                segment_id: *line_id,
+                text: text.clone(),
             }
         }
         MoonshineTinyTranscriptUpdate::Final { line_id, text, .. } => {
             StreamingTranscriptUpdate::Final {
-                segment_id: line_id,
-                text,
+                segment_id: *line_id,
+                text: text.clone(),
             }
         }
     }
@@ -459,3 +511,7 @@ async fn join_finished_startup_worker(
 #[cfg(test)]
 #[path = "pipeline_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "pipeline_benchmarks.rs"]
+mod benchmarks;

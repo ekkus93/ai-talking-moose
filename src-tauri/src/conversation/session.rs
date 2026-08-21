@@ -2,7 +2,6 @@ use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
 use crate::asr::lifecycle::LocalAsrLifecycle;
 use crate::asr::moonshine::MoonshineModelInstaller;
-use crate::asr::pipeline::{LocalAsrPipeline, LocalAsrPipelineEventCallback};
 use crate::asr::{AsrEvent, AsrMode};
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
@@ -17,6 +16,9 @@ use tracing::warn;
 use uuid::Uuid;
 
 mod event_loop;
+mod local_asr;
+
+use local_asr::{LocalAsrDiagnosticsStore, LocalAsrPreparation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -141,6 +143,7 @@ pub struct ConversationManager {
     lifecycle_callback: Arc<SyncMutex<Option<LifecycleCallback>>>,
     transcript_callback: Arc<SyncMutex<Option<TranscriptCallback>>>,
     local_asr: Arc<LocalAsrLifecycle>,
+    local_asr_diagnostics: Arc<LocalAsrDiagnosticsStore>,
     operation_lock: Arc<AsyncMutex<()>>,
 }
 
@@ -158,6 +161,7 @@ impl ConversationManager {
             lifecycle_callback: Arc::new(SyncMutex::new(None)),
             transcript_callback: Arc::new(SyncMutex::new(None)),
             local_asr: Arc::new(LocalAsrLifecycle::default()),
+            local_asr_diagnostics: Arc::new(LocalAsrDiagnosticsStore::default()),
             operation_lock: Arc::new(AsyncMutex::new(())),
         }
     }
@@ -242,12 +246,9 @@ impl ConversationManager {
 
         capture.lock().stop();
         playback.flush();
-        if let Err(error_value) = self.local_asr.stop_and_clear().await {
-            warn!(
-                kind = ?error_value.kind,
-                "Local ASR resource teardown reported an error"
-            );
-        }
+        let active_asr_mode = *self.active_asr_mode.lock();
+        self.stop_local_asr_for_shutdown(active_asr_mode, &capture)
+            .await;
 
         let mut session_lock = self.live_session.lock().await;
         if let Some(mut session) = session_lock.take() {
@@ -389,18 +390,6 @@ impl ConversationManager {
         Ok(true)
     }
 
-    async fn stop_provisional_local_asr(pipeline: &mut Option<LocalAsrPipeline>) {
-        let Some(mut pipeline) = pipeline.take() else {
-            return;
-        };
-        if let Err(error) = pipeline.stop_and_join().await {
-            warn!(
-                kind = ?error.kind,
-                "Failed to stop provisional local ASR pipeline"
-            );
-        }
-    }
-
     pub async fn start_session(&self, request: ConversationStartRequest) -> Result<String, String> {
         let _operation_guard = self.operation_lock.lock().await;
         self.shutdown_locked(
@@ -445,105 +434,21 @@ impl ConversationManager {
             Some(&lifecycle_callback),
         );
 
-        // Local ASR is prepared before opening the cloud Live session. This fails closed for a
-        // missing/corrupt model or unavailable native runtime before microphone capture starts and
-        // avoids opening an unnecessary provider session when the local prerequisite is invalid.
-        let mut local_pipeline = if matches!(
-            asr_mode,
-            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
-        ) {
-            let installer = match moonshine_installer {
-                Some(installer) => installer,
-                None => {
-                    Self::set_lifecycle(
-                        &self.lifecycle,
-                        ConversationLifecycle::Failed,
-                        Some(&lifecycle_callback),
-                    );
-                    state_callback(CharacterState::Error);
-                    return Err(
-                        "Local Moonshine ASR is selected, but the model installer is unavailable. No microphone audio was sent."
-                            .to_string(),
-                    );
-                }
-            };
-            let manager_for_asr = self.clone();
-            let session_id_for_asr = session_id.clone();
-            let capture_for_asr = capture.clone();
-            let playback_for_asr = playback.clone();
-            let state_for_asr = state_callback.clone();
-            let provider_error_for_asr = provider_error_callback.clone();
-            let event_callback: LocalAsrPipelineEventCallback = Arc::new(move |event| {
-                let manager = manager_for_asr.clone();
-                let session_id = session_id_for_asr.clone();
-                let capture = capture_for_asr.clone();
-                let playback = playback_for_asr.clone();
-                let state_callback = state_for_asr.clone();
-                let provider_error_callback = provider_error_for_asr.clone();
-                tauri::async_runtime::spawn(async move {
-                    match event {
-                        AsrEvent::Error { error } => {
-                            let cleaned = manager
-                                .shutdown_if_generation_current(
-                                    generation,
-                                    capture,
-                                    playback,
-                                    ConversationLifecycle::Failed,
-                                )
-                                .await;
-                            if cleaned {
-                                warn!(kind = ?error.kind, "Local ASR inference terminated");
-                                state_callback(CharacterState::Error);
-                            }
-                        }
-                        event => {
-                            if let Err(error) = manager
-                                .handle_local_asr_event(generation, &session_id, event)
-                                .await
-                            {
-                                let cleaned = manager
-                                    .shutdown_if_generation_current(
-                                        generation,
-                                        capture,
-                                        playback,
-                                        ConversationLifecycle::Failed,
-                                    )
-                                    .await;
-                                if cleaned {
-                                    provider_error_callback(error);
-                                    state_callback(CharacterState::Error);
-                                }
-                            }
-                        }
-                    }
-                });
-            });
-
-            let pipeline_result = match asr_mode {
-                AsrMode::MoonshineTinyStreaming => {
-                    LocalAsrPipeline::start_tiny(installer, event_callback).await
-                }
-                AsrMode::MoonshineSmallStreaming => {
-                    LocalAsrPipeline::start_small(installer, event_callback).await
-                }
-                AsrMode::GeminiLiveAudio => unreachable!("cloud mode does not create local ASR"),
-            };
-
-            match pipeline_result {
-                Ok(pipeline) => Some(pipeline),
-                Err(error) => {
-                    Self::set_lifecycle(
-                        &self.lifecycle,
-                        ConversationLifecycle::Failed,
-                        Some(&lifecycle_callback),
-                    );
-                    state_callback(CharacterState::Error);
-                    return Err(error.message);
-                }
-            }
-        } else {
-            None
-        };
+        // Local ASR is prepared before opening the cloud Live session. The focused helper
+        // fails closed before microphone capture or provider traffic if local prerequisites fail.
+        let mut local_pipeline = self
+            .prepare_local_asr(LocalAsrPreparation {
+                generation,
+                asr_mode,
+                installer: moonshine_installer,
+                session_id: session_id.clone(),
+                capture: capture.clone(),
+                playback: playback.clone(),
+                state_callback: state_callback.clone(),
+                lifecycle_callback: lifecycle_callback.clone(),
+                provider_error_callback: provider_error_callback.clone(),
+            })
+            .await?;
 
         let input_sample_rate = config.sample_rate_in;
         let output_sample_rate = config.sample_rate_out;
@@ -583,7 +488,11 @@ impl ConversationManager {
                 .as_ref()
                 .expect("local Moonshine mode must have a provisional ASR pipeline")
                 .start_capture(&mut capture.lock(), input_device, Some(level_tx))
-                .map_err(|error| error.message),
+                .map_err(|error| {
+                    self.local_asr_diagnostics
+                        .remember_error(asr_mode, error.clone());
+                    error.message
+                }),
             AsrMode::GeminiLiveAudio => {
                 let (pcm_tx, pcm_rx) = mpsc::channel::<Vec<u8>>(32);
                 let result = capture
@@ -613,6 +522,8 @@ impl ConversationManager {
 
         if let Some(pipeline) = local_pipeline.take() {
             if let Err(error) = self.local_asr.attach(generation, Box::new(pipeline)).await {
+                self.local_asr_diagnostics
+                    .remember_error(asr_mode, error.clone());
                 capture.lock().stop();
                 playback.flush();
                 Self::close_provisional_session(&mut session).await;
@@ -766,3 +677,7 @@ impl Default for ConversationManager {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "session/diagnostics_tests.rs"]
+mod diagnostics_tests;

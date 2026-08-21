@@ -21,7 +21,7 @@ pub struct AsrModelProgressEvent {
     pub current_file: Option<String>,
 }
 
-fn architecture_for_mode(mode: AsrMode) -> Result<MoonshineModelArchitecture, String> {
+pub(super) fn architecture_for_mode(mode: AsrMode) -> Result<MoonshineModelArchitecture, String> {
     match mode {
         AsrMode::MoonshineTinyStreaming => Ok(MoonshineModelArchitecture::TinyStreaming),
         AsrMode::MoonshineSmallStreaming => Ok(MoonshineModelArchitecture::SmallStreaming),
@@ -94,7 +94,7 @@ fn descriptor_for_architecture(
     }
 }
 
-async fn load_descriptor(
+pub(super) async fn load_descriptor(
     installer: Arc<MoonshineModelInstaller>,
     architecture: MoonshineModelArchitecture,
     active: bool,
@@ -115,7 +115,7 @@ fn model_is_in_use(
     active_mode == Some(requested_mode) || (lifecycle_busy && selected_mode == requested_mode)
 }
 
-fn model_in_use(state: &AppState, mode: AsrMode) -> bool {
+pub(super) fn model_in_use(state: &AppState, mode: AsrMode) -> bool {
     let lifecycle_busy = !matches!(
         state.conversation_mgr.lifecycle(),
         ConversationLifecycle::Idle | ConversationLifecycle::Failed

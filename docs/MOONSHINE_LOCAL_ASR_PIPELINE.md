@@ -1,7 +1,7 @@
 # Moonshine Local ASR Pipeline
 
-Status: **V1R-ASR-008/009/012 Tiny + Small production lifecycle integrated**
-Recorded: 2026-08-20
+Status: **V1R-ASR-008/009/012/015 Tiny + Small lifecycle and diagnostics integrated**
+Recorded: 2026-08-21
 
 ## Ownership
 
@@ -91,4 +91,4 @@ Moonshine Tiny and Small now share the same bounded local pipeline and lifecycle
 - worker running state;
 - last typed terminal ASR error.
 
-ASR-015 will aggregate these values into the user-facing diagnostics surface and add measured CPU utilization, real-time factor, and peak/steady memory. ASR-008 only makes the existing pipeline diagnostics architecture-aware so those measurements can be attributed to Tiny versus Small without inventing benchmark numbers.
+ASR-015 now aggregates these values into the user-facing diagnostics surface and adds first-useful transcript latency, native decode latency, cumulative real-time factor, process CPU utilization, and baseline/current/highest-sampled process RSS. Process RSS is labeled honestly rather than presented as model-exclusive memory. The supported-Mac Tiny/Small benchmark protocol is documented in `MOONSHINE_CPU_BENCHMARK.md`; the actual hardware evidence remains intentionally open until it is measured. Runtime sampling is isolated in `asr/runtime_metrics.rs`, diagnostics composition/querying in `commands/asr_diagnostics.rs`, and retained conversation snapshots/errors in `conversation/session/local_asr.rs`, keeping the inference pipeline and conversation coordinator focused on orchestration.

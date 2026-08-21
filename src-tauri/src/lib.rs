@@ -73,6 +73,7 @@ pub fn run() {
             get_google_models,
             update_settings,
             get_asr_models,
+            get_asr_diagnostics,
             install_asr_model,
             delete_asr_model,
             set_google_api_key,

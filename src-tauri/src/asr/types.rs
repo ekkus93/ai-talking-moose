@@ -71,7 +71,35 @@ pub struct AsrModelDescriptor {
     pub error_message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Live metrics owned by one active local-ASR pipeline.
+///
+/// Memory values are process RSS snapshots because the native Moonshine/ONNX
+/// allocator is process-global and does not expose a reliable per-model RSS.
+/// `baseline_resident_memory_bytes` is sampled before the native model is
+/// opened, so callers can derive a session-local incremental footprint without
+/// pretending the process-level measurement is model-exclusive.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) struct LocalAsrRuntimeDiagnostics {
+    pub input_sample_rate_hz: u32,
+    pub streaming: bool,
+    pub metrics_snapshot: bool,
+    pub queue_depth: usize,
+    pub queue_capacity: usize,
+    pub last_error: Option<AsrError>,
+    pub first_partial_latency_ms: Option<u64>,
+    pub first_final_latency_ms: Option<u64>,
+    pub last_transcription_latency_ms: Option<u32>,
+    pub processed_audio_ms: u64,
+    pub inference_wall_time_ms: u64,
+    pub real_time_factor: Option<f32>,
+    pub process_cpu_time_ms: Option<u64>,
+    pub average_cpu_utilization_percent: Option<f32>,
+    pub baseline_resident_memory_bytes: Option<u64>,
+    pub resident_memory_bytes: Option<u64>,
+    pub peak_resident_memory_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AsrDiagnostics {
     pub selected_mode: AsrMode,
     pub engine_name: String,
@@ -80,10 +108,23 @@ pub struct AsrDiagnostics {
     pub install_state: Option<AsrModelInstallState>,
     pub input_sample_rate_hz: u32,
     pub streaming: bool,
+    pub metrics_snapshot: bool,
     pub cpu_threads: Option<usize>,
     pub queue_depth: usize,
+    pub queue_capacity: usize,
     pub dropped_chunks: u64,
     pub last_error: Option<AsrError>,
+    pub first_partial_latency_ms: Option<u64>,
+    pub first_final_latency_ms: Option<u64>,
+    pub last_transcription_latency_ms: Option<u32>,
+    pub processed_audio_ms: u64,
+    pub inference_wall_time_ms: u64,
+    pub real_time_factor: Option<f32>,
+    pub process_cpu_time_ms: Option<u64>,
+    pub average_cpu_utilization_percent: Option<f32>,
+    pub baseline_resident_memory_bytes: Option<u64>,
+    pub resident_memory_bytes: Option<u64>,
+    pub peak_resident_memory_bytes: Option<u64>,
 }
 
 #[cfg(test)]
