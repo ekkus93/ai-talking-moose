@@ -7,6 +7,7 @@ use super::runtime::{
 use crate::asr::{AsrError, AsrErrorKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tracing::debug;
 
 /// Moonshine's V1 local-ASR input contract for Tiny and Small streaming models.
 ///
@@ -15,6 +16,7 @@ use std::path::{Path, PathBuf};
 /// cloud provider and never falls back to Gemini Live audio recognition.
 pub const MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ: u32 = 16_000;
 /// Moonshine Small uses the same 16 kHz mono PCM input contract as Tiny.
+#[cfg(test)]
 pub const MOONSHINE_SMALL_INPUT_SAMPLE_RATE_HZ: u32 = MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ;
 
 /// One meaningful transcript change emitted by the Tiny streaming engine.
@@ -34,9 +36,6 @@ pub enum MoonshineTinyTranscriptUpdate {
         latency_ms: u32,
     },
 }
-
-/// Small emits the same native-line update shape as Tiny.
-pub type MoonshineSmallTranscriptUpdate = MoonshineTinyTranscriptUpdate;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct EmittedLineState {
@@ -164,6 +163,11 @@ impl StreamFactory for NativeStreamFactory {
         architecture: MoonshineModelArchitecture,
     ) -> Result<Box<dyn StreamBackend>, AsrError> {
         let transcriber = MoonshineTranscriber::load(model_path, architecture)?;
+        debug!(
+            architecture = ?architecture,
+            runtime_version = transcriber.runtime_version(),
+            "Moonshine transcriber loaded"
+        );
         let mut stream = transcriber.create_stream()?;
         stream.start()?;
         Ok(Box::new(NativeStreamBackend { stream }))
