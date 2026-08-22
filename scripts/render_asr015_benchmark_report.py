@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import statistics
 from collections import defaultdict
@@ -68,6 +69,18 @@ def main() -> int:
             if not str(record.get("final_transcript", "")).strip():
                 raise SystemExit(f"{architecture} run has no useful final transcript text")
 
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    repository = os.environ.get("GITHUB_REPOSITORY")
+    run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT")
+    run_identity: list[str] = []
+    if run_id and repository:
+        server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+        run_identity.append(
+            f"- GitHub Actions run: `{server_url}/{repository}/actions/runs/{run_id}`"
+        )
+        if run_attempt:
+            run_identity.append(f"- Run attempt: `{run_attempt}`")
+
     lines = [
         "# ASR-015 supported-Mac native acceptance report",
         "",
@@ -83,6 +96,7 @@ def main() -> int:
         f"- Architecture: `{hardware['architecture']}`",
         f"- Low-power mode: `{hardware['low_power_mode']}`",
         f"- Talking Moose commit: `{args.commit}`",
+        *run_identity,
         "",
         "This is the minimum **measured** CPU reference established by this acceptance run. "
         "No slower Mac CPU is claimed supported by this evidence.",
