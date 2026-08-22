@@ -1,4 +1,5 @@
 use crate::ai::types::{LiveSessionConfig, TtsRequest};
+use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 #[cfg(test)]
 use crate::asr::AsrMode;
@@ -61,6 +62,9 @@ pub async fn start_conversation<R: Runtime>(
         return Err("Moose is currently muted".to_string());
     }
 
+    // Prevent a settings update from committing a new ASR/provider/device selection while this
+    // start request is still constructing or activating the old graph.
+    let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
     prepare_character_for_conversation(state.inner(), &app)?;
     let provider = state.get_live_provider();
