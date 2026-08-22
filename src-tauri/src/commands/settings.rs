@@ -14,7 +14,6 @@ use crate::audio::permissions::{
     microphone_permission_state, request_microphone_permission, MicrophonePermissionState,
 };
 use crate::audio::playback::AudioPlaybackDiagnostics;
-use crate::character::behavior::BehaviorEngine;
 use crate::character::state::{transition_character_state, CharacterState};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -41,10 +40,6 @@ pub struct AudioDiagnostics {
 pub struct MicrophoneTestResult {
     pub peak_level: f32,
     pub diagnostics: AudioDiagnostics,
-}
-
-fn synchronize_behavior_engine(settings: &AppSettings, engine: &mut BehaviorEngine) {
-    settings.apply_to_character_config(&mut engine.config);
 }
 
 fn active_conversation_connection_test_result(is_active: bool) -> Option<ConnectionTestResult> {
@@ -308,6 +303,7 @@ pub fn test_audio_output(state: State<'_, AppState>) -> Result<AudioDiagnostics,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::character::behavior::BehaviorEngine;
     use crate::character::personality::CharacterConfig;
 
     #[test]
@@ -323,7 +319,7 @@ mod tests {
             ..Default::default()
         };
 
-        synchronize_behavior_engine(&settings, &mut engine);
+        settings.apply_to_character_config(&mut engine.config);
 
         assert!(!engine.config.behavior.unsolicited_comments);
         assert_eq!(engine.config.personality.talkativeness, 0.93);
