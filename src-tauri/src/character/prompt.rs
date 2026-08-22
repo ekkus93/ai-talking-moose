@@ -4,11 +4,9 @@ pub(crate) const MAX_SYSTEM_INSTRUCTION_CHARS: usize = 12_000;
 pub(crate) const MAX_RULES_CHARS: usize = 3_000;
 pub(crate) const MAX_MEMORY_CONTEXT_CHARS: usize = 3_000;
 pub(crate) const MAX_OBSERVATION_CONTEXT_CHARS: usize = 1_500;
-// Tool results and conversation transcript history are intentionally not injected by
-// PromptBuilder today. Their V1 budget is therefore zero until an explicit bounded
-// input surface is added.
-pub(crate) const MAX_TOOL_CONTEXT_CHARS: usize = 0;
-pub(crate) const MAX_TRANSCRIPT_CONTEXT_CHARS: usize = 0;
+// Tool results and conversation transcript history are intentionally not accepted by
+// PromptBuilder. Those contexts remain fail-closed until explicit bounded input
+// surfaces are added.
 pub(crate) const MAX_AMBIENT_EVENT_CHARS: usize = 600;
 pub(crate) const MAX_AMBIENT_PROMPT_CHARS: usize = 13_000;
 
@@ -174,12 +172,6 @@ mod tests {
         assert!(prompt.contains("User is a software developer"));
         assert!(prompt.contains("Active App: VS Code"));
         assert!(prompt.contains("ABSOLUTELY FORBIDDEN"));
-    }
-
-    #[test]
-    fn tool_and_transcript_context_are_fail_closed_until_explicitly_supported() {
-        assert_eq!(MAX_TOOL_CONTEXT_CHARS, 0);
-        assert_eq!(MAX_TRANSCRIPT_CONTEXT_CHARS, 0);
     }
 
     #[test]
