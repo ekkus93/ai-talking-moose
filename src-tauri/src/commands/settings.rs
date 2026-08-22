@@ -1,9 +1,12 @@
 use crate::ai::google::{
-    validate_live_model, validate_text_model, GoogleAuth, GoogleLiveProvider,
-    GoogleModelDescriptor, GOOGLE_MODELS,
+    validate_live_model, GoogleAuth, GoogleLiveProvider, GoogleModelDescriptor, GOOGLE_MODELS,
 };
 use crate::ai::traits::RealtimeConversationProvider;
 use crate::ai::types::LiveSessionConfig;
+use crate::app::settings_policy::{
+    conversation_restart_required, persist_and_apply_settings, settings_runtime_lock,
+    validate_app_settings, validate_selected_device,
+};
 use crate::app::state::{AppSettings, AppState};
 use crate::audio::capture::AudioCaptureDiagnostics;
 use crate::audio::devices::{AudioDeviceInfo, AudioDeviceManager};
@@ -17,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Runtime, State};
 use tokio::sync::mpsc;
+use tracing::warn;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectionTestResult {
@@ -48,6 +52,21 @@ fn active_conversation_connection_test_result(is_active: bool) -> Option<Connect
         success: false,
         message: "Stop the active conversation before testing Gemini connectivity.".to_string(),
     })
+}
+
+fn validate_changed_audio_devices(
+    previous: &AppSettings,
+    next: &AppSettings,
+) -> Result<(), String> {
+    if previous.input_device != next.input_device && next.input_device.is_some() {
+        let available = AudioDeviceManager::list_input_devices()?;
+        validate_selected_device(next.input_device.as_deref(), &available, "input")?;
+    }
+    if previous.output_device != next.output_device && next.output_device.is_some() {
+        let available = AudioDeviceManager::list_output_devices()?;
+        validate_selected_device(next.output_device.as_deref(), &available, "output")?;
+    }
+    Ok(())
 }
 
 fn collect_audio_diagnostics(state: &AppState) -> AudioDiagnostics {
@@ -91,36 +110,42 @@ pub async fn update_settings<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
+    // Serialize the entire settings commit with conversation startup. A provider/ASR/device
+    // change therefore cannot race a start that already captured the old configuration.
+    let _settings_guard = settings_runtime_lock().lock().await;
+
     new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
-    new_settings.microphone_permission_granted = microphone_permission_state().is_granted();
-    if !matches!(new_settings.provider.as_str(), "google" | "fake") {
-        return Err("unsupported AI provider".to_string());
-    }
-    validate_live_model(&new_settings.live_model)?;
-    validate_text_model(&new_settings.text_model)?;
+    validate_app_settings(&new_settings)?;
 
     let previous = state.settings.read().clone();
-    let requires_conversation_teardown = previous.asr_mode != new_settings.asr_mode
-        || previous.provider != new_settings.provider
-        || previous.live_model != new_settings.live_model;
-    if requires_conversation_teardown && state.conversation_mgr.is_active() {
+    validate_changed_audio_devices(&previous, &new_settings)?;
+    let restart_required = conversation_restart_required(&previous, &new_settings);
+
+    // Persist first. If SQLite rejects the write, no runtime settings or active conversation
+    // state has been changed.
+    persist_and_apply_settings(
+        state.db.as_ref(),
+        state.settings.as_ref(),
+        state.behavior_engine.as_ref(),
+        &new_settings,
+    )?;
+
+    if restart_required && state.conversation_mgr.is_active() {
+        // Privacy-preserving restart policy: tear down the old graph and require a fresh explicit
+        // Start action. Never auto-open the microphone merely because a setting changed,
+        // especially when switching to Gemini Live cloud audio.
         state
             .conversation_mgr
             .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
             .await;
-        transition_character_state(&state.character_state, CharacterState::Idle)?;
-        let _ = app.emit("moose://state", CharacterState::Idle);
+        if let Err(error) = transition_character_state(&state.character_state, CharacterState::Idle)
+        {
+            warn!(error = %error, "Conversation stopped after settings change but character state could not transition to Idle");
+        } else {
+            let _ = app.emit("moose://state", CharacterState::Idle);
+        }
     }
 
-    let json_str = serde_json::to_string(&new_settings).map_err(|error| error.to_string())?;
-    state
-        .db
-        .set_setting("app_settings", &json_str)
-        .map_err(|error| error.to_string())?;
-
-    *state.settings.write() = new_settings.clone();
-    let mut engine = state.behavior_engine.lock();
-    synchronize_behavior_engine(&new_settings, &mut engine);
     Ok(())
 }
 
