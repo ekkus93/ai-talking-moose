@@ -41,12 +41,7 @@ pub(crate) fn persist_window_position(
     db: &Database,
     position: WindowPosition,
 ) -> Result<(), String> {
-    persist_window_position_with_coordination(
-        db,
-        position,
-        &PERSIST_GENERATION,
-        &PERSIST_LOCK,
-    )
+    persist_window_position_with_coordination(db, position, &PERSIST_GENERATION, &PERSIST_LOCK)
 }
 
 fn persist_window_position_with_coordination(
@@ -63,10 +58,7 @@ fn persist_window_position_with_coordination(
     persist_window_position_unlocked(db, position)
 }
 
-fn persist_window_position_unlocked(
-    db: &Database,
-    position: WindowPosition,
-) -> Result<(), String> {
+fn persist_window_position_unlocked(db: &Database, position: WindowPosition) -> Result<(), String> {
     let json = serde_json::to_string(&position).map_err(|error| error.to_string())?;
     db.set_setting(WINDOW_POSITION_SETTING, &json)
         .map_err(|error| error.to_string())
