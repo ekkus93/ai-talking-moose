@@ -143,10 +143,7 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
     transition_and_emit(state, app, CharacterState::Talking)?;
     let _ = app.emit("moose://speech-bubble", &text);
     speak_standalone(&text, state).await?;
-    state
-        .behavior_engine
-        .lock()
-        .record_ambient_delivery(&event);
+    state.behavior_engine.lock().record_ambient_delivery(&event);
     Ok(Some(text))
 }
 
@@ -218,8 +215,14 @@ mod tests {
             &state,
             AmbientEventCategory::WindowTitle
         ));
-        assert!(ambient_privacy_allowed(&state, AmbientEventCategory::Manual));
-        assert!(!ambient_privacy_allowed(&state, AmbientEventCategory::Other));
+        assert!(ambient_privacy_allowed(
+            &state,
+            AmbientEventCategory::Manual
+        ));
+        assert!(!ambient_privacy_allowed(
+            &state,
+            AmbientEventCategory::Other
+        ));
 
         state.settings.write().active_app_observation = true;
         assert!(ambient_privacy_allowed(
@@ -234,9 +237,8 @@ mod tests {
 
     #[test]
     fn policy_diagnostics_do_not_carry_event_summary() {
-        let mut engine = BehaviorEngine::new(
-            crate::character::personality::CharacterConfig::default(),
-        );
+        let mut engine =
+            BehaviorEngine::new(crate::character::personality::CharacterConfig::default());
         let event = AmbientEvent::new(
             "active_app_changed",
             "Secret Project Window".to_string(),

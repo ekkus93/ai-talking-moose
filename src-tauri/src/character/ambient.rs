@@ -302,11 +302,7 @@ mod tests {
             "VS Code 123 -- README.md".to_string(),
             0.8,
         );
-        let second = AmbientEvent::new(
-            "application",
-            "vs code 456, README md!!!".to_string(),
-            0.8,
-        );
+        let second = AmbientEvent::new("application", "vs code 456, README md!!!".to_string(), 0.8);
 
         assert_eq!(first.category, AmbientEventCategory::Application);
         assert_eq!(second.category, AmbientEventCategory::Application);

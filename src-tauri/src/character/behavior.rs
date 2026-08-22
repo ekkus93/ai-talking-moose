@@ -298,15 +298,14 @@ mod tests {
             "VS Code 101 -- README.md".to_string(),
             1.0,
         );
-        let duplicate = AmbientEvent::new(
-            "application",
-            "vs code 202, README md!!!".to_string(),
-            1.0,
-        );
+        let duplicate =
+            AmbientEvent::new("application", "vs code 202, README md!!!".to_string(), 1.0);
 
-        assert!(engine
-            .evaluate_ambient_event_at(now, &first, AmbientPolicyContext::default())
-            .should_speak);
+        assert!(
+            engine
+                .evaluate_ambient_event_at(now, &first, AmbientPolicyContext::default())
+                .should_speak
+        );
         engine.record_ambient_delivery_at(now, &first);
         let decision = engine.evaluate_ambient_event_at(
             now + Duration::seconds(1),
@@ -327,17 +326,10 @@ mod tests {
 
         for index in 0..HARD_MAX_AMBIENT_COMMENTS_PER_HOUR {
             let suffix = char::from(b'a' + index as u8);
-            let event = AmbientEvent::new(
-                "system",
-                format!("unique event alpha {suffix}"),
-                1.0,
-            );
+            let event = AmbientEvent::new("system", format!("unique event alpha {suffix}"), 1.0);
             let now = start + Duration::seconds(i64::from(index));
-            let decision = engine.evaluate_ambient_event_at(
-                now,
-                &event,
-                AmbientPolicyContext::default(),
-            );
+            let decision =
+                engine.evaluate_ambient_event_at(now, &event, AmbientPolicyContext::default());
             assert!(decision.should_speak);
             engine.record_ambient_delivery_at(now, &event);
         }
