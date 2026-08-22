@@ -279,6 +279,24 @@ fn retry_policy_has_hard_bounds_and_explicit_close_cancels_reconnect() {
     assert!(!active.load(Ordering::SeqCst));
 }
 
+#[tokio::test]
+async fn explicit_close_cancels_in_flight_reconnect_attempt() {
+    let active = AtomicBool::new(true);
+    let (tx, mut rx) = mpsc::channel(1);
+    tx.send(Message::Close(None)).await.unwrap();
+
+    let error = await_reconnect_attempt(
+        std::future::pending::<Result<(), ProviderError>>(),
+        &mut rx,
+        &active,
+    )
+    .await
+    .expect_err("explicit close must cancel a pending reconnect attempt");
+
+    assert_eq!(error.kind, ProviderErrorKind::Closed);
+    assert!(!active.load(Ordering::SeqCst));
+}
+
 #[test]
 fn retryability_is_explicit_by_provider_error_category() {
     for kind in [

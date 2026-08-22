@@ -16,6 +16,7 @@ use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde_json::json;
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -435,6 +436,31 @@ fn drain_disconnected_messages(
     is_active.load(Ordering::SeqCst)
 }
 
+async fn await_reconnect_attempt<T, F>(
+    attempt: F,
+    receiver: &mut mpsc::Receiver<Message>,
+    is_active: &AtomicBool,
+) -> Result<T, ProviderError>
+where
+    F: Future<Output = Result<T, ProviderError>>,
+{
+    tokio::pin!(attempt);
+    loop {
+        tokio::select! {
+            result = &mut attempt => return result,
+            outbound = receiver.recv() => {
+                match outbound {
+                    Some(Message::Close(_)) | None => {
+                        is_active.store(false, Ordering::SeqCst);
+                        return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+}
+
 async fn reconnect(
     api_key: &str,
     config: &LiveSessionConfig,
@@ -469,12 +495,24 @@ async fn reconnect(
                 }
             }
         }
-        match open_and_setup(api_key, config, resume_handle).await {
+
+        let reconnect_result = await_reconnect_attempt(
+            open_and_setup(api_key, config, resume_handle),
+            receiver,
+            is_active,
+        )
+        .await;
+        match reconnect_result {
             Ok(socket) => {
-                drain_disconnected_messages(receiver, is_active);
+                if !drain_disconnected_messages(receiver, is_active) {
+                    return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
+                }
                 return Ok(socket);
             }
             Err(error) => {
+                if !is_active.load(Ordering::SeqCst) {
+                    return Err(error);
+                }
                 if !error.retryable {
                     return Err(error);
                 }
