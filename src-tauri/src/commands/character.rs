@@ -1,13 +1,14 @@
-use crate::ai::types::{TextRequest, TtsRequest};
+use crate::ai::types::TtsRequest;
 use crate::app::state::AppState;
 use crate::character::behavior::BehaviorEngine;
-use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
+#[cfg(test)]
 use crate::memory::MemoryManager;
 use tauri::{Emitter, Runtime, State};
 
 pub(crate) const VOICE_AUDITION_SCRIPT: &str = "Hello, I'm Moose. Oh good, another button to click. I'm not annoyed; I'm just professionally disappointed. Short version: it works. Longer version: I'll explain it, but I reserve the right to look bewildered while doing it.";
 
+#[cfg(test)]
 fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<String> {
     if memory_enabled {
         memory.get_memory_strings()
@@ -109,6 +110,7 @@ pub async fn dismiss_moose<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
+    state.ambient_scheduler.interrupt();
     let now = chrono::Utc::now();
     state.behavior_engine.lock().cooldowns.record_dismissal(now);
     state
@@ -126,6 +128,7 @@ pub async fn set_mute<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     if muted {
+        state.ambient_scheduler.interrupt();
         // Set the privacy gate before awaiting teardown so a racing start request sees
         // muted=true either before or inside the serialized manager startup lock.
         *state.is_muted.write() = true;
@@ -182,59 +185,6 @@ pub async fn trigger_canned_reaction<R: Runtime>(
 
     speak_standalone(text, None, state.inner()).await?;
     Ok(text.to_string())
-}
-
-#[tauri::command]
-pub async fn trigger_ambient_remark<R: Runtime>(
-    event_summary: String,
-    state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
-) -> Result<Option<String>, String> {
-    if *state.is_muted.read() || !state.settings.read().unsolicited_comments {
-        return Ok(None);
-    }
-
-    let should_speak = {
-        let mut engine = state.behavior_engine.lock();
-        engine
-            .evaluate_event("manual_or_system", &event_summary, 0.75)
-            .is_some()
-    };
-
-    if !should_speak {
-        return Ok(None);
-    }
-
-    if matches!(
-        *state.character_state.read(),
-        CharacterState::Hidden | CharacterState::Dismissed
-    ) {
-        show_character(state.inner(), &app)?;
-    }
-    transition_and_emit(state.inner(), &app, CharacterState::Thinking)?;
-
-    let memory_enabled = state.settings.read().memory_enabled;
-    let memories = model_prompt_memories(memory_enabled, state.memory.as_ref());
-    let config = state.behavior_engine.lock().config.clone();
-    let prompt = PromptBuilder::build_ambient_prompt(&config, &event_summary, &memories);
-
-    let text_model = state.get_text_model();
-    let text = text_model
-        .generate(TextRequest {
-            prompt,
-            system_instruction: None,
-            temperature: Some(0.85),
-            max_tokens: Some(60),
-        })
-        .await
-        .map_err(|error_value| state.secrets.redact(&error_value))?
-        .text;
-
-    transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
-    let _ = app.emit("moose://speech-bubble", &text);
-
-    speak_standalone(&text, None, state.inner()).await?;
-    Ok(Some(text))
 }
 
 #[cfg(test)]

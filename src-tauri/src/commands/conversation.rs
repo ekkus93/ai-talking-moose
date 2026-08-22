@@ -58,6 +58,7 @@ pub async fn start_conversation<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
+    state.ambient_scheduler.interrupt();
     if *state.is_muted.read() {
         return Err("Moose is currently muted".to_string());
     }
@@ -173,6 +174,7 @@ pub async fn stop_conversation(
 
 #[tauri::command]
 pub async fn barge_in(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+    state.ambient_scheduler.interrupt();
     state
         .conversation_mgr
         .barge_in(state.audio_playback.clone())
@@ -181,6 +183,7 @@ pub async fn barge_in(state: State<'_, AppState>, app: tauri::AppHandle) -> Resu
     if *state.character_state.read() == CharacterState::Talking {
         transition_and_emit(&state.character_state, &app, CharacterState::Interrupted)?;
     }
+    state.behavior_engine.lock().cooldowns.record_interruption();
     Ok(())
 }
 

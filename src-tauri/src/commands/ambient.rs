@@ -1,7 +1,9 @@
 use crate::ai::types::{TextRequest, TtsRequest};
 use crate::app::state::AppState;
 use crate::character::ambient::{AmbientEvent, AmbientEventCategory};
-use crate::character::behavior::{AmbientPolicyContext, BehaviorEngine};
+use crate::character::behavior::AmbientPolicyContext;
+#[cfg(test)]
+use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
 use tauri::{Emitter, Runtime, State};
@@ -157,47 +159,6 @@ pub async fn trigger_ambient_remark(
         .clone()
         .submit(AmbientEvent::new("manual_or_system", event_summary, 0.75))
         .await
-}
-
-#[tauri::command]
-pub async fn start_conversation<R: Runtime>(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
-) -> Result<String, String> {
-    state.ambient_scheduler.interrupt();
-    crate::commands::conversation::start_conversation(state, app).await
-}
-
-#[tauri::command]
-pub async fn dismiss_moose<R: Runtime>(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
-) -> Result<(), String> {
-    state.ambient_scheduler.interrupt();
-    crate::commands::character::dismiss_moose(state, app).await
-}
-
-#[tauri::command]
-pub async fn set_mute<R: Runtime>(
-    muted: bool,
-    state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
-) -> Result<(), String> {
-    if muted {
-        state.ambient_scheduler.interrupt();
-    }
-    crate::commands::character::set_mute(muted, state, app).await
-}
-
-#[tauri::command]
-pub async fn barge_in(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    state.ambient_scheduler.interrupt();
-    let behavior_engine = state.behavior_engine.clone();
-    let result = crate::commands::conversation::barge_in(state, app).await;
-    if result.is_ok() {
-        behavior_engine.lock().cooldowns.record_interruption();
-    }
-    result
 }
 
 #[cfg(test)]
