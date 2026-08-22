@@ -43,6 +43,13 @@ fn synchronize_behavior_engine(settings: &AppSettings, engine: &mut BehaviorEngi
     settings.apply_to_character_config(&mut engine.config);
 }
 
+fn active_conversation_connection_test_result(is_active: bool) -> Option<ConnectionTestResult> {
+    is_active.then(|| ConnectionTestResult {
+        success: false,
+        message: "Stop the active conversation before testing Gemini connectivity.".to_string(),
+    })
+}
+
 fn collect_audio_diagnostics(state: &AppState) -> AudioDiagnostics {
     let settings = state.settings.read();
     let capture = state.audio_capture.lock().diagnostics();
@@ -142,11 +149,10 @@ pub fn has_google_api_key(state: State<'_, AppState>) -> Result<bool, String> {
 pub async fn test_ai_connection(
     state: State<'_, AppState>,
 ) -> Result<ConnectionTestResult, String> {
-    if state.conversation_mgr.is_active() {
-        return Ok(ConnectionTestResult {
-            success: false,
-            message: "Stop the active conversation before testing Gemini connectivity.".to_string(),
-        });
+    if let Some(blocked) =
+        active_conversation_connection_test_result(state.conversation_mgr.is_active())
+    {
+        return Ok(blocked);
     }
 
     let key = match state.secrets.get_google_api_key() {
@@ -303,6 +309,15 @@ mod tests {
         assert!(engine
             .evaluate_event("test", "runtime settings applied", 1.0)
             .is_none());
+    }
+
+    #[test]
+    fn connection_test_guard_blocks_active_conversation_before_provider_work() {
+        let blocked = active_conversation_connection_test_result(true)
+            .expect("active conversations must block connectivity tests");
+        assert!(!blocked.success);
+        assert!(blocked.message.contains("Stop the active conversation"));
+        assert!(active_conversation_connection_test_result(false).is_none());
     }
 
     #[test]
