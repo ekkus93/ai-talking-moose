@@ -3,3 +3,6 @@ pub mod transcript;
 
 pub use session::{ConversationLifecycle, ConversationManager};
 pub use transcript::*;
+
+#[cfg(test)]
+mod readiness_tests;

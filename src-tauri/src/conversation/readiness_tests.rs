@@ -1,21 +1,19 @@
+use super::session::{
+    ConversationCallbacks, ConversationLifecycle, ConversationManager, ConversationStartRequest,
+};
+use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
+use crate::ai::types::{LiveServerEvent, LiveSessionConfig, ProviderError, ProviderErrorKind};
+use crate::asr::AsrMode;
+use crate::audio::capture::AudioCapture;
+use crate::audio::playback::AudioPlayback;
+use crate::character::personality::CharacterConfig;
+use crate::memory::MemoryManager;
+use crate::persistence::Database;
+use crate::tools::builtin::BuiltinTools;
+use crate::tools::router::ToolRouter;
 use async_trait::async_trait;
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
-use talking_moose_lib::ai::traits::{LiveSession, RealtimeConversationProvider};
-use talking_moose_lib::ai::types::{
-    LiveServerEvent, LiveSessionConfig, ProviderError, ProviderErrorKind,
-};
-use talking_moose_lib::asr::AsrMode;
-use talking_moose_lib::audio::capture::AudioCapture;
-use talking_moose_lib::audio::playback::AudioPlayback;
-use talking_moose_lib::character::personality::CharacterConfig;
-use talking_moose_lib::conversation::session::{
-    ConversationCallbacks, ConversationLifecycle, ConversationManager, ConversationStartRequest,
-};
-use talking_moose_lib::memory::MemoryManager;
-use talking_moose_lib::persistence::Database;
-use talking_moose_lib::tools::builtin::BuiltinTools;
-use talking_moose_lib::tools::router::ToolRouter;
 use tokio::sync::{mpsc, Notify};
 
 struct PendingSetupProvider {
@@ -37,9 +35,7 @@ impl RealtimeConversationProvider for PendingSetupProvider {
 }
 
 fn tool_router() -> Arc<ToolRouter> {
-    let settings = Arc::new(RwLock::new(
-        talking_moose_lib::app::state::AppSettings::default(),
-    ));
+    let settings = Arc::new(RwLock::new(crate::app::state::AppSettings::default()));
     let memory = Arc::new(MemoryManager::new(Arc::new(
         Database::new_in_memory().expect("in-memory database"),
     )));
