@@ -86,6 +86,27 @@ describe("SettingsModal Component", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows only current capability-filtered Gemini model options", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Gemini AI"));
+
+    expect(
+      await screen.findByRole("option", {
+        name: /Gemini 3.1 Flash Live Preview.*gemini-3.1-flash-live-preview/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", {
+        name: /Gemini 3.7 Flash.*gemini-3.7-flash/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", {
+        name: /gemini-2.5-flash-native-audio/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("exposes audio diagnostics and local microphone test controls", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Diagnostics"));

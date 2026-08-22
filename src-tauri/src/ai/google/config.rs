@@ -1,9 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-pub const LIVE_WEBSOCKET_ENDPOINT: &str = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
-pub const DEFAULT_LIVE_MODEL: &str = "gemini-3.1-flash-live-preview";
-pub const DEFAULT_TEXT_MODEL: &str = "gemini-3.7-flash";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GoogleModelCapability {
@@ -21,14 +17,20 @@ pub struct GoogleModelDescriptor {
 const LIVE_AUDIO: &[GoogleModelCapability] = &[GoogleModelCapability::LiveAudio];
 const TEXT_GENERATION: &[GoogleModelCapability] = &[GoogleModelCapability::TextGeneration];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct GoogleProviderConfig {
+    pub live_websocket_endpoint: &'static str,
+    pub models: &'static [GoogleModelDescriptor],
+}
+
 pub const GOOGLE_MODELS: &[GoogleModelDescriptor] = &[
     GoogleModelDescriptor {
-        id: DEFAULT_LIVE_MODEL,
+        id: "gemini-3.1-flash-live-preview",
         display_name: "Gemini 3.1 Flash Live Preview",
         capabilities: LIVE_AUDIO,
     },
     GoogleModelDescriptor {
-        id: DEFAULT_TEXT_MODEL,
+        id: "gemini-3.7-flash",
         display_name: "Gemini 3.7 Flash",
         capabilities: TEXT_GENERATION,
     },
@@ -38,6 +40,14 @@ pub const GOOGLE_MODELS: &[GoogleModelDescriptor] = &[
         capabilities: TEXT_GENERATION,
     },
 ];
+
+pub const GOOGLE_PROVIDER_CONFIG: GoogleProviderConfig = GoogleProviderConfig {
+    live_websocket_endpoint: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent",
+    models: GOOGLE_MODELS,
+};
+
+pub const DEFAULT_LIVE_MODEL: &str = GOOGLE_MODELS[0].id;
+pub const DEFAULT_TEXT_MODEL: &str = GOOGLE_MODELS[1].id;
 
 pub fn supports_capability(model_id: &str, capability: GoogleModelCapability) -> bool {
     GOOGLE_MODELS
@@ -129,5 +139,16 @@ mod tests {
         assert_eq!(value[0]["capabilities"][0], "live_audio");
         assert_eq!(value[1]["id"], DEFAULT_TEXT_MODEL);
         assert_eq!(value[1]["capabilities"][0], "text_generation");
+    }
+
+    #[test]
+    fn provider_config_serializes_current_live_endpoint_and_model_catalog() {
+        let value = serde_json::to_value(GOOGLE_PROVIDER_CONFIG).unwrap();
+        assert_eq!(
+            value["live_websocket_endpoint"],
+            "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+        );
+        assert_eq!(value["models"][0]["id"], DEFAULT_LIVE_MODEL);
+        assert_eq!(value["models"][1]["id"], DEFAULT_TEXT_MODEL);
     }
 }
