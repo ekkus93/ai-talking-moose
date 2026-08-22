@@ -29,13 +29,14 @@ fn macos_microphone_permission_state() -> MicrophonePermissionState {
     let audio_media_type = unsafe { AVMediaTypeAudio };
     let status = AVCaptureDevice::authorization_status_for_media_type(audio_media_type);
 
-    match status {
-        AVAuthorizationStatusNotDetermined => MicrophonePermissionState::NotRequested,
-        AVAuthorizationStatusAuthorized => MicrophonePermissionState::Granted,
-        AVAuthorizationStatusDenied | AVAuthorizationStatusRestricted => {
-            MicrophonePermissionState::Denied
-        }
-        _ => MicrophonePermissionState::Unavailable,
+    if status == AVAuthorizationStatusNotDetermined {
+        MicrophonePermissionState::NotRequested
+    } else if status == AVAuthorizationStatusAuthorized {
+        MicrophonePermissionState::Granted
+    } else if status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted {
+        MicrophonePermissionState::Denied
+    } else {
+        MicrophonePermissionState::Unavailable
     }
 }
 

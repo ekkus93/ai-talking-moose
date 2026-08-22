@@ -67,6 +67,7 @@ pub(super) struct FfiError {
 }
 
 impl FfiError {
+    #[cfg(not(moonshine_native_linked))]
     fn unavailable() -> Self {
         Self {
             code: -1,

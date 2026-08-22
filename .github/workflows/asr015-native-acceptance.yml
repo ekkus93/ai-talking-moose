@@ -40,6 +40,19 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Verify acceptance source revision
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "ASR-015 checkout: $actual"
+          test "$actual" = "$GITHUB_SHA"
+          if grep -F 'ASR015_BENCHMARK architecture={architecture:?}' \
+            src-tauri/src/asr/pipeline_benchmarks.rs; then
+            echo "stale ASR-015 benchmark formatter detected" >&2
+            exit 1
+          fi
+          grep -F 'ASR015_BENCHMARK architecture={:?} corpus={}' \
+            src-tauri/src/asr/pipeline_benchmarks.rs >/dev/null
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
