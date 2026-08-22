@@ -27,6 +27,10 @@ fn persist_transcript_if_enabled(
         .map_err(|error| error.to_string())
 }
 
+fn is_final_transcript_role(role: &str) -> bool {
+    matches!(role, "user" | "moose")
+}
+
 fn transition_and_emit<R: Runtime>(
     character_state: &parking_lot::RwLock<CharacterState>,
     app: &tauri::AppHandle<R>,
@@ -115,7 +119,7 @@ pub async fn start_conversation<R: Runtime>(
             },
             move |session_id: String, role: String, text: String| {
                 let _ = app_transcript.emit(&format!("moose://transcript/{role}"), &text);
-                if matches!(role.as_str(), "user" | "moose") {
+                if is_final_transcript_role(&role) {
                     if let Err(error_value) = persist_transcript_if_enabled(
                         db_ref.as_ref(),
                         save_transcripts,
@@ -323,6 +327,14 @@ mod tests {
         persist_transcript_if_enabled(&db, false, "session", "moose", "private output").unwrap();
 
         assert!(db.get_transcripts(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn only_final_live_transcript_roles_are_persistable() {
+        assert!(is_final_transcript_role("user"));
+        assert!(is_final_transcript_role("moose"));
+        assert!(!is_final_transcript_role("user_partial"));
+        assert!(!is_final_transcript_role("moose_partial"));
     }
 
     #[test]

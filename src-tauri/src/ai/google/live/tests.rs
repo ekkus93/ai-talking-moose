@@ -17,6 +17,22 @@ fn config() -> LiveSessionConfig {
     }
 }
 
+async fn expect_transcript_event(
+    receiver: &mut mpsc::Receiver<LiveServerEvent>,
+    user: bool,
+    expected_text: &str,
+    expected_final: bool,
+) {
+    let event = receiver.recv().await.expect("transcript event");
+    let update = match (user, event) {
+        (true, LiveServerEvent::UserTranscript(update))
+        | (false, LiveServerEvent::ModelTranscript(update)) => update,
+        (_, other) => panic!("unexpected transcript event: {other:?}"),
+    };
+    assert_eq!(update.text, expected_text);
+    assert_eq!(update.is_final, expected_final);
+}
+
 #[test]
 fn setup_enables_transcription_tools_resumption_and_compression() {
     let value = serde_json::to_value(setup_message(&config(), None)).unwrap();
@@ -110,6 +126,72 @@ async fn transcription_fragments_finalize_at_turn_boundaries() {
         rx.recv().await,
         Some(LiveServerEvent::TurnComplete)
     ));
+}
+
+#[tokio::test]
+async fn input_transcription_deduplicates_updates_and_emits_one_final() {
+    let (tx, mut rx) = mpsc::channel(8);
+    let mut input = String::new();
+    let mut output = String::new();
+    let mut resume = None;
+
+    for frame in [
+        json!({
+            "serverContent": { "interimInputTranscription": { "text": "hello" } }
+        }),
+        json!({
+            "serverContent": { "interimInputTranscription": { "text": "hello" } }
+        }),
+        json!({
+            "serverContent": {
+                "inputTranscription": { "text": "hello moose", "finished": true }
+            }
+        }),
+    ] {
+        let server: LiveServerMessage = serde_json::from_value(frame).unwrap();
+        assert!(matches!(
+            handle_server_message(server, &tx, &mut input, &mut output, &mut resume).await,
+            ServerAction::Continue
+        ));
+    }
+
+    expect_transcript_event(&mut rx, true, "hello", false).await;
+    expect_transcript_event(&mut rx, true, "hello moose", false).await;
+    expect_transcript_event(&mut rx, true, "hello moose", true).await;
+    assert!(rx.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn output_transcription_deduplicates_updates_and_emits_one_final() {
+    let (tx, mut rx) = mpsc::channel(8);
+    let mut input = String::new();
+    let mut output = String::new();
+    let mut resume = None;
+
+    for frame in [
+        json!({
+            "serverContent": { "outputTranscription": { "text": "hello" } }
+        }),
+        json!({
+            "serverContent": { "outputTranscription": { "text": "hello" } }
+        }),
+        json!({
+            "serverContent": {
+                "outputTranscription": { "text": "hello human", "finished": true }
+            }
+        }),
+    ] {
+        let server: LiveServerMessage = serde_json::from_value(frame).unwrap();
+        assert!(matches!(
+            handle_server_message(server, &tx, &mut input, &mut output, &mut resume).await,
+            ServerAction::Continue
+        ));
+    }
+
+    expect_transcript_event(&mut rx, false, "hello", false).await;
+    expect_transcript_event(&mut rx, false, "hello human", false).await;
+    expect_transcript_event(&mut rx, false, "hello human", true).await;
+    assert!(rx.try_recv().is_err());
 }
 
 #[test]
