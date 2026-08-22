@@ -12,12 +12,16 @@ pub mod secrets;
 pub mod tools;
 
 use app::state::AppState;
+use app::window_position::{
+    clamp_window_position, load_window_position, persist_window_position,
+    schedule_window_position_persist, DisplayBounds, WindowPosition,
+};
 use commands::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{info, warn};
 
 pub fn moonshine_native_smoke_check() -> Result<i32, String> {
     asr::moonshine::native_runtime_smoke_check().map_err(|error| error.message)
@@ -37,6 +41,25 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            let tauri::WindowEvent::Moved(position) = event else {
+                return;
+            };
+            let Some(state) = window.app_handle().try_state::<AppState>() else {
+                return;
+            };
+
+            schedule_window_position_persist(
+                state.db.clone(),
+                WindowPosition {
+                    x: position.x,
+                    y: position.y,
+                },
+            );
+        })
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().ok();
             let db_path = if let Some(dir) = app_data_dir {
@@ -47,6 +70,51 @@ pub fn run() {
             };
 
             let app_state = AppState::new(db_path.as_deref()).map_err(std::io::Error::other)?;
+
+            if app_state.settings.read().restore_position {
+                if let Some(window) = app.get_webview_window("main") {
+                    match load_window_position(app_state.db.as_ref()) {
+                        Ok(Some(saved)) => match (window.outer_size(), window.available_monitors()) {
+                            (Ok(window_size), Ok(monitors)) => {
+                                let displays = monitors
+                                    .iter()
+                                    .map(|monitor| {
+                                        let work_area = monitor.work_area();
+                                        DisplayBounds {
+                                            x: work_area.position.x,
+                                            y: work_area.position.y,
+                                            width: work_area.size.width,
+                                            height: work_area.size.height,
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+                                if let Some(restored) = clamp_window_position(
+                                    saved,
+                                    window_size.width,
+                                    window_size.height,
+                                    &displays,
+                                ) {
+                                    if let Err(error) = window.set_position(
+                                        tauri::PhysicalPosition::new(restored.x, restored.y),
+                                    ) {
+                                        warn!(error = %error, "Failed to restore Moose window position");
+                                    }
+                                }
+                            }
+                            (Err(error), _) => {
+                                warn!(error = %error, "Could not read Moose window size for restore");
+                            }
+                            (_, Err(error)) => {
+                                warn!(error = %error, "Could not enumerate displays for Moose window restore");
+                            }
+                        },
+                        Ok(None) => {}
+                        Err(error) => {
+                            warn!(error = %error, "Ignoring invalid stored Moose window position");
+                        }
+                    }
+                }
+            }
 
             let (mouth_tx, mut mouth_rx) = mpsc::channel(64);
             let (out_lvl_tx, mut out_lvl_rx) = mpsc::channel(64);
@@ -127,6 +195,22 @@ pub fn run() {
             let handle = app_handle.clone();
             let exit_code = code.unwrap_or(0);
             tauri::async_runtime::spawn(async move {
+                if let (Some(state), Some(window)) =
+                    (handle.try_state::<AppState>(), handle.get_webview_window("main"))
+                {
+                    if let Ok(position) = window.outer_position() {
+                        if let Err(error) = persist_window_position(
+                            state.db.as_ref(),
+                            WindowPosition {
+                                x: position.x,
+                                y: position.y,
+                            },
+                        ) {
+                            warn!(error = %error, "Failed to flush Moose window position during shutdown");
+                        }
+                    }
+                }
+
                 let resources = handle.try_state::<AppState>().map(|state| {
                     (
                         state.conversation_mgr.clone(),

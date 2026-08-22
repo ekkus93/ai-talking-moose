@@ -57,6 +57,62 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Dry Wit & Deadpan")).toBeInTheDocument();
   });
 
+  it("updates every behavior and personality control in runtime settings", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Behavior"));
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /Enable unsolicited ambient remarks/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.unsolicited_comments).toBe(
+        false,
+      ),
+    );
+
+    fireEvent.change(screen.getAllByRole("slider")[0], {
+      target: { value: "0.75" },
+    });
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.talkativeness).toBe(0.75),
+    );
+
+    fireEvent.change(screen.getAllByRole("slider")[1], {
+      target: { value: "9" },
+    });
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.max_comments_per_hour).toBe(9),
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Quiet Hours/i }));
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.quiet_hours_enabled).toBe(
+        false,
+      ),
+    );
+
+    fireEvent.click(screen.getByText("Personality"));
+    const personalityUpdates = [
+      ["dry", 0.1],
+      ["sarcastic", 0.2],
+      ["friendly", 0.3],
+      ["absurd", 0.4],
+      ["helpful", 0.5],
+      ["verbosity", 0.6],
+    ] as const;
+
+    for (const [index, [key, value]] of personalityUpdates.entries()) {
+      fireEvent.change(screen.getAllByRole("slider")[index], {
+        target: { value: String(value) },
+      });
+      await waitFor(() =>
+        expect(useMooseStore.getState().settings?.[key]).toBe(value),
+      );
+    }
+  });
+
   it("offers explicit local and cloud ASR modes with privacy copy", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Speech Recognition"));
