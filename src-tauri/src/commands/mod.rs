@@ -1,3 +1,4 @@
+pub mod ambient;
 pub mod asr_diagnostics;
 pub mod asr_models;
 pub mod character;

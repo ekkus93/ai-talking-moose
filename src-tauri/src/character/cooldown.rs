@@ -2,6 +2,17 @@ use chrono::{DateTime, Duration, Local, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const DISMISSAL_COOLDOWN_SECONDS: i64 = 180;
+pub const EVENT_DEDUP_WINDOW_SECONDS: i64 = 600;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AmbientCooldownBlockReason {
+    QuietHours,
+    AnnoyanceBudget,
+    DismissalCooldown,
+    DuplicateEvent,
+    Cooldown,
+    HourlyLimit,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnnoyanceBudget {
@@ -74,6 +85,7 @@ pub struct CooldownTracker {
     pub last_dismissal_time: Option<DateTime<Utc>>,
     pub speech_timestamps: Vec<DateTime<Utc>>,
     pub annoyance_budget: AnnoyanceBudget,
+    recent_event_fingerprints: Vec<(String, DateTime<Utc>)>,
 }
 
 impl CooldownTracker {
@@ -82,10 +94,19 @@ impl CooldownTracker {
     }
 
     pub fn record_speech(&mut self, now: DateTime<Utc>) {
+        self.record_ambient_speech(now, "");
+    }
+
+    pub fn record_ambient_speech(&mut self, now: DateTime<Utc>, fingerprint: &str) {
         self.last_speech_time = Some(now);
         self.speech_timestamps.push(now);
+        if !fingerprint.is_empty() {
+            self.recent_event_fingerprints
+                .push((fingerprint.to_string(), now));
+        }
         self.annoyance_budget.record_unsolicited_speech_at(now);
         self.prune_old_timestamps(now);
+        self.prune_old_fingerprints(now);
     }
 
     pub fn record_dismissal(&mut self, now: DateTime<Utc>) {
@@ -106,6 +127,22 @@ impl CooldownTracker {
         self.speech_timestamps.retain(|&ts| ts > one_hour_ago);
     }
 
+    fn prune_old_fingerprints(&mut self, now: DateTime<Utc>) {
+        let cutoff = now - Duration::seconds(EVENT_DEDUP_WINDOW_SECONDS);
+        self.recent_event_fingerprints
+            .retain(|(_, timestamp)| *timestamp > cutoff);
+    }
+
+    fn is_duplicate_event(&mut self, now: DateTime<Utc>, fingerprint: &str) -> bool {
+        if fingerprint.is_empty() {
+            return false;
+        }
+        self.prune_old_fingerprints(now);
+        self.recent_event_fingerprints
+            .iter()
+            .any(|(recent, _)| recent == fingerprint)
+    }
+
     pub fn is_in_quiet_hours<Tz: TimeZone>(
         now: &DateTime<Tz>,
         start_hour: u8,
@@ -116,12 +153,55 @@ impl CooldownTracker {
             return false;
         }
         if start_hour < end_hour {
-            // e.g. 1 to 6 (1 AM to 6 AM)
             current_hour >= start_hour && current_hour < end_hour
         } else {
-            // Overnight: e.g. 22 to 8 (10 PM to 8 AM)
             current_hour >= start_hour || current_hour < end_hour
         }
+    }
+
+    pub fn check_ambient_gate(
+        &mut self,
+        now: DateTime<Utc>,
+        min_cooldown_seconds: u64,
+        max_comments_per_hour: u32,
+        quiet_hours_enabled: bool,
+        quiet_hours_start: u8,
+        quiet_hours_end: u8,
+        fingerprint: Option<&str>,
+    ) -> Result<(), AmbientCooldownBlockReason> {
+        let local_now = now.with_timezone(&Local);
+        if quiet_hours_enabled
+            && Self::is_in_quiet_hours(&local_now, quiet_hours_start, quiet_hours_end)
+        {
+            return Err(AmbientCooldownBlockReason::QuietHours);
+        }
+
+        if self.annoyance_budget.is_suppressed_at(now) {
+            return Err(AmbientCooldownBlockReason::AnnoyanceBudget);
+        }
+
+        if let Some(dismissed) = self.last_dismissal_time {
+            if now - dismissed < Duration::seconds(DISMISSAL_COOLDOWN_SECONDS) {
+                return Err(AmbientCooldownBlockReason::DismissalCooldown);
+            }
+        }
+
+        if fingerprint.is_some_and(|value| self.is_duplicate_event(now, value)) {
+            return Err(AmbientCooldownBlockReason::DuplicateEvent);
+        }
+
+        if let Some(last_speech) = self.last_speech_time {
+            if now - last_speech < Duration::seconds(min_cooldown_seconds as i64) {
+                return Err(AmbientCooldownBlockReason::Cooldown);
+            }
+        }
+
+        self.prune_old_timestamps(now);
+        if self.speech_timestamps.len() >= max_comments_per_hour as usize {
+            return Err(AmbientCooldownBlockReason::HourlyLimit);
+        }
+
+        Ok(())
     }
 
     pub fn can_speak_ambient(
@@ -133,42 +213,16 @@ impl CooldownTracker {
         quiet_hours_start: u8,
         quiet_hours_end: u8,
     ) -> bool {
-        // Quiet hours are a user-facing wall-clock setting. Convert the UTC
-        // instant used for cooldown arithmetic into the machine's local timezone;
-        // chrono::Local applies the platform's current DST/offset rules.
-        let local_now = now.with_timezone(&Local);
-        if quiet_hours_enabled
-            && Self::is_in_quiet_hours(&local_now, quiet_hours_start, quiet_hours_end)
-        {
-            return false;
-        }
-
-        // Check annoyance budget
-        if self.annoyance_budget.is_suppressed_at(now) {
-            return false;
-        }
-
-        // Check recent dismissal cooldown (at least 3 minutes)
-        if let Some(dismissed) = self.last_dismissal_time {
-            if now - dismissed < Duration::seconds(DISMISSAL_COOLDOWN_SECONDS) {
-                return false;
-            }
-        }
-
-        // Check minimum inter-comment cooldown
-        if let Some(last_speech) = self.last_speech_time {
-            if now - last_speech < Duration::seconds(min_cooldown_seconds as i64) {
-                return false;
-            }
-        }
-
-        // Check hourly limit
-        self.prune_old_timestamps(now);
-        if self.speech_timestamps.len() >= max_comments_per_hour as usize {
-            return false;
-        }
-
-        true
+        self.check_ambient_gate(
+            now,
+            min_cooldown_seconds,
+            max_comments_per_hour,
+            quiet_hours_enabled,
+            quiet_hours_start,
+            quiet_hours_end,
+            None,
+        )
+        .is_ok()
     }
 }
 
@@ -179,17 +233,37 @@ mod tests {
     #[test]
     fn test_annoyance_budget_and_decay() {
         let mut budget = AnnoyanceBudget::default();
-        assert!(!budget.is_suppressed());
+        let now = Utc.with_ymd_and_hms(2026, 8, 22, 12, 0, 0).unwrap();
+        budget.last_decay_check = now;
+        assert!(!budget.is_suppressed_at(now));
 
-        budget.record_dismissal(); // +35
-        budget.record_dismissal(); // +35 -> 70 (>= 60 threshold)
-        assert!(budget.is_suppressed());
+        budget.record_dismissal_at(now);
+        budget.record_dismissal_at(now);
+        assert!(budget.is_suppressed_at(now));
 
-        // Fast forward 15 minutes (should decay 15 * 5 = 75 points)
-        let future = budget.last_decay_check + Duration::minutes(15);
+        let future = now + Duration::minutes(15);
         budget.update_decay(future);
-        assert!(!budget.is_suppressed());
+        assert!(!budget.is_suppressed_at(future));
         assert_eq!(budget.score, 0.0);
+    }
+
+    #[test]
+    fn speech_interruption_and_dismissal_share_one_recovering_annoyance_budget() {
+        let mut tracker = CooldownTracker::new();
+        let now = Utc.with_ymd_and_hms(2026, 8, 22, 12, 0, 0).unwrap();
+        tracker.annoyance_budget.last_decay_check = now;
+
+        tracker.record_speech(now);
+        assert_eq!(tracker.annoyance_budget.score, 15.0);
+        tracker.record_interruption_at(now);
+        assert_eq!(tracker.annoyance_budget.score, 35.0);
+        tracker.record_dismissal(now);
+        assert_eq!(tracker.annoyance_budget.score, 70.0);
+        assert!(tracker.annoyance_budget.is_suppressed_at(now));
+
+        let recovered = now + Duration::minutes(15);
+        assert!(!tracker.annoyance_budget.is_suppressed_at(recovered));
+        assert_eq!(tracker.annoyance_budget.score, 0.0);
     }
 
     #[test]
@@ -225,7 +299,6 @@ mod tests {
     fn test_quiet_hours_with_pacific_offset_independent_of_host_timezone() {
         use chrono::FixedOffset;
 
-        // 2026-08-18 05:30 UTC is 22:30 at a UTC-07:00 Pacific summer offset.
         let utc = Utc.with_ymd_and_hms(2026, 8, 18, 5, 30, 0).unwrap();
         let pacific_summer = FixedOffset::west_opt(7 * 60 * 60).unwrap();
         let pacific_local = utc.with_timezone(&pacific_summer);
@@ -236,19 +309,48 @@ mod tests {
 
     #[test]
     fn test_cooldown_tracker() {
-        use chrono::TimeZone;
         let mut tracker = CooldownTracker::new();
         let t0 = Utc.with_ymd_and_hms(2026, 8, 17, 12, 0, 0).unwrap();
 
         assert!(tracker.can_speak_ambient(t0, 300, 3, false, 22, 8));
         tracker.record_speech(t0);
 
-        // 60 seconds later (under 300s cooldown) -> false
         let t1 = t0 + Duration::seconds(60);
         assert!(!tracker.can_speak_ambient(t1, 300, 3, false, 22, 8));
 
-        // 350 seconds later -> true
         let t2 = t0 + Duration::seconds(350);
         assert!(tracker.can_speak_ambient(t2, 300, 3, false, 22, 8));
+    }
+
+    #[test]
+    fn duplicate_fingerprint_expires_at_the_dedup_boundary() {
+        let mut tracker = CooldownTracker::new();
+        tracker.annoyance_budget.threshold = 101.0;
+        let now = Utc.with_ymd_and_hms(2026, 8, 22, 12, 0, 0).unwrap();
+        tracker.record_ambient_speech(now, "fingerprint");
+
+        assert_eq!(
+            tracker.check_ambient_gate(
+                now + Duration::seconds(EVENT_DEDUP_WINDOW_SECONDS - 1),
+                0,
+                12,
+                false,
+                22,
+                8,
+                Some("fingerprint"),
+            ),
+            Err(AmbientCooldownBlockReason::DuplicateEvent)
+        );
+        assert!(tracker
+            .check_ambient_gate(
+                now + Duration::seconds(EVENT_DEDUP_WINDOW_SECONDS),
+                0,
+                12,
+                false,
+                22,
+                8,
+                Some("fingerprint"),
+            )
+            .is_ok());
     }
 }

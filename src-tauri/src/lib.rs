@@ -70,6 +70,18 @@ pub fn run() {
             };
 
             let app_state = AppState::new(db_path.as_deref()).map_err(std::io::Error::other)?;
+            let ambient_scheduler = app_state.ambient_scheduler.clone();
+            let ambient_state = app_state.clone();
+            let ambient_app = app.handle().clone();
+            ambient_scheduler
+                .start(move |event| {
+                    let state = ambient_state.clone();
+                    let app = ambient_app.clone();
+                    async move {
+                        commands::ambient::process_ambient_event(event, &state, &app).await
+                    }
+                })
+                .map_err(std::io::Error::other)?;
 
             if app_state.settings.read().restore_position {
                 if let Some(window) = app.get_webview_window("main") {
@@ -163,15 +175,15 @@ pub fn run() {
             set_character_state,
             show_moose,
             hide_moose,
-            dismiss_moose,
-            set_mute,
+            commands::ambient::dismiss_moose,
+            commands::ambient::set_mute,
             is_muted,
             trigger_canned_reaction,
-            trigger_ambient_remark,
+            commands::ambient::trigger_ambient_remark,
             audition_voice,
-            start_conversation,
+            commands::ambient::start_conversation,
             stop_conversation,
-            barge_in,
+            commands::ambient::barge_in,
             get_memories,
             delete_memory,
             forget_everything,
@@ -195,6 +207,13 @@ pub fn run() {
             let handle = app_handle.clone();
             let exit_code = code.unwrap_or(0);
             tauri::async_runtime::spawn(async move {
+                let ambient_scheduler = handle
+                    .try_state::<AppState>()
+                    .map(|state| state.ambient_scheduler.clone());
+                if let Some(scheduler) = ambient_scheduler {
+                    scheduler.stop().await;
+                }
+
                 if let (Some(state), Some(window)) =
                     (handle.try_state::<AppState>(), handle.get_webview_window("main"))
                 {

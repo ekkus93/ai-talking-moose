@@ -8,6 +8,7 @@ use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
+use crate::character::ambient::AmbientScheduler;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::personality::CharacterConfig;
 use crate::character::state::CharacterState;
@@ -174,12 +175,14 @@ impl AppSettings {
     }
 }
 
+#[derive(Clone)]
 pub struct AppState {
     pub db: Arc<Database>,
     pub memory: Arc<MemoryManager>,
     pub secrets: Arc<SecretStore>,
     pub character_state: Arc<RwLock<CharacterState>>,
     pub behavior_engine: Arc<Mutex<BehaviorEngine>>,
+    pub ambient_scheduler: AmbientScheduler,
     pub audio_capture: Arc<Mutex<AudioCapture>>,
     pub audio_playback: Arc<AudioPlayback>,
     pub conversation_mgr: Arc<ConversationManager>,
@@ -301,6 +304,7 @@ impl AppState {
             secrets,
             character_state: Arc::new(RwLock::new(CharacterState::Idle)),
             behavior_engine,
+            ambient_scheduler: AmbientScheduler::new(),
             audio_capture,
             audio_playback,
             conversation_mgr,
