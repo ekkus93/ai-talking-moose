@@ -29,7 +29,7 @@ pub struct FakeSpeechSynthesizer;
 
 #[async_trait]
 impl SpeechSynthesizer for FakeSpeechSynthesizer {
-    async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, String> {
+    async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
         // Generate 0.5s of synthetic beep/speech tones (24000 Hz, 16-bit PCM mono)
         let sample_rate = 24000;
         let num_samples = sample_rate / 2;

@@ -53,6 +53,160 @@ pub const LIVE_WEBSOCKET_ENDPOINT: &str = GOOGLE_PROVIDER_CONFIG.live_websocket_
 pub const DEFAULT_LIVE_MODEL: &str = GOOGLE_MODELS[0].id;
 pub const DEFAULT_TEXT_MODEL: &str = GOOGLE_MODELS[1].id;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct GoogleTtsVoiceDescriptor {
+    pub id: &'static str,
+    pub style: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct GoogleTtsConfig {
+    pub models: &'static [&'static str],
+    pub voices: &'static [GoogleTtsVoiceDescriptor],
+    pub default_model: &'static str,
+    pub default_voice: &'static str,
+}
+
+/// Standalone TTS stays on the generateContent-compatible 2.5 Flash TTS model for
+/// this V1 implementation. The model identifier is centralized here so a future
+/// transport/model migration cannot diverge across runtime call sites.
+pub const GOOGLE_TTS_MODELS: &[&str] = &["gemini-2.5-flash-preview-tts"];
+pub const DEFAULT_TTS_MODEL: &str = GOOGLE_TTS_MODELS[0];
+pub const LEGACY_TTS_MODEL: &str = "en-US-Standard-B";
+
+/// Current Gemini TTS / Live native-audio voice catalog. Live native audio supports
+/// the TTS voice set, so one validated voice selector can drive both paths.
+pub const GOOGLE_TTS_VOICES: &[GoogleTtsVoiceDescriptor] = &[
+    GoogleTtsVoiceDescriptor {
+        id: "Zephyr",
+        style: "Bright",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Puck",
+        style: "Upbeat",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Charon",
+        style: "Informative",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Kore",
+        style: "Firm",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Fenrir",
+        style: "Excitable",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Leda",
+        style: "Youthful",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Orus",
+        style: "Firm",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Aoede",
+        style: "Breezy",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Callirrhoe",
+        style: "Easy-going",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Autonoe",
+        style: "Bright",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Enceladus",
+        style: "Breathy",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Iapetus",
+        style: "Clear",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Umbriel",
+        style: "Easy-going",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Algieba",
+        style: "Smooth",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Despina",
+        style: "Smooth",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Erinome",
+        style: "Clear",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Algenib",
+        style: "Gravelly",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Rasalgethi",
+        style: "Informative",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Laomedeia",
+        style: "Upbeat",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Achernar",
+        style: "Soft",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Alnilam",
+        style: "Firm",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Schedar",
+        style: "Even",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Gacrux",
+        style: "Mature",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Pulcherrima",
+        style: "Forward",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Achird",
+        style: "Friendly",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Zubenelgenubi",
+        style: "Casual",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Vindemiatrix",
+        style: "Gentle",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Sadachbia",
+        style: "Lively",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Sadaltager",
+        style: "Knowledgeable",
+    },
+    GoogleTtsVoiceDescriptor {
+        id: "Sulafat",
+        style: "Warm",
+    },
+];
+pub const DEFAULT_TTS_VOICE: &str = "Fenrir";
+
+pub const GOOGLE_TTS_CONFIG: GoogleTtsConfig = GoogleTtsConfig {
+    models: GOOGLE_TTS_MODELS,
+    voices: GOOGLE_TTS_VOICES,
+    default_model: DEFAULT_TTS_MODEL,
+    default_voice: DEFAULT_TTS_VOICE,
+};
+
 pub fn supports_capability(model_id: &str, capability: GoogleModelCapability) -> bool {
     GOOGLE_MODELS
         .iter()
@@ -79,6 +233,22 @@ pub fn validate_text_model(model_id: &str) -> Result<(), String> {
     }
 }
 
+pub fn validate_tts_model(model_id: &str) -> Result<(), String> {
+    if GOOGLE_TTS_MODELS.contains(&model_id) || model_id == LEGACY_TTS_MODEL {
+        Ok(())
+    } else {
+        Err(format!("unsupported Gemini TTS model '{model_id}'"))
+    }
+}
+
+pub fn validate_tts_voice(voice_id: &str) -> Result<(), String> {
+    if GOOGLE_TTS_VOICES.iter().any(|voice| voice.id == voice_id) {
+        Ok(())
+    } else {
+        Err(format!("unsupported Gemini TTS voice '{voice_id}'"))
+    }
+}
+
 pub fn normalize_live_model(model_id: &str) -> &'static str {
     if supports_capability(model_id, GoogleModelCapability::LiveAudio) {
         GOOGLE_MODELS
@@ -99,6 +269,25 @@ pub fn normalize_text_model(model_id: &str) -> &'static str {
     } else {
         DEFAULT_TEXT_MODEL
     }
+}
+
+pub fn normalize_tts_model(model_id: &str) -> &'static str {
+    if model_id == LEGACY_TTS_MODEL {
+        return DEFAULT_TTS_MODEL;
+    }
+
+    GOOGLE_TTS_MODELS
+        .iter()
+        .copied()
+        .find(|model| *model == model_id)
+        .unwrap_or(DEFAULT_TTS_MODEL)
+}
+
+pub fn normalize_tts_voice(voice_id: &str) -> &'static str {
+    GOOGLE_TTS_VOICES
+        .iter()
+        .find(|voice| voice.id == voice_id)
+        .map_or(DEFAULT_TTS_VOICE, |voice| voice.id)
 }
 
 #[cfg(test)]
@@ -137,6 +326,24 @@ mod tests {
     }
 
     #[test]
+    fn tts_catalog_has_a_valid_default_and_migrates_legacy_model_ids() {
+        validate_tts_model(DEFAULT_TTS_MODEL).unwrap();
+        validate_tts_model(LEGACY_TTS_MODEL).unwrap();
+        validate_tts_voice(DEFAULT_TTS_VOICE).unwrap();
+        assert_eq!(DEFAULT_TTS_VOICE, "Fenrir");
+        assert_eq!(
+            GOOGLE_TTS_VOICES
+                .iter()
+                .find(|voice| voice.id == DEFAULT_TTS_VOICE)
+                .unwrap()
+                .style,
+            "Excitable"
+        );
+        assert_eq!(normalize_tts_model(LEGACY_TTS_MODEL), DEFAULT_TTS_MODEL);
+        assert_eq!(normalize_tts_voice("not-a-real-voice"), DEFAULT_TTS_VOICE);
+    }
+
+    #[test]
     fn model_catalog_serializes_typed_capabilities() {
         let value = serde_json::to_value(GOOGLE_MODELS).unwrap();
         assert_eq!(value[0]["id"], DEFAULT_LIVE_MODEL);
@@ -158,5 +365,13 @@ mod tests {
         );
         assert_eq!(value["models"][0]["id"], DEFAULT_LIVE_MODEL);
         assert_eq!(value["models"][1]["id"], DEFAULT_TEXT_MODEL);
+    }
+
+    #[test]
+    fn tts_config_serializes_model_and_voice_catalog() {
+        let value = serde_json::to_value(GOOGLE_TTS_CONFIG).unwrap();
+        assert_eq!(value["default_model"], DEFAULT_TTS_MODEL);
+        assert_eq!(value["default_voice"], DEFAULT_TTS_VOICE);
+        assert_eq!(value["voices"].as_array().unwrap().len(), 30);
     }
 }

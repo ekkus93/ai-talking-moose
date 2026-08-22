@@ -11,7 +11,10 @@ pub async fn synthesize_and_queue(
     request: TtsRequest,
     output_device: Option<String>,
 ) -> Result<PlaybackEnqueueReport, String> {
-    let audio = synthesizer.synthesize(request).await?;
+    let audio = synthesizer
+        .synthesize(request)
+        .await
+        .map_err(|error| error.message)?;
     playback
         .start(output_device)
         .map_err(|error_value| error_value.to_string())?;

@@ -6,6 +6,8 @@ use crate::character::state::{transition_character_state, CharacterState};
 use crate::memory::MemoryManager;
 use tauri::{Emitter, Runtime, State};
 
+pub(crate) const VOICE_AUDITION_SCRIPT: &str = "Hello, I'm Moose. Oh good, another button to click. I'm not annoyed; I'm just professionally disappointed. Short version: it works. Longer version: I'll explain it, but I reserve the right to look bewildered while doing it.";
+
 fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<String> {
     if memory_enabled {
         memory.get_memory_strings()
@@ -150,20 +152,12 @@ pub async fn audition_voice<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
-    let sample = match voice_name.as_str() {
-        "Fenrir" => "Hey pal, I'm Moose. Deep, gravelly, and living in your computer.",
-        "Charon" => "I am the Moose. Slow, deadpan, and wondering why you're clicking buttons.",
-        "Orus" => "Greetings. Warm and relaxed, right here on your desktop.",
-        "Puck" => "Hey there! Look at me, I'm the talking cartoon moose!",
-        "Aoede" => "Hello! A bright and cheerful voice for your desktop moose.",
-        _ => "Hello from your desktop moose.",
-    };
-
+    crate::ai::google::validate_tts_voice(&voice_name)?;
     transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
-    let _ = app.emit("moose://speech-bubble", sample);
+    let _ = app.emit("moose://speech-bubble", VOICE_AUDITION_SCRIPT);
 
-    speak_standalone(sample, Some(voice_name), state.inner()).await?;
-    Ok(sample.to_string())
+    speak_standalone(VOICE_AUDITION_SCRIPT, Some(voice_name), state.inner()).await?;
+    Ok(VOICE_AUDITION_SCRIPT.to_string())
 }
 
 #[tauri::command]
@@ -254,6 +248,16 @@ mod tests {
     use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
     use tauri::webview::InvokeRequest;
     use tauri::Listener;
+
+    #[test]
+    fn voice_auditions_use_one_fixed_original_moose_corpus() {
+        let script = VOICE_AUDITION_SCRIPT;
+        assert!(script.contains("Hello, I'm Moose"));
+        assert!(script.contains("another button"));
+        assert!(script.contains("not annoyed"));
+        assert!(script.contains("Short version"));
+        assert!(script.contains("Longer version"));
+    }
 
     fn ipc_request(command: &str, body: serde_json::Value) -> InvokeRequest {
         InvokeRequest {

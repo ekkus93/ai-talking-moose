@@ -1,6 +1,7 @@
+use crate::app::state::AppSettings;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IdentityConfig {
     pub name: String,
     pub species: String,
@@ -15,7 +16,7 @@ impl Default for IdentityConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersonalitySliders {
     pub dry: f32,
     pub sarcastic: f32,
@@ -28,19 +29,20 @@ pub struct PersonalitySliders {
 
 impl Default for PersonalitySliders {
     fn default() -> Self {
+        let settings = AppSettings::default();
         Self {
-            dry: 0.85,
-            sarcastic: 0.70,
-            friendly: 0.55,
-            absurd: 0.65,
-            helpful: 0.35,
-            verbosity: 0.30,
-            talkativeness: 0.50,
+            dry: settings.dry,
+            sarcastic: settings.sarcastic,
+            friendly: settings.friendly,
+            absurd: settings.absurd,
+            helpful: settings.helpful,
+            verbosity: settings.verbosity,
+            talkativeness: settings.talkativeness,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpeechRules {
     pub max_sentences_ambient: usize,
     pub max_sentences_conversation_default: usize,
@@ -59,7 +61,7 @@ impl Default for SpeechRules {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BehaviorConfig {
     pub unsolicited_comments: bool,
     pub quiet_hours_enabled: bool,
@@ -71,18 +73,19 @@ pub struct BehaviorConfig {
 
 impl Default for BehaviorConfig {
     fn default() -> Self {
+        let settings = AppSettings::default();
         Self {
-            unsolicited_comments: true,
-            quiet_hours_enabled: true,
-            quiet_hours_start: 22,
-            quiet_hours_end: 8,
-            max_comments_per_hour: 4,
+            unsolicited_comments: settings.unsolicited_comments,
+            quiet_hours_enabled: settings.quiet_hours_enabled,
+            quiet_hours_start: settings.quiet_hours_start,
+            quiet_hours_end: settings.quiet_hours_end,
+            max_comments_per_hour: settings.max_comments_per_hour,
             min_cooldown_seconds: 300, // 5 minutes
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CharacterConfig {
     pub identity: IdentityConfig,
     pub personality: PersonalitySliders,
@@ -121,5 +124,49 @@ impl CharacterConfig {
 
     pub fn to_yaml_str(&self) -> Result<String, serde_yaml::Error> {
         serde_yaml::to_string(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn character_config_json_round_trip_preserves_authoritative_defaults() {
+        let expected = CharacterConfig::default();
+        let json = serde_json::to_string(&expected).unwrap();
+        let restored: CharacterConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, expected);
+    }
+
+    #[test]
+    fn character_defaults_follow_persisted_settings_defaults() {
+        let settings = AppSettings::default();
+        let character = CharacterConfig::default();
+
+        assert_eq!(character.personality.dry, settings.dry);
+        assert_eq!(character.personality.sarcastic, settings.sarcastic);
+        assert_eq!(character.personality.friendly, settings.friendly);
+        assert_eq!(character.personality.absurd, settings.absurd);
+        assert_eq!(character.personality.helpful, settings.helpful);
+        assert_eq!(character.personality.verbosity, settings.verbosity);
+        assert_eq!(character.personality.talkativeness, settings.talkativeness);
+        assert_eq!(
+            character.behavior.unsolicited_comments,
+            settings.unsolicited_comments
+        );
+        assert_eq!(
+            character.behavior.quiet_hours_enabled,
+            settings.quiet_hours_enabled
+        );
+        assert_eq!(
+            character.behavior.quiet_hours_start,
+            settings.quiet_hours_start
+        );
+        assert_eq!(character.behavior.quiet_hours_end, settings.quiet_hours_end);
+        assert_eq!(
+            character.behavior.max_comments_per_hour,
+            settings.max_comments_per_hour
+        );
     }
 }

@@ -1,78 +1,113 @@
 use crate::ai::google::auth::GoogleAuth;
+use crate::ai::google::config::{
+    normalize_tts_model, normalize_tts_voice, validate_tts_model, validate_tts_voice,
+    DEFAULT_TTS_MODEL,
+};
 use crate::ai::traits::SpeechSynthesizer;
-use crate::ai::types::{AudioStreamData, TtsRequest};
+use crate::ai::types::{
+    AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest,
+};
 use async_trait::async_trait;
 use base64::Engine;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde_json::json;
-use tracing::{info, warn};
+use std::time::Duration;
+use tracing::info;
+
+const TTS_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct GoogleSpeechSynthesizer {
     auth: GoogleAuth,
+    model: String,
     default_voice: String,
     client: Client,
 }
 
 impl GoogleSpeechSynthesizer {
     pub fn new(auth: GoogleAuth, default_voice: String) -> Self {
+        Self::new_with_model(auth, DEFAULT_TTS_MODEL.to_string(), default_voice)
+    }
+
+    fn new_with_model(auth: GoogleAuth, model: String, default_voice: String) -> Self {
         Self {
             auth,
-            default_voice,
+            model: normalize_tts_model(&model).to_string(),
+            default_voice: normalize_tts_voice(&default_voice).to_string(),
             client: Client::new(),
         }
     }
 
-    fn generate_cartoon_synth_audio(text: &str) -> AudioStreamData {
-        let sample_rate = 24000;
-        // Generate duration proportional to text length (~60ms per character)
-        let duration_secs = (text.len() as f32 * 0.065).clamp(0.8, 6.0);
-        let num_samples = (sample_rate as f32 * duration_secs) as usize;
-        let mut samples = Vec::with_capacity(num_samples);
+    fn safe_error(kind: ProviderErrorKind) -> ProviderError {
+        ProviderError::from_kind(kind)
+    }
 
-        for (i, _) in (0..num_samples).enumerate() {
-            let t = i as f32 / sample_rate as f32;
-            // Wobbly pitch cadence characteristic of 80s/90s Mac speech
-            let base_freq = 130.0 + (t * 8.0).sin() * 25.0 + (t * 22.0).sin() * 15.0;
-            let formant1 = (t * base_freq * 2.0 * std::f32::consts::PI).sin();
-            let formant2 = (t * base_freq * 2.5 * 2.0 * std::f32::consts::PI).sin() * 0.5;
-            let val = ((formant1 + formant2) * 0.3).clamp(-0.9, 0.9);
-            samples.push((val * 32767.0) as i16);
+    fn classify_status(status: StatusCode) -> ProviderError {
+        match status.as_u16() {
+            401 | 403 => Self::safe_error(ProviderErrorKind::Auth),
+            429 => Self::safe_error(ProviderErrorKind::Quota),
+            404 => Self::safe_error(ProviderErrorKind::Model),
+            400..=499 => Self::safe_error(ProviderErrorKind::Setup),
+            _ => Self::safe_error(ProviderErrorKind::Network),
         }
+    }
 
-        let mut pcm_bytes = Vec::with_capacity(samples.len() * 2);
-        for s in samples {
-            pcm_bytes.extend_from_slice(&s.to_le_bytes());
-        }
+    fn performance_instruction(request: &TtsRequest) -> String {
+        let rate = request.speaking_rate.unwrap_or(1.0);
+        let pitch = request.pitch.unwrap_or(0.0);
+        let pace = if rate < 0.75 {
+            "very slowly"
+        } else if rate < 0.95 {
+            "a little slowly"
+        } else if rate > 1.35 {
+            "quickly"
+        } else if rate > 1.05 {
+            "a little briskly"
+        } else {
+            "at a natural, measured pace"
+        };
+        let register = if pitch <= -6.0 {
+            "a noticeably lower vocal register"
+        } else if pitch < -0.5 {
+            "a slightly lower vocal register"
+        } else if pitch >= 6.0 {
+            "a noticeably higher vocal register"
+        } else if pitch > 0.5 {
+            "a slightly higher vocal register"
+        } else {
+            "your natural vocal register"
+        };
 
-        AudioStreamData {
-            pcm_bytes,
-            sample_rate,
-        }
+        format!(
+            "Perform this exact line as an original dry-witted cartoon moose. Speak {pace}, using {register}. Do not add, remove, or paraphrase words. Line: {}",
+            request.text
+        )
     }
 }
 
 #[async_trait]
 impl SpeechSynthesizer for GoogleSpeechSynthesizer {
-    async fn synthesize(&self, request: TtsRequest) -> Result<AudioStreamData, String> {
+    async fn synthesize(&self, request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
         if !self.auth.is_valid() {
-            return Ok(Self::generate_cartoon_synth_audio(&request.text));
+            return Err(Self::safe_error(ProviderErrorKind::Auth));
         }
+        validate_tts_model(&self.model)
+            .map_err(|_| Self::safe_error(ProviderErrorKind::Model))?;
 
         let voice = request
             .voice_name
+            .clone()
             .unwrap_or_else(|| self.default_voice.clone());
+        validate_tts_voice(&voice).map_err(|_| Self::safe_error(ProviderErrorKind::Setup))?;
 
-        // 1. Try Gemini 2.0 Flash audio generation endpoint (works with AI Studio API keys)
-        let gemini_url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={}",
-            self.auth.api_key
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            self.model, self.auth.api_key
         );
-
-        let gemini_body = json!({
+        let body = json!({
             "contents": [
                 {
                     "parts": [
-                        { "text": format!("Speak the following line in character as a cartoon moose: {}", request.text) }
+                        { "text": Self::performance_instruction(&request) }
                     ]
                 }
             ],
@@ -88,39 +123,98 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
             }
         });
 
-        if let Ok(resp) = self
+        let response = self
             .client
-            .post(&gemini_url)
-            .json(&gemini_body)
+            .post(&url)
+            .timeout(TTS_REQUEST_TIMEOUT)
+            .json(&body)
             .send()
             .await
-        {
-            if resp.status().is_success() {
-                if let Ok(json_val) = resp.json::<serde_json::Value>().await {
-                    if let Some(parts) = json_val["candidates"][0]["content"]["parts"].as_array() {
-                        for part in parts {
-                            if let Some(b64) = part["inlineData"]["data"].as_str() {
-                                if let Ok(pcm_bytes) =
-                                    base64::engine::general_purpose::STANDARD.decode(b64)
-                                {
-                                    info!(
-                                        "Gemini generated audio stream successfully ({} bytes)",
-                                        pcm_bytes.len()
-                                    );
-                                    return Ok(AudioStreamData {
-                                        pcm_bytes,
-                                        sample_rate: 24000,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
+            .map_err(|_| Self::safe_error(ProviderErrorKind::Network))?;
+        if !response.status().is_success() {
+            return Err(Self::classify_status(response.status()));
+        }
+
+        let payload = response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|_| Self::safe_error(ProviderErrorKind::Protocol))?;
+        let parts = payload["candidates"][0]["content"]["parts"]
+            .as_array()
+            .ok_or_else(|| Self::safe_error(ProviderErrorKind::Protocol))?;
+        for part in parts {
+            if let Some(encoded) = part["inlineData"]["data"].as_str() {
+                let pcm_bytes = base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .map_err(|_| Self::safe_error(ProviderErrorKind::Protocol))?;
+                info!(
+                    byte_count = pcm_bytes.len(),
+                    "Gemini generated standalone TTS audio"
+                );
+                return Ok(AudioStreamData {
+                    pcm_bytes,
+                    sample_rate: 24_000,
+                });
             }
         }
 
-        // 2. Fallback to vintage MacinTalk-style cartoon synth tones if API key doesn't support cloud TTS
-        warn!("Falling back to cartoon synth audio for remark");
-        Ok(Self::generate_cartoon_synth_audio(&request.text))
+        Err(Self::safe_error(ProviderErrorKind::Protocol))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn performance_prompt_maps_rate_and_pitch_without_changing_text() {
+        let request = TtsRequest {
+            text: "Oh good. Another dialog box.".to_string(),
+            voice_name: None,
+            speaking_rate: Some(0.8),
+            pitch: Some(-2.0),
+        };
+        let prompt = GoogleSpeechSynthesizer::performance_instruction(&request);
+        assert!(prompt.contains("a little slowly"));
+        assert!(prompt.contains("slightly lower vocal register"));
+        assert!(prompt.contains(&request.text));
+    }
+
+    #[test]
+    fn constructor_normalizes_legacy_model_and_unknown_voice() {
+        let synthesizer = GoogleSpeechSynthesizer::new_with_model(
+            GoogleAuth::new("test-key".to_string()),
+            "en-US-Standard-B".to_string(),
+            "not-a-real-voice".to_string(),
+        );
+
+        assert_eq!(
+            synthesizer.model,
+            crate::ai::google::config::DEFAULT_TTS_MODEL
+        );
+        assert_eq!(
+            synthesizer.default_voice,
+            crate::ai::google::config::DEFAULT_TTS_VOICE
+        );
+    }
+
+    #[test]
+    fn http_errors_map_to_structured_safe_provider_categories() {
+        assert_eq!(
+            GoogleSpeechSynthesizer::classify_status(StatusCode::UNAUTHORIZED).kind,
+            ProviderErrorKind::Auth
+        );
+        assert_eq!(
+            GoogleSpeechSynthesizer::classify_status(StatusCode::TOO_MANY_REQUESTS).kind,
+            ProviderErrorKind::Quota
+        );
+        assert_eq!(
+            GoogleSpeechSynthesizer::classify_status(StatusCode::NOT_FOUND).kind,
+            ProviderErrorKind::Model
+        );
+        assert_eq!(
+            GoogleSpeechSynthesizer::classify_status(StatusCode::BAD_GATEWAY).kind,
+            ProviderErrorKind::Network
+        );
     }
 }

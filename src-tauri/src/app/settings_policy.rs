@@ -1,4 +1,6 @@
-use crate::ai::google::{validate_live_model, validate_text_model};
+use crate::ai::google::{
+    validate_live_model, validate_text_model, validate_tts_model, validate_tts_voice,
+};
 use crate::app::state::AppSettings;
 use crate::audio::devices::AudioDeviceInfo;
 use crate::character::behavior::BehaviorEngine;
@@ -49,8 +51,8 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
     }
     validate_live_model(&settings.live_model)?;
     validate_text_model(&settings.text_model)?;
-    bounded_identifier("TTS voice", &settings.tts_voice, 128)?;
-    bounded_identifier("TTS model", &settings.tts_model, 128)?;
+    validate_tts_voice(&settings.tts_voice)?;
+    validate_tts_model(&settings.tts_model)?;
     optional_device_id("input device ID", settings.input_device.as_deref())?;
     optional_device_id("output device ID", settings.output_device.as_deref())?;
 

@@ -9,7 +9,7 @@ pub trait TextModel: Send + Sync {
 
 #[async_trait]
 pub trait SpeechSynthesizer: Send + Sync {
-    async fn synthesize(&self, request: TtsRequest) -> Result<AudioStreamData, String>;
+    async fn synthesize(&self, request: TtsRequest) -> Result<AudioStreamData, ProviderError>;
 }
 
 #[async_trait]
