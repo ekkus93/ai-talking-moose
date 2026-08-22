@@ -4,9 +4,7 @@ use crate::ai::google::config::{
     DEFAULT_TTS_MODEL,
 };
 use crate::ai::traits::SpeechSynthesizer;
-use crate::ai::types::{
-    AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest,
-};
+use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
 use async_trait::async_trait;
 use base64::Engine;
 use reqwest::{Client, StatusCode};
@@ -90,8 +88,7 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
         if !self.auth.is_valid() {
             return Err(Self::safe_error(ProviderErrorKind::Auth));
         }
-        validate_tts_model(&self.model)
-            .map_err(|_| Self::safe_error(ProviderErrorKind::Model))?;
+        validate_tts_model(&self.model).map_err(|_| Self::safe_error(ProviderErrorKind::Model))?;
 
         let voice = request
             .voice_name
