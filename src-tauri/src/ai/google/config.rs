@@ -46,6 +46,10 @@ pub const GOOGLE_PROVIDER_CONFIG: GoogleProviderConfig = GoogleProviderConfig {
     models: GOOGLE_MODELS,
 };
 
+// Compatibility alias for transport code. The endpoint value remains owned by
+// the typed provider configuration above, so there is still one source of truth.
+pub const LIVE_WEBSOCKET_ENDPOINT: &str = GOOGLE_PROVIDER_CONFIG.live_websocket_endpoint;
+
 pub const DEFAULT_LIVE_MODEL: &str = GOOGLE_MODELS[0].id;
 pub const DEFAULT_TEXT_MODEL: &str = GOOGLE_MODELS[1].id;
 
@@ -148,6 +152,7 @@ mod tests {
             value["live_websocket_endpoint"],
             "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
         );
+        assert_eq!(LIVE_WEBSOCKET_ENDPOINT, GOOGLE_PROVIDER_CONFIG.live_websocket_endpoint);
         assert_eq!(value["models"][0]["id"], DEFAULT_LIVE_MODEL);
         assert_eq!(value["models"][1]["id"], DEFAULT_TEXT_MODEL);
     }
