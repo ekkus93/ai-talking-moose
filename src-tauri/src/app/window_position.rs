@@ -8,6 +8,7 @@ use tracing::warn;
 const WINDOW_POSITION_SETTING: &str = "moose_window_position";
 const PERSIST_DEBOUNCE_MS: u64 = 250;
 static PERSIST_GENERATION: AtomicU64 = AtomicU64::new(0);
+static PERSIST_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct WindowPosition {
@@ -40,25 +41,71 @@ pub(crate) fn persist_window_position(
     db: &Database,
     position: WindowPosition,
 ) -> Result<(), String> {
+    persist_window_position_with_coordination(
+        db,
+        position,
+        &PERSIST_GENERATION,
+        &PERSIST_LOCK,
+    )
+}
+
+fn persist_window_position_with_coordination(
+    db: &Database,
+    position: WindowPosition,
+    generation: &AtomicU64,
+    persist_lock: &parking_lot::Mutex<()>,
+) -> Result<(), String> {
+    // Invalidate delayed drag-time writes before waiting for the persistence lock.
+    // If one already owns the lock, it finishes first and this authoritative write
+    // wins afterward; otherwise stale tasks fail their generation check in-lock.
+    generation.fetch_add(1, Ordering::Relaxed);
+    let _guard = persist_lock.lock();
+    persist_window_position_unlocked(db, position)
+}
+
+fn persist_window_position_unlocked(
+    db: &Database,
+    position: WindowPosition,
+) -> Result<(), String> {
     let json = serde_json::to_string(&position).map_err(|error| error.to_string())?;
     db.set_setting(WINDOW_POSITION_SETTING, &json)
         .map_err(|error| error.to_string())
 }
 
+fn next_persist_generation(counter: &AtomicU64) -> u64 {
+    counter.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
+}
+
+fn persist_scheduled_window_position_if_current(
+    db: &Database,
+    position: WindowPosition,
+    generation: u64,
+    generation_counter: &AtomicU64,
+    persist_lock: &parking_lot::Mutex<()>,
+) -> Result<bool, String> {
+    let _guard = persist_lock.lock();
+    if generation_counter.load(Ordering::Relaxed) != generation {
+        return Ok(false);
+    }
+
+    persist_window_position_unlocked(db, position)?;
+    Ok(true)
+}
+
 /// Debounce drag-time window move events so SQLite is not rewritten for every
 /// intermediate pixel while still persisting the final settled position.
 pub(crate) fn schedule_window_position_persist(db: Arc<Database>, position: WindowPosition) {
-    let generation = PERSIST_GENERATION
-        .fetch_add(1, Ordering::Relaxed)
-        .wrapping_add(1);
+    let generation = next_persist_generation(&PERSIST_GENERATION);
 
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(PERSIST_DEBOUNCE_MS)).await;
-        if PERSIST_GENERATION.load(Ordering::Relaxed) != generation {
-            return;
-        }
-
-        if let Err(error) = persist_window_position(db.as_ref(), position) {
+        if let Err(error) = persist_scheduled_window_position_if_current(
+            db.as_ref(),
+            position,
+            generation,
+            &PERSIST_GENERATION,
+            &PERSIST_LOCK,
+        ) {
             warn!(error = %error, "Failed to persist Moose window position");
         }
     });
@@ -131,6 +178,35 @@ mod tests {
         persist_window_position(&db, position).unwrap();
 
         assert_eq!(load_window_position(&db).unwrap(), Some(position));
+    }
+
+    #[test]
+    fn authoritative_persist_blocks_an_older_debounce_write() {
+        let db = Database::new_in_memory().unwrap();
+        let generation_counter = AtomicU64::new(0);
+        let persist_lock = parking_lot::Mutex::new(());
+        let pending_generation = next_persist_generation(&generation_counter);
+
+        let final_position = WindowPosition { x: 777, y: 333 };
+        persist_window_position_with_coordination(
+            &db,
+            final_position,
+            &generation_counter,
+            &persist_lock,
+        )
+        .unwrap();
+
+        let stale_write = persist_scheduled_window_position_if_current(
+            &db,
+            WindowPosition { x: 111, y: 222 },
+            pending_generation,
+            &generation_counter,
+            &persist_lock,
+        )
+        .unwrap();
+
+        assert!(!stale_write);
+        assert_eq!(load_window_position(&db).unwrap(), Some(final_position));
     }
 
     #[test]
