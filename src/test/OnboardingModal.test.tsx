@@ -25,6 +25,14 @@ describe("OnboardingModal ASR privacy", () => {
         /never automatically switch to cloud microphone upload/i,
       ),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/active conversation or an explicit microphone test/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /active-app observation, cross-conversation memory, and local transcript saving all start Off/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("describes cloud microphone upload when Gemini Live is selected", () => {

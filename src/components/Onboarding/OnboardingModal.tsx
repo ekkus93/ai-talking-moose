@@ -94,7 +94,8 @@ export const OnboardingModal: React.FC = () => {
             </p>
             <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-700 space-y-1">
               <p>
-                Microphone is only active when you click to talk. No hidden
+                Microphone is only active during an active conversation or an
+                explicit microphone test you start from Settings. No hidden
                 continuous recording.
               </p>
               {localAsr ? (
@@ -112,6 +113,11 @@ export const OnboardingModal: React.FC = () => {
               <p>
                 Local ASR errors never automatically switch to cloud microphone
                 upload.
+              </p>
+              <p>
+                Privacy defaults are conservative: active-app observation,
+                cross-conversation memory, and local transcript saving all start
+                Off until you enable them in Settings.
               </p>
             </div>
             <button

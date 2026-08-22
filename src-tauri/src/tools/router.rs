@@ -46,6 +46,37 @@ mod tests {
     use crate::persistence::sqlite::Database;
     use parking_lot::RwLock;
     use serde_json::json;
+    use std::io::{self, Write};
+    use std::sync::Mutex as StdMutex;
+    use tracing_subscriber::fmt::MakeWriter;
+
+    #[derive(Clone, Default)]
+    struct CapturedLogs(Arc<StdMutex<Vec<u8>>>);
+
+    impl CapturedLogs {
+        fn text(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    impl Write for CapturedLogs {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for CapturedLogs {
+        type Writer = Self;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
 
     #[tokio::test]
     async fn test_tool_router_time_and_memory() {
@@ -108,5 +139,79 @@ mod tests {
             .dispatch("execute_shell", &json!({ "cmd": "ls" }))
             .await;
         assert!(bad_tool.is_err());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn private_tool_payloads_and_observer_results_never_enter_normal_logs() {
+        const TRANSCRIPT_SENTINEL: &str = "PRIVATE_TRANSCRIPT_SENTINEL_7c2a";
+        const PROMPT_SENTINEL: &str = "PRIVATE_SYSTEM_PROMPT_SENTINEL_91bd";
+        const SECRET_SENTINEL: &str = "AIzaSyPRIVATE_SECRET_SENTINEL_d41f";
+        const MEMORY_SENTINEL: &str = "PRIVATE_MEMORY_FACT_SENTINEL_a331";
+        const WINDOW_SENTINEL: &str = "PRIVATE_WINDOW_TITLE_SENTINEL_448e";
+
+        let db = Arc::new(Database::new_in_memory().unwrap());
+        let mem = Arc::new(crate::memory::MemoryManager::new(db));
+        let settings = Arc::new(RwLock::new(AppSettings::default()));
+        settings.write().memory_enabled = true;
+        settings.write().active_app_observation = true;
+        let router = ToolRouter::new(Arc::new(BuiltinTools {
+            memory_manager: mem,
+            character_config: CharacterConfig::default(),
+            settings,
+        }));
+
+        let captured = CapturedLogs::default();
+        let subscriber = tracing_subscriber::fmt()
+            .without_time()
+            .with_ansi(false)
+            .with_writer(captured.clone())
+            .finish();
+        let _default = tracing::subscriber::set_default(subscriber);
+
+        let private_payload = format!(
+            "{TRANSCRIPT_SENTINEL} {PROMPT_SENTINEL} {SECRET_SENTINEL} {MEMORY_SENTINEL} {WINDOW_SENTINEL}"
+        );
+        router
+            .dispatch("remember_fact", &json!({ "fact": private_payload }))
+            .await
+            .unwrap();
+
+        let observer_result = router
+            .dispatch("get_active_application", &json!({}))
+            .await
+            .unwrap();
+        let observed_app = observer_result
+            .get("active_application")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+
+        // Unknown-tool arguments are model-controlled too. Their payload must not be
+        // echoed when the router rejects the request.
+        let _ = router
+            .dispatch(
+                "unregistered_private_probe",
+                &json!({ "window_title": WINDOW_SENTINEL, "secret": SECRET_SENTINEL }),
+            )
+            .await;
+
+        let logs = captured.text();
+        for sentinel in [
+            TRANSCRIPT_SENTINEL,
+            PROMPT_SENTINEL,
+            SECRET_SENTINEL,
+            MEMORY_SENTINEL,
+            WINDOW_SENTINEL,
+        ] {
+            assert!(!logs.contains(sentinel), "private value leaked into log output");
+        }
+        if !observed_app.is_empty() && observed_app != "Unknown" {
+            assert!(
+                !logs.contains(observed_app),
+                "active-application observation leaked into log output"
+            );
+        }
+        assert!(logs.contains("remember_fact"));
+        assert!(logs.contains("get_active_application"));
+        assert!(logs.contains("unregistered_private_probe"));
     }
 }
