@@ -152,7 +152,10 @@ mod tests {
             value["live_websocket_endpoint"],
             "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
         );
-        assert_eq!(LIVE_WEBSOCKET_ENDPOINT, GOOGLE_PROVIDER_CONFIG.live_websocket_endpoint);
+        assert_eq!(
+            LIVE_WEBSOCKET_ENDPOINT,
+            GOOGLE_PROVIDER_CONFIG.live_websocket_endpoint
+        );
         assert_eq!(value["models"][0]["id"], DEFAULT_LIVE_MODEL);
         assert_eq!(value["models"][1]["id"], DEFAULT_TEXT_MODEL);
     }
