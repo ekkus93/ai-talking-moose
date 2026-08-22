@@ -202,7 +202,10 @@ mod tests {
             MEMORY_SENTINEL,
             WINDOW_SENTINEL,
         ] {
-            assert!(!logs.contains(sentinel), "private value leaked into log output");
+            assert!(
+                !logs.contains(sentinel),
+                "private value leaked into log output"
+            );
         }
         if !observed_app.is_empty() && observed_app != "Unknown" {
             assert!(
