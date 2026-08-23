@@ -207,7 +207,10 @@ export interface MemoryRecord {
   id: number;
   fact: string;
   category: string;
+  source: string;
+  confidence: number;
   created_at: string;
+  updated_at: string;
 }
 
 export interface TranscriptRecord {

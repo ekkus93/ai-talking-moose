@@ -252,11 +252,14 @@ impl AppState {
         db_path: Option<&str>,
         secret_store: SecretStore,
     ) -> Result<Self, String> {
-        let db = if let Some(path) = db_path {
-            Arc::new(Database::new(path).unwrap_or_else(|_| Database::new_in_memory().unwrap()))
-        } else {
-            Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
-        };
+        let db =
+            if let Some(path) = db_path {
+                Arc::new(Database::new(path).map_err(|error| {
+                    format!("failed to initialize persistent database: {error}")
+                })?)
+            } else {
+                Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
+            };
 
         let memory = Arc::new(MemoryManager::new(db.clone()));
         let secrets = Arc::new(secret_store);
@@ -357,7 +360,7 @@ mod tests {
     use super::*;
     use crate::secrets::{MemorySecretBackend, SecretBackend};
     use std::sync::Arc;
-    use tempfile::NamedTempFile;
+    use tempfile::{tempdir, NamedTempFile};
 
     #[derive(Default)]
     struct RejectWriteBackend;
@@ -529,6 +532,24 @@ mod tests {
             reopened.get_setting(LEGACY_GOOGLE_API_KEY_SETTING).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn persistent_database_init_failure_never_falls_back_to_memory() {
+        let dir = tempdir().unwrap();
+        let backend = Arc::new(MemorySecretBackend::default());
+        let secret_store = SecretStore::with_backend(backend).unwrap();
+
+        let result = AppState::new_with_secret_store(
+            Some(dir.path().to_string_lossy().as_ref()),
+            secret_store,
+        );
+
+        let error = match result {
+            Ok(_) => panic!("a persistent database failure must abort startup"),
+            Err(error) => error,
+        };
+        assert!(error.contains("failed to initialize persistent database"));
     }
 
     #[test]
