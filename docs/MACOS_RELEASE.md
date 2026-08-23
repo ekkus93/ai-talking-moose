@@ -3,9 +3,11 @@
 **V1 product:** Talking Moose AI  
 **Bundle identifier:** `com.talkingmoose.ai`  
 **V1 version:** `0.1.0`  
-**Deployment target:** macOS 10.15 or later on Intel; Apple Silicon hardware necessarily starts with macOS 11 or later.
+**Deployment target:** macOS 13.4 or later on both Intel and Apple Silicon.
 
 This document describes direct Developer ID distribution outside the Mac App Store. The release gate is intentionally split into automated artifact integrity and physical clean-Mac acceptance. A tagged workflow creates a **draft** GitHub Release; it must not be published until the physical acceptance report passes.
+
+The V1 floor is set by the pinned ONNX Runtime 1.23.2 dylibs shipped with Moonshine. Their Mach-O deployment target is macOS 13.4, so advertising an earlier application minimum would be incorrect even if the Rust/Tauri executable itself could be compiled for an older OS.
 
 ## Entitlement review
 
@@ -51,7 +53,7 @@ git push origin v0.1.0
 `.github/workflows/release.yml` then builds Apple Silicon and Intel artifacts independently. For each architecture it:
 
 1. generates the deterministic icon set and validates tag/version/product/bundle metadata plus the generated icon containers;
-2. prepares the pinned Moonshine + ONNX Runtime dylibs at the explicit support floor (macOS 10.15 Intel, macOS 11.0 Apple Silicon);
+2. prepares the pinned Moonshine + ONNX Runtime dylibs at the explicit macOS 13.4 support floor on both architectures;
 3. stages the project license, Moonshine/native notices, and license texts for resolved Rust/production npm dependencies;
 4. builds the Tauri `.app` and DMG with Developer ID signing and Tauri notarization/stapling;
 5. verifies nested native libraries, deployment target, Developer ID authority, secure timestamp, hardened runtime, Gatekeeper assessment, stapled notarization ticket, and absence of obvious secret/database files;

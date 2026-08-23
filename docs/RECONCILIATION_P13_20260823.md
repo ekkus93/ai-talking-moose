@@ -10,7 +10,7 @@ Source state after this reconciliation:
 - bundle identifier is `com.talkingmoose.ai`, matching the existing Keychain/TCC identity already used by prior physical protocols;
 - V1 version is consistently `0.1.0` across npm, Cargo, and Tauri metadata;
 - placeholder icon blobs are removed; release builds deterministically generate original project Moose artwork in PNG, ICNS, and ICO formats from `scripts/generate_app_icons.py`;
-- Tauri metadata and the native Moonshine build target macOS 10.15; release verification enforces the architecture support floor (10.15 Intel, 11.0 Apple Silicon) on every shipped Mach-O;
+- V1 now declares macOS 13.4 as the minimum on both Intel and Apple Silicon, matching the Mach-O deployment target of the pinned ONNX Runtime 1.23.2 dylibs; CI and release verification enforce that same floor on every shipped Mach-O;
 - direct Developer ID distribution has been reviewed as non-sandboxed and requiring no custom V1 entitlements; microphone access remains a TCC/usage-description capability rather than an App Sandbox entitlement.
 
 `python3 scripts/validate_release_metadata.py` is the fail-closed metadata/version/icon gate.

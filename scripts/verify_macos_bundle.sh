@@ -16,11 +16,14 @@ fail() {
 [[ -n "$app_path" && -d "$app_path" ]] || fail "usage: $0 /path/to/App.app [arm64|x86_64] [--require-signature]"
 case "$arch" in arm64|x86_64) ;; *) fail "unsupported architecture: $arch" ;; esac
 
-ort_version="$(python3 - "$manifest" <<'PY'
+IFS=$'\t' read -r ort_version max_macos_target < <(python3 - "$manifest" "$arch" <<'PY'
 import json, sys
-print(json.load(open(sys.argv[1], encoding="utf-8"))["onnxruntime"]["version"])
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+entry = data["macos"][sys.argv[2]]
+print(f"{data['onnxruntime']['version']}\t{entry['minimum_macos']}")
 PY
-)"
+)
+[[ -n "$ort_version" && -n "$max_macos_target" ]] || fail "invalid native runtime provenance manifest"
 frameworks="$app_path/Contents/Frameworks"
 moonshine="$frameworks/libmoonshine.dylib"
 ort="$frameworks/libonnxruntime.$ort_version.dylib"
@@ -57,13 +60,9 @@ for binary in "$executable" "$moonshine" "$ort"; do
   fi
 done
 
-# Every shipped Mach-O must remain compatible with the documented architecture-specific
-# support floor. Intel can run on 10.15; Apple Silicon itself requires macOS 11.0.
-# Support both modern LC_BUILD_VERSION and older LC_VERSION_MIN_MACOSX load commands.
-case "$arch" in
-  x86_64) max_macos_target="10.15" ;;
-  arm64) max_macos_target="11.0" ;;
-esac
+# Every shipped Mach-O must remain compatible with the deployment floor pinned in
+# the native runtime provenance manifest. Support both modern LC_BUILD_VERSION and
+# older LC_VERSION_MIN_MACOSX load commands.
 for binary in "$executable" "$moonshine" "$ort"; do
   min_version="$(otool -l "$binary" | awk '
     $1 == "cmd" && $2 == "LC_BUILD_VERSION" { build = 1; legacy = 0; next }

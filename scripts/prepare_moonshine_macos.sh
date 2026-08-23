@@ -13,11 +13,7 @@ fail() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "this script must run on macOS"
-case "$arch" in
-  arm64) deployment_target="11.0" ;;
-  x86_64) deployment_target="10.15" ;;
-  *) fail "unsupported macOS architecture: $arch" ;;
-esac
+case "$arch" in arm64|x86_64) ;; *) fail "unsupported macOS architecture: $arch" ;; esac
 [[ "$(uname -m)" == "$arch" ]] || fail "requested architecture $arch does not match host $(uname -m)"
 
 for command in git cmake python3 lipo otool install_name_tool codesign; do
@@ -25,7 +21,7 @@ for command in git cmake python3 lipo otool install_name_tool codesign; do
 done
 command -v git-lfs >/dev/null || git lfs version >/dev/null 2>&1 || fail "git-lfs is required"
 
-IFS=$'\t' read -r runtime_release source_commit ort_version ort_sha256 ort_bytes < <(python3 - "$manifest" "$arch" <<'PY'
+IFS=$'\t' read -r runtime_release source_commit ort_version deployment_target ort_sha256 ort_bytes < <(python3 - "$manifest" "$arch" <<'PY'
 import json, sys
 manifest_path, arch = sys.argv[1:]
 data = json.load(open(manifest_path, encoding="utf-8"))
@@ -34,12 +30,13 @@ print("\t".join([
     data["runtime"]["release"],
     data["runtime"]["source_commit"],
     data["onnxruntime"]["version"],
+    entry["minimum_macos"],
     entry["onnxruntime_sha256"],
     str(entry["onnxruntime_bytes"]),
 ]))
 PY
 )
-[[ -n "$runtime_release" && -n "$source_commit" && -n "$ort_version" && -n "$ort_sha256" && -n "$ort_bytes" ]] || fail "invalid provenance manifest"
+[[ -n "$runtime_release" && -n "$source_commit" && -n "$ort_version" && -n "$deployment_target" && -n "$ort_sha256" && -n "$ort_bytes" ]] || fail "invalid provenance manifest"
 
 workspace="$(mktemp -d "${TMPDIR:-/tmp}/talking-moose-moonshine.XXXXXX")"
 cleanup() { rm -rf "$workspace"; }

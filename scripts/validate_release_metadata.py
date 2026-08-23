@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_PRODUCT = "Talking Moose AI"
 EXPECTED_IDENTIFIER = "com.talkingmoose.ai"
-EXPECTED_MIN_MACOS = "10.15"
+EXPECTED_MIN_MACOS = "13.4"
 
 
 def fail(message: str) -> None:
@@ -120,6 +120,7 @@ def main() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     package_lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
     tauri = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+    native_runtime = json.loads((ROOT / "src-tauri/native/moonshine-runtime.json").read_text(encoding="utf-8"))
     cargo_version = parse_cargo_version(ROOT / "src-tauri/Cargo.toml")
     lock_root_version = package_lock.get("packages", {}).get("", {}).get("version")
     versions = {package["version"], package_lock.get("version"), lock_root_version, tauri["version"], cargo_version}
@@ -150,6 +151,15 @@ def main() -> None:
     if macos.get("entitlements") is not None:
         fail("V1 direct-download release intentionally requires no custom macOS entitlements")
 
+    runtime_macos = native_runtime.get("macos", {})
+    for arch in ("arm64", "x86_64"):
+        runtime_minimum = runtime_macos.get(arch, {}).get("minimum_macos")
+        if runtime_minimum != EXPECTED_MIN_MACOS:
+            fail(
+                f"native runtime minimum for {arch} must be {EXPECTED_MIN_MACOS}, "
+                f"got {runtime_minimum!r}"
+            )
+
     info_plist = ROOT / "src-tauri/Info.plist"
     try:
         plist_root = ET.parse(info_plist).getroot()
@@ -168,14 +178,8 @@ def main() -> None:
         fail("NSMicrophoneUsageDescription is missing or empty")
 
     prepare_script = (ROOT / "scripts/prepare_moonshine_macos.sh").read_text(encoding="utf-8")
-    required_native_targets = (
-        'arm64) deployment_target="11.0"',
-        'x86_64) deployment_target="10.15"',
-        '-DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target"',
-    )
-    for snippet in required_native_targets:
-        if snippet not in prepare_script:
-            fail("Moonshine native build deployment targets drifted from the documented support floor")
+    if '-DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target"' not in prepare_script:
+        fail("Moonshine native build no longer applies the provenance deployment target")
 
     if args.tag and args.tag != f"v{version}":
         fail(f"tag {args.tag!r} does not match application version v{version}")

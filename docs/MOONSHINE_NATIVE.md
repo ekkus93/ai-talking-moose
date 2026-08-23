@@ -126,12 +126,14 @@ V1 deliberately supports both macOS CPU architectures that Moonshine supports:
 | Apple Silicon `arm64` | `aarch64-apple-darwin` | `480790a978a48ad3e06ce86b6025e037bd70221637f5c104a8dde19617364cf4` | 27,623,992 |
 | Intel `x86_64` | `x86_64-apple-darwin` | `8c9c78de65ea3786f987c0d980e9c1b13a3a5fbc6b3e2965ba05b450e6e4c054` | 39,742,608 |
 
+The pinned ONNX Runtime 1.23.2 dylibs declare macOS 13.4 as their minimum deployment target. That native dependency therefore sets the V1 application support floor to macOS 13.4 on both architectures.
+
 `scripts/prepare_moonshine_macos.sh` performs the reproducible native preparation step on the matching host architecture. It:
 
 1. checks out exactly Moonshine commit `db88bffd14574212b6094a2e230d4f328029c31b`;
 2. materializes only the architecture-specific ONNX Runtime dylib from Git LFS;
 3. verifies that dylib against the pinned byte count and SHA-256 above;
-4. builds the `moonshine` CMake target for the host architecture with deployment target 10.15;
+4. builds the `moonshine` CMake target for the host architecture with deployment target 13.4;
 5. stages `libmoonshine.dylib` and `libonnxruntime.1.23.2.dylib` under `src-tauri/native/macos/`;
 6. normalizes their install names to `@rpath` and rejects Homebrew/developer-machine load paths; and
 7. copies the pinned runtime provenance plus license/notice files from the source tree into the generated notice staging directory.

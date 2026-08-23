@@ -318,7 +318,7 @@ The normal CI gates include:
 
 `.github/workflows/release.yml` is separate from ordinary CI and runs only for semantic `v*.*.*` tags. It requires Developer ID + Apple notarization credentials, verifies hardened-runtime/signature/stapling/Gatekeeper state for both Apple Silicon and Intel artifacts, computes SHA-256 manifests, and creates a **draft** GitHub Release for final physical acceptance. See `docs/MACOS_RELEASE.md`.
 
-The V1 deployment target is macOS 10.15 on Intel; Apple Silicon hardware requires macOS 11 or later.
+The V1 deployment target is macOS 13.4 on both Intel and Apple Silicon, matching the pinned ONNX Runtime 1.23.2 runtime floor.
 
 ---
 

@@ -44,7 +44,7 @@
         "native/macos/libmoonshine.dylib",
         "native/macos/libonnxruntime.1.23.2.dylib"
       ],
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "13.4",
       "exceptionDomain": "",
       "signingIdentity": null,
       "providerShortName": null,
