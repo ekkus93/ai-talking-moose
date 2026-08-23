@@ -2,13 +2,20 @@
 
 This overlay reconciles the legacy monolithic TODO without rewriting the large tracker file through the GitHub contents API.
 
-## Current closure candidate: V1R-110 through V1R-117
+## Accepted closure: V1R-110 through V1R-117
 
-P11 is **implemented in the source candidate but pending GitHub Actions acceptance**. Do not treat P11 as accepted complete until the implementation commit is reported green.
+P11 is **accepted complete**.
 
-Implementation candidate: `a203381d78c52aae75fac33a9680ad8008271e26` (`feat: close P11 UX and accessibility`).
+Implementation commit: `a203381d78c52aae75fac33a9680ad8008271e26` (`feat: close P11 UX and accessibility`).
 
-Local frontend acceptance completed before publication: TypeScript, ESLint with zero warnings, Prettier, 31/31 Vitest tests, and the production Vite build passed. The sandbox did not contain a Rust toolchain, so the Tauri/Rust changes require CI compilation before acceptance.
+Follow-up CI fixes:
+
+- `939fb3d5b32da36afdb4d9373f62e43ef5c61acb` (`style: apply rustfmt module ordering`).
+- `b38bcacc9bb3b222d21aa8c263dc7c100d50ca10` (`fix: remove unused Tauri Manager import`).
+
+Acceptance evidence: GitHub Actions CI run `32629218483` completed successfully on `master` at `b38bcacc9bb3b222d21aa8c263dc7c100d50ca10` on 2026-08-23.
+
+Local frontend acceptance completed before publication: TypeScript, ESLint with zero warnings, Prettier, 31/31 Vitest tests, and the production Vite build passed. The final CI run supplied the required Rust formatting/compilation acceptance that was unavailable in the sandbox.
 
 ### V1R-110 — Onboarding
 
