@@ -28,7 +28,9 @@ fn transition_and_emit<R: Runtime>(
 }
 
 fn cancel_standalone_audio<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) {
-    state.standalone_speech.cancel(state.audio_playback.as_ref());
+    state
+        .standalone_speech
+        .cancel(state.audio_playback.as_ref());
     let _ = app.emit("moose://speech-bubble", "");
 }
 

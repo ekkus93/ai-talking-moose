@@ -54,14 +54,8 @@ pub async fn synthesize_and_queue(
     output_device: Option<String>,
 ) -> Result<PlaybackEnqueueReport, String> {
     let cancellation = CancellationToken::new();
-    synthesize_and_queue_cancellable(
-        synthesizer,
-        playback,
-        request,
-        output_device,
-        &cancellation,
-    )
-    .await
+    synthesize_and_queue_cancellable(synthesizer, playback, request, output_device, &cancellation)
+        .await
 }
 
 pub async fn synthesize_and_queue_cancellable(
@@ -147,7 +141,9 @@ mod tests {
             }
         }
 
-        let error = future.await.expect_err("cancelled synthesis must fail closed");
+        let error = future
+            .await
+            .expect_err("cancelled synthesis must fail closed");
         assert_eq!(error, STANDALONE_SPEECH_CANCELLED);
         assert!(!playback.is_playing());
         assert_eq!(playback.queue_length(), 0);
