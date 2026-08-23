@@ -12,6 +12,7 @@ on:
       - "src-tauri/Cargo.lock"
       - "src-tauri/native/**"
       - "src-tauri/tauri.conf.json"
+      - "scripts/generate_app_icons.py"
       - "scripts/prepare_moonshine_macos.sh"
       - "scripts/validate_moonshine_runtime_manifest.py"
       - "scripts/prepare_asr015_corpus.py"
@@ -69,6 +70,12 @@ jobs:
 
       - name: Validate pinned native runtime provenance
         run: python3 scripts/validate_moonshine_runtime_manifest.py
+
+      # tauri::generate_context!() reads the configured icon set at compile time.
+      # Icons are generated/ignored release inputs, so clean checkouts must create
+      # them before any full src-tauri Cargo command.
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
 
       # Any macOS Cargo build reads the Tauri framework list from tauri.conf.json.
       # Stage the pinned dylibs before invoking Cargo so the build script can
