@@ -88,8 +88,15 @@ jobs:
           TALKING_MOOSE_MOONSHINE_LIB_DIR: ${{ github.workspace }}/src-tauri/native/macos
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/src-tauri/native/macos
         run: |
-          cargo test --manifest-path src-tauri/Cargo.toml \
+          cargo test --locked --manifest-path src-tauri/Cargo.toml \
             asr::moonshine::manifest::tests::pinned_manifests_are_structurally_valid
+          dirty="$(git status --porcelain --untracked-files=no)"
+          if [[ -n "$dirty" ]]; then
+            echo "Tracked files changed before ASR-015 benchmark:" >&2
+            printf '%s\n' "$dirty" >&2
+            git diff -- src-tauri/Cargo.lock >&2 || true
+            exit 1
+          fi
 
       - name: Run Tiny and Small native acceptance benchmark
         id: benchmark
