@@ -1,6 +1,7 @@
 use crate::app::state::AppSettings;
 use crate::character::personality::CharacterConfig;
 use crate::desktop::macos::SystemDesktopMonitor;
+use crate::desktop::observation::{ObserverKind, ObserverResult};
 use crate::memory::MemoryManager;
 use crate::tools::policy::{ToolDeclaration, ToolPermissionLevel};
 use chrono::Local;
@@ -12,6 +13,17 @@ pub struct BuiltinTools {
     pub memory_manager: Arc<MemoryManager>,
     pub character_config: CharacterConfig,
     pub settings: Arc<RwLock<AppSettings>>,
+}
+
+fn observer_unavailable<T>(kind: ObserverKind, result: &ObserverResult<T>) -> serde_json::Value {
+    let diagnostic = result.diagnostic(kind);
+    json!({
+        "available": false,
+        "observer": diagnostic.kind,
+        "status": diagnostic.status,
+        "error_code": diagnostic.error_code,
+        "error": "Desktop observation is not available",
+    })
 }
 
 impl BuiltinTools {
@@ -76,21 +88,29 @@ impl BuiltinTools {
                 }))
             }
             "get_battery_level" => {
-                let (level, charging) = SystemDesktopMonitor::get_battery_info();
-                Ok(json!({
-                    "level_percentage": level,
-                    "is_charging": charging
-                }))
+                let result = SystemDesktopMonitor::get_battery_state();
+                match result {
+                    ObserverResult::Available(observation) => Ok(json!({
+                        "available": true,
+                        "level_percentage": observation.level_percent,
+                        "is_charging": observation.is_charging
+                    })),
+                    other => Ok(observer_unavailable(ObserverKind::Battery, &other)),
+                }
             }
             "get_active_application" => {
-                if !self.settings.read().active_app_observation {
-                    return Ok(json!({
-                        "error": "Active application observation permission is disabled by user"
-                    }));
+                let allowed = self.settings.read().active_app_observation;
+                let result = SystemDesktopMonitor::get_active_application(allowed);
+                match result {
+                    ObserverResult::Available(observation) => Ok(json!({
+                        "available": true,
+                        "active_application": observation.name
+                    })),
+                    other => Ok(observer_unavailable(
+                        ObserverKind::ActiveApplication,
+                        &other,
+                    )),
                 }
-                let app =
-                    SystemDesktopMonitor::get_active_app().unwrap_or_else(|| "Unknown".to_string());
-                Ok(json!({ "active_application": app }))
             }
             "remember_fact" => {
                 if !self.settings.read().memory_enabled {
@@ -105,5 +125,29 @@ impl BuiltinTools {
             // Strict security: Reject unknown or arbitrary tool requests
             unknown => Err(format!("Tool '{}' is not registered or permitted", unknown)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::desktop::observation::{ObserverErrorCode, ObserverStatus};
+
+    #[test]
+    fn observer_tool_failures_expose_only_safe_status_metadata() {
+        let response = observer_unavailable::<String>(
+            ObserverKind::ActiveApplication,
+            &ObserverResult::Error(ObserverErrorCode::PlatformApiFailure),
+        );
+        assert_eq!(response["available"], false);
+        assert_eq!(response["status"], "error");
+        assert_eq!(response["error_code"], "platform_api_failure");
+        assert!(response.get("active_application").is_none());
+
+        let denied = ObserverResult::<String>::Denied;
+        assert_eq!(
+            denied.diagnostic(ObserverKind::ActiveApplication).status,
+            ObserverStatus::Denied
+        );
     }
 }

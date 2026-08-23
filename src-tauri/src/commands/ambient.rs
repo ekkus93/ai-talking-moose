@@ -91,7 +91,9 @@ fn ambient_privacy_allowed(state: &AppState, category: AmbientEventCategory) -> 
     let settings = state.settings.read();
     match category {
         AmbientEventCategory::Application => settings.active_app_observation,
-        AmbientEventCategory::WindowTitle => settings.window_title_observation,
+        // Window-title observation is deliberately unsupported in V1. Keep this
+        // fail-closed even if a legacy settings blob contains a stale true value.
+        AmbientEventCategory::WindowTitle => false,
         AmbientEventCategory::Manual
         | AmbientEventCategory::Idle
         | AmbientEventCategory::Power
@@ -280,7 +282,11 @@ mod tests {
             AmbientEventCategory::Other
         ));
 
-        state.settings.write().active_app_observation = true;
+        {
+            let mut settings = state.settings.write();
+            settings.active_app_observation = true;
+            settings.window_title_observation = true;
+        }
         assert!(ambient_privacy_allowed(
             &state,
             AmbientEventCategory::Application

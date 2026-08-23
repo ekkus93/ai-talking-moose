@@ -82,6 +82,8 @@ pub fn run() {
                     }
                 })
                 .map_err(std::io::Error::other)?;
+            desktop::runtime::start(app_state.settings.clone(), ambient_scheduler)
+                .map_err(std::io::Error::other)?;
 
             if app_state.settings.read().restore_position {
                 if let Some(window) = app.get_webview_window("main") {
@@ -207,6 +209,7 @@ pub fn run() {
             let handle = app_handle.clone();
             let exit_code = code.unwrap_or(0);
             tauri::async_runtime::spawn(async move {
+                desktop::runtime::stop().await;
                 let ambient_scheduler = handle
                     .try_state::<AppState>()
                     .map(|state| state.ambient_scheduler.clone());
