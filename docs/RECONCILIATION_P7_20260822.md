@@ -41,14 +41,42 @@ The user reported GitHub Actions run `32608694686` passing for that checkpoint. 
 - [x] V1R-038: application shutdown cancels and awaits the ambient scheduler.
 - [x] V1R-035: deterministic dismissal-cooldown coverage proves immediate ambient reappearance is suppressed.
 
-The remaining V1R-035 final hide/appearance transition row belongs to V1R-076 below and is not accepted by this reconciliation yet.
+## Accepted checkpoint: V1R-074 through V1R-076
 
-## Current closure candidate: V1R-074 through V1R-076
+Accepted implementation commit: `52a1b3bef3e2e3b2eac89681d8fcc7a425409df8`.
 
-The next source checkpoint implements the remaining P7 criteria. These rows remain **candidate/pending CI acceptance** until the new commit is reported green.
+The user reported GitHub Actions run `32609781814` passing for this checkpoint. GitHub reports the frontend-quality job, Rust-quality job, dependency/security audits, and both macOS arm64/x86_64 Tauri smoke-bundle jobs completed successfully. This closes the remaining P7 rows:
 
-- V1R-074: V1 explicitly uses no secondary model classifier; deterministic local policy remains authoritative.
-- V1R-075: ambient model output is locally bounded, disabled memory/observer data remains excluded, and provider/TTS failure never creates a fallback remark.
-- V1R-076: ambient-only appearance follows appear → think/speak → short idle → hide, never calls native window focus APIs, and remains interruptible by explicit user actions.
+### V1R-074 — Optional classifier decision
 
-See `docs/AMBIENT_V1_POLICY.md` for the implementation contract and deferral rationale.
+- [x] V1 deliberately uses no secondary model classifier after local gating.
+- [x] The deterministic Rust policy is authoritative and remains safe when model providers are unavailable.
+- [x] A future classifier, if introduced, must run only after local allow, use separately bounded/minimized context and a typed output schema, and never override a local deny.
+
+### V1R-075 — Safe ambient generation
+
+- [x] Ambient generation uses only bounded/minimized event context and optional memory facts when memory is enabled.
+- [x] Application/window-title observations are excluded unless their explicit privacy gates are enabled; unknown categories fail closed.
+- [x] Tool results and transcript history have no ambient PromptBuilder input surface.
+- [x] Provider output is trimmed and hard-capped locally at 320 Unicode scalar values; empty output is dropped.
+- [x] Provider/TTS failure clears transient presentation state and never fabricates a fallback remark.
+- [x] Speech-bubble text is emitted only after TTS audio has successfully queued.
+
+### V1R-076 — Ambient appearance lifecycle
+
+- [x] Ambient-only appearance follows appear → think/speak → short idle → hide.
+- [x] Talking duration is bounded by queued-audio duration with a hard 10-second ceiling, followed by a 750 ms idle interval.
+- [x] The ambient path does not call native show/focus/raise/always-on-top APIs and therefore does not request focus.
+- [x] Explicit conversation start, mute, dismissal, barge-in, and application shutdown interrupt the central scheduler.
+- [x] Dismissal records cooldown/annoyance state so ambient behavior cannot immediately reappear.
+- [x] The frontend does not re-show stale ambient bubble text after the backend lifecycle clears it.
+
+### Cross-phase row closed by V1R-076
+
+- [x] V1R-035: final hide/appearance lifecycle transition is implemented and regression-covered.
+
+## Phase P7 status
+
+**P7 ambient behavior is accepted complete.** The legacy monolithic `docs/TODO(20260818-163801).md` still contains stale unchecked P7 rows; this reconciliation is authoritative for V1R-070 through V1R-076 until those rows are mechanically folded back into the monolithic tracker.
+
+See `docs/AMBIENT_V1_POLICY.md` for the classifier decision, safe-generation contract, and appearance-lifecycle rationale.
