@@ -1,0 +1,11 @@
+{
+  "hardware_model": "VirtualMac2,1",
+  "cpu_brand": "Apple M1 (Virtual)",
+  "physical_cpu_count": 3,
+  "logical_cpu_count": 3,
+  "memory_bytes": 7516192768,
+  "macos_version": "15.7.7",
+  "macos_build": "24G720",
+  "architecture": "arm64",
+  "low_power_mode": "unknown"
+}

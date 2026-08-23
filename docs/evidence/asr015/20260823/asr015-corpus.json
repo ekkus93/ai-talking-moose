@@ -1,0 +1,18 @@
+{
+  "source_repository": "ggml-org/whisper.cpp",
+  "source_path": "samples/jfk.wav",
+  "source_commit": "45f1593fd326b3435c04392e3151dff65967e523",
+  "source_git_blob_sha1": "3184d372cd2f8b804d3a540c70ec50d927b335d2",
+  "source_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "source_bytes": 352078,
+  "source_frames": 176000,
+  "source_duration_ms": 11000,
+  "trailing_silence_ms": 2000,
+  "sample_rate_hz": 16000,
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "corpus_frames": 208000,
+  "corpus_duration_ms": 13000,
+  "corpus_bytes": 416000,
+  "corpus_sha256": "5d5024881abcb527a43c9b643abed1545627960ac894584167ea510c8a442061"
+}
