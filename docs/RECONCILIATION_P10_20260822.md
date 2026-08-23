@@ -3,10 +3,18 @@
 This overlay reconciles the active V1 tracker without rewriting the large monolithic TODO through the
 GitHub contents API.
 
-## Current closure candidate: V1R-100 through V1R-105
+## Accepted closure: V1R-100 through V1R-105
 
-These rows are implemented in the source candidate but remain **pending GitHub Actions acceptance**.
-Do not treat P10 as accepted complete until CI is reported green for the implementation commit.
+P10 is **accepted complete**.
+
+Acceptance evidence:
+
+- implementation commit: `9b57c213d12e9b151afff596818adbc539ef24a6` (`feat: harden V1 tool policy and routing`)
+- Clippy repair commit: `d0d87e4cfbb15c428c2a06a3c89e3f4ed69b15ec` (`fix: satisfy Clippy tool audit membership check`)
+- GitHub Actions run: `32621352577`
+- workflow: `.github/workflows/ci.yml`
+- tested head SHA: `d0d87e4cfbb15c428c2a06a3c89e3f4ed69b15ec`
+- result: `completed / success`
 
 ### V1R-100 — Provider-neutral tool schema
 
