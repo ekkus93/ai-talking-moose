@@ -57,12 +57,39 @@ for binary in "$executable" "$moonshine" "$ort"; do
   fi
 done
 
+# Every shipped Mach-O must remain compatible with the documented architecture-specific
+# support floor. Intel can run on 10.15; Apple Silicon itself requires macOS 11.0.
+# Support both modern LC_BUILD_VERSION and older LC_VERSION_MIN_MACOSX load commands.
+case "$arch" in
+  x86_64) max_macos_target="10.15" ;;
+  arm64) max_macos_target="11.0" ;;
+esac
+for binary in "$executable" "$moonshine" "$ort"; do
+  min_version="$(otool -l "$binary" | awk '
+    $1 == "cmd" && $2 == "LC_BUILD_VERSION" { build = 1; legacy = 0; next }
+    $1 == "cmd" && $2 == "LC_VERSION_MIN_MACOSX" { legacy = 1; build = 0; next }
+    build && $1 == "minos" { print $2; exit }
+    legacy && $1 == "version" { print $2; exit }
+  ')"
+  [[ -n "$min_version" ]] || fail "could not determine deployment target for $binary"
+  python3 - "$binary" "$min_version" "$max_macos_target" <<'PY2'
+import sys
+path, actual, maximum = sys.argv[1:]
+def parts(value):
+    pieces = [int(piece) for piece in value.split('.')]
+    return tuple((pieces + [0, 0, 0])[:3])
+if parts(actual) > parts(maximum):
+    raise SystemExit(f"{path} requires macOS {actual}, above supported {maximum} for this architecture")
+PY2
+done
+
 otool -L "$executable" | grep -F '@rpath/libmoonshine.dylib' >/dev/null \
   || fail "application executable does not load Moonshine through @rpath"
 otool -L "$moonshine" | grep -F "@rpath/libonnxruntime.$ort_version.dylib" >/dev/null \
   || fail "Moonshine does not load ONNX Runtime through @rpath"
 
 notice_root="$app_path/Contents/Resources/native/macos/notices"
+[[ -f "$notice_root/TALKING_MOOSE_LICENSE" ]] || fail "Talking Moose project license is missing from bundle"
 [[ -f "$notice_root/THIRD_PARTY_NOTICES.md" ]] || fail "third-party notice inventory is missing from bundle"
 license_count="$(find "$notice_root/MoonshineRuntime" -type f 2>/dev/null | wc -l | tr -d ' ')"
 (( license_count >= 5 )) || fail "bundled native notice set is incomplete"

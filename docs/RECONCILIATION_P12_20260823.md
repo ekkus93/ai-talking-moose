@@ -2,11 +2,11 @@
 
 This overlay reconciles the legacy monolithic TODO without rewriting the large tracker file through the GitHub contents API.
 
-## Current closure candidate: V1R-120 through V1R-125
+## Accepted closure: V1R-120 through V1R-125
 
-P12 is **implemented in the source candidate but pending GitHub Actions acceptance**. Do not treat P12 as accepted complete until the published implementation commit is reported green.
+P12 is **accepted complete**. The user reported GitHub Actions run `32635509276` green on 2026-08-23 at master commit `38682fc6c89cc6fa1465d57a6bd70241a71a1fd4`. That head contains the P12 implementation candidate plus the follow-up rustfmt, rusqlite lifetime, and stale diagnostics-test corrections required to restore all repository gates.
 
-Implementation candidate: `6657fd337e99e3e55d8a250b4ce69ac892111925` (`test: harden P12 runtime boundaries`).
+Implementation candidate: `6657fd337e99e3e55d8a250b4ce69ac892111925` (`test: harden P12 runtime boundaries`). Accepted CI head: `38682fc6c89cc6fa1465d57a6bd70241a71a1fd4`.
 
 The current sandbox source ZIP predates the already-accepted P11 commits, so P12 work is limited to files verified unchanged between ZIP commit `bae050ce94b9d56943e80b8e8ba3b0f599864f86` and P11-accepted `master` commit `5499bba34b3119a2018e55710c6fe60fe308c53c`, plus this reconciliation overlay.
 
@@ -73,7 +73,7 @@ Local validation available in this sandbox: `git diff --check`, workflow YAML pa
 
 ## Acceptance gate
 
-P12 may be promoted from closure candidate to accepted only after the published commit passes the repository CI gates, especially:
+Satisfied by user-reported successful GitHub Actions run `32635509276` at accepted head `38682fc6c89cc6fa1465d57a6bd70241a71a1fd4`, covering:
 
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`

@@ -152,9 +152,10 @@ cargo build --manifest-path src-tauri/Cargo.toml --release
 
 ### Tauri application bundle
 
-On macOS, prepare the pinned native Moonshine runtime before invoking Tauri:
+On macOS, generate the deterministic release icons and prepare the pinned native Moonshine runtime before invoking Tauri:
 
 ```bash
+python3 scripts/generate_app_icons.py
 bash scripts/prepare_moonshine_macos.sh "$(uname -m)"
 ```
 
@@ -164,13 +165,13 @@ Then build the normal packaged application, matching the non-tagged macOS CI smo
 npm run tauri build -- --bundles app
 ```
 
-For a macOS application plus DMG, as used for tagged CI builds:
+For a local unsigned macOS application plus DMG:
 
 ```bash
 npm run tauri build -- --bundles app,dmg
 ```
 
-GitHub Actions retains build artifacts only for tag-triggered workflows.
+Unsigned local/CI bundles are smoke-test artifacts only. Public distribution uses the dedicated Developer ID signing/notarization workflow documented in `docs/MACOS_RELEASE.md`.
 
 ---
 
@@ -315,7 +316,9 @@ The normal CI gates include:
 - RustSec dependency audit
 - macOS Tauri application bundle smoke build
 
-Tagged runs additionally build distributable macOS application/DMG bundles and retain those assets.
+`.github/workflows/release.yml` is separate from ordinary CI and runs only for semantic `v*.*.*` tags. It requires Developer ID + Apple notarization credentials, verifies hardened-runtime/signature/stapling/Gatekeeper state for both Apple Silicon and Intel artifacts, computes SHA-256 manifests, and creates a **draft** GitHub Release for final physical acceptance. See `docs/MACOS_RELEASE.md`.
+
+The V1 deployment target is macOS 10.15 on Intel; Apple Silicon hardware requires macOS 11 or later.
 
 ---
 

@@ -43,7 +43,7 @@ impl ReqwestModelDownloadTransport {
             .connect_timeout(HTTP_CONNECT_TIMEOUT)
             .timeout(HTTP_REQUEST_TIMEOUT)
             .redirect(redirect_policy)
-            .user_agent("talking-moose-ai/0.1.0")
+            .user_agent(concat!("talking-moose-ai/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|_| MoonshineModelInstallError::network())?;
         Ok(Self { client })

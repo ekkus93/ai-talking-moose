@@ -141,6 +141,31 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           working-directory: src-tauri
 
+  release-static:
+    name: Release metadata static gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Validate release metadata and icon set
+        run: python3 scripts/validate_release_metadata.py
+
+      - name: Validate release helper syntax
+        run: |
+          python3 -m py_compile \
+            scripts/generate_app_icons.py \
+            scripts/validate_release_metadata.py \
+            scripts/collect_release_licenses.py
+          bash -n scripts/prepare_moonshine_macos.sh
+          bash -n scripts/verify_macos_bundle.sh
+          bash -n scripts/verify_macos_release.sh
+          bash -n scripts/run_p13_macos_release_acceptance.sh
+
   macos-bundle:
     name: macOS Tauri bundle (${{ matrix.arch }})
     strategy:
@@ -149,10 +174,14 @@ jobs:
         include:
           - arch: arm64
             runner: macos-15
+            deployment_target: "11.0"
           - arch: x86_64
             runner: macos-15-intel
+            deployment_target: "10.15"
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -180,34 +209,23 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Validate release metadata and icon set
+        run: python3 scripts/validate_release_metadata.py
+
       - name: Validate Moonshine runtime provenance
         run: python3 scripts/validate_moonshine_runtime_manifest.py
 
       - name: Build pinned Moonshine native runtime
         run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
 
-      - name: Build macOS application smoke bundle
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - name: Build unsigned macOS application smoke bundle
         run: npm run tauri build -- --bundles app
-
-      - name: Build tagged macOS distribution bundles
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        run: npm run tauri build -- --bundles app,dmg
 
       - name: Verify self-contained native runtime bundle
         run: |
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app_path"
           bash scripts/verify_macos_bundle.sh "$app_path" "${{ matrix.arch }}"
-
-      # Build outputs are intentionally retained only for tagged commits.
-      - name: Save tagged macOS assets
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: talking-moose-ai-${{ github.ref_name }}-macos-${{ matrix.arch }}
-          path: |
-            src-tauri/target/release/bundle/macos/*.app
-            src-tauri/target/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-          retention-days: 30

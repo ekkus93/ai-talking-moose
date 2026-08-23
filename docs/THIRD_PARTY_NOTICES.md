@@ -1,6 +1,6 @@
 # Third-Party Dependency Notice Inventory
 
-Status: **V1 working notice inventory**  
+Status: **V1 release notice inventory**
 Recorded: 2026-08-18
 
 This file records licenses and immutable source identities for native components that Talking Moose expects to redistribute or directly depend on. Release packaging must include the actual license/notice texts required by those components; this inventory is not a substitute for those texts.
@@ -45,8 +45,9 @@ These crates are thin Rust bindings around Apple's Security framework and are us
 
 Before producing a signed/notarized V1 distribution:
 
-- run `scripts/prepare_moonshine_macos.sh` so the package notice directory is regenerated from the pinned Moonshine source tree;
-- include the generated inventory plus license/notice texts under the application bundle's `Resources/native/macos/notices` path;
+- run `scripts/prepare_moonshine_macos.sh` so the package notice directory is regenerated from the pinned Moonshine source tree and includes the Talking Moose project license;
+- run `scripts/collect_release_licenses.py` after `npm ci` and Cargo dependency resolution to collect production npm and resolved Rust license/notice texts plus a generated dependency inventory;
+- include the generated inventories and license/notice texts under the application bundle's `Resources/native/macos/notices` path;
 - verify that no non-commercial Moonshine model has entered the release payload;
 - verify that model downloads remain limited to the explicitly approved English Tiny/Small manifests;
 - verify that the application bundle does not accidentally contain developer model caches or credentials.

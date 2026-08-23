@@ -24,3 +24,7 @@ target
 src-tauri/native/macos/*.dylib
 src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
 src-tauri/native/macos/notices/MoonshineRuntime/
+# Deterministically generated application icons
+src-tauri/icons/*.png
+src-tauri/icons/*.icns
+src-tauri/icons/*.ico

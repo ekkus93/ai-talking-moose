@@ -1,0 +1,210 @@
+name: macOS Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    name: Signed macOS release (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            deployment_target: "11.0"
+          - arch: x86_64
+            runner: macos-15-intel
+            deployment_target: "10.15"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+      TALKING_MOOSE_ALLOW_LIVE_API: "0"
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.arch }}-release-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Validate tag and release metadata
+        run: python3 scripts/validate_release_metadata.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Require Developer ID and notarization credentials
+        run: |
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Required release secret is not configured: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID certificate
+        shell: bash
+        run: |
+          certificate_path="${RUNNER_TEMP}/developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/talking-moose-build.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$keychain_password"
+
+          python3 -c 'import base64, os, pathlib, sys; pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(os.environ["APPLE_CERTIFICATE"], validate=True))' "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security default-keychain -s "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -t 21600 -u "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain_path"
+
+          identity="$(
+            security find-identity -v -p codesigning "$keychain_path" \
+              | awk -F'"' '/Developer ID Application:/ { print $2; exit }'
+          )"
+          if [[ -z "$identity" ]]; then
+            echo 'Imported certificate does not expose a Developer ID Application identity' >&2
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          rm -f "$certificate_path"
+
+      - name: Validate Moonshine runtime provenance
+        run: python3 scripts/validate_moonshine_runtime_manifest.py
+
+      - name: Build pinned Moonshine native runtime
+        run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+
+      - name: Collect dependency license texts
+        run: python3 scripts/collect_release_licenses.py
+
+      - name: Build, sign, notarize, and staple application and DMG
+        run: npm run tauri build -- --bundles app,dmg
+
+      - name: Locate release artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          dmg_path="$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$app_path" && test -d "$app_path"
+          test -n "$dmg_path" && test -f "$dmg_path"
+          echo "app_path=$app_path" >> "$GITHUB_OUTPUT"
+          echo "dmg_path=$dmg_path" >> "$GITHUB_OUTPUT"
+
+      - name: Verify signed and notarized release
+        run: |
+          bash scripts/verify_macos_release.sh \
+            "${{ steps.artifacts.outputs.app_path }}" \
+            "${{ steps.artifacts.outputs.dmg_path }}" \
+            "${{ matrix.arch }}"
+
+      - name: Stage architecture release files
+        shell: bash
+        run: |
+          mkdir -p release
+          base="Talking-Moose-AI_${GITHUB_REF_NAME}_macos_${{ matrix.arch }}"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "${{ steps.artifacts.outputs.app_path }}" \
+            "release/${base}.app.zip"
+          cp "${{ steps.artifacts.outputs.dmg_path }}" "release/${base}.dmg"
+          (
+            cd release
+            shasum -a 256 "${base}.app.zip" "${base}.dmg" > "${base}.SHA256SUMS.txt"
+          )
+
+      - name: Upload signed tagged release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: talking-moose-ai-${{ github.ref_name }}-macos-${{ matrix.arch }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-draft:
+    name: Create draft GitHub release
+    needs: build-macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Validate tag and release metadata
+        run: python3 scripts/validate_release_metadata.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Download signed release files
+        uses: actions/download-artifact@v5
+        with:
+          pattern: talking-moose-ai-${{ github.ref_name }}-macos-*
+          path: release
+          merge-multiple: true
+
+      - name: Build combined checksum manifest
+        run: |
+          cd release
+          sha256sum *.app.zip *.dmg | sort -k2 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create draft release for physical acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --draft \
+            --title "Talking Moose AI ${GITHUB_REF_NAME}" \
+            --notes-file "$notes" \
+            release/*.app.zip \
+            release/*.dmg \
+            release/*.SHA256SUMS.txt \
+            release/SHA256SUMS.txt

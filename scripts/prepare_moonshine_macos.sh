@@ -14,7 +14,8 @@ fail() {
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "this script must run on macOS"
 case "$arch" in
-  arm64|x86_64) ;;
+  arm64) deployment_target="11.0" ;;
+  x86_64) deployment_target="10.15" ;;
   *) fail "unsupported macOS architecture: $arch" ;;
 esac
 [[ "$(uname -m)" == "$arch" ]] || fail "requested architecture $arch does not match host $(uname -m)"
@@ -77,7 +78,7 @@ cmake \
   -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_ARCHITECTURES="$arch" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+  -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target"
 cmake --build "$build_dir" --config Release --target moonshine --parallel
 
 moonshine_source="$(find "$build_dir" -type f -name 'libmoonshine.dylib' -print -quit)"
@@ -132,6 +133,7 @@ otool -L "$stage_dir/libmoonshine.dylib" | grep -F "@rpath/libonnxruntime.$ort_v
 
 rm -rf "$notice_dir/MoonshineRuntime"
 mkdir -p "$notice_dir/MoonshineRuntime/source"
+cp "$repo_root/LICENSE" "$notice_dir/TALKING_MOOSE_LICENSE"
 cp "$repo_root/docs/THIRD_PARTY_NOTICES.md" "$notice_dir/THIRD_PARTY_NOTICES.md"
 cp "$manifest" "$notice_dir/MoonshineRuntime/moonshine-runtime.json"
 cp "$source_dir/LICENSE" "$notice_dir/MoonshineRuntime/MOONSHINE_LICENSE"
