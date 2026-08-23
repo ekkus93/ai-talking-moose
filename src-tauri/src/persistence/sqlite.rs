@@ -328,7 +328,8 @@ impl Database {
              FROM memories
              ORDER BY COALESCE(updated_at, created_at) DESC, id DESC",
         )?;
-        collect_memory_rows(stmt.query_map([], memory_record_from_row)?)
+        let rows = stmt.query_map([], memory_record_from_row)?;
+        collect_memory_rows(rows)
     }
 
     pub fn get_recent_memories(&self, limit: usize) -> Result<Vec<MemoryRecord>> {
@@ -346,7 +347,8 @@ impl Database {
              ORDER BY COALESCE(updated_at, created_at) DESC, id DESC
              LIMIT ?1",
         )?;
-        collect_memory_rows(stmt.query_map(params![bounded_limit], memory_record_from_row)?)
+        let rows = stmt.query_map(params![bounded_limit], memory_record_from_row)?;
+        collect_memory_rows(rows)
     }
 
     pub fn delete_memory(&self, id: i64) -> Result<bool> {

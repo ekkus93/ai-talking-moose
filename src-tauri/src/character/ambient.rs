@@ -302,10 +302,16 @@ mod tests {
 
     #[test]
     fn event_summary_is_bounded_before_entering_the_scheduler_queue() {
-        let oversized = format!("PRIVATE:{}", "x".repeat(MAX_AMBIENT_EVENT_SUMMARY_CHARS * 4));
+        let oversized = format!(
+            "PRIVATE:{}",
+            "x".repeat(MAX_AMBIENT_EVENT_SUMMARY_CHARS * 4)
+        );
         let event = AmbientEvent::new("manual", oversized, 0.8);
 
-        assert_eq!(event.summary.chars().count(), MAX_AMBIENT_EVENT_SUMMARY_CHARS);
+        assert_eq!(
+            event.summary.chars().count(),
+            MAX_AMBIENT_EVENT_SUMMARY_CHARS
+        );
         assert!(event.summary.starts_with("PRIVATE:"));
     }
 

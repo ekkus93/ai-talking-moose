@@ -204,7 +204,9 @@ async fn repeated_start_stop_cycles_are_hardware_free_and_release_each_session()
         assert!(capture.lock().is_active());
         assert_eq!(playback.output_sample_rate_hz(), Some(24_000));
 
-        manager.stop_session(capture.clone(), playback.clone()).await;
+        manager
+            .stop_session(capture.clone(), playback.clone())
+            .await;
         assert!(!manager.is_active());
         assert_eq!(manager.lifecycle(), ConversationLifecycle::Idle);
         assert!(!capture.lock().is_active());

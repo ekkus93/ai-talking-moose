@@ -586,7 +586,10 @@ mod tests {
         playback.start(None).unwrap();
 
         let diagnostics = playback.diagnostics();
-        assert_eq!(diagnostics.selected_device.as_deref(), Some("Explicit mock output"));
+        assert_eq!(
+            diagnostics.selected_device.as_deref(),
+            Some("Explicit mock output")
+        );
         assert_eq!(diagnostics.sample_rate_hz, Some(24_000));
         assert_eq!(diagnostics.sample_format.as_deref(), Some("F32"));
         assert_eq!(diagnostics.channels, Some(1));
