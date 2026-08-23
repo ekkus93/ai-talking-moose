@@ -74,6 +74,10 @@ pub async fn start_conversation<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
     state.ambient_scheduler.interrupt();
+    state
+        .standalone_speech
+        .cancel(state.audio_playback.as_ref());
+    let _ = app.emit("moose://speech-bubble", "");
     if *state.is_muted.read() {
         return Err("Moose is currently muted".to_string());
     }
@@ -289,7 +293,8 @@ pub async fn send_text_message(
 
     if !*state.is_muted.read() {
         let synthesizer = state.get_speech_synthesizer();
-        let report = crate::audio::synthesize_and_queue(
+        let cancellation = state.standalone_speech.begin(state.audio_playback.as_ref());
+        let report = crate::audio::speech::synthesize_and_queue_cancellable(
             synthesizer.as_ref(),
             state.audio_playback.as_ref(),
             TtsRequest {
@@ -299,6 +304,7 @@ pub async fn send_text_message(
                 pitch: Some(settings.pitch),
             },
             settings.output_device.clone(),
+            &cancellation,
         )
         .await?;
         if report.dropped_samples > 0 {

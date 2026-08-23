@@ -6,7 +6,7 @@ use crate::character::state::{transition_character_state, CharacterState};
 use crate::memory::MemoryManager;
 use tauri::{Emitter, Runtime, State};
 
-pub(crate) const VOICE_AUDITION_SCRIPT: &str = "Hello, I'm Moose. Oh good, another button to click. I'm not annoyed; I'm just professionally disappointed. Short version: it works. Longer version: I'll explain it, but I reserve the right to look bewildered while doing it.";
+pub(crate) const VOICE_AUDITION_SCRIPT: &str = "Hello, I'm Moose. Oh good, another button. Professionally disappointed. Short version: it works. Longer version: I explain things while looking bewildered.";
 
 #[cfg(test)]
 fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<String> {
@@ -25,6 +25,11 @@ fn transition_and_emit<R: Runtime>(
     transition_character_state(&state.character_state, target)?;
     let _ = app.emit("moose://state", target);
     Ok(())
+}
+
+fn cancel_standalone_audio<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) {
+    state.standalone_speech.cancel(state.audio_playback.as_ref());
+    let _ = app.emit("moose://speech-bubble", "");
 }
 
 fn show_character<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) -> Result<(), String> {
@@ -53,7 +58,8 @@ async fn speak_standalone(
         )
     };
     let synthesizer = state.get_speech_synthesizer();
-    let report = crate::audio::synthesize_and_queue(
+    let cancellation = state.standalone_speech.begin(state.audio_playback.as_ref());
+    let report = crate::audio::speech::synthesize_and_queue_cancellable(
         synthesizer.as_ref(),
         state.audio_playback.as_ref(),
         TtsRequest {
@@ -63,6 +69,7 @@ async fn speak_standalone(
             pitch: Some(pitch),
         },
         output_device,
+        &cancellation,
     )
     .await?;
 
@@ -111,6 +118,7 @@ pub async fn dismiss_moose<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     state.ambient_scheduler.interrupt();
+    cancel_standalone_audio(state.inner(), &app);
     let now = chrono::Utc::now();
     state.behavior_engine.lock().cooldowns.record_dismissal(now);
     state
@@ -129,6 +137,7 @@ pub async fn set_mute<R: Runtime>(
 ) -> Result<(), String> {
     if muted {
         state.ambient_scheduler.interrupt();
+        cancel_standalone_audio(state.inner(), &app);
         // Set the privacy gate before awaiting teardown so a racing start request sees
         // muted=true either before or inside the serialized manager startup lock.
         *state.is_muted.write() = true;
@@ -150,6 +159,20 @@ pub fn is_muted(state: State<'_, AppState>) -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub fn cancel_standalone_speech<R: Runtime>(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<(), String> {
+    cancel_standalone_audio(state.inner(), &app);
+    if !state.conversation_mgr.is_active()
+        && matches!(*state.character_state.read(), CharacterState::Talking)
+    {
+        transition_and_emit(state.inner(), &app, CharacterState::Idle)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn audition_voice<R: Runtime>(
     voice_name: String,
     state: State<'_, AppState>,
@@ -159,7 +182,17 @@ pub async fn audition_voice<R: Runtime>(
     transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
     let _ = app.emit("moose://speech-bubble", VOICE_AUDITION_SCRIPT);
 
-    speak_standalone(VOICE_AUDITION_SCRIPT, Some(voice_name), state.inner()).await?;
+    if let Err(error_value) =
+        speak_standalone(VOICE_AUDITION_SCRIPT, Some(voice_name), state.inner()).await
+    {
+        let _ = app.emit("moose://speech-bubble", "");
+        if !state.conversation_mgr.is_active()
+            && matches!(*state.character_state.read(), CharacterState::Talking)
+        {
+            transition_and_emit(state.inner(), &app, CharacterState::Idle)?;
+        }
+        return Err(error_value);
+    }
     Ok(VOICE_AUDITION_SCRIPT.to_string())
 }
 
@@ -204,7 +237,7 @@ mod tests {
         let script = VOICE_AUDITION_SCRIPT;
         assert!(script.contains("Hello, I'm Moose"));
         assert!(script.contains("another button"));
-        assert!(script.contains("not annoyed"));
+        assert!(script.contains("Professionally disappointed"));
         assert!(script.contains("Short version"));
         assert!(script.contains("Longer version"));
     }

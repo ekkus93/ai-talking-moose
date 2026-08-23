@@ -55,7 +55,8 @@ async fn speak_standalone(text: &str, state: &AppState) -> Result<Duration, Stri
         )
     };
     let synthesizer = state.get_speech_synthesizer();
-    let report = crate::audio::synthesize_and_queue(
+    let cancellation = state.standalone_speech.begin(state.audio_playback.as_ref());
+    let report = crate::audio::speech::synthesize_and_queue_cancellable(
         synthesizer.as_ref(),
         state.audio_playback.as_ref(),
         TtsRequest {
@@ -65,6 +66,7 @@ async fn speak_standalone(text: &str, state: &AppState) -> Result<Duration, Stri
             pitch: Some(pitch),
         },
         output_device,
+        &cancellation,
     )
     .await?;
 

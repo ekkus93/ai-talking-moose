@@ -159,6 +159,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_settings,
             get_google_models,
+            get_google_tts_voices,
             update_settings,
             get_asr_models,
             get_asr_diagnostics,
@@ -185,6 +186,7 @@ pub fn run() {
             trigger_canned_reaction,
             commands::ambient::trigger_ambient_remark,
             audition_voice,
+            commands::character::cancel_standalone_speech,
             commands::conversation::start_conversation,
             stop_conversation,
             commands::conversation::barge_in,

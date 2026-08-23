@@ -9,6 +9,7 @@ import {
   CharacterState,
   ConnectionTestResult,
   GoogleModelDescriptor,
+  GoogleTtsVoiceDescriptor,
   ConversationLifecycle,
   MemoryRecord,
   MicrophonePermissionState,
@@ -81,6 +82,39 @@ const mockAsrDiagnostics = (): AsrDiagnostics => ({
   resident_memory_bytes: null,
   peak_resident_memory_bytes: null,
 });
+
+const mockGoogleTtsVoices = (): GoogleTtsVoiceDescriptor[] => [
+  { id: "Zephyr", style: "Bright" },
+  { id: "Puck", style: "Upbeat" },
+  { id: "Charon", style: "Informative" },
+  { id: "Kore", style: "Firm" },
+  { id: "Fenrir", style: "Excitable" },
+  { id: "Leda", style: "Youthful" },
+  { id: "Orus", style: "Firm" },
+  { id: "Aoede", style: "Breezy" },
+  { id: "Callirrhoe", style: "Easy-going" },
+  { id: "Autonoe", style: "Bright" },
+  { id: "Enceladus", style: "Breathy" },
+  { id: "Iapetus", style: "Clear" },
+  { id: "Umbriel", style: "Easy-going" },
+  { id: "Algieba", style: "Smooth" },
+  { id: "Despina", style: "Smooth" },
+  { id: "Erinome", style: "Clear" },
+  { id: "Algenib", style: "Gravelly" },
+  { id: "Rasalgethi", style: "Informative" },
+  { id: "Laomedeia", style: "Upbeat" },
+  { id: "Achernar", style: "Soft" },
+  { id: "Alnilam", style: "Firm" },
+  { id: "Schedar", style: "Even" },
+  { id: "Gacrux", style: "Mature" },
+  { id: "Pulcherrima", style: "Forward" },
+  { id: "Achird", style: "Friendly" },
+  { id: "Zubenelgenubi", style: "Casual" },
+  { id: "Vindemiatrix", style: "Gentle" },
+  { id: "Sadachbia", style: "Lively" },
+  { id: "Sadaltager", style: "Knowledgeable" },
+  { id: "Sulafat", style: "Warm" },
+];
 
 const mockAsrModels = (): AsrModelDescriptor[] => [
   {
@@ -193,6 +227,12 @@ export const tauriBridge = {
     }
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<GoogleModelDescriptor[]>("get_google_models");
+  },
+
+  async getGoogleTtsVoices(): Promise<GoogleTtsVoiceDescriptor[]> {
+    if (!isTauri()) return mockGoogleTtsVoices();
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<GoogleTtsVoiceDescriptor[]>("get_google_tts_voices");
   },
 
   async getAsrModels(): Promise<AsrModelDescriptor[]> {
@@ -348,6 +388,12 @@ export const tauriBridge = {
     if (!isTauri()) return `Auditioning ${voiceName}`;
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<string>("audition_voice", { voiceName });
+  },
+
+  async cancelStandaloneSpeech(): Promise<void> {
+    if (!isTauri()) return;
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("cancel_standalone_speech");
   },
 
   async startConversation(): Promise<string> {

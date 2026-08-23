@@ -229,6 +229,11 @@ export interface GoogleModelDescriptor {
   capabilities: GoogleModelCapability[];
 }
 
+export interface GoogleTtsVoiceDescriptor {
+  id: string;
+  style: string;
+}
+
 export interface ConnectionTestResult {
   success: boolean;
   message: string;

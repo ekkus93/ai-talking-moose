@@ -8,6 +8,7 @@ use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
+use crate::audio::speech::StandaloneSpeechController;
 use crate::character::ambient::AmbientScheduler;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::personality::CharacterConfig;
@@ -185,6 +186,7 @@ pub struct AppState {
     pub ambient_scheduler: AmbientScheduler,
     pub audio_capture: Arc<Mutex<AudioCapture>>,
     pub audio_playback: Arc<AudioPlayback>,
+    pub standalone_speech: StandaloneSpeechController,
     pub conversation_mgr: Arc<ConversationManager>,
     pub moonshine_installer: Arc<MoonshineModelInstaller>,
     pub tool_router: Arc<ToolRouter>,
@@ -288,6 +290,7 @@ impl AppState {
         let behavior_engine = Arc::new(Mutex::new(BehaviorEngine::new(character_config.clone())));
         let audio_capture = Arc::new(Mutex::new(AudioCapture::new()));
         let audio_playback = Arc::new(AudioPlayback::new());
+        let standalone_speech = StandaloneSpeechController::new();
         let conversation_mgr = Arc::new(ConversationManager::new());
         let moonshine_installer = Arc::new(
             MoonshineModelInstaller::new(moonshine_model_root(db_path))
@@ -310,6 +313,7 @@ impl AppState {
             ambient_scheduler: AmbientScheduler::new(),
             audio_capture,
             audio_playback,
+            standalone_speech,
             conversation_mgr,
             moonshine_installer,
             tool_router,

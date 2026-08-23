@@ -1,5 +1,6 @@
 use crate::ai::google::{
-    validate_live_model, GoogleAuth, GoogleLiveProvider, GoogleModelDescriptor, GOOGLE_MODELS,
+    validate_live_model, GoogleAuth, GoogleLiveProvider, GoogleModelDescriptor,
+    GoogleTtsVoiceDescriptor, GOOGLE_MODELS, GOOGLE_TTS_VOICES,
 };
 use crate::ai::traits::RealtimeConversationProvider;
 use crate::ai::types::LiveSessionConfig;
@@ -97,6 +98,11 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
 #[tauri::command]
 pub fn get_google_models() -> Vec<GoogleModelDescriptor> {
     GOOGLE_MODELS.to_vec()
+}
+
+#[tauri::command]
+pub fn get_google_tts_voices() -> Vec<GoogleTtsVoiceDescriptor> {
+    GOOGLE_TTS_VOICES.to_vec()
 }
 
 #[tauri::command]
