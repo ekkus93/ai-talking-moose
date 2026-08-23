@@ -96,6 +96,9 @@ jobs:
       - name: Validate Moonshine native runtime manifest
         run: python3 scripts/validate_moonshine_runtime_manifest.py
 
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
