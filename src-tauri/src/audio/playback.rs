@@ -124,6 +124,10 @@ impl PlaybackCallbackState {
     }
 }
 
+fn require_default_output_device<T>(device: Option<T>) -> Result<T, AudioPlaybackError> {
+    device.ok_or(AudioPlaybackError::NoOutputDevice)
+}
+
 fn f32_to_i16_sample(sample: f32) -> i16 {
     (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
 }
@@ -132,15 +136,29 @@ fn f32_to_u16_sample(sample: f32) -> u16 {
     (((sample.clamp(-1.0, 1.0) + 1.0) * 0.5) * u16::MAX as f32).round() as u16
 }
 
+fn mark_runtime_stream_failure(
+    message: &str,
+    is_playing: &AtomicBool,
+    output_level: &AtomicU32,
+    last_error: &Mutex<Option<String>>,
+) {
+    is_playing.store(false, Ordering::SeqCst);
+    output_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
+    *last_error.lock() = Some(format!("runtime audio output stream error: {message}"));
+}
+
 fn stream_error_handler(
     is_playing: Arc<AtomicBool>,
     output_level: Arc<AtomicU32>,
     last_error: Arc<Mutex<Option<String>>>,
 ) -> impl FnMut(cpal::StreamError) + Send + 'static {
     move |error_value| {
-        is_playing.store(false, Ordering::SeqCst);
-        output_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
-        *last_error.lock() = Some(format!("runtime audio output stream error: {error_value}"));
+        mark_runtime_stream_failure(
+            &error_value.to_string(),
+            &is_playing,
+            &output_level,
+            &last_error,
+        );
         error!(error = %error_value, "Audio playback stream failed");
     }
 }
@@ -159,6 +177,10 @@ pub struct AudioPlayback {
     sample_format: Mutex<Option<String>>,
     dropped_samples: AtomicU64,
     last_error: Arc<Mutex<Option<String>>>,
+    #[cfg(test)]
+    mock_mode: bool,
+    #[cfg(test)]
+    mock_start_error: Option<String>,
 }
 
 impl AudioPlayback {
@@ -177,7 +199,25 @@ impl AudioPlayback {
             sample_format: Mutex::new(None),
             dropped_samples: AtomicU64::new(0),
             last_error: Arc::new(Mutex::new(None)),
+            #[cfg(test)]
+            mock_mode: false,
+            #[cfg(test)]
+            mock_start_error: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_mock() -> Self {
+        let mut playback = Self::new();
+        playback.mock_mode = true;
+        playback
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_failing_mock(start_error: &str) -> Self {
+        let mut playback = Self::new_mock();
+        playback.mock_start_error = Some(start_error.to_string());
+        playback
     }
 
     pub fn set_mouth_sender(&self, tx: mpsc::Sender<MouthShape>) {
@@ -205,6 +245,19 @@ impl AudioPlayback {
     }
 
     fn start_inner(&self, device_name: Option<String>) -> Result<(), AudioPlaybackError> {
+        #[cfg(test)]
+        if self.mock_mode {
+            if let Some(message) = self.mock_start_error.as_ref() {
+                return Err(AudioPlaybackError::StartStream(message.clone()));
+            }
+            *self.selected_device.lock() = Some("Explicit mock output".to_string());
+            *self.sample_format.lock() = Some("F32".to_string());
+            self.output_channels.store(1, Ordering::SeqCst);
+            self.output_sample_rate_hz.store(24_000, Ordering::SeqCst);
+            info!("Explicit mock audio playback started");
+            return Ok(());
+        }
+
         let host = cpal::default_host();
         let device = if let Some(ref requested_name) = device_name {
             host.output_devices()
@@ -221,8 +274,7 @@ impl AudioPlayback {
                     AudioPlaybackError::RequestedDeviceNotFound(requested_name.clone())
                 })?
         } else {
-            host.default_output_device()
-                .ok_or(AudioPlaybackError::NoOutputDevice)?
+            require_default_output_device(host.default_output_device())?
         };
 
         let selected_device = device.name().ok().or(device_name);
@@ -443,6 +495,12 @@ mod tests {
     }
 
     #[test]
+    fn missing_default_output_fails_closed_without_hardware() {
+        let result = require_default_output_device::<()>(None);
+        assert!(matches!(result, Err(AudioPlaybackError::NoOutputDevice)));
+    }
+
+    #[test]
     fn stop_flushes_and_resets_negotiated_output_state() {
         let playback = playback_with_rate(48_000);
         playback.output_channels.store(2, Ordering::SeqCst);
@@ -520,6 +578,44 @@ mod tests {
         assert_eq!(playback.queue_length(), 0);
         assert!(!playback.is_playing());
         assert_eq!(playback.diagnostics().output_level, 0.0);
+    }
+
+    #[test]
+    fn mock_playback_requires_explicit_test_construction_and_no_hardware() {
+        let playback = AudioPlayback::new_mock();
+        playback.start(None).unwrap();
+
+        let diagnostics = playback.diagnostics();
+        assert_eq!(diagnostics.selected_device.as_deref(), Some("Explicit mock output"));
+        assert_eq!(diagnostics.sample_rate_hz, Some(24_000));
+        assert_eq!(diagnostics.sample_format.as_deref(), Some("F32"));
+        assert_eq!(diagnostics.channels, Some(1));
+        assert_eq!(diagnostics.queue_limit_samples, 240_000);
+
+        playback.stop();
+        assert_eq!(playback.diagnostics().sample_rate_hz, None);
+    }
+
+    #[test]
+    fn runtime_output_failure_stops_playback_and_records_bounded_diagnostics() {
+        let playback = playback_with_rate(48_000);
+        playback.seed_buffer_for_tests(&[0.5, -0.5], 0.75);
+        assert!(playback.is_playing());
+
+        mark_runtime_stream_failure(
+            "device disconnected",
+            &playback.is_playing,
+            &playback.output_level,
+            &playback.last_error,
+        );
+
+        let diagnostics = playback.diagnostics();
+        assert!(!diagnostics.playing);
+        assert_eq!(diagnostics.output_level, 0.0);
+        assert_eq!(
+            diagnostics.last_error.as_deref(),
+            Some("runtime audio output stream error: device disconnected")
+        );
     }
 
     #[test]

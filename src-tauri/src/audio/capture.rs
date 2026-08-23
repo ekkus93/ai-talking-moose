@@ -1,6 +1,8 @@
 use crate::audio::levels::LevelMeter;
 #[cfg(target_os = "macos")]
-use crate::audio::permissions::{microphone_permission_state, MicrophonePermissionState};
+use crate::audio::permissions::microphone_permission_state;
+#[cfg(any(target_os = "macos", test))]
+use crate::audio::permissions::MicrophonePermissionState;
 use crate::audio::resample::AudioResampler;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use parking_lot::Mutex;
@@ -74,6 +76,10 @@ fn looks_like_permission_denied(message: &str) -> bool {
         || lower.contains("not authorized")
 }
 
+fn require_default_input_device<T>(device: Option<T>) -> Result<T, AudioCaptureError> {
+    device.ok_or(AudioCaptureError::NoInputDevice)
+}
+
 fn configuration_error(message: String) -> AudioCaptureError {
     if looks_like_permission_denied(&message) {
         AudioCaptureError::PermissionDenied(message)
@@ -98,14 +104,37 @@ fn start_error(message: String) -> AudioCaptureError {
     }
 }
 
+fn mark_runtime_stream_failure(
+    message: &str,
+    is_running: &AtomicBool,
+    last_error: &Mutex<Option<String>>,
+) {
+    is_running.store(false, Ordering::SeqCst);
+    *last_error.lock() = Some(format!("runtime microphone stream error: {message}"));
+}
+
 fn stream_error_handler(
     is_running: Arc<AtomicBool>,
     last_error: Arc<Mutex<Option<String>>>,
 ) -> impl FnMut(cpal::StreamError) + Send + 'static {
     move |error_value| {
-        is_running.store(false, Ordering::SeqCst);
-        *last_error.lock() = Some(format!("runtime microphone stream error: {error_value}"));
+        mark_runtime_stream_failure(&error_value.to_string(), &is_running, &last_error);
         error!(error = %error_value, "Microphone capture stream failed");
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn microphone_permission_error(
+    permission_state: MicrophonePermissionState,
+) -> Option<AudioCaptureError> {
+    match permission_state {
+        MicrophonePermissionState::Granted => None,
+        MicrophonePermissionState::NotRequested => Some(AudioCaptureError::PermissionNotRequested),
+        MicrophonePermissionState::Denied => Some(AudioCaptureError::PermissionDenied(
+            "grant microphone access in macOS System Settings > Privacy & Security > Microphone"
+                .to_string(),
+        )),
+        MicrophonePermissionState::Unavailable => Some(AudioCaptureError::PermissionUnavailable),
     }
 }
 
@@ -304,20 +333,8 @@ impl AudioCapture {
         }
 
         #[cfg(target_os = "macos")]
-        match microphone_permission_state() {
-            MicrophonePermissionState::Granted => {}
-            MicrophonePermissionState::NotRequested => {
-                return Err(AudioCaptureError::PermissionNotRequested)
-            }
-            MicrophonePermissionState::Denied => {
-                return Err(AudioCaptureError::PermissionDenied(
-                    "grant microphone access in macOS System Settings > Privacy & Security > Microphone"
-                        .to_string(),
-                ))
-            }
-            MicrophonePermissionState::Unavailable => {
-                return Err(AudioCaptureError::PermissionUnavailable)
-            }
+        if let Some(permission_error) = microphone_permission_error(microphone_permission_state()) {
+            return Err(permission_error);
         }
 
         let host = cpal::default_host();
@@ -334,8 +351,7 @@ impl AudioCapture {
                 })
                 .ok_or_else(|| AudioCaptureError::RequestedDeviceNotFound(requested_name.clone()))?
         } else {
-            host.default_input_device()
-                .ok_or(AudioCaptureError::NoInputDevice)?
+            require_default_input_device(host.default_input_device())?
         };
 
         let selected_device = device.name().ok().or(device_name);
@@ -480,10 +496,54 @@ mod tests {
     }
 
     #[test]
+    fn missing_default_microphone_fails_closed_without_hardware() {
+        let result = require_default_input_device::<()>(None);
+        assert!(matches!(result, Err(AudioCaptureError::NoInputDevice)));
+    }
+
+    #[test]
     fn permission_detection_is_conservative() {
         assert!(looks_like_permission_denied("microphone permission denied"));
         assert!(looks_like_permission_denied("not authorized to use input"));
         assert!(!looks_like_permission_denied("device disconnected"));
+    }
+
+    #[test]
+    fn microphone_permission_states_fail_closed_without_touching_hardware() {
+        assert!(microphone_permission_error(MicrophonePermissionState::Granted).is_none());
+        assert!(matches!(
+            microphone_permission_error(MicrophonePermissionState::NotRequested),
+            Some(AudioCaptureError::PermissionNotRequested)
+        ));
+        assert!(matches!(
+            microphone_permission_error(MicrophonePermissionState::Denied),
+            Some(AudioCaptureError::PermissionDenied(_))
+        ));
+        assert!(matches!(
+            microphone_permission_error(MicrophonePermissionState::Unavailable),
+            Some(AudioCaptureError::PermissionUnavailable)
+        ));
+    }
+
+    #[test]
+    fn runtime_input_failure_stops_capture_and_records_diagnostics() {
+        let mut capture = AudioCapture::new_mock();
+        let (tx, _rx) = mpsc::channel(1);
+        capture.start(None, 16_000, tx, None).unwrap();
+        assert!(capture.is_active());
+
+        mark_runtime_stream_failure(
+            "device disconnected",
+            &capture.is_running,
+            &capture.last_error,
+        );
+
+        let diagnostics = capture.diagnostics();
+        assert!(!diagnostics.active);
+        assert_eq!(
+            diagnostics.last_error.as_deref(),
+            Some("runtime microphone stream error: device disconnected")
+        );
     }
 
     #[test]

@@ -21,6 +21,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
+  # Ordinary CI is explicitly offline with respect to live Gemini calls. The sole live
+  # integration test is ignored and also requires this guard to be set to 1 manually.
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
 
 jobs:
   frontend:

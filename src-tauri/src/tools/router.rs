@@ -493,6 +493,8 @@ mod tests {
         const SECRET_SENTINEL: &str = "AIzaSyPRIVATE_SECRET_SENTINEL_d41f";
         const MEMORY_SENTINEL: &str = "PRIVATE_MEMORY_FACT_SENTINEL_a331";
         const WINDOW_SENTINEL: &str = "PRIVATE_WINDOW_TITLE_SENTINEL_448e";
+        const ACTIVE_APP_SENTINEL: &str = "PRIVATE_ACTIVE_APP_SENTINEL_a885";
+        const RAW_AUDIO_SENTINEL: &str = "AAECAwQFBgcICQoLDA0ODw_PRIVATE_AUDIO_5ef0";
 
         let (router, settings) = router();
         settings.write().memory_enabled = true;
@@ -505,7 +507,7 @@ mod tests {
         let _default = tracing::subscriber::set_default(subscriber);
 
         let private_payload = format!(
-            "{TRANSCRIPT_SENTINEL} {PROMPT_SENTINEL} {SECRET_SENTINEL} {MEMORY_SENTINEL} {WINDOW_SENTINEL}"
+            "{TRANSCRIPT_SENTINEL} {PROMPT_SENTINEL} {SECRET_SENTINEL} {MEMORY_SENTINEL} {WINDOW_SENTINEL} {ACTIVE_APP_SENTINEL} {RAW_AUDIO_SENTINEL}"
         );
         router
             .dispatch("remember_fact", &json!({ "fact": private_payload }))
@@ -516,7 +518,12 @@ mod tests {
         let _ = router
             .dispatch(
                 &private_unknown_name,
-                &json!({ "window_title": WINDOW_SENTINEL, "secret": SECRET_SENTINEL }),
+                &json!({
+                    "window_title": WINDOW_SENTINEL,
+                    "active_app": ACTIVE_APP_SENTINEL,
+                    "raw_audio_base64": RAW_AUDIO_SENTINEL,
+                    "secret": SECRET_SENTINEL
+                }),
             )
             .await;
 
@@ -527,6 +534,8 @@ mod tests {
             SECRET_SENTINEL,
             MEMORY_SENTINEL,
             WINDOW_SENTINEL,
+            ACTIVE_APP_SENTINEL,
+            RAW_AUDIO_SENTINEL,
         ] {
             assert!(
                 !logs.contains(sentinel),

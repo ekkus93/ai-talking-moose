@@ -253,6 +253,7 @@ mod tests {
         }];
         assert!(validate_selected_device(Some("Built-in Mic"), &available, "input").is_ok());
         assert!(validate_selected_device(Some("Missing Mic"), &available, "input").is_err());
+        assert!(validate_selected_device(Some("Missing Output"), &available, "output").is_err());
         assert!(validate_selected_device(None, &available, "input").is_ok());
     }
 

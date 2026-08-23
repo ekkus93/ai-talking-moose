@@ -12,6 +12,21 @@ use crate::persistence::{Database, MemoryRecord, TranscriptRecord};
 use tauri::{Emitter, Runtime, State};
 use tracing::{info, warn};
 
+const MAX_TEXT_MESSAGE_CHARS: usize = 16_384;
+
+fn normalize_text_message(message: String) -> Result<Option<String>, String> {
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > MAX_TEXT_MESSAGE_CHARS {
+        return Err(format!(
+            "text message exceeds the {MAX_TEXT_MESSAGE_CHARS}-character limit"
+        ));
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
 fn persist_transcript_if_enabled(
     db: &Database,
     enabled: bool,
@@ -223,10 +238,9 @@ pub async fn send_text_message(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    let msg_trimmed = message.trim().to_string();
-    if msg_trimmed.is_empty() {
+    let Some(msg_trimmed) = normalize_text_message(message)? else {
         return Ok(String::new());
-    }
+    };
     let settings = state.settings.read().clone();
 
     let _ = app.emit("moose://transcript/user", &msg_trimmed);
@@ -324,6 +338,19 @@ mod tests {
             headers: Default::default(),
             invoke_key: INVOKE_KEY.to_string(),
         }
+    }
+
+    #[test]
+    fn text_message_admission_is_trimmed_and_hard_bounded() {
+        assert_eq!(
+            normalize_text_message("  hello moose  ".to_string()).unwrap(),
+            Some("hello moose".to_string())
+        );
+        assert_eq!(normalize_text_message("   ".to_string()).unwrap(), None);
+
+        let oversized = "x".repeat(MAX_TEXT_MESSAGE_CHARS + 1);
+        let error = normalize_text_message(oversized).unwrap_err();
+        assert!(error.contains("character limit"));
     }
 
     #[test]

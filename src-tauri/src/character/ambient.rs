@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
 const AMBIENT_QUEUE_CAPACITY: usize = 32;
+const MAX_AMBIENT_EVENT_SUMMARY_CHARS: usize = 2_048;
 const AMBIENT_SETTLE_DELAY: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +65,10 @@ impl AmbientEvent {
         } else {
             0.0
         };
+        let summary = summary
+            .chars()
+            .take(MAX_AMBIENT_EVENT_SUMMARY_CHARS)
+            .collect();
         Self {
             category: AmbientEventCategory::from_event_name(event_name),
             summary,
@@ -294,6 +299,15 @@ impl AmbientScheduler {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn event_summary_is_bounded_before_entering_the_scheduler_queue() {
+        let oversized = format!("PRIVATE:{}", "x".repeat(MAX_AMBIENT_EVENT_SUMMARY_CHARS * 4));
+        let event = AmbientEvent::new("manual", oversized, 0.8);
+
+        assert_eq!(event.summary.chars().count(), MAX_AMBIENT_EVENT_SUMMARY_CHARS);
+        assert!(event.summary.starts_with("PRIVATE:"));
+    }
 
     #[test]
     fn event_categories_and_fingerprints_are_normalized_without_retaining_text() {

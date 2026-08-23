@@ -9,6 +9,7 @@ const MAX_MEMORY_FACT_CHARS: usize = 1_024;
 const MAX_METADATA_CHARS: usize = 64;
 const MAX_TRANSCRIPT_TEXT_CHARS: usize = 16_384;
 const MAX_SESSION_ID_CHARS: usize = 128;
+const MAX_MEMORY_QUERY_LIMIT: usize = 200;
 const MAX_TRANSCRIPT_QUERY_LIMIT: usize = 200;
 const MAX_TRANSCRIPT_RECORDS: i64 = 1_000;
 const EXPLICIT_MEMORY_SOURCE: &str = "remember_fact";
@@ -30,6 +31,25 @@ pub struct MemoryRecord {
     pub confidence: f64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+fn memory_record_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryRecord> {
+    Ok(MemoryRecord {
+        id: row.get(0)?,
+        fact: row.get(1)?,
+        category: row.get(2)?,
+        source: row.get(3)?,
+        confidence: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
+}
+
+fn collect_memory_rows<M>(rows: M) -> Result<Vec<MemoryRecord>>
+where
+    M: Iterator<Item = rusqlite::Result<MemoryRecord>>,
+{
+    rows.collect()
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -308,23 +328,25 @@ impl Database {
              FROM memories
              ORDER BY COALESCE(updated_at, created_at) DESC, id DESC",
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(MemoryRecord {
-                id: row.get(0)?,
-                fact: row.get(1)?,
-                category: row.get(2)?,
-                source: row.get(3)?,
-                confidence: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-            })
-        })?;
+        collect_memory_rows(stmt.query_map([], memory_record_from_row)?)
+    }
 
-        let mut list = Vec::new();
-        for row in rows {
-            list.push(row?);
+    pub fn get_recent_memories(&self, limit: usize) -> Result<Vec<MemoryRecord>> {
+        let bounded_limit = limit.min(MAX_MEMORY_QUERY_LIMIT);
+        if bounded_limit == 0 {
+            return Ok(Vec::new());
         }
-        Ok(list)
+        let bounded_limit =
+            i64::try_from(bounded_limit).map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, fact, category, source, confidence, created_at,
+                    COALESCE(updated_at, created_at)
+             FROM memories
+             ORDER BY COALESCE(updated_at, created_at) DESC, id DESC
+             LIMIT ?1",
+        )?;
+        collect_memory_rows(stmt.query_map(params![bounded_limit], memory_record_from_row)?)
     }
 
     pub fn delete_memory(&self, id: i64) -> Result<bool> {
