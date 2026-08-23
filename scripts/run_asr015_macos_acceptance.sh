@@ -130,7 +130,7 @@ run_one() {
   export TALKING_MOOSE_ASR_BENCHMARK_RUN="$run_number"
 
   printf '\n=== %s %s run %s ===\n' "$architecture" "$phase" "$run_number"
-  cargo test --release --manifest-path "$repo_root/src-tauri/Cargo.toml" --lib \
+  cargo test --locked --release --manifest-path "$repo_root/src-tauri/Cargo.toml" --lib \
     "$test_name" -- --ignored --nocapture --test-threads=1 2>&1 | tee "$log"
 
   record="$(grep -o 'ASR015_BENCHMARK_JSON=.*' "$log" | tail -n 1 | sed 's/^ASR015_BENCHMARK_JSON=//')"
