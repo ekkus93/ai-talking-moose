@@ -1,0 +1,101 @@
+name: macOS Release Preflight
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/release-preflight.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-release-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Validate release credentials and metadata
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - name: Check out release candidate
+        uses: actions/checkout@v7
+
+      - name: Generate deterministic application icons
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Validate v0.1.0 release metadata
+        run: python3 scripts/validate_release_metadata.py --tag v0.1.0
+
+      - name: Validate pinned native runtime provenance
+        run: python3 scripts/validate_moonshine_runtime_manifest.py
+
+      - name: Require release credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required release secret: %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+          [[ "$APPLE_ID" == *@* ]] || { echo 'APPLE_ID does not look like an Apple ID email address' >&2; exit 1; }
+          [[ "$APPLE_TEAM_ID" =~ ^[A-Za-z0-9]{10}$ ]] || { echo 'APPLE_TEAM_ID must be a 10-character Apple Developer Team ID' >&2; exit 1; }
+
+      - name: Validate Developer ID certificate and password
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate_path="${RUNNER_TEMP}/developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/talking-moose-preflight.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          cleanup() {
+            security delete-keychain "$keychain_path" >/dev/null 2>&1 || true
+            rm -f "$certificate_path"
+          }
+          trap cleanup EXIT
+
+          python3 -c 'import base64, os, pathlib, sys; pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(os.environ["APPLE_CERTIFICATE"], validate=True))' "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign >/dev/null
+
+          identity="$(security find-identity -v -p codesigning "$keychain_path" | awk -F'"' '/Developer ID Application:/ { print $2; exit }')"
+          if [[ -z "$identity" ]]; then
+            echo 'Certificate does not expose a Developer ID Application signing identity' >&2
+            exit 1
+          fi
+          echo 'Developer ID Application certificate and password are valid.'
+
+      - name: Validate Apple notarization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun notarytool history \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json >/dev/null
+          echo 'Apple notarization credentials authenticated successfully.'
+
+      - name: Release preflight passed
+        run: |
+          echo 'Release preflight PASS for v0.1.0.'
+          echo 'Tag the exact accepted master commit only after the ordinary CI and this preflight are green.'
