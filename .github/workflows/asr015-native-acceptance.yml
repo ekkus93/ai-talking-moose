@@ -109,3 +109,17 @@ jobs:
           test -s "$report"
           cat "$report" >> "$GITHUB_STEP_SUMMARY"
           echo "report=$report" >> "$GITHUB_OUTPUT"
+
+      - name: Upload ASR-015 acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asr015-supported-mac-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/talking-moose-asr015/ASR015_SUPPORTED_MAC_ACCEPTANCE.md
+            ${{ runner.temp }}/talking-moose-asr015/asr015-hardware.json
+            ${{ runner.temp }}/talking-moose-asr015/asr015-corpus.json
+            ${{ runner.temp }}/talking-moose-asr015/asr015-records.jsonl
+            ${{ runner.temp }}/talking-moose-asr015/*.log
+          if-no-files-found: warn
+          retention-days: 30
