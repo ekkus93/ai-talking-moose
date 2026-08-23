@@ -3,11 +3,21 @@ use crate::character::personality::CharacterConfig;
 use crate::desktop::macos::SystemDesktopMonitor;
 use crate::desktop::observation::{ObserverKind, ObserverResult};
 use crate::memory::MemoryManager;
-use crate::tools::policy::{ToolDeclaration, ToolPermissionLevel};
+use crate::tools::policy::{
+    ToolConfirmationPolicy, ToolDeclaration, ToolExecutionPolicy, ToolPermissionLevel,
+    ToolPrivacyGate,
+};
 use chrono::Local;
 use parking_lot::RwLock;
 use serde_json::json;
 use std::sync::Arc;
+
+pub const V1_TOOL_NAMES: &[&str] = &[
+    "get_current_time",
+    "get_battery_level",
+    "get_active_application",
+    "remember_fact",
+];
 
 pub struct BuiltinTools {
     pub memory_manager: Arc<MemoryManager>,
@@ -32,29 +42,29 @@ impl BuiltinTools {
             ToolDeclaration {
                 name: "get_current_time".to_string(),
                 description: "Get current local time and date".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {}
-                }),
+                parameters: no_argument_schema(),
                 permission: ToolPermissionLevel::SafeReadOnly,
+                privacy_gate: ToolPrivacyGate::None,
+                confirmation: ToolConfirmationPolicy::None,
+                execution: ToolExecutionPolicy::new(250, 64, 1_024),
             },
             ToolDeclaration {
                 name: "get_battery_level".to_string(),
                 description: "Get the current battery charge level and power status".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {}
-                }),
+                parameters: no_argument_schema(),
                 permission: ToolPermissionLevel::SafeReadOnly,
+                privacy_gate: ToolPrivacyGate::None,
+                confirmation: ToolConfirmationPolicy::None,
+                execution: ToolExecutionPolicy::new(500, 64, 1_024),
             },
             ToolDeclaration {
                 name: "get_active_application".to_string(),
                 description: "Get the name of the currently active frontmost application on the user's screen".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {}
-                }),
+                parameters: no_argument_schema(),
                 permission: ToolPermissionLevel::SafeReadOnly,
+                privacy_gate: ToolPrivacyGate::ActiveApplication,
+                confirmation: ToolConfirmationPolicy::None,
+                execution: ToolExecutionPolicy::new(500, 64, 2_048),
             },
             ToolDeclaration {
                 name: "remember_fact".to_string(),
@@ -64,14 +74,28 @@ impl BuiltinTools {
                     "properties": {
                         "fact": {
                             "type": "string",
-                            "description": "The fact to remember"
+                            "description": "The explicit fact to remember",
+                            "minLength": 1,
+                            "maxLength": 1024
                         }
                     },
-                    "required": ["fact"]
+                    "required": ["fact"],
+                    "additionalProperties": false
                 }),
                 permission: ToolPermissionLevel::MemoryMutation,
+                privacy_gate: ToolPrivacyGate::Memory,
+                confirmation: ToolConfirmationPolicy::SettingOptIn,
+                execution: ToolExecutionPolicy::new(1_500, 4_096, 1_024),
             },
         ]
+    }
+
+    pub(crate) fn privacy_gate_allowed(&self, gate: ToolPrivacyGate) -> bool {
+        match gate {
+            ToolPrivacyGate::None => true,
+            ToolPrivacyGate::ActiveApplication => self.settings.read().active_app_observation,
+            ToolPrivacyGate::Memory => self.settings.read().memory_enabled,
+        }
     }
 
     pub async fn execute(
@@ -122,16 +146,34 @@ impl BuiltinTools {
                 let id = self.memory_manager.remember(fact, Some("conversation"))?;
                 Ok(json!({ "status": "remembered", "memory_id": id }))
             }
-            // Strict security: Reject unknown or arbitrary tool requests
-            unknown => Err(format!("Tool '{}' is not registered or permitted", unknown)),
+            // Defense in depth: direct callers cannot use this executor as an escape hatch.
+            _ => Err("Tool is not registered or permitted".to_string()),
         }
     }
+}
+
+fn no_argument_schema() -> serde_json::Value {
+    json!({
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::desktop::observation::{ObserverErrorCode, ObserverStatus};
+    use crate::persistence::sqlite::Database;
+
+    fn tools() -> BuiltinTools {
+        let db = Arc::new(Database::new_in_memory().unwrap());
+        BuiltinTools {
+            memory_manager: Arc::new(MemoryManager::new(db)),
+            character_config: CharacterConfig::default(),
+            settings: Arc::new(RwLock::new(AppSettings::default())),
+        }
+    }
 
     #[test]
     fn observer_tool_failures_expose_only_safe_status_metadata() {
@@ -149,5 +191,54 @@ mod tests {
             denied.diagnostic(ObserverKind::ActiveApplication).status,
             ObserverStatus::Denied
         );
+    }
+
+    #[test]
+    fn v1_tool_surface_is_an_exact_allowlist_without_generic_execution() {
+        let declarations = tools().get_declarations();
+        let names: Vec<&str> = declarations.iter().map(|tool| tool.name.as_str()).collect();
+        assert_eq!(names.as_slice(), V1_TOOL_NAMES);
+
+        for forbidden in [
+            "shell",
+            "applescript",
+            "filesystem",
+            "http_request",
+            "spawn_process",
+            "execute_command",
+        ] {
+            assert!(
+                declarations.iter().all(|tool| {
+                    !tool.name.to_ascii_lowercase().contains(forbidden)
+                        && !tool.description.to_ascii_lowercase().contains(forbidden)
+                }),
+                "prohibited generic capability appeared in the V1 tool surface: {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn declaration_permissions_match_v1_safety_policy() {
+        let declarations = tools().get_declarations();
+        for tool in declarations {
+            match tool.name.as_str() {
+                "get_current_time" | "get_battery_level" => {
+                    assert_eq!(tool.permission, ToolPermissionLevel::SafeReadOnly);
+                    assert_eq!(tool.privacy_gate, ToolPrivacyGate::None);
+                    assert_eq!(tool.confirmation, ToolConfirmationPolicy::None);
+                }
+                "get_active_application" => {
+                    assert_eq!(tool.permission, ToolPermissionLevel::SafeReadOnly);
+                    assert_eq!(tool.privacy_gate, ToolPrivacyGate::ActiveApplication);
+                    assert_eq!(tool.confirmation, ToolConfirmationPolicy::None);
+                }
+                "remember_fact" => {
+                    assert_eq!(tool.permission, ToolPermissionLevel::MemoryMutation);
+                    assert_eq!(tool.privacy_gate, ToolPrivacyGate::Memory);
+                    assert_eq!(tool.confirmation, ToolConfirmationPolicy::SettingOptIn);
+                }
+                other => panic!("unexpected V1 tool declaration: {other}"),
+            }
+        }
     }
 }

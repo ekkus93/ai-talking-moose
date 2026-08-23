@@ -146,7 +146,10 @@ impl ConversationManager {
                     }
                 }
                 LiveServerEvent::ToolCall { id, name, args } => {
-                    info!(tool_name = %name, "Handling model tool call");
+                    // Tool names are provider-controlled. The router records the registered
+                    // name or a fixed `unregistered` label after local lookup, so do not
+                    // echo an untrusted identifier into normal logs here.
+                    info!("Handling model tool call");
                     let router = tool_router.clone();
                     let live_ref = self.live_session.clone();
                     let generation_ref = self.generation.clone();

@@ -1,5 +1,8 @@
 use super::*;
-use crate::tools::policy::{ToolDeclaration, ToolPermissionLevel};
+use crate::tools::policy::{
+    ToolConfirmationPolicy, ToolDeclaration, ToolExecutionPolicy, ToolPermissionLevel,
+    ToolPrivacyGate,
+};
 
 fn config() -> LiveSessionConfig {
     LiveSessionConfig {
@@ -11,8 +14,15 @@ fn config() -> LiveSessionConfig {
         tools: vec![ToolDeclaration {
             name: "get_current_time".to_string(),
             description: "Get time".to_string(),
-            parameters: json!({ "type": "object", "properties": {} }),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
             permission: ToolPermissionLevel::SafeReadOnly,
+            privacy_gate: ToolPrivacyGate::None,
+            confirmation: ToolConfirmationPolicy::None,
+            execution: ToolExecutionPolicy::new(250, 64, 1_024),
         }],
     }
 }
@@ -42,10 +52,13 @@ fn setup_enables_transcription_tools_resumption_and_compression() {
     assert!(setup.get("outputAudioTranscription").is_some());
     assert!(setup.get("sessionResumption").is_some());
     assert!(setup.get("contextWindowCompression").is_some());
-    assert_eq!(
-        setup["tools"][0]["functionDeclarations"][0]["name"],
-        "get_current_time"
-    );
+    let declaration = &setup["tools"][0]["functionDeclarations"][0];
+    assert_eq!(declaration["name"], "get_current_time");
+    assert!(declaration.get("parametersJsonSchema").is_some());
+    assert!(declaration.get("permission").is_none());
+    assert!(declaration.get("privacy_gate").is_none());
+    assert!(declaration.get("confirmation").is_none());
+    assert!(declaration.get("execution").is_none());
 }
 
 #[test]
