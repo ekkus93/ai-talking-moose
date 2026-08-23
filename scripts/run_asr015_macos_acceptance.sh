@@ -14,6 +14,47 @@ fail() {
 [[ "$arch" == "arm64" || "$arch" == "x86_64" ]] || fail "unsupported architecture: $arch"
 [[ "$(uname -m)" == "$arch" ]] || fail "requested $arch but host is $(uname -m)"
 
+for command in cargo git lipo python3; do
+  command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
+done
+
+commit_sha="$(git -C "$repo_root" rev-parse HEAD)"
+[[ -n "$commit_sha" ]] || fail "unable to determine repository commit"
+if [[ -n "$(git -C "$repo_root" status --porcelain --untracked-files=no)" ]]; then
+  fail "tracked repository files are dirty; run acceptance against an exact commit"
+fi
+
+# A local acceptance run must build the pinned runtime from the manifest rather
+# than silently trusting dylibs left behind by an older checkout. The dedicated
+# GitHub workflow stages the same runtime in a prior step and opts into reuse to
+# avoid compiling Moonshine twice.
+if [[ "${TALKING_MOOSE_ASR015_RUNTIME_PREPARED:-0}" != "1" ]]; then
+  python3 "$repo_root/scripts/validate_moonshine_runtime_manifest.py"
+  bash "$repo_root/scripts/prepare_moonshine_macos.sh" "$arch"
+fi
+
+runtime_manifest="$repo_root/src-tauri/native/moonshine-runtime.json"
+ort_version="$(python3 - "$runtime_manifest" <<'PY_RUNTIME'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.load(handle)["onnxruntime"]["version"])
+PY_RUNTIME
+)"
+moonshine_dylib="$repo_root/src-tauri/native/macos/libmoonshine.dylib"
+onnxruntime_dylib="$repo_root/src-tauri/native/macos/libonnxruntime.$ort_version.dylib"
+for dylib in "$moonshine_dylib" "$onnxruntime_dylib"; do
+  [[ -f "$dylib" ]] || fail "prepared native runtime is missing: $dylib"
+  dylib_arches="$(lipo -archs "$dylib")"
+  [[ " $dylib_arches " == *" $arch "* ]] || fail "$dylib does not contain architecture $arch"
+done
+
+# tauri::generate_context!() reads the configured icon set at compile time.
+# Release icons are deterministic ignored build inputs, so create them on clean
+# local checkouts before invoking Cargo.
+python3 "$repo_root/scripts/generate_app_icons.py"
+
 mkdir -p "$work_root"
 model_root="$work_root/models"
 pcm_path="$work_root/asr015-corpus.pcm"
@@ -110,7 +151,6 @@ run_model() {
 run_model tiny_streaming asr015_cpu_benchmark_tiny_on_supported_mac
 run_model small_streaming asr015_cpu_benchmark_small_on_supported_mac
 
-commit_sha="$(git -C "$repo_root" rev-parse HEAD)"
 python3 "$repo_root/scripts/render_asr015_benchmark_report.py" \
   --records "$records" \
   --hardware "$hardware_metadata" \

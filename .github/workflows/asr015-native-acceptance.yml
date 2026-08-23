@@ -93,6 +93,8 @@ jobs:
 
       - name: Run Tiny and Small native acceptance benchmark
         id: benchmark
+        env:
+          TALKING_MOOSE_ASR015_RUNTIME_PREPARED: "1"
         run: |
           work_root="$RUNNER_TEMP/talking-moose-asr015"
           bash scripts/run_asr015_macos_acceptance.sh arm64 "$work_root"

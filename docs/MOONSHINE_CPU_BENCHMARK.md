@@ -51,7 +51,7 @@ Do not use silence, synthetic random data, or a different corpus per model as re
 
 The hardware benchmark lives as ignored macOS tests in `src-tauri/src/asr/pipeline_benchmarks.rs`. It requires a build explicitly linked to the pinned Moonshine native runtime and pre-installed, verified model payloads.
 
-Prepare the pinned runtime first on the Mac that will run the benchmark:
+For the low-level ignored Cargo tests, prepare the pinned runtime first on the Mac that will run the benchmark:
 
 ```bash
 bash scripts/prepare_moonshine_macos.sh "$(uname -m)"
@@ -71,7 +71,7 @@ cargo test --release --manifest-path src-tauri/Cargo.toml \
 
 Run the corresponding `asr015_cpu_benchmark_small_on_supported_mac` test for Small. The benchmark feeds one 100 ms chunk every 100 ms using the same non-blocking bounded ingress behavior as production and fails if the queue drops a chunk. Set `TALKING_MOOSE_ASR_BENCHMARK_INSTALL=1` when the benchmark should install or re-verify the pinned model through the production model installer before native startup.
 
-For reproducible project acceptance, use the opt-in `ASR-015 Native Acceptance` GitHub Actions workflow or run `scripts/run_asr015_macos_acceptance.sh "$(uname -m)"` on a supported Mac. The automation performs one warm-up plus five measured **release-mode** runs for Tiny, then the same for Small, using one verified model-install root and the fixed corpus above. It emits machine-readable `ASR015_BENCHMARK_JSON` records and renders a complete Markdown report with every run, medians, worst cases, hardware identity, corpus identity, CPU utilization, RTF, latency, RSS, and transcript evidence. Ordinary CI does not invoke this workflow and still downloads no model weights.
+For reproducible project acceptance, use the opt-in `ASR-015 Native Acceptance` GitHub Actions workflow or run `scripts/run_asr015_macos_acceptance.sh "$(uname -m)"` on a supported Mac. The local runner requires a clean tracked checkout, validates and prepares the pinned native runtime itself, generates deterministic Tauri icon inputs, installs/re-verifies the pinned models through the production installer, and rejects a runtime whose Mach-O architecture does not match the host. The GitHub workflow prepares the same pinned runtime in its preceding provenance step and explicitly reuses that fresh staging directory. The automation performs one warm-up plus five measured **release-mode** runs for Tiny, then the same for Small, using one verified model-install root and the fixed corpus above. It emits machine-readable `ASR015_BENCHMARK_JSON` records and renders a complete Markdown report with every run, medians, worst cases, hardware identity, corpus identity, CPU utilization, RTF, latency, RSS, and transcript evidence. Ordinary CI does not invoke this workflow and still downloads no model weights.
 
 ## Required report fields
 
