@@ -2,9 +2,9 @@
 
 This overlay reconciles the legacy monolithic TODO without rewriting the large tracker file through the GitHub contents API.
 
-## Current closure candidate: V1R-080 through V1R-086
+## Accepted closure: V1R-080 through V1R-086
 
-These rows are **implemented in the source candidate but pending GitHub Actions acceptance**. Do not treat P8 as accepted complete until the implementation commit is reported green.
+P8 is **accepted complete**. GitHub Actions run `32612793246` completed successfully against `master` commit `105582810ad1ff977a8b1bc36543e836cd792c46` (`fix: split non-macOS desktop observer stub`), which includes the real P8 observer implementation from its parent commit.
 
 ### V1R-080 — Observer result model
 
