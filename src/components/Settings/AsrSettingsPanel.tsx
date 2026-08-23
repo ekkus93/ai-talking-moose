@@ -194,7 +194,7 @@ export const AsrSettingsPanel: React.FC = () => {
           />
           <span className="flex-1">
             <span className="font-bold block">{title}</span>
-            <span className="text-[11px] text-gray-600 block">{summary}</span>
+            <span className="text-[11px] text-gray-700 block">{summary}</span>
           </span>
         </label>
 
@@ -344,7 +344,7 @@ export const AsrSettingsPanel: React.FC = () => {
               <span className="font-bold flex items-center gap-1">
                 <Cloud className="w-3.5 h-3.5" /> Gemini Live Cloud Audio
               </span>
-              <span className="text-[11px] text-gray-600 block">
+              <span className="text-[11px] text-gray-700 block">
                 Google performs speech recognition from microphone audio sent
                 during the active conversation.
               </span>

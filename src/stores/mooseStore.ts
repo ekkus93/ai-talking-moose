@@ -370,6 +370,31 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       },
     );
 
+    const unlistenOpenSettings = await tauriBridge.listenEvent<void>(
+      "moose://ui/open-settings",
+      () => {
+        get().toggleSettings(true);
+      },
+    );
+
+    const unlistenTrayAction = await tauriBridge.listenEvent<string>(
+      "moose://tray/action",
+      (action) => {
+        if (action === "start_conversation" && !get().isConversationActive) {
+          void get().startConversation();
+        } else if (
+          action === "stop_conversation" &&
+          get().isConversationActive
+        ) {
+          void get().stopConversation();
+        } else if (action === "mute" && !get().isMuted) {
+          void get().toggleMute();
+        } else if (action === "unmute" && get().isMuted) {
+          void get().toggleMute();
+        }
+      },
+    );
+
     return () => {
       unlistenState();
       unlistenLifecycle();
@@ -382,6 +407,8 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       unlistenMoosePartial();
       unlistenInLvl();
       unlistenOutLvl();
+      unlistenOpenSettings();
+      unlistenTrayAction();
     };
   },
 }));

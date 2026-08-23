@@ -87,4 +87,54 @@ describe("mooseStore State Management", () => {
     expect(useMooseStore.getState().speechBubbleText).toBeNull();
     cleanup();
   });
+  it("routes tray and menu-bar actions through bounded store commands", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
+      async (eventName: string, handler: (payload: unknown) => void) => {
+        handlers.set(eventName, handler);
+        return () => {};
+      },
+    );
+    const start = vi
+      .spyOn(tauriBridge, "startConversation")
+      .mockResolvedValue("test-session");
+    const stop = vi
+      .spyOn(tauriBridge, "stopConversation")
+      .mockResolvedValue(undefined);
+    const setMute = vi
+      .spyOn(tauriBridge, "setMute")
+      .mockResolvedValue(undefined);
+    vi.spyOn(tauriBridge, "resizeWindow").mockResolvedValue(undefined);
+
+    useMooseStore.setState({
+      isConversationActive: false,
+      isMuted: false,
+      isSettingsOpen: false,
+    });
+    const cleanup = await useMooseStore.getState().initEventListeners();
+    const trayAction = handlers.get("moose://tray/action");
+    const openSettings = handlers.get("moose://ui/open-settings");
+
+    expect(trayAction).toBeDefined();
+    expect(openSettings).toBeDefined();
+
+    trayAction?.("start_conversation");
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+
+    useMooseStore.setState({ isConversationActive: true });
+    trayAction?.("stop_conversation");
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(1));
+
+    useMooseStore.setState({ isMuted: false });
+    trayAction?.("mute");
+    await vi.waitFor(() => expect(setMute).toHaveBeenLastCalledWith(true));
+
+    trayAction?.("unmute");
+    await vi.waitFor(() => expect(setMute).toHaveBeenLastCalledWith(false));
+
+    openSettings?.(undefined);
+    expect(useMooseStore.getState().isSettingsOpen).toBe(true);
+
+    cleanup();
+  });
 });

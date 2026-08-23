@@ -17,7 +17,7 @@ use crate::audio::playback::AudioPlaybackDiagnostics;
 use crate::character::state::{transition_character_state, CharacterState};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use tauri::{Emitter, Runtime, State};
+use tauri::{Emitter, Manager, Runtime, State};
 use tokio::sync::mpsc;
 use tracing::warn;
 
@@ -124,6 +124,13 @@ pub async fn update_settings<R: Runtime>(
         state.behavior_engine.as_ref(),
         &new_settings,
     )?;
+
+    if previous.show_in_menu_bar != new_settings.show_in_menu_bar {
+        if let Some(tray) = app.tray_by_id(crate::app::tray::TRAY_ID) {
+            tray.set_visible(new_settings.show_in_menu_bar)
+                .map_err(|error| error.to_string())?;
+        }
+    }
 
     if restart_required && state.conversation_mgr.is_active() {
         // Privacy-preserving restart policy: tear down the old graph and require a fresh explicit

@@ -19,3 +19,28 @@
   image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
 }
+
+/* Keep the 32x32 Moose grid crisp at every renderer-controlled scale. */
+.pixelated-sprite,
+.pixelated-sprite svg {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  shape-rendering: crispEdges;
+}
+
+/* Strong keyboard focus without changing the retro palette. */
+:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

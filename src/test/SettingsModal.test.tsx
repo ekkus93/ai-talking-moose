@@ -172,4 +172,66 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Test Output")).toBeInTheDocument();
     expect(await screen.findByText("Unavailable")).toBeInTheDocument();
   });
+  it("exposes local-time quiet hours with explicit overnight UX", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Behavior"));
+
+    expect(screen.getByLabelText("Quiet hours start")).toHaveValue("22");
+    expect(screen.getByLabelText("Quiet hours end")).toHaveValue("8");
+    expect(
+      screen.getByText(/Overnight: quiet from 10:00 PM/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Lower values make Moose require more important events/i,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Quiet hours start"), {
+      target: { value: "7" },
+    });
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.quiet_hours_start).toBe(7),
+    );
+    expect(
+      screen.getByText(/Same-day: quiet from 7:00 AM/i),
+    ).toBeInTheDocument();
+  });
+
+  it("summarizes privacy and resets opt-in retention controls", async () => {
+    useMooseStore.setState((state) => ({
+      settings: state.settings
+        ? {
+            ...state.settings,
+            active_app_observation: true,
+            memory_enabled: true,
+            save_transcripts: true,
+          }
+        : null,
+    }));
+
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Privacy"));
+
+    expect(screen.getByText("Active privacy summary")).toBeInTheDocument();
+    expect(screen.getByText(/Window titles:/i)).toHaveTextContent("Off");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Reset privacy defaults/i }),
+    );
+
+    await waitFor(() => {
+      const settings = useMooseStore.getState().settings;
+      expect(settings?.active_app_observation).toBe(false);
+      expect(settings?.memory_enabled).toBe(false);
+      expect(settings?.save_transcripts).toBe(false);
+    });
+  });
+
+  it("documents focused-window shortcuts without global capture", () => {
+    render(<SettingsModal />);
+    expect(screen.getByText("Ctrl/Cmd + Enter")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No global keyboard capture is registered/i),
+    ).toBeInTheDocument();
+  });
 });

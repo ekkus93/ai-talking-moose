@@ -56,19 +56,23 @@ export const TranscriptDrawer: React.FC = () => {
   return (
     <div
       data-testid="transcript-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="transcript-title"
       className="absolute inset-0 z-30 bg-[#ece7de] flex flex-col border-2 border-black animate-in slide-in-from-bottom-5 duration-150 select-none font-mono text-xs"
     >
       {/* Terminal Title Bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-black text-white text-xs font-bold">
         <div className="flex items-center gap-1.5">
           <Terminal className="w-4 h-4 text-green-400" />
-          <span>MOOSE DEBUG TERMINAL</span>
+          <span id="transcript-title">MOOSE DEBUG TERMINAL</span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => forgetEverything()}
             className="text-gray-400 hover:text-red-400 p-0.5"
             title="Clear All Logs"
+            aria-label="Forget all stored Moose data"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -76,6 +80,7 @@ export const TranscriptDrawer: React.FC = () => {
             onClick={() => toggleTranscript(false)}
             className="hover:bg-gray-800 p-0.5 rounded"
             title="Close Terminal"
+            aria-label="Close transcript terminal"
           >
             <X className="w-4 h-4" />
           </button>
@@ -167,7 +172,11 @@ export const TranscriptDrawer: React.FC = () => {
         <span className="text-green-700 font-bold text-sm select-none">
           &gt;
         </span>
+        <label htmlFor="moose-text-message" className="sr-only">
+          Message Moose
+        </label>
         <input
+          id="moose-text-message"
           ref={inputRef}
           type="text"
           placeholder="Type a message to Moose..."
@@ -181,6 +190,7 @@ export const TranscriptDrawer: React.FC = () => {
           disabled={!inputMessage.trim() || isSubmitting}
           className="px-3 py-1.5 bg-black text-white font-bold rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800 disabled:opacity-40 flex items-center gap-1 active:translate-y-0.5"
           title="Send Message"
+          aria-label="Send message"
         >
           {isSubmitting ? (
             <span className="animate-spin text-xs">...</span>

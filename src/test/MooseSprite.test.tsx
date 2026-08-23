@@ -23,4 +23,14 @@ describe("MooseSprite Component", () => {
     );
     expect(container.innerHTML).toContain("Zzz");
   });
+
+  it("uses a keyboard-operable control and crisp 32x32 render grid", () => {
+    render(<MooseSprite state="idle" mouth="closed" isBlinking={false} />);
+    const sprite = screen.getByRole("button", { name: "Talk to Moose" });
+    const svg = sprite.querySelector("svg");
+
+    expect(sprite).toHaveClass("pixelated-sprite");
+    expect(svg).toHaveAttribute("viewBox", "0 0 32 32");
+    expect(svg).toHaveAttribute("shape-rendering", "crispEdges");
+  });
 });

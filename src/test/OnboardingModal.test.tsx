@@ -14,9 +14,17 @@ describe("OnboardingModal ASR privacy", () => {
 
   it("describes the selected local ASR privacy boundary", () => {
     render(<OnboardingModal />);
+    expect(
+      screen.getByText(
+        /active-app observation, cross-conversation memory, and transcript retention start Off/i,
+      ),
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByText("Next: Voice"));
 
-    expect(screen.getByText(/Moonshine Tiny Streaming/)).toBeInTheDocument();
+    expect(screen.getByText(/Current mode:/)).toHaveTextContent(
+      "Moonshine Tiny Streaming",
+    );
     expect(
       screen.getByText(/processes microphone audio locally/i),
     ).toBeInTheDocument();
@@ -26,11 +34,8 @@ describe("OnboardingModal ASR privacy", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/active conversation or an explicit microphone test/i),
-    ).toBeInTheDocument();
-    expect(
       screen.getByText(
-        /active-app observation, cross-conversation memory, and local transcript saving all start Off/i,
+        /active conversation, or for an explicit microphone test/i,
       ),
     ).toBeInTheDocument();
   });
@@ -50,5 +55,45 @@ describe("OnboardingModal ASR privacy", () => {
         /sends microphone audio to Google during the active conversation/i,
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("OnboardingModal P11 onboarding controls", () => {
+  beforeEach(async () => {
+    useMooseStore.setState({
+      isOnboardingOpen: true,
+      settings: await tauriBridge.getSettings(),
+    });
+  });
+
+  it("offers the Tiny model download without blocking onboarding", async () => {
+    render(<OnboardingModal />);
+    fireEvent.click(screen.getByText("Next: Voice"));
+    fireEvent.click(screen.getByText("Next: Local Model"));
+
+    expect(
+      await screen.findByRole("button", { name: /Download Tiny Model/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Continue to Gemini Key/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains secure key storage and conservative defaults", () => {
+    render(<OnboardingModal />);
+    expect(
+      screen.getByText(
+        /active-app observation.*memory.*transcript retention start Off/i,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Next: Voice"));
+    fireEvent.click(screen.getByText("Next: Local Model"));
+    fireEvent.click(screen.getByText("Continue to Gemini Key"));
+
+    expect(
+      screen.getByText(/never stored in the app settings database/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/stored in Keychain/i)).toBeInTheDocument();
   });
 });

@@ -150,7 +150,9 @@ pub fn run() {
                 }
             });
 
+            let tray_visible = app_state.settings.read().show_in_menu_bar;
             app.manage(app_state);
+            app::tray::install(app, tray_visible)?;
             info!("Talking Moose AI backend initialized successfully");
             Ok(())
         })

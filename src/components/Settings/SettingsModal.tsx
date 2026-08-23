@@ -19,7 +19,16 @@ import {
   CheckCircle,
   AlertCircle,
   Sparkles,
+  Keyboard,
+  RotateCcw,
 } from "lucide-react";
+
+const formatLocalHour = (hour: number): string => {
+  const normalized = ((hour % 24) + 24) % 24;
+  const suffix = normalized >= 12 ? "PM" : "AM";
+  const display = normalized % 12 || 12;
+  return `${display}:00 ${suffix}`;
+};
 
 export const SettingsModal: React.FC = () => {
   const {
@@ -83,6 +92,16 @@ export const SettingsModal: React.FC = () => {
     }
   };
 
+  const resetPrivacyDefaults = async () => {
+    await updateSettings({
+      ...settings,
+      active_app_observation: false,
+      window_title_observation: false,
+      memory_enabled: false,
+      save_transcripts: false,
+    });
+  };
+
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
@@ -99,6 +118,9 @@ export const SettingsModal: React.FC = () => {
   return (
     <div
       data-testid="settings-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
       className="absolute inset-0 z-50 bg-[#ece7de] flex flex-col font-mono text-xs overflow-hidden select-none animate-in fade-in duration-100"
     >
       {/* Title bar */}
@@ -108,12 +130,13 @@ export const SettingsModal: React.FC = () => {
       >
         <div className="flex items-center gap-2 font-bold text-sm">
           <Sliders className="w-4 h-4" />
-          <span>TALKING MOOSE CONTROL PANEL</span>
+          <span id="settings-title">TALKING MOOSE CONTROL PANEL</span>
         </div>
         <button
           onClick={() => toggleSettings(false)}
           className="hover:bg-gray-300 p-1 rounded border border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5"
           title="Close Settings"
+          aria-label="Close settings"
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -121,7 +144,11 @@ export const SettingsModal: React.FC = () => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Tabs */}
-        <div className="w-44 bg-[#ded9cf] border-r-2 border-black flex flex-col py-2 gap-0.5 select-none overflow-y-auto">
+        <div
+          role="tablist"
+          aria-label="Settings sections"
+          className="w-44 bg-[#ded9cf] border-r-2 border-black flex flex-col py-2 gap-0.5 select-none overflow-y-auto"
+        >
           {[
             { id: "general", label: "General", icon: Sliders },
             { id: "behavior", label: "Behavior", icon: Sparkles },
@@ -138,6 +165,8 @@ export const SettingsModal: React.FC = () => {
             return (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={isCurrent}
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
                 className={`flex items-center gap-2 px-3 py-2 text-left font-bold transition-colors ${
                   isCurrent
@@ -177,6 +206,20 @@ export const SettingsModal: React.FC = () => {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
+                  checked={settings.show_in_menu_bar}
+                  onChange={(e) =>
+                    updateSettings({
+                      ...settings,
+                      show_in_menu_bar: e.target.checked,
+                    })
+                  }
+                  className="accent-black"
+                />
+                <span>Show Talking Moose in the system tray / menu bar</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
                   checked={settings.always_on_top}
                   onChange={(e) =>
                     updateSettings({
@@ -202,6 +245,35 @@ export const SettingsModal: React.FC = () => {
                 />
                 <span>Restore desktop window position across restarts</span>
               </label>
+
+              <section
+                className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2"
+                aria-labelledby="keyboard-shortcuts-heading"
+              >
+                <div
+                  className="flex items-center gap-1.5 font-bold"
+                  id="keyboard-shortcuts-heading"
+                >
+                  <Keyboard className="w-3.5 h-3.5" aria-hidden="true" />
+                  Keyboard Shortcuts
+                </div>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+                  <dt className="font-bold">Ctrl/Cmd + Enter</dt>
+                  <dd>Start or stop a conversation</dd>
+                  <dt className="font-bold">Ctrl/Cmd + Shift + M</dt>
+                  <dd>Mute or unmute Moose</dd>
+                  <dt className="font-bold">Ctrl/Cmd + ,</dt>
+                  <dd>Open Settings</dd>
+                  <dt className="font-bold">Escape</dt>
+                  <dd>Close the active panel</dd>
+                </dl>
+                <p className="text-[10px] text-gray-700">
+                  These shortcuts work only while the Moose window is focused.
+                  No global keyboard capture is registered. Show/hide remains
+                  available from the tray so a hidden window can be restored
+                  safely.
+                </p>
+              </section>
             </div>
           )}
 
@@ -241,6 +313,7 @@ export const SettingsModal: React.FC = () => {
                   max="1"
                   step="0.05"
                   value={settings.talkativeness}
+                  aria-label="Talkativeness"
                   onChange={(e) =>
                     updateSettings({
                       ...settings,
@@ -249,6 +322,11 @@ export const SettingsModal: React.FC = () => {
                   }
                   className="w-full accent-black"
                 />
+                <p className="text-[11px] text-gray-700">
+                  Lower values make Moose require more important events before
+                  speaking; higher values make him more willing to comment. The
+                  hourly cap and quiet hours still apply.
+                </p>
               </div>
 
               <div className="space-y-1">
@@ -264,6 +342,7 @@ export const SettingsModal: React.FC = () => {
                   max="12"
                   step="1"
                   value={settings.max_comments_per_hour}
+                  aria-label="Maximum ambient comments per hour"
                   onChange={(e) =>
                     updateSettings({
                       ...settings,
@@ -289,10 +368,60 @@ export const SettingsModal: React.FC = () => {
                   />
                   <span>Quiet Hours</span>
                 </label>
-                <p className="text-gray-600 text-[11px]">
-                  Silence all unsolicited remarks between{" "}
-                  {settings.quiet_hours_start}:00 and {settings.quiet_hours_end}
-                  :00.
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1">
+                    <span className="block font-bold text-[11px]">
+                      Start (local time)
+                    </span>
+                    <select
+                      aria-label="Quiet hours start"
+                      value={settings.quiet_hours_start}
+                      onChange={(e) =>
+                        updateSettings({
+                          ...settings,
+                          quiet_hours_start: Number(e.target.value),
+                        })
+                      }
+                      disabled={!settings.quiet_hours_enabled}
+                      className="w-full p-1.5 border border-black rounded bg-white disabled:opacity-60"
+                    >
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <option key={hour} value={hour}>
+                          {formatLocalHour(hour)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="block font-bold text-[11px]">
+                      End (local time)
+                    </span>
+                    <select
+                      aria-label="Quiet hours end"
+                      value={settings.quiet_hours_end}
+                      onChange={(e) =>
+                        updateSettings({
+                          ...settings,
+                          quiet_hours_end: Number(e.target.value),
+                        })
+                      }
+                      disabled={!settings.quiet_hours_enabled}
+                      className="w-full p-1.5 border border-black rounded bg-white disabled:opacity-60"
+                    >
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <option key={hour} value={hour}>
+                          {formatLocalHour(hour)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <p className="text-gray-700 text-[11px]">
+                  {settings.quiet_hours_start === settings.quiet_hours_end
+                    ? "Start and end are the same, so there is no quiet interval."
+                    : settings.quiet_hours_start > settings.quiet_hours_end
+                      ? `Overnight: quiet from ${formatLocalHour(settings.quiet_hours_start)} through midnight until ${formatLocalHour(settings.quiet_hours_end)}.`
+                      : `Same-day: quiet from ${formatLocalHour(settings.quiet_hours_start)} until ${formatLocalHour(settings.quiet_hours_end)}.`}
                 </p>
               </div>
             </div>
@@ -306,10 +435,14 @@ export const SettingsModal: React.FC = () => {
               </h3>
 
               <div>
-                <label className="block mb-1 font-bold">
+                <label
+                  htmlFor="settings-input-device"
+                  className="block mb-1 font-bold"
+                >
                   Microphone Input Device
                 </label>
                 <select
+                  id="settings-input-device"
                   value={settings.input_device || ""}
                   onChange={(e) =>
                     updateSettings({
@@ -329,10 +462,14 @@ export const SettingsModal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">
+                <label
+                  htmlFor="settings-output-device"
+                  className="block mb-1 font-bold"
+                >
                   Audio Output Device
                 </label>
                 <select
+                  id="settings-output-device"
                   value={settings.output_device || ""}
                   onChange={(e) =>
                     updateSettings({
@@ -353,10 +490,14 @@ export const SettingsModal: React.FC = () => {
 
               <div className="space-y-2">
                 <div>
-                  <label className="block mb-1 font-bold">
+                  <label
+                    htmlFor="settings-tts-voice"
+                    className="block mb-1 font-bold"
+                  >
                     Moose Voice Preset
                   </label>
                   <select
+                    id="settings-tts-voice"
                     value={settings.tts_voice}
                     onChange={(e) =>
                       updateSettings({ ...settings, tts_voice: e.target.value })
@@ -442,6 +583,7 @@ export const SettingsModal: React.FC = () => {
                     value={
                       settings[slider.key as keyof typeof settings] as number
                     }
+                    aria-label={slider.label}
                     onChange={(e) =>
                       updateSettings({
                         ...settings,
@@ -463,12 +605,17 @@ export const SettingsModal: React.FC = () => {
               </h3>
 
               <div className="space-y-2">
-                <label className="block font-bold">
+                <label
+                  htmlFor="settings-google-api-key"
+                  className="block font-bold"
+                >
                   Google Gemini API Key (BYOK)
                 </label>
                 <div className="flex gap-2">
                   <input
+                    id="settings-google-api-key"
                     type="password"
+                    autoComplete="off"
                     placeholder="Enter AIzaSy... API Key"
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
@@ -481,7 +628,7 @@ export const SettingsModal: React.FC = () => {
                     Save Key
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-500">
+                <p className="text-[10px] text-gray-700">
                   Your key is stored in the operating system secure credential
                   store and is never returned to this settings screen.
                 </p>
@@ -490,10 +637,14 @@ export const SettingsModal: React.FC = () => {
               <div className="pt-2 border-t border-gray-200">
                 <div className="space-y-3 mb-3">
                   <div>
-                    <label className="block mb-1 font-bold">
+                    <label
+                      htmlFor="settings-live-model"
+                      className="block mb-1 font-bold"
+                    >
                       Realtime Live Voice Model
                     </label>
                     <select
+                      id="settings-live-model"
                       value={settings.live_model}
                       onChange={(e) =>
                         updateSettings({
@@ -516,10 +667,14 @@ export const SettingsModal: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block mb-1 font-bold">
+                    <label
+                      htmlFor="settings-text-model"
+                      className="block mb-1 font-bold"
+                    >
                       Text & Ambient Remark Model
                     </label>
                     <select
+                      id="settings-text-model"
                       value={settings.text_model}
                       onChange={(e) =>
                         updateSettings({
@@ -581,6 +736,62 @@ export const SettingsModal: React.FC = () => {
                 Privacy & Permissions
               </h3>
 
+              <section
+                className="border-2 border-black rounded bg-[#fbf9f5] p-3 space-y-2"
+                aria-labelledby="privacy-summary-heading"
+              >
+                <h4 id="privacy-summary-heading" className="font-bold">
+                  Active privacy summary
+                </h4>
+                <ul className="text-[11px] space-y-1 list-disc pl-4">
+                  <li>
+                    Microphone: used only during active conversations or tests;
+                    live OS permission is shown below.
+                  </li>
+                  <li>
+                    Active-app observation:{" "}
+                    <strong>
+                      {settings.active_app_observation ? "On" : "Off"}
+                    </strong>
+                    .
+                  </li>
+                  <li>
+                    Window titles: <strong>Off</strong> in V1; title observation
+                    remains fail-closed.
+                  </li>
+                  <li>
+                    Cross-conversation memory:{" "}
+                    <strong>{settings.memory_enabled ? "On" : "Off"}</strong> (
+                    {memories.length} stored{" "}
+                    {memories.length === 1 ? "fact" : "facts"}).
+                  </li>
+                  <li>
+                    Transcript retention:{" "}
+                    <strong>{settings.save_transcripts ? "On" : "Off"}</strong>.
+                    When Off, finalized transcript text is not retained after
+                    the live session.
+                  </li>
+                </ul>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => void forgetEverything()}
+                    className="px-2 py-1 bg-red-700 text-white border border-black rounded font-bold flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3 h-3" aria-hidden="true" />
+                    Forget stored data
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void resetPrivacyDefaults()}
+                    className="px-2 py-1 bg-white border border-black rounded font-bold flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                    Reset privacy defaults
+                  </button>
+                </div>
+              </section>
+
               <MicrophonePermissionCard />
 
               <label className="flex items-center gap-2 cursor-pointer">
@@ -628,7 +839,7 @@ export const SettingsModal: React.FC = () => {
                 <span>Save local conversation transcripts</span>
               </label>
 
-              <div className="p-3 bg-gray-50 border border-gray-300 rounded text-[11px] text-gray-700 space-y-1">
+              <div className="p-3 bg-gray-50 border border-gray-400 rounded text-[11px] text-gray-800 space-y-1">
                 <p className="font-bold">Microphone privacy:</p>
                 {settings.asr_mode === "gemini_live_audio" ? (
                   <p>
@@ -647,8 +858,8 @@ export const SettingsModal: React.FC = () => {
                   upload.
                 </p>
                 <p>
-                  - Screen contents, OCR, keystrokes, and files are never
-                  collected.
+                  - Screen contents, OCR, keystrokes, window titles, and files
+                  are not collected in V1.
                 </p>
               </div>
             </div>

@@ -25,8 +25,12 @@ export const MooseWindow: React.FC = () => {
     isMuted,
     isConversationActive,
     hasApiKey,
+    isSettingsOpen,
+    isOnboardingOpen,
+    isTranscriptOpen,
     toggleMute,
     toggleSettings,
+    toggleOnboarding,
     toggleTranscript,
     startConversation,
     stopConversation,
@@ -41,6 +45,68 @@ export const MooseWindow: React.FC = () => {
       unlistenPromise.then((unlisten: () => void) => unlisten());
     };
   }, [loadSettings, initEventListeners]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isEditing =
+        target instanceof Element &&
+        target.matches("input, textarea, select, [contenteditable='true']");
+
+      if (event.key === "Escape") {
+        if (isOnboardingOpen) {
+          toggleOnboarding(false);
+        } else if (isSettingsOpen) {
+          toggleSettings(false);
+        } else if (isTranscriptOpen) {
+          toggleTranscript(false);
+        } else {
+          return;
+        }
+        event.preventDefault();
+        return;
+      }
+
+      if (isEditing || isOnboardingOpen) return;
+      const command = event.ctrlKey || event.metaKey;
+      if (!command) return;
+
+      if (event.key === ",") {
+        event.preventDefault();
+        toggleSettings(true);
+        return;
+      }
+
+      if (event.shiftKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        void toggleMute();
+        return;
+      }
+
+      if (event.key === "Enter" && !isSettingsOpen && !isTranscriptOpen) {
+        event.preventDefault();
+        if (isConversationActive) {
+          void stopConversation();
+        } else {
+          void startConversation();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    isConversationActive,
+    isOnboardingOpen,
+    isSettingsOpen,
+    isTranscriptOpen,
+    startConversation,
+    stopConversation,
+    toggleMute,
+    toggleOnboarding,
+    toggleSettings,
+    toggleTranscript,
+  ]);
 
   // State badge styling and label
   const getStateBadge = () => {
@@ -108,7 +174,8 @@ export const MooseWindow: React.FC = () => {
           <button
             onClick={() => toggleMute()}
             className="w-3.5 h-3.5 bg-white border border-black rounded-[2px] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 flex items-center justify-center"
-            title="Close / Toggle Mute"
+            title={isMuted ? "Unmute Moose" : "Mute Moose"}
+            aria-label={isMuted ? "Unmute Moose" : "Mute Moose"}
           >
             <Square className="w-2 h-2 fill-current" />
           </button>
@@ -128,6 +195,7 @@ export const MooseWindow: React.FC = () => {
             onClick={() => toggleSettings(true)}
             className="w-3.5 h-3.5 bg-white border border-black rounded-[2px] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 flex items-center justify-center"
             title="Settings"
+            aria-label="Open Settings"
           >
             <Minus className="w-2.5 h-2.5" />
           </button>
@@ -140,6 +208,8 @@ export const MooseWindow: React.FC = () => {
         <div className="flex items-center justify-between z-10 gap-1.5 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span
+              role="status"
+              aria-live="polite"
               className={`text-[10px] font-bold px-2 py-0.5 rounded border border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${badge.color}`}
             >
               {badge.label}
@@ -153,6 +223,11 @@ export const MooseWindow: React.FC = () => {
                   ? "bg-green-100 text-green-900 border-green-800"
                   : "bg-amber-100 text-amber-900 border-amber-800"
               }`}
+              aria-label={
+                hasApiKey
+                  ? "Gemini API key configured; open Settings"
+                  : "Gemini API key missing; open Settings"
+              }
               title={
                 hasApiKey
                   ? "Google Gemini API Key Active (Click to Configure)"
@@ -168,7 +243,14 @@ export const MooseWindow: React.FC = () => {
           <div className="flex items-center gap-2 bg-white px-2 py-0.5 border border-black rounded shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
             <div className="flex items-center gap-1 text-[9px] font-bold">
               <Mic className="w-2.5 h-2.5" />
-              <div className="w-8 h-1.5 bg-gray-200 border border-gray-400 rounded-sm overflow-hidden">
+              <div
+                role="meter"
+                aria-label="Microphone input level"
+                aria-valuemin={0}
+                aria-valuemax={1}
+                aria-valuenow={Math.min(1, Math.max(0, inputLevel))}
+                className="w-8 h-1.5 bg-gray-200 border border-gray-400 rounded-sm overflow-hidden"
+              >
                 <div
                   className="h-full bg-green-500 transition-all duration-75"
                   style={{
@@ -180,7 +262,14 @@ export const MooseWindow: React.FC = () => {
 
             <div className="flex items-center gap-1 text-[9px] font-bold">
               <Volume2 className="w-2.5 h-2.5" />
-              <div className="w-8 h-1.5 bg-gray-200 border border-gray-400 rounded-sm overflow-hidden">
+              <div
+                role="meter"
+                aria-label="Audio output level"
+                aria-valuemin={0}
+                aria-valuemax={1}
+                aria-valuenow={Math.min(1, Math.max(0, outputLevel))}
+                className="w-8 h-1.5 bg-gray-200 border border-gray-400 rounded-sm overflow-hidden"
+              >
                 <div
                   className="h-full bg-blue-500 transition-all duration-75"
                   style={{
@@ -211,6 +300,9 @@ export const MooseWindow: React.FC = () => {
                 startConversation();
               }
             }}
+            aria-label={
+              isConversationActive ? "Stop conversation" : "Start conversation"
+            }
             className={`flex-1 py-1.5 px-2 rounded border-2 border-black font-bold text-xs flex items-center justify-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 transition-colors ${
               isConversationActive
                 ? "bg-red-500 text-white hover:bg-red-600"
@@ -235,6 +327,7 @@ export const MooseWindow: React.FC = () => {
             onClick={() => toggleTranscript()}
             className="p-1.5 bg-white border-2 border-black rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 hover:bg-gray-100 flex items-center gap-1"
             title="Open Debug Terminal / Type Message"
+            aria-label="Open transcript and text terminal"
           >
             <Terminal className="w-3.5 h-3.5 text-black" />
           </button>
@@ -246,6 +339,7 @@ export const MooseWindow: React.FC = () => {
               isMuted ? "bg-amber-400 text-black" : "bg-white hover:bg-gray-100"
             }`}
             title={isMuted ? "Unmute Moose" : "Mute Moose"}
+            aria-label={isMuted ? "Unmute Moose" : "Mute Moose"}
           >
             {isMuted ? (
               <VolumeX className="w-3.5 h-3.5" />
@@ -259,6 +353,7 @@ export const MooseWindow: React.FC = () => {
             onClick={() => toggleSettings(true)}
             className="p-1.5 bg-white border-2 border-black rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 hover:bg-gray-100"
             title="Open Settings"
+            aria-label="Open Settings"
           >
             <Sliders className="w-3.5 h-3.5" />
           </button>
