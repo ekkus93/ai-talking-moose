@@ -281,7 +281,7 @@ async fn barge_in_flushes_buffered_output_and_interrupts_once() {
 
     assert_eq!(playback.queue_length(), 0);
     assert!(!playback.is_playing());
-    assert_eq!(playback.current_output_level(), 0.0);
+    assert_eq!(playback.diagnostics().output_level, 0.0);
     assert_eq!(interrupt_count.load(AtomicOrdering::SeqCst), 1);
 
     manager.stop_session(capture, playback).await;
