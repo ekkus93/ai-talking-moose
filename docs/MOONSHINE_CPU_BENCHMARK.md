@@ -1,7 +1,7 @@
 # Moonshine CPU Benchmark and ASR Diagnostics
 
-Status: **ASR-015 instrumentation complete; supported-Mac acceptance measurements pending**
-Recorded: 2026-08-21
+Status: **ASR-015 supported-Mac acceptance passed**
+Recorded: 2026-08-23
 
 ## Purpose
 
@@ -64,14 +64,14 @@ export TALKING_MOOSE_ASR_BENCHMARK=1
 export TALKING_MOOSE_ASR_BENCHMARK_MODEL_ROOT="$HOME/Library/Application Support/Talking Moose/models"
 export TALKING_MOOSE_ASR_BENCHMARK_PCM=/absolute/path/to/asr015-corpus.pcm
 
-cargo test --release --manifest-path src-tauri/Cargo.toml \
+cargo test --release --locked --manifest-path src-tauri/Cargo.toml \
   asr015_cpu_benchmark_tiny_on_supported_mac \
   -- --ignored --nocapture
 ```
 
 Run the corresponding `asr015_cpu_benchmark_small_on_supported_mac` test for Small. The benchmark feeds one 100 ms chunk every 100 ms using the same non-blocking bounded ingress behavior as production and fails if the queue drops a chunk. Set `TALKING_MOOSE_ASR_BENCHMARK_INSTALL=1` when the benchmark should install or re-verify the pinned model through the production model installer before native startup.
 
-For reproducible project acceptance, use the opt-in `ASR-015 Native Acceptance` GitHub Actions workflow or run `scripts/run_asr015_macos_acceptance.sh "$(uname -m)"` on a supported Mac. The local runner requires a clean tracked checkout, validates and prepares the pinned native runtime itself, generates deterministic Tauri icon inputs, installs/re-verifies the pinned models through the production installer, and rejects a runtime whose Mach-O architecture does not match the host. The GitHub workflow prepares the same pinned runtime in its preceding provenance step and explicitly reuses that fresh staging directory. The automation performs one warm-up plus five measured **release-mode** runs for Tiny, then the same for Small, using one verified model-install root and the fixed corpus above. It emits machine-readable `ASR015_BENCHMARK_JSON` records and renders a complete Markdown report with every run, medians, worst cases, hardware identity, corpus identity, CPU utilization, RTF, latency, RSS, and transcript evidence. Ordinary CI does not invoke this workflow and still downloads no model weights.
+For reproducible project acceptance, use the opt-in `ASR-015 Native Acceptance` GitHub Actions workflow or run `scripts/run_asr015_macos_acceptance.sh "$(uname -m)"` on a supported Mac. The local runner requires a clean tracked checkout, validates and prepares the pinned native runtime itself, generates deterministic Tauri icon inputs, installs/re-verifies the pinned models through the production installer, and rejects a runtime whose Mach-O architecture does not match the host. The GitHub workflow prepares the same pinned runtime in its preceding provenance step and explicitly reuses that fresh staging directory. The automation performs one warm-up plus five measured **release-mode** runs for Tiny, then the same for Small, using one verified model-install root and the fixed corpus above. It emits machine-readable `ASR015_BENCHMARK_JSON` records and renders a complete Markdown report with every run, medians, worst cases, hardware identity, corpus identity, CPU utilization, RTF, latency, RSS, and transcript evidence. The workflow also preserves the report, raw JSONL records, hardware/corpus metadata, and per-run logs as a workflow artifact. Ordinary CI does not invoke this workflow and still downloads no model weights.
 
 ## Required report fields
 
@@ -99,7 +99,7 @@ Run each model at least five times after one warm-up run. Report all runs plus m
 
 ## Minimum supported CPU acceptance
 
-No CPU model is declared supported by ASR-015 until representative measurements exist. The minimum supported reference CPU will be chosen from measured Macs, not from model size, marketing generation, core count, or an assumed performance ratio.
+No CPU model is declared supported by ASR-015 until representative measurements exist. The minimum supported reference CPU is chosen from measured Macs, not from model size, marketing generation, core count, or an assumed performance ratio.
 
 For the chosen minimum supported reference CPU, both selectable local models must complete the representative sustained feed with:
 
@@ -113,4 +113,22 @@ A slower machine may only be added to the supported set after it independently p
 
 ## Current acceptance record
 
-The Linux sandbox used for implementation cannot supply supported-macOS CPU evidence and does not have the pinned native Moonshine runtime linked. Therefore ASR-015's benchmark-data and minimum-supported-CPU checklist items remain open until the opt-in Tiny and Small runs are executed on representative supported Mac hardware and their measurements are committed here (or in a timestamped successor benchmark report).
+GitHub Actions run `32665369708` passed the `ASR-015 Native Acceptance` workflow on 2026-08-23 at commit `f181a1d18ab65eecfddf875f6706d9bce5f136fb`. The durable artifact is `asr015-supported-mac-f181a1d18ab65eecfddf875f6706d9bce5f136fb` (artifact ID `9500044584`, recorded digest `sha256:b8964a048667fb638fd9e4fc39dc3825a5fac68afd7458e1e5b6ca68c2c9764d`).
+
+Reference environment:
+
+- hardware model: `VirtualMac2,1`;
+- CPU/chip: `Apple M1 (Virtual)`;
+- physical/logical CPU count: 3 / 3;
+- RAM: 7168 MiB;
+- macOS: 15.7.7 (`24G720`);
+- architecture: arm64;
+- corpus: 13.0 s, 16 kHz mono s16le, derived SHA-256 `5d5024881abcb527a43c9b643abed1545627960ac894584167ea510c8a442061`.
+
+Tiny Streaming completed one warm-up and five measured native runs. Across the five measured runs, median RTF was **0.099**, worst RTF was **0.106**, median first-final latency was **4747 ms**, worst first-final latency was **5356 ms**, highest sampled process RSS was **306.5 MiB**, average process CPU utilization ranged from about **4.9% to 6.0%**, every run accepted all 130 chunks, and total drops/errors were zero.
+
+Small Streaming completed the same one-warm-up/five-measured protocol. Median RTF was **0.195**, worst RTF was **0.200**, median first-final latency was **5081 ms**, worst first-final latency was **5434 ms**, highest sampled process RSS was **758.6 MiB**, average process CPU utilization ranged from about **10.2% to 11.7%**, every run accepted all 130 chunks, and total drops/errors were zero.
+
+Every Tiny and Small run emitted a useful partial and final transcript from the real pinned native model/runtime. The minimum **measured acceptance reference** is therefore the GitHub macOS-15 arm64 environment presenting `Apple M1 (Virtual)` / `VirtualMac2,1` with 3 vCPUs. This evidence does **not** claim support for a slower CPU, does not establish a consumer-facing equivalence between a virtual 3-vCPU runner and every physical M1 Mac, and does not replace the separate P2/P3 physical microphone/device acceptance gates.
+
+Detailed reconciliation and gate disposition are recorded in `docs/RECONCILIATION_P3A_20260823.md`.
