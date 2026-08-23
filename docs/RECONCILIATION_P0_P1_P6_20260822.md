@@ -118,4 +118,4 @@ Accepted complete:
 
 ## Next implementation checkpoint
 
-Proceed with P7 V1R-070 through V1R-073: central ambient scheduler, normalized cooldown/dedup, consistent annoyance budget, and deterministic privacy-safe local should-speak gating.
+P7 ambient behavior is already accepted complete under `RECONCILIATION_P7_20260822.md`; the 2026-08-23 audit additionally repairs ambient-only barge-in cancellation after the P6 standalone-TTS changes. With P6 real listening/cancellation acceptance intentionally left open for later physical testing, proceed next with P8 real desktop observation.

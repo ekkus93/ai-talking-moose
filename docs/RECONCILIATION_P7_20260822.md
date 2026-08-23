@@ -75,8 +75,26 @@ The user reported GitHub Actions run `32609781814` passing for this checkpoint. 
 
 - [x] V1R-035: final hide/appearance lifecycle transition is implemented and regression-covered.
 
+## 2026-08-23 regression audit — ambient barge-in
+
+A current-master audit after the P6 standalone-TTS cancellation work found one interaction boundary that was not fully covered by the earlier P7 acceptance:
+
+- the frontend routes a click while Moose is `Talking` to `barge_in`, including when `Talking` came from an ambient-only remark;
+- `ConversationManager::barge_in` previously returned immediately when no Live conversation was active, so ambient-only playback was not guaranteed to flush; and
+- the command could transition ambient-only `Talking` to `Interrupted`, even though no provider session existed to acknowledge the interruption and return the character to a stable state.
+
+The repaired contract is:
+
+- every barge-in interrupts the ambient scheduler and cancels authoritative standalone TTS before touching the Live conversation path;
+- the standalone playback queue and speech bubble are cleared immediately;
+- the command distinguishes ambient-only interruption from an already-active Live conversation before applying the presentation-state transition;
+- real conversation barge-in preserves `Talking -> Interrupted`; and
+- ambient-only barge-in settles `Talking -> Idle` immediately rather than waiting for a nonexistent provider acknowledgement.
+
+A command-level regression test seeds standalone playback with no active conversation, invokes `barge_in`, and requires zero queued audio/output level plus authoritative `Idle` state.
+
 ## Phase P7 status
 
-**P7 ambient behavior is accepted complete.** The legacy monolithic `docs/TODO(20260818-163801).md` still contains stale unchecked P7 rows; this reconciliation is authoritative for V1R-070 through V1R-076 until those rows are mechanically folded back into the monolithic tracker.
+**P7 ambient behavior remains accepted complete after the 2026-08-23 regression repair.** The legacy monolithic `docs/TODO(20260818-163801).md` still contains stale unchecked P7 rows; this reconciliation is authoritative for V1R-070 through V1R-076 until those rows are mechanically folded back into the monolithic tracker.
 
 See `docs/AMBIENT_V1_POLICY.md` for the classifier decision, safe-generation contract, and appearance-lifecycle rationale.

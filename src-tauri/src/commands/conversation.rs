@@ -195,12 +195,23 @@ pub async fn stop_conversation(
 pub async fn barge_in(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     state.ambient_scheduler.interrupt();
     state
+        .standalone_speech
+        .cancel(state.audio_playback.as_ref());
+    let _ = app.emit("moose://speech-bubble", "");
+
+    let conversation_active = state.conversation_mgr.is_active();
+    state
         .conversation_mgr
         .barge_in(state.audio_playback.clone())
         .await?;
 
     if *state.character_state.read() == CharacterState::Talking {
-        transition_and_emit(&state.character_state, &app, CharacterState::Interrupted)?;
+        let target = if conversation_active {
+            CharacterState::Interrupted
+        } else {
+            CharacterState::Idle
+        };
+        transition_and_emit(&state.character_state, &app, target)?;
     }
     state.behavior_engine.lock().cooldowns.record_interruption();
     Ok(())
@@ -425,6 +436,32 @@ mod tests {
         assert!(error.contains("Moonshine Small"));
         assert!(error.contains("No microphone audio was sent"));
         assert!(!capture.lock().is_active());
+    }
+
+    #[test]
+    fn ambient_barge_in_flushes_standalone_audio_and_returns_to_idle() {
+        let app_state = AppState::new_for_tests().unwrap();
+        let playback = app_state.audio_playback.clone();
+        let character_state = app_state.character_state.clone();
+        playback.seed_buffer_for_tests(&[0.25, -0.25, 0.5], 0.5);
+        *character_state.write() = CharacterState::Talking;
+
+        let app = mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![barge_in])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        get_ipc_response(&webview, ipc_request("barge_in", json!({})))
+            .expect("ambient-only barge-in should succeed");
+
+        assert!(!playback.is_playing());
+        assert_eq!(playback.queue_length(), 0);
+        assert_eq!(playback.diagnostics().output_level, 0.0);
+        assert_eq!(*character_state.read(), CharacterState::Idle);
     }
 
     #[test]
