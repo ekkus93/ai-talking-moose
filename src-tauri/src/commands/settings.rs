@@ -17,7 +17,7 @@ use crate::audio::playback::AudioPlaybackDiagnostics;
 use crate::character::state::{transition_character_state, CharacterState};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use tauri::{Emitter, Manager, Runtime, State};
+use tauri::{Emitter, Runtime, State};
 use tokio::sync::mpsc;
 use tracing::warn;
 
