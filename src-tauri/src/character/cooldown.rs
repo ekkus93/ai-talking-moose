@@ -164,11 +164,10 @@ impl CooldownTracker {
         now: DateTime<Utc>,
         min_cooldown_seconds: u64,
         max_comments_per_hour: u32,
-        quiet_hours_enabled: bool,
-        quiet_hours_start: u8,
-        quiet_hours_end: u8,
+        quiet_hours: (bool, u8, u8),
         fingerprint: Option<&str>,
     ) -> Result<(), AmbientCooldownBlockReason> {
+        let (quiet_hours_enabled, quiet_hours_start, quiet_hours_end) = quiet_hours;
         let local_now = now.with_timezone(&Local);
         if quiet_hours_enabled
             && Self::is_in_quiet_hours(&local_now, quiet_hours_start, quiet_hours_end)
@@ -217,9 +216,7 @@ impl CooldownTracker {
             now,
             min_cooldown_seconds,
             max_comments_per_hour,
-            quiet_hours_enabled,
-            quiet_hours_start,
-            quiet_hours_end,
+            (quiet_hours_enabled, quiet_hours_start, quiet_hours_end),
             None,
         )
         .is_ok()
@@ -334,9 +331,7 @@ mod tests {
                 now + Duration::seconds(EVENT_DEDUP_WINDOW_SECONDS - 1),
                 0,
                 12,
-                false,
-                22,
-                8,
+                (false, 22, 8),
                 Some("fingerprint"),
             ),
             Err(AmbientCooldownBlockReason::DuplicateEvent)
@@ -346,9 +341,7 @@ mod tests {
                 now + Duration::seconds(EVENT_DEDUP_WINDOW_SECONDS),
                 0,
                 12,
-                false,
-                22,
-                8,
+                (false, 22, 8),
                 Some("fingerprint"),
             )
             .is_ok());

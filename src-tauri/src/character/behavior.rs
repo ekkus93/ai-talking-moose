@@ -142,9 +142,11 @@ impl BehaviorEngine {
             now,
             self.config.behavior.min_cooldown_seconds,
             effective_hourly_limit,
-            self.config.behavior.quiet_hours_enabled,
-            self.config.behavior.quiet_hours_start,
-            self.config.behavior.quiet_hours_end,
+            (
+                self.config.behavior.quiet_hours_enabled,
+                self.config.behavior.quiet_hours_start,
+                self.config.behavior.quiet_hours_end,
+            ),
             Some(&fingerprint),
         ) {
             let reason = match reason {
