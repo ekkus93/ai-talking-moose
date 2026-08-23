@@ -85,11 +85,45 @@ jobs:
           if removed:
               raise SystemExit(f"unexpected removed lock packages: {sorted(removed)}")
 
+          # Cargo.lock records only the optional dependency edges that are active
+          # in the resolved feature graph. Adding AVFoundation can therefore add
+          # dependency edges to an already-locked package (for example
+          # objc2-foundation) without changing that package's identity, version,
+          # source, or checksum. Permit those additive edges, but reject every
+          # other mutation to an existing package and reject dependency removals.
+          feature_unified_packages = []
           for package_key, old_package in before_packages.items():
               if package_key == root_key:
                   continue
-              if after_packages[package_key] != old_package:
-                  raise SystemExit(f"existing package changed unexpectedly: {package_key}")
+              new_package = after_packages[package_key]
+              old_metadata = {
+                  field: value
+                  for field, value in old_package.items()
+                  if field != "dependencies"
+              }
+              new_metadata = {
+                  field: value
+                  for field, value in new_package.items()
+                  if field != "dependencies"
+              }
+              if new_metadata != old_metadata:
+                  raise SystemExit(
+                      f"existing package metadata changed unexpectedly: {package_key}"
+                  )
+
+              old_dependencies = set(old_package.get("dependencies", []))
+              new_dependencies = set(new_package.get("dependencies", []))
+              removed_dependencies = old_dependencies - new_dependencies
+              if removed_dependencies:
+                  raise SystemExit(
+                      f"existing package lost dependencies unexpectedly: {package_key}: "
+                      f"{sorted(removed_dependencies)}"
+                  )
+              added_dependencies = new_dependencies - old_dependencies
+              if added_dependencies:
+                  feature_unified_packages.append(
+                      (package_key, sorted(added_dependencies))
+                  )
 
           before_root = before_packages[root_key]
           after_root = after_packages[root_key]
@@ -120,6 +154,10 @@ jobs:
                   f"manifest/root lock dependency mismatch: manifest={sorted(direct)} lock={sorted(locked_direct)}"
               )
 
+          if feature_unified_packages:
+              print("Cargo feature unification added dependency edges to existing packages:")
+              for package_key, dependencies in feature_unified_packages:
+                  print(f"  {package_key}: {dependencies}")
           print("Cargo.lock delta is the expected macOS dependency repair.")
           PY
 
