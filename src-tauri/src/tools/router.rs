@@ -481,9 +481,9 @@ mod tests {
         }
         let audit = router.audit_snapshot();
         assert_eq!(audit.len(), MAX_TOOL_AUDIT_RECORDS);
-        assert!(audit.iter().all(|record| V1_TOOL_NAMES
+        assert!(audit
             .iter()
-            .any(|name| *name == record.tool_name.as_str())));
+            .all(|record| V1_TOOL_NAMES.contains(&record.tool_name.as_str())));
     }
 
     #[tokio::test(flavor = "current_thread")]
