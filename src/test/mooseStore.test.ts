@@ -57,6 +57,17 @@ describe("mooseStore State Management", () => {
     cleanup();
   });
 
+  it("does not re-show an ambient bubble after the backend lifecycle completes", async () => {
+    vi.spyOn(tauriBridge, "triggerAmbientRemark").mockResolvedValue(
+      "A bounded ambient remark.",
+    );
+
+    await useMooseStore.getState().triggerAmbient("safe event");
+
+    expect(useMooseStore.getState().speechBubbleVisible).toBe(false);
+    expect(useMooseStore.getState().speechBubbleText).toBeNull();
+  });
+
   it("hides the bubble when the backend explicitly clears speech text", async () => {
     useMooseStore.getState().showSpeechBubble("stale response");
     expect(useMooseStore.getState().speechBubbleVisible).toBe(true);

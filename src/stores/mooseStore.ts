@@ -196,10 +196,9 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   },
 
   triggerAmbient: async (summary: string) => {
-    const text = await tauriBridge.triggerAmbientRemark(summary);
-    if (text) {
-      get().showSpeechBubble(text);
-    }
+    // Ambient speech-bubble visibility is backend-event driven so the Rust lifecycle can
+    // clear it before hiding Moose without this promise re-showing stale text afterward.
+    await tauriBridge.triggerAmbientRemark(summary);
   },
 
   loadSettings: async () => {
