@@ -1,7 +1,7 @@
 use crate::desktop::observation::{
     ActiveApplicationObservation, BatteryObservation, IdleObservation, ObserverResult, PowerEvent,
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 /// Non-macOS production implementation. Real desktop observation is a macOS-only V1
 /// capability; unsupported platforms fail closed instead of fabricating values.
@@ -32,9 +32,7 @@ impl SystemDesktopMonitor {
         }
     }
 
-    pub fn start_power_events(
-        _sender: UnboundedSender<PowerEvent>,
-    ) -> ObserverResult<SystemPowerObserver> {
+    pub fn start_power_events(_sender: Sender<PowerEvent>) -> ObserverResult<SystemPowerObserver> {
         ObserverResult::Unsupported
     }
 }

@@ -260,6 +260,29 @@ impl AmbientScheduler {
         }
     }
 
+    pub fn try_submit_background(&self, event: AmbientEvent) -> Result<bool, String> {
+        if self.inner.cancellation.is_cancelled() {
+            return Ok(false);
+        }
+        if !self.inner.started.load(AtomicOrdering::SeqCst) {
+            return Err("ambient scheduler is not running".to_string());
+        }
+
+        let (response_tx, _response_rx) = oneshot::channel();
+        let request = AmbientRequest {
+            event,
+            epoch: self.inner.epoch.load(AtomicOrdering::SeqCst),
+            response: response_tx,
+        };
+        match self.inner.sender.try_send(request) {
+            Ok(()) => Ok(true),
+            Err(mpsc::error::TrySendError::Full(_)) => Ok(false),
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err("ambient scheduler is not running".to_string())
+            }
+        }
+    }
+
     pub async fn submit(&self, event: AmbientEvent) -> Result<Option<String>, String> {
         if self.inner.cancellation.is_cancelled() {
             return Ok(None);
@@ -299,6 +322,21 @@ impl AmbientScheduler {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn background_submission_is_hard_bounded_and_drops_newest_when_full() {
+        let scheduler = AmbientScheduler::new();
+        scheduler.inner.started.store(true, AtomicOrdering::SeqCst);
+
+        for index in 0..AMBIENT_QUEUE_CAPACITY {
+            assert!(scheduler
+                .try_submit_background(AmbientEvent::new("desktop", format!("event {index}"), 0.5,))
+                .unwrap());
+        }
+        assert!(!scheduler
+            .try_submit_background(AmbientEvent::new("desktop", "drop newest".to_string(), 0.5,))
+            .unwrap());
+    }
 
     #[test]
     fn event_summary_is_bounded_before_entering_the_scheduler_queue() {

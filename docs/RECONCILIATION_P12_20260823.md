@@ -10,7 +10,7 @@ Implementation candidate: `6657fd337e99e3e55d8a250b4ce69ac892111925` (`test: har
 
 The current sandbox source ZIP predates the already-accepted P11 commits, so P12 work is limited to files verified unchanged between ZIP commit `bae050ce94b9d56943e80b8e8ba3b0f599864f86` and P11-accepted `master` commit `5499bba34b3119a2018e55710c6fe60fe308c53c`, plus this reconciliation overlay.
 
-Local validation available in this sandbox: `git diff --check`, workflow YAML parsing, and `scripts/validate_moonshine_runtime_manifest.py` pass. The previously supplied standalone Rust toolchain is not mounted in this new chat sandbox, so Rust formatting, Clippy, and tests require GitHub Actions acceptance for this candidate.
+Original P12 local validation covered `git diff --check`, workflow YAML parsing, and `scripts/validate_moonshine_runtime_manifest.py`. For the 2026-08-24 current-master regression pass, the user-supplied Rust toolchain is mounted: `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check` pass. A focused offline Cargo test cannot resolve the local dependency graph because this sandbox has no cached crates.io package set (`base64` is the first missing package), so GitHub Actions remains authoritative for compilation, Clippy, and Rust tests.
 
 ## V1R-120 — Resource limits
 
@@ -70,6 +70,18 @@ Local validation available in this sandbox: `git diff --check`, workflow YAML pa
 - [x] Playback, microphone, and Moonshine ingress overload policies are hard bounded with drop/flush diagnostics tests.
 - [x] Synthetic runtime microphone/output device failure updates state deterministically without hardware.
 - [x] Moonshine stop/cancellation discards queued audio, prevents reuse, and stops lifecycle resources exactly once in the existing pipeline/engine tests.
+
+## 2026-08-24 current-master regression audit
+
+A current-master audit after P6/P7/P8/P9/P10/P11 confirmed that the accepted failure matrix, prompt/data boundaries, logging privacy suite, offline-default test gate, and audio/session stress coverage remain intact. Ordinary CI still pins `TALKING_MOOSE_ALLOW_LIVE_API=0`, and the live Gemini integration test remains ignored behind explicit opt-in. P9 strengthened local-data deletion and P10 added a hard four-call tool-execution concurrency cap without widening provider authority.
+
+The audit did find two coupled resource-limit regressions introduced by the later desktop-observer runtime:
+
+- [x] macOS sleep/wake notifications no longer enter an unbounded Tokio channel; the observer now uses an eight-event bounded queue and nonblocking `try_send`, so a stalled async consumer cannot create unbounded memory growth or block the IOKit callback thread;
+- [x] desktop observations no longer spawn one waiting task per event when the ambient scheduler is saturated; a new nonblocking background-admission path uses the existing bounded ambient queue and drops the newest observation when that queue is full; and
+- [x] regression tests prove both the power-event queue capacity and the ambient background-admission hard limit.
+
+This current-master P12 hardening remains **pending GitHub Actions acceptance**. The existing user-facing observation behavior and explicit/user ambient submission semantics are unchanged.
 
 ## Acceptance gate
 

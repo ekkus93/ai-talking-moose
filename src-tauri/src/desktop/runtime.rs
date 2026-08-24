@@ -12,6 +12,7 @@ use tracing::debug;
 
 const OBSERVER_POLL_INTERVAL: Duration = Duration::from_secs(15);
 const BATTERY_POLL_EVERY_TICKS: u32 = 4;
+const POWER_EVENT_QUEUE_CAPACITY: usize = 8;
 
 struct DesktopRuntimeState {
     cancellation: CancellationToken,
@@ -61,13 +62,16 @@ fn log_observer_result<T>(kind: ObserverKind, result: &ObserverResult<T>) {
 }
 
 fn submit_event(scheduler: &AmbientScheduler, event: DesktopEvent) {
-    let scheduler = scheduler.clone();
     let ambient = DesktopEventSummarizer::to_ambient_event(event);
-    tauri::async_runtime::spawn(async move {
-        if scheduler.submit(ambient).await.is_err() {
+    match scheduler.try_submit_background(ambient) {
+        Ok(true) => {}
+        Ok(false) => {
+            debug!("Ambient scheduler queue full; dropping newest desktop observation");
+        }
+        Err(_) => {
             debug!("Desktop observation could not be submitted to ambient scheduler");
         }
-    });
+    }
 }
 
 fn handle_power_event(
@@ -140,8 +144,8 @@ async fn run_observer_loop(
     cancellation: CancellationToken,
     shutdown_complete: watch::Sender<bool>,
     summarizer: Arc<Mutex<DesktopEventSummarizer>>,
-    mut power_rx: mpsc::UnboundedReceiver<PowerEvent>,
-    _power_sender_keepalive: mpsc::UnboundedSender<PowerEvent>,
+    mut power_rx: mpsc::Receiver<PowerEvent>,
+    _power_sender_keepalive: mpsc::Sender<PowerEvent>,
 ) {
     let _shutdown_signal = ShutdownSignal(shutdown_complete);
     let mut interval = tokio::time::interval(OBSERVER_POLL_INTERVAL);
@@ -183,7 +187,7 @@ pub fn start(
 
     let cancellation = CancellationToken::new();
     let (shutdown_complete, _shutdown_rx) = watch::channel(false);
-    let (power_tx, power_rx) = mpsc::unbounded_channel();
+    let (power_tx, power_rx) = mpsc::channel(POWER_EVENT_QUEUE_CAPACITY);
     let power_result = SystemDesktopMonitor::start_power_events(power_tx.clone());
     log_observer_result(ObserverKind::SleepWake, &power_result);
     let power_observer = power_result.into_available();
@@ -240,6 +244,21 @@ mod tests {
         ActiveApplicationObservation, IdleObservation, ObserverErrorCode, ObserverStatus,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn power_event_queue_has_a_hard_capacity() {
+        let (sender, mut receiver) = mpsc::channel(POWER_EVENT_QUEUE_CAPACITY);
+        for _ in 0..POWER_EVENT_QUEUE_CAPACITY {
+            sender.try_send(PowerEvent::Sleep).unwrap();
+        }
+        assert!(matches!(
+            sender.try_send(PowerEvent::Wake),
+            Err(mpsc::error::TrySendError::Full(PowerEvent::Wake))
+        ));
+        for _ in 0..POWER_EVENT_QUEUE_CAPACITY {
+            assert_eq!(receiver.try_recv().unwrap(), PowerEvent::Sleep);
+        }
+    }
 
     #[test]
     fn non_available_observer_results_never_reach_consumer() {
