@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 app_path="${1:-}"
 dmg_path="${2:-}"
 arch="${3:-$(uname -m)}"
+expected_commit="${4:-}"
 
 fail() {
   printf 'verify_macos_release: %s\n' "$*" >&2
@@ -12,9 +13,13 @@ fail() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "this script must run on macOS"
-[[ -n "$app_path" && -d "$app_path" ]] || fail "usage: $0 /path/to/App.app /path/to/App.dmg [arm64|x86_64]"
+[[ -n "$app_path" && -d "$app_path" ]] || fail "usage: $0 /path/to/App.app /path/to/App.dmg [arm64|x86_64] [EXPECTED_FULL_GIT_SHA]"
 [[ -n "$dmg_path" && -f "$dmg_path" ]] || fail "DMG does not exist: $dmg_path"
 case "$arch" in arm64|x86_64) ;; *) fail "unsupported architecture: $arch" ;; esac
+
+if [[ -n "$expected_commit" ]]; then
+  bash "$repo_root/scripts/verify_app_build_provenance.sh" "$app_path" "$expected_commit"
+fi
 
 bash "$repo_root/scripts/verify_macos_bundle.sh" "$app_path" "$arch" --require-signature
 

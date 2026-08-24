@@ -1,11 +1,11 @@
 # macOS release process
 
-**V1 product:** Talking Moose AI  
-**Bundle identifier:** `com.talkingmoose.ai`  
-**V1 version:** `0.1.0`  
+**V1 product:** Talking Moose AI
+**Bundle identifier:** `com.talkingmoose.ai`
+**V1 version:** `0.1.0`
 **Deployment target:** macOS 13.4 or later on both Intel and Apple Silicon.
 
-This document describes direct Developer ID distribution outside the Mac App Store. The release gate is intentionally split into automated artifact integrity and physical clean-Mac acceptance. A tagged workflow creates a **draft** GitHub Release; it must not be published until the physical acceptance report passes.
+This document describes direct Developer ID distribution outside the Mac App Store. The release gate is intentionally split into automated artifact integrity and physical clean-Mac acceptance. A tagged workflow creates a **draft** GitHub Release; it must not be published until the project owner has explicitly resolved the physical-acceptance gate. When supported Mac hardware is unavailable, those physical rows remain deferred rather than being inferred from CI.
 
 The V1 floor is set by the pinned ONNX Runtime 1.23.2 dylibs shipped with Moonshine. Their Mach-O deployment target is macOS 13.4, so advertising an earlier application minimum would be incorrect even if the Rust/Tauri executable itself could be compiled for an older OS.
 
@@ -19,13 +19,15 @@ Developer ID signing must enable Apple's hardened runtime. The release verifier 
 
 ## Release credentials
 
-Configure these GitHub Actions secrets before creating a release tag. The release workflow imports the supplied `.p12` into an ephemeral build keychain, derives the `Developer ID Application` identity with `security find-identity`, and passes that identity to Tauri as `APPLE_SIGNING_IDENTITY`:
+Configure these GitHub Actions secrets before creating a release tag:
 
 - `APPLE_CERTIFICATE` — base64-encoded Developer ID Application `.p12` certificate.
 - `APPLE_CERTIFICATE_PASSWORD` — password used when exporting that certificate.
 - `APPLE_ID` — Apple ID used for notarization.
 - `APPLE_PASSWORD` — app-specific password for that Apple ID.
 - `APPLE_TEAM_ID` — Apple Developer team ID.
+
+The workflow deliberately lets the Tauri bundler own the ephemeral signing-keychain lifecycle from `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD`. Do not also import the same `.p12` manually in the workflow: duplicate identities can make signing ambiguous. `APPLE_SIGNING_IDENTITY` remains available as a Tauri override if a future certificate setup genuinely requires it, but V1 does not need to derive and inject it manually.
 
 Never commit the certificate, app-specific password, private keys, or decoded credential files.
 
@@ -37,9 +39,12 @@ From a clean checkout:
 python3 scripts/generate_app_icons.py
 python3 scripts/validate_release_metadata.py
 npm run check:all
+python3 scripts/collect_release_licenses.py
 ```
 
-On a real supported Mac, all still-open physical gates from P1/P2/P3/P3A/P6 must be complete before the final release is published. P13 does not waive those gates.
+Ordinary CI also executes dependency-license collection so a missing resolved notice file fails on `master`, before a release tag is created.
+
+When real supported Mac hardware is available, the still-open physical gates from P1/P2/P3/P3A/P6 must be collected against the intended release candidate. If hardware is unavailable, record those rows as deferred; do not mark them PASS from CI.
 
 ## Creating a release candidate
 
@@ -50,27 +55,32 @@ git tag -a v0.1.0 -m "Talking Moose AI v0.1.0"
 git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` then builds Apple Silicon and Intel artifacts independently. For each architecture it:
+`.github/workflows/release.yml` first runs a **tagged source release gate**. Signing does not begin until that gate passes frontend typecheck/lint/format/tests/build, Rust formatting/Clippy/tests, release metadata, Moonshine provenance, dependency audits, and dependency-license collection.
+
+After the source gate, Apple Silicon and Intel artifacts build independently. For each architecture the workflow:
 
 1. generates the deterministic icon set and validates tag/version/product/bundle metadata plus the generated icon containers;
-2. prepares the pinned Moonshine + ONNX Runtime dylibs at the explicit macOS 13.4 support floor on both architectures;
+2. prepares the pinned Moonshine + ONNX Runtime dylibs at the explicit macOS 13.4 support floor;
 3. stages the project license, Moonshine/native notices, and license texts for resolved Rust/production npm dependencies;
-4. builds the Tauri `.app` and DMG with Developer ID signing and Tauri notarization/stapling;
-5. verifies nested native libraries, deployment target, Developer ID authority, secure timestamp, hardened runtime, Gatekeeper assessment, stapled notarization ticket, and absence of obvious secret/database files;
-6. packages the `.app` with `ditto`, retains the DMG, and computes architecture checksums;
-7. combines both architectures into one **draft** GitHub Release with `SHA256SUMS.txt` and the checked-in release notes.
+4. sets `TALKING_MOOSE_BUILD_COMMIT` to the exact tag `GITHUB_SHA`;
+5. builds the Tauri `.app` and DMG with Developer ID signing and Tauri notarization/stapling;
+6. verifies nested native libraries, deployment target, embedded build commit, Developer ID authority, secure timestamp, hardened runtime, Gatekeeper assessment, stapled notarization ticket, and absence of obvious secret/database files;
+7. packages the `.app` with `ditto`, retains the DMG, and computes architecture checksums.
+
+The draft-publish job then requires exactly two `.app.zip` files, two DMGs, and two architecture checksum manifests, verifies both architecture manifests, generates and self-verifies the combined `SHA256SUMS.txt`, and only then creates the **draft** GitHub Release.
 
 Ordinary `ci.yml` never publishes unsigned bundles. It only builds an unsigned `.app` smoke bundle on macOS. Distribution assets come exclusively from the signed/notarized release workflow.
 
 ## Automated verification commands
 
-Given a built application and DMG on macOS:
+Given a built application and DMG on macOS, verify both signing/notarization and source provenance:
 
 ```bash
 bash scripts/verify_macos_release.sh \
   "/path/to/Talking Moose AI.app" \
   "/path/to/Talking-Moose-AI_v0.1.0_macos_arm64.dmg" \
-  arm64
+  arm64 \
+  "$(git rev-parse v0.1.0^{commit})"
 ```
 
 The verifier includes the equivalent of:
@@ -88,22 +98,31 @@ Apple's current notarization service uses `notarytool`; Tauri performs submissio
 
 ## Physical P13 acceptance
 
-Download the draft release artifacts onto a supported Mac and run:
+When a supported Mac becomes available, download the draft release's architecture artifact plus the combined `SHA256SUMS.txt`, check out the exact tag commit, and run:
 
 ```bash
+P13_EXPECTED_COMMIT="$(git rev-parse v0.1.0^{commit})" \
+P13_SHA256SUMS="/path/to/SHA256SUMS.txt" \
 bash scripts/run_p13_macos_release_acceptance.sh \
   "/Applications/Talking Moose AI.app" \
   "/path/to/Talking-Moose-AI_v0.1.0_macos_arm64.dmg"
 ```
 
+The runner requires the checkout, release tag, packaged executable's embedded build commit, and DMG checksum manifest to agree before manual evidence begins. Every PASS/FAIL/SKIP row requires nonblank evidence, and the runner re-hashes the application executable at the end so the tested binary cannot silently change during acceptance.
+
 The generated report remains `OPEN` if any required row is `FAIL` or `SKIP`. It covers metadata, signing/notarization, distribution files, upgrade compatibility, clean first run, local/cloud ASR routing, audio/conversation behavior, privacy/data controls, degraded modes, and clean-machine packaged-native-runtime behavior.
 
 ## Publishing the draft
 
-Only after the P13 report and all prerequisite physical gates are PASS should the draft be made public. With GitHub CLI authenticated:
+A draft release is not equivalent to release acceptance. Before public publication:
+
+1. confirm the signed/notarized tagged workflow succeeded for both architectures;
+2. review the generated dependency/native notice payload;
+3. collect the supported-Mac physical evidence when hardware is available, or explicitly document the project's decision to ship with those rows deferred;
+4. record the final tag commit and artifact hashes in the P13 reconciliation record.
+
+Only after that explicit release decision should the draft be made public. With GitHub CLI authenticated:
 
 ```bash
 gh release edit v0.1.0 --draft=false
 ```
-
-Record the final release URL, exact tag commit, artifact hashes, Mac models/OS versions used for acceptance, and the acceptance report location in the P13 reconciliation document.

@@ -1,6 +1,6 @@
 # P13 macOS release reconciliation — 2026-08-23
 
-**Status:** source/workflow implementation staged; signed/notarized artifacts and physical release acceptance remain open until a real release tag and supported-Mac evidence exist.
+**Status:** source/workflow implementation staged; signed/notarized artifacts remain an execution gate, while supported-Mac physical acceptance is explicitly deferred until suitable Mac hardware is available.
 
 ## V1R-130 — macOS metadata
 
@@ -25,7 +25,7 @@ Implemented source/workflow behavior:
 - `docs/MACOS_RELEASE.md` documents secrets and independent verification commands;
 - no credential is stored in source.
 
-Still open: an actual Developer ID-signed/notarized run using the owner's Apple credentials.
+Still open: an actual Developer ID-signed/notarized tagged run using the owner's Apple credentials.
 
 ## V1R-132 — distribution artifacts
 
@@ -49,11 +49,11 @@ Existing deterministic implementation/tests already cover the source-level requi
 - current profiles preserve an explicit Tiny/Small/Gemini selection;
 - legacy settings migration is pure settings normalization and does not invoke the Moonshine model installer, so upgrade does not silently download a local model.
 
-Still open: physical upgrade acceptance on a representative pre-ASR-selector macOS profile using the packaged release candidate, including Keychain persistence and confirmation that no unexpected model download/cloud-routing change occurs.
+Physical upgrade acceptance on a representative pre-ASR-selector macOS profile remains deferred with the other supported-Mac-only evidence.
 
 ## V1R-134 — release smoke
 
-`scripts/run_p13_macos_release_acceptance.sh` now records the exact commit/version, macOS/hardware identity, and explicit PASS/FAIL/SKIP evidence for:
+`scripts/run_p13_macos_release_acceptance.sh` records the exact commit/version, macOS/hardware identity, and explicit PASS/FAIL/SKIP evidence for:
 
 - final metadata/signing/distribution;
 - legacy upgrade behavior;
@@ -64,14 +64,43 @@ Still open: physical upgrade acceptance on a representative pre-ASR-selector mac
 - degraded provider/audio/model/install paths;
 - clean-machine packaged runtime and no-development-secret checks.
 
-No V1R-134 physical row is marked complete by this source change.
+No V1R-134 physical row is marked complete by source/CI work.
+
+## 2026-08-24 current-master source-only release audit
+
+The release-engineering audit is performed against current `master` after P12 and the P2/P3 physical-evidence provenance hardening. Because supported Mac hardware is not currently available, this pass deliberately closes only deterministic source/workflow requirements and records the physical remainder as deferred rather than PASS.
+
+The audit found and repaired the following release-boundary gaps:
+
+- [x] **No signing before source quality:** the tagged release workflow now has an explicit `source-gate` job. Both signed macOS builds depend on it, so frontend typecheck/lint/format/tests/build, Rust fmt/Clippy/tests, release metadata, Moonshine provenance, production dependency audits, and dependency-license collection must pass before Developer ID signing begins.
+- [x] **Single signing-keychain owner:** the workflow no longer manually imports the same `.p12` that is also supplied through `APPLE_CERTIFICATE`. Tauri owns the documented ephemeral signing-keychain flow directly from `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD`; notarization remains authenticated with `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID`.
+- [x] **Signed artifact provenance:** release builds explicitly set `TALKING_MOOSE_BUILD_COMMIT=$GITHUB_SHA`, and `verify_macos_release.sh` can require the packaged executable's embedded commit to equal that exact tag commit before accepting the signature/notarization checks.
+- [x] **Release artifact set integrity:** the draft publisher requires exactly two `.app.zip` files, two DMGs, and two architecture checksum manifests, verifies both architecture manifests, then builds and self-verifies the combined `SHA256SUMS.txt` before creating the draft release.
+- [x] **License payload fails before tagging:** ordinary CI now executes `collect_release_licenses.py` instead of merely compiling its Python syntax, so missing resolved npm/Rust notice files are detected on normal `master` CI rather than for the first time during a release tag.
+- [x] **Generated notices do not dirty source:** the generated dependency-notice staging tree is ignored alongside the other generated native release resources.
+- [x] **Physical report provenance hardened:** the P13 physical runner requires the exact release tag and embedded build commit, verifies the downloaded DMG against the combined checksum manifest, requires nonblank evidence for every manual result, and confirms the tested executable hash did not change during the run.
+
+Current Tauri 2 documentation still supports `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, and optional `APPLE_SIGNING_IDENTITY`; no retired `altool` flow or custom sandbox entitlement is introduced by this audit.
+
+## Deferred Mac-only acceptance ledger
+
+The following remain intentionally **DEFERRED / NOT VERIFIED** until suitable supported Mac hardware is available:
+
+- P1 real macOS Keychain persistence across an actual process restart and SQLite absence check;
+- P2 V1R-020 through V1R-027 real production audio/device/TCC/Diagnostics acceptance;
+- P3 V1R-037 real audible barge-in-stop latency and stale-audio confirmation;
+- any remaining P3A native Tiny/Small physical/benchmark evidence that specifically requires supported Mac hardware;
+- P6 intentional final-voice listening/cancellation physical acceptance;
+- P13 V1R-133 packaged legacy-profile upgrade acceptance;
+- P13 V1R-134 clean-machine packaged release smoke.
+
+These rows are not failures, but they are also not converted to PASS by CI. They remain release-risk evidence to collect when hardware becomes available.
 
 ## Gate decision
 
-P13 remains **OPEN** until:
+P13 has two independent states:
 
-1. all prerequisite physical gates still required from P1/P2/P3/P3A/P6 are PASS on the release candidate;
-2. a `v0.1.0` (or later version-consistent) tag produces both signed/notarized architectures successfully;
-3. the generated draft release passes the complete P13 physical acceptance script on supported clean Mac hardware;
-4. the generated license/notice payload receives final release review;
-5. the draft GitHub Release is published only after those acceptance conditions are met.
+1. **Source/release engineering:** pending acceptance of the current-master CI candidate produced by this audit. Once that CI is green, the deterministic P13 source/workflow portion is complete.
+2. **Release execution / physical acceptance:** still open. A real semantic tag must successfully produce Developer ID-signed/notarized arm64 and x86_64 artifacts, the generated notice payload still requires final release review, and supported-Mac physical evidence remains deferred.
+
+The draft GitHub Release must remain unpublished until the project owner explicitly decides how to handle the deferred physical evidence and the signed/notarized tag execution has succeeded.

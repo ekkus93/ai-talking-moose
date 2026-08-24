@@ -15,8 +15,8 @@ target
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore that can
+#  be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
@@ -24,6 +24,7 @@ target
 src-tauri/native/macos/*.dylib
 src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
 src-tauri/native/macos/notices/MoonshineRuntime/
+src-tauri/native/macos/notices/Dependencies/
 # Deterministically generated application icons
 src-tauri/icons/*.png
 src-tauri/icons/*.icns

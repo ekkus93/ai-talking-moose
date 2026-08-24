@@ -147,10 +147,22 @@ jobs:
   release-static:
     name: Release metadata static gate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
 
       - name: Generate release icon set
         run: python3 scripts/generate_app_icons.py
@@ -166,8 +178,13 @@ jobs:
             scripts/collect_release_licenses.py
           bash -n scripts/prepare_moonshine_macos.sh
           bash -n scripts/verify_macos_bundle.sh
+          bash -n scripts/verify_app_build_provenance.sh
           bash -n scripts/verify_macos_release.sh
+          bash -n scripts/run_p2_p3_macos_physical_acceptance.sh
           bash -n scripts/run_p13_macos_release_acceptance.sh
+
+      - name: Validate dependency license collection
+        run: python3 scripts/collect_release_licenses.py
 
   macos-bundle:
     name: macOS Tauri bundle (${{ matrix.arch }})

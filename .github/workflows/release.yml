@@ -13,8 +13,108 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  source-gate:
+    name: Tagged source release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      checks: write
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+      TALKING_MOOSE_ALLOW_LIVE_API: "0"
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-release-source-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Validate tag and release metadata
+        run: python3 scripts/validate_release_metadata.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Validate Moonshine runtime provenance
+        run: python3 scripts/validate_moonshine_runtime_manifest.py
+
+      - name: Validate release helper syntax
+        run: |
+          python3 -m py_compile \
+            scripts/generate_app_icons.py \
+            scripts/validate_release_metadata.py \
+            scripts/collect_release_licenses.py
+          bash -n scripts/prepare_moonshine_macos.sh
+          bash -n scripts/verify_macos_bundle.sh
+          bash -n scripts/verify_app_build_provenance.sh
+          bash -n scripts/verify_macos_release.sh
+          bash -n scripts/run_p2_p3_macos_physical_acceptance.sh
+          bash -n scripts/run_p13_macos_release_acceptance.sh
+
+      - name: Run frontend release gate
+        run: npm run check:frontend
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
+
+      - name: Collect dependency license texts
+        run: python3 scripts/collect_release_licenses.py
+
+      - name: Audit production Node dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit Rust dependencies
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: src-tauri
+
   build-macos:
     name: Signed macOS release (${{ matrix.arch }})
+    needs: source-gate
     strategy:
       fail-fast: false
       matrix:
@@ -31,6 +131,7 @@ jobs:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: "1"
       TALKING_MOOSE_ALLOW_LIVE_API: "0"
+      TALKING_MOOSE_BUILD_COMMIT: ${{ github.sha }}
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -81,38 +182,6 @@ jobs:
             fi
           done
 
-      - name: Import Developer ID certificate
-        shell: bash
-        run: |
-          certificate_path="${RUNNER_TEMP}/developer-id.p12"
-          keychain_path="${RUNNER_TEMP}/talking-moose-build.keychain-db"
-          keychain_password="$(openssl rand -hex 24)"
-          echo "::add-mask::$keychain_password"
-
-          python3 -c 'import base64, os, pathlib, sys; pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(os.environ["APPLE_CERTIFICATE"], validate=True))' "$certificate_path"
-          security create-keychain -p "$keychain_password" "$keychain_path"
-          security default-keychain -s "$keychain_path"
-          security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security set-keychain-settings -t 21600 -u "$keychain_path"
-          security import "$certificate_path" \
-            -k "$keychain_path" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s -k "$keychain_password" "$keychain_path"
-
-          identity="$(
-            security find-identity -v -p codesigning "$keychain_path" \
-              | awk -F'"' '/Developer ID Application:/ { print $2; exit }'
-          )"
-          if [[ -z "$identity" ]]; then
-            echo 'Imported certificate does not expose a Developer ID Application identity' >&2
-            exit 1
-          fi
-          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
-          rm -f "$certificate_path"
-
       - name: Validate Moonshine runtime provenance
         run: python3 scripts/validate_moonshine_runtime_manifest.py
 
@@ -141,7 +210,8 @@ jobs:
           bash scripts/verify_macos_release.sh \
             "${{ steps.artifacts.outputs.app_path }}" \
             "${{ steps.artifacts.outputs.dmg_path }}" \
-            "${{ matrix.arch }}"
+            "${{ matrix.arch }}" \
+            "$GITHUB_SHA"
 
       - name: Stage architecture release files
         shell: bash
@@ -188,10 +258,22 @@ jobs:
           path: release
           merge-multiple: true
 
+      - name: Verify architecture artifact set and checksums
+        shell: bash
+        run: |
+          cd release
+          test "$(find . -maxdepth 1 -type f -name '*.app.zip' | wc -l | tr -d ' ')" = 2
+          test "$(find . -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" = 2
+          test "$(find . -maxdepth 1 -type f -name '*_macos_*.SHA256SUMS.txt' | wc -l | tr -d ' ')" = 2
+          for manifest in *_macos_*.SHA256SUMS.txt; do
+            sha256sum -c "$manifest"
+          done
+
       - name: Build combined checksum manifest
         run: |
           cd release
           sha256sum *.app.zip *.dmg | sort -k2 > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create draft release for physical acceptance
@@ -206,5 +288,5 @@ jobs:
             --notes-file "$notes" \
             release/*.app.zip \
             release/*.dmg \
-            release/*.SHA256SUMS.txt \
+            release/*_macos_*.SHA256SUMS.txt \
             release/SHA256SUMS.txt
