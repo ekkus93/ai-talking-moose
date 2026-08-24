@@ -232,3 +232,9 @@ jobs:
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app_path"
           bash scripts/verify_macos_bundle.sh "$app_path" "${{ matrix.arch }}"
+
+      - name: Verify packaged build provenance
+        run: |
+          app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          bash scripts/verify_app_build_provenance.sh "$app_path" "$GITHUB_SHA"

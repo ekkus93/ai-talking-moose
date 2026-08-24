@@ -15,7 +15,24 @@ The following legacy unchecked rows are now covered by implementation/tests intr
 - **V1R-035 final hide/cooldown + Listening/Talking integration:** P7 closes appearance/cooldown semantics and `dismiss_ipc_tears_down_listening_and_talking_hides_and_records_cooldown` exercises both states through Tauri IPC.
 - **V1R-038 ambient shutdown:** P7 application shutdown cancels/awaits the central ambient scheduler. Later window-position persistence work serializes the final shutdown write so an older debounce cannot overwrite it.
 
-P12's implementation candidate is `6657fd337e99e3e55d8a250b4ce69ac892111925`; its reconciliation remains pending CI acceptance until the user reports the published checkpoint green. This overlay does not promote P12 by itself.
+P12 is now accepted on current master through follow-up commit `e03cec29e2b65473fb7e2eee94c81017bfe64d70`; GitHub Actions run `32699957139` completed successfully with Rust formatting, Clippy, Rust tests, frontend quality, dependency/security audits, release metadata, and both macOS bundle smoke jobs green.
+
+## 2026-08-24 physical-evidence integrity hardening
+
+Before asking a supported Mac to close the remaining rows, the evidence path was audited for reproducibility. The prior runner recorded repository `HEAD` but could not prove that the `.app` under test came from that commit. It also allowed a PASS row with blank evidence notes.
+
+The physical runner now:
+
+- [x] requires source-controlled inputs to match the tested commit, including untracked-file detection, while excluding only known dependency/generated/build trees that may legitimately differ during a local package build;
+- [x] requires a packaged `.app` and verifies `com.talkingmoose.ai`, bundle version, executable path, and embedded full Git build commit before any manual evidence is accepted;
+- [x] fails if the packaged binary commit differs from repository `HEAD` or optional `P2_P3_EXPECTED_COMMIT`;
+- [x] records the validated executable SHA-256 and verifies it again at the end of the run;
+- [x] launches the exact validated bundle with `open -n` before physical checks; and
+- [x] requires nonblank evidence/notes for every PASS/FAIL/SKIP result so a nominal PASS cannot carry an empty evidence record.
+
+The binary exposes this provenance through a non-GUI `--build-info` probe. `build.rs` prefers explicit `TALKING_MOOSE_BUILD_COMMIT`, then GitHub Actions `GITHUB_SHA`, then the clean checkout's Git `HEAD`; local acceptance instructions explicitly set the expected/build SHA.
+
+This hardening does not claim any physical row PASS. The preparation changes require ordinary CI acceptance at their publication head, and P2/P3 remains open until the validated supported-Mac report is completed.
 
 ## Physical rows that remain open
 

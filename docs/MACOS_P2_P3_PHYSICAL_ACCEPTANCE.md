@@ -6,15 +6,31 @@ This protocol closes the deliberately physical remainder of P2 (production audio
 
 Run the acceptance against the exact candidate commit that is intended to proceed to P13. Use a real supported Mac, the packaged application where the check concerns bundle/runtime behavior, and real audio hardware. Do not mark a row complete from mock audio, Tauri test runtime, Linux behavior, or a GitHub-hosted bundle smoke job.
 
-## Evidence runner
+The application binary now embeds its full Git build commit. The acceptance runner fails closed unless the packaged `.app` reports the same commit as the clean source checkout, so a stale or accidentally substituted bundle cannot be certified under the current source SHA. The runner also records the bundle identifier/version and executable SHA-256, then verifies that executable hash again after the physical run.
 
-From the repository root on the Mac:
+## Build and evidence runner
+
+Build the exact clean checkout you intend to test. When building locally, pin the embedded provenance explicitly:
 
 ```bash
-bash scripts/run_p2_p3_macos_physical_acceptance.sh
+export P2_P3_EXPECTED_COMMIT="$(git rev-parse HEAD)"
+export TALKING_MOOSE_BUILD_COMMIT="$P2_P3_EXPECTED_COMMIT"
+
+# Prepare the pinned native runtime if it is not already staged for this Mac.
+bash scripts/prepare_moonshine_macos.sh
+python3 scripts/generate_app_icons.py
+npm run tauri -- build --bundles app
 ```
 
-The runner records host/build identity, captures the macOS audio-device inventory, walks the operator through each manual check, and emits a Markdown report. A run is accepted only when every required check is explicitly recorded `PASS`; `SKIP`, blank answers, or failures keep the gate open.
+The default bundle location is `src-tauri/target/release/bundle/macos/Talking Moose AI.app`. If the candidate bundle is elsewhere, set `TALKING_MOOSE_APP_PATH` to that `.app`. Then run:
+
+```bash
+P2_P3_EXPECTED_COMMIT="$(git rev-parse HEAD)" \
+  TALKING_MOOSE_APP_PATH="src-tauri/target/release/bundle/macos/Talking Moose AI.app" \
+  bash scripts/run_p2_p3_macos_physical_acceptance.sh
+```
+
+The runner rejects tracked or untracked changes to source-controlled inputs while allowing only the repository’s known dependency/generated/build trees (`node_modules`, `dist`, Tauri target output, generated icons, and staged macOS native runtime). It validates the `.app` bundle identifier/version/build commit, records the executable hash, captures the macOS audio-device inventory, and launches that exact validated bundle with `open -n` before walking the operator through each manual check. A run is accepted only when every required check is explicitly recorded `PASS`, every result has nonblank evidence notes, and the executable remains byte-identical through the run. `SKIP`, blank evidence, provenance mismatch, bundle mutation, or any failure keeps the gate open.
 
 For the clean microphone-permission sequence, resetting the application permission is destructive to the current TCC decision. The runner only prints the command; it never runs `tccutil reset` automatically.
 
