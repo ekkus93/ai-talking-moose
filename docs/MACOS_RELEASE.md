@@ -42,7 +42,16 @@ npm run check:all
 python3 scripts/collect_release_licenses.py
 ```
 
-Ordinary CI also executes dependency-license collection so a missing resolved notice file fails on `master`, before a release tag is created.
+Ordinary CI also executes dependency-license collection so unresolved license evidence fails on `master`, before a release tag is created.
+
+The collector intentionally models the shipped dependency surface rather than the whole cross-platform lock graph. For Rust it runs Cargo metadata with `--filter-platform` for both `aarch64-apple-darwin` and `x86_64-apple-darwin`, walks only non-dev dependency edges from the application root, and unions the two reachable sets. For every production npm dependency and macOS-reachable Rust crate it then:
+
+1. copies conventional `LICENSE*`, `COPYING*`, `NOTICE*`, and `COPYRIGHT*` files when the published package contains them;
+2. honors Cargo's explicit `license-file` metadata even when the file has a nonstandard name;
+3. if no standalone legal text is packaged but a license expression is declared in package metadata, writes a `LICENSE-DECLARATION.txt` record and flags that dependency in `DEPENDENCY_LICENSES.md` for final release review;
+4. fails closed if neither packaged legal text nor a declared license is available.
+
+A declaration-only entry is not represented as copied license text and is not a substitute for final legal review. Before public release, review every declaration-only dependency and confirm the distribution obligations are satisfied.
 
 When real supported Mac hardware is available, the still-open physical gates from P1/P2/P3/P3A/P6 must be collected against the intended release candidate. If hardware is unavailable, record those rows as deferred; do not mark them PASS from CI.
 
@@ -61,7 +70,7 @@ After the source gate, Apple Silicon and Intel artifacts build independently. Fo
 
 1. generates the deterministic icon set and validates tag/version/product/bundle metadata plus the generated icon containers;
 2. prepares the pinned Moonshine + ONNX Runtime dylibs at the explicit macOS 13.4 support floor;
-3. stages the project license, Moonshine/native notices, and license texts for resolved Rust/production npm dependencies;
+3. stages the project license, Moonshine/native notices, and dependency license evidence inventory described above;
 4. sets `TALKING_MOOSE_BUILD_COMMIT` to the exact tag `GITHUB_SHA`;
 5. builds the Tauri `.app` and DMG with Developer ID signing and Tauri notarization/stapling;
 6. verifies nested native libraries, deployment target, embedded build commit, Developer ID authority, secure timestamp, hardened runtime, Gatekeeper assessment, stapled notarization ticket, and absence of obvious secret/database files;
@@ -117,7 +126,7 @@ The generated report remains `OPEN` if any required row is `FAIL` or `SKIP`. It 
 A draft release is not equivalent to release acceptance. Before public publication:
 
 1. confirm the signed/notarized tagged workflow succeeded for both architectures;
-2. review the generated dependency/native notice payload;
+2. review the generated dependency/native notice payload, including every declaration-only dependency;
 3. collect the supported-Mac physical evidence when hardware is available, or explicitly document the project's decision to ship with those rows deferred;
 4. record the final tag commit and artifact hashes in the P13 reconciliation record.
 

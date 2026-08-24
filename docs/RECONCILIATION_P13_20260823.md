@@ -34,7 +34,9 @@ Implemented source/workflow behavior:
 - architecture-specific `.app.zip` and `.dmg` outputs for arm64 and x86_64;
 - combined `SHA256SUMS.txt` plus per-architecture checksum manifests;
 - checked-in `docs/releases/v0.1.0.md` release notes;
-- project `LICENSE`, native Moonshine/ONNX notices, and resolved production npm/Rust dependency license texts are staged into the application notice resource tree;
+- project `LICENSE` and native Moonshine/ONNX notices are staged into the application notice resource tree;
+- production npm and macOS-reachable Rust dependencies are inventoried with copied package notice/license text when present; when a published package has no standalone notice file but declares a license in package metadata, that declaration is bundled explicitly and flagged for final release review;
+- dependencies with neither packaged notice/license text nor a declared license remain a fail-closed error;
 - the tagged workflow creates a **draft** GitHub Release only after both architectures verify; unsigned ordinary-CI smoke bundles are never published as release artifacts.
 
 Still open: real tagged release artifacts and final legal/notice review of the generated payload before public publication.
@@ -76,9 +78,11 @@ The audit found and repaired the following release-boundary gaps:
 - [x] **Single signing-keychain owner:** the workflow no longer manually imports the same `.p12` that is also supplied through `APPLE_CERTIFICATE`. Tauri owns the documented ephemeral signing-keychain flow directly from `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD`; notarization remains authenticated with `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID`.
 - [x] **Signed artifact provenance:** release builds explicitly set `TALKING_MOOSE_BUILD_COMMIT=$GITHUB_SHA`, and `verify_macos_release.sh` can require the packaged executable's embedded commit to equal that exact tag commit before accepting the signature/notarization checks.
 - [x] **Release artifact set integrity:** the draft publisher requires exactly two `.app.zip` files, two DMGs, and two architecture checksum manifests, verifies both architecture manifests, then builds and self-verifies the combined `SHA256SUMS.txt` before creating the draft release.
-- [x] **License payload fails before tagging:** ordinary CI now executes `collect_release_licenses.py` instead of merely compiling its Python syntax, so missing resolved npm/Rust notice files are detected on normal `master` CI rather than for the first time during a release tag.
+- [x] **License payload fails before tagging:** ordinary CI executes `collect_release_licenses.py` on normal `master` CI rather than for the first time during a release tag. The collector filters Cargo's resolve graph for both shipped macOS targets, excludes dev-only dependency edges, copies explicit Cargo `license-file` paths and conventional notice files, and records declaration-only license metadata separately. A dependency with no usable notice/license text and no declared license still fails closed.
 - [x] **Generated notices do not dirty source:** the generated dependency-notice staging tree is ignored alongside the other generated native release resources.
 - [x] **Physical report provenance hardened:** the P13 physical runner requires the exact release tag and embedded build commit, verifies the downloaded DMG against the combined checksum manifest, requires nonblank evidence for every manual result, and confirms the tested executable hash did not change during the run.
+
+The first CI execution of the license payload gate exposed that the original collector incorrectly treated every package in Cargo metadata as shipped and required a standalone notice file even when package metadata declared an SPDX license. That failure was a collector-model bug, not evidence that the listed crates were unlicensed. The corrected collector uses Cargo's target-filtered resolve graph and preserves declaration-only entries for mandatory final release review rather than silently treating them as copied license text.
 
 Current Tauri 2 documentation still supports `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, and optional `APPLE_SIGNING_IDENTITY`; no retired `altool` flow or custom sandbox entitlement is introduced by this audit.
 
