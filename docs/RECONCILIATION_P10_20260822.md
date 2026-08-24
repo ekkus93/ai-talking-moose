@@ -30,6 +30,7 @@ Acceptance evidence:
 - [x] Permission/privacy/confirmation policy is enforced locally.
 - [x] Arguments are validated against the declared JSON-schema subset before execution.
 - [x] Every tool executes under a timeout with a repository-wide hard ceiling.
+- [x] Concurrent provider-originated executions are hard-capped; excess calls fail closed rather than waiting unboundedly.
 - [x] Hard output-size bound is enforced.
 - [x] Failures use stable structured error classes and discard raw backend errors.
 
@@ -62,3 +63,23 @@ Acceptance evidence:
 - [x] Built-in declarations are scanned by tests for prohibited generic capability labels.
 
 See `docs/TOOLS_V1_POLICY.md` for the V1 safe-tool contract.
+
+## 2026-08-24 current-master regression audit
+
+A current-master audit after P7/P8/P9/P11/P12 found that the accepted provider-visible allowlist,
+privacy gates, schema validation, provider declaration conversion, audit redaction, and model-call
+routing are still intact. The only prior change under `src-tauri/src/tools` since accepted P10 was the
+P12 logging-privacy regression expansion for active-application names and raw audio.
+
+The audit found one resource-boundary gap not covered by the original P10 checklist: the conversation
+event loop spawns a task for each provider tool call, so individually bounded calls could still create
+unbounded simultaneous executions under a tool-call flood. The hardening candidate therefore:
+
+- [x] adds a router-owned four-slot execution semaphore;
+- [x] uses non-waiting admission so excess calls fail closed immediately;
+- [x] returns a stable `concurrency_limit` error/result category;
+- [x] records only the normal bounded privacy-safe audit metadata for rejected calls; and
+- [x] tests both rejection at capacity and recovery after a slot is released.
+
+This regression hardening remains **pending GitHub Actions acceptance**. The already-accepted V1 tool
+capability surface is unchanged.

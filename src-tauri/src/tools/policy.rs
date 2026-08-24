@@ -77,6 +77,7 @@ pub enum ToolErrorKind {
     InvalidArguments,
     PermissionDenied,
     ConfirmationRequired,
+    ConcurrencyLimit,
     Timeout,
     OutputTooLarge,
     ExecutionFailed,
@@ -97,6 +98,9 @@ impl ToolError {
             ToolErrorKind::PermissionDenied => "Tool permission was denied by local policy.",
             ToolErrorKind::ConfirmationRequired => {
                 "Tool requires explicit user confirmation before execution."
+            }
+            ToolErrorKind::ConcurrencyLimit => {
+                "Tool execution capacity is temporarily exhausted."
             }
             ToolErrorKind::Timeout => "Tool execution exceeded its time limit.",
             ToolErrorKind::OutputTooLarge => "Tool output exceeds the allowed size.",
@@ -126,6 +130,7 @@ pub enum ToolResultCategory {
     InvalidArguments,
     PermissionDenied,
     ConfirmationRequired,
+    ConcurrencyLimit,
     Timeout,
     OutputTooLarge,
     ExecutionFailed,
@@ -141,6 +146,7 @@ impl ToolResultCategory {
                 ToolErrorKind::InvalidArguments => Self::InvalidArguments,
                 ToolErrorKind::PermissionDenied => Self::PermissionDenied,
                 ToolErrorKind::ConfirmationRequired => Self::ConfirmationRequired,
+                ToolErrorKind::ConcurrencyLimit => Self::ConcurrencyLimit,
                 ToolErrorKind::Timeout => Self::Timeout,
                 ToolErrorKind::OutputTooLarge => Self::OutputTooLarge,
                 ToolErrorKind::ExecutionFailed => Self::ExecutionFailed,

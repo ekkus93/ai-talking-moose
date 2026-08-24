@@ -26,12 +26,15 @@ The Rust `ToolRouter` is authoritative. A model tool call must pass, in order:
 2. hard serialized input-size bound;
 3. local permission/privacy/confirmation policy;
 4. declared JSON-schema validation;
-5. a hard timeout; and
-6. a hard serialized output-size bound.
+5. a hard concurrent-execution slot;
+6. a hard timeout; and
+7. a hard serialized output-size bound.
 
 Failures return a structured `ToolErrorKind`; raw arguments, raw results, and backend error strings are not
 included in normal logs or audit records. Repository-wide hard ceilings prevent a declaration from raising
-its own timeout or size limits beyond the V1 maximums.
+its own timeout or size limits beyond the V1 maximums. At most four provider-originated tool executions may
+be active at once; excess calls fail closed immediately with a structured concurrency-limit error rather than
+queueing an unbounded number of tool tasks.
 
 ## V1 capability allowlist
 
