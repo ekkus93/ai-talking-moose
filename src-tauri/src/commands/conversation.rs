@@ -239,7 +239,15 @@ pub fn delete_memory(id: i64, state: State<'_, AppState>) -> Result<bool, String
 
 #[tauri::command]
 pub fn forget_everything(state: State<'_, AppState>) -> Result<(), String> {
-    state.memory.forget_everything()
+    state.memory.forget_everything()?;
+    state.ambient_scheduler.interrupt();
+    state
+        .behavior_engine
+        .lock()
+        .cooldowns
+        .clear_event_fingerprints();
+    crate::desktop::runtime::reset_observation_state();
+    Ok(())
 }
 
 #[tauri::command]
@@ -465,6 +473,46 @@ mod tests {
         assert_eq!(playback.queue_length(), 0);
         assert_eq!(playback.diagnostics().output_level, 0.0);
         assert_eq!(*character_state.read(), CharacterState::Idle);
+    }
+
+    #[test]
+    fn forget_everything_ipc_purges_private_records_but_preserves_preferences_and_credentials() {
+        let app_state = AppState::new_for_tests().unwrap();
+        app_state
+            .memory
+            .remember("User likes tea", Some("preference"))
+            .unwrap();
+        app_state
+            .db
+            .add_transcript("session", "user", "private transcript")
+            .unwrap();
+        app_state.db.set_setting("non_secret_preference", "keep").unwrap();
+        app_state
+            .secrets
+            .set_google_api_key("test-api-key".to_string())
+            .unwrap();
+        let db = app_state.db.clone();
+        let secrets = app_state.secrets.clone();
+
+        let app = mock_builder()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![forget_everything])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        get_ipc_response(&webview, ipc_request("forget_everything", json!({})))
+            .expect("Forget Everything should succeed through IPC");
+
+        assert!(db.get_memories().unwrap().is_empty());
+        assert!(db.get_transcripts(10).unwrap().is_empty());
+        assert_eq!(
+            db.get_setting("non_secret_preference").unwrap(),
+            Some("keep".to_string())
+        );
+        assert!(secrets.has_google_api_key());
     }
 
     #[test]

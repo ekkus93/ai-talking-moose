@@ -6,7 +6,7 @@
 2. **Conservative fresh-profile defaults.** Active-application observation, cross-conversation memory, and transcript retention start **Off**. Users may explicitly enable each feature later.
 3. **No silent cloud escalation.** Selecting a local Moonshine ASR model must never silently fall back to uploading microphone audio to Google when the model is missing, corrupt, overloaded, or unavailable.
 4. **Secure credentials.** On macOS, the Google API key is stored in the user's Keychain. It is not stored in SQLite, frontend state, or normal logs.
-5. **Complete local erasure.** Users can inspect and delete saved memories and can use **Forget Everything** to purge local memory, transcript, and observation data.
+5. **Complete private-data reset.** Users can inspect and delete saved memories and can use **Forget Everything** to purge persisted memory/transcript data and reset transient derived observation state. Ordinary preferences and the separately managed Keychain credential are preserved.
 6. **Microphone lifecycle is explicit.** The microphone is permitted only for a user-initiated conversation or an explicit diagnostics action. Mute, dismiss, stop, provider failure, and app shutdown must terminate capture; these lifecycle guarantees are release-blocking requirements.
 
 ## 2. Speech-recognition privacy
@@ -53,7 +53,7 @@ Provider failures cross application boundaries as structured, provider-neutral c
 
 ## 5. Local persistence
 
-SQLite stores ordinary settings and, only when the user has opted in, memory/transcript/observation data. The generic settings repository rejects `google_api_key` so future callers cannot accidentally reintroduce plaintext credential persistence.
+SQLite stores ordinary settings and, only when the user has opted in, semantic memory and transcript data. V1 desktop observations are transient and are never persisted; schema version 4 removes the legacy `observations` table. The generic settings repository rejects `google_api_key` so future callers cannot accidentally reintroduce plaintext credential persistence.
 
 When upgrading an old database that contains a plaintext `google_api_key`, startup migrates the key into secure storage, verifies the secure read-back, and only then deletes the SQLite row. A failed secure-store write leaves the old row in place so migration does not destroy the user's only copy; the application treats the migration failure as an error rather than pretending it succeeded.
 

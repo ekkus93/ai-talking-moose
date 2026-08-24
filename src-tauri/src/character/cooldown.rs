@@ -133,6 +133,10 @@ impl CooldownTracker {
             .retain(|(_, timestamp)| *timestamp > cutoff);
     }
 
+    pub fn clear_event_fingerprints(&mut self) {
+        self.recent_event_fingerprints.clear();
+    }
+
     fn is_duplicate_event(&mut self, now: DateTime<Utc>, fingerprint: &str) -> bool {
         if fingerprint.is_empty() {
             return false;
@@ -302,6 +306,36 @@ mod tests {
 
         assert_eq!(pacific_local.hour(), 22);
         assert!(CooldownTracker::is_in_quiet_hours(&pacific_local, 22, 8));
+    }
+
+    #[test]
+    fn event_fingerprint_history_can_be_cleared_for_privacy_reset() {
+        let mut tracker = CooldownTracker::new();
+        let now = Utc.with_ymd_and_hms(2026, 8, 23, 12, 0, 0).unwrap();
+        tracker.record_ambient_speech(now, "private-derived-fingerprint");
+
+        assert_eq!(
+            tracker.check_ambient_gate(
+                now,
+                0,
+                12,
+                (false, 22, 8),
+                Some("private-derived-fingerprint"),
+            ),
+            Err(AmbientCooldownBlockReason::DuplicateEvent)
+        );
+
+        tracker.clear_event_fingerprints();
+
+        assert!(tracker
+            .check_ambient_gate(
+                now,
+                0,
+                12,
+                (false, 22, 8),
+                Some("private-derived-fingerprint"),
+            )
+            .is_ok());
     }
 
     #[test]

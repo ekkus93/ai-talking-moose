@@ -5,7 +5,7 @@ memory records, and conversation summaries.
 
 ## Schema and migration policy
 
-- The SQLite schema has an explicit `schema_version` table. V1 currently targets schema version 3.
+- The SQLite schema has an explicit `schema_version` table. V1 currently targets schema version 4.
 - Pending migrations run in numeric order and are idempotent against the version recorded in the database.
 - The complete pending migration chain for a startup runs inside one SQLite transaction. Any migration
   failure rolls the entire startup migration attempt back.
@@ -16,6 +16,9 @@ memory records, and conversation summaries.
 - Persistent database initialization or migration failure aborts application initialization. Production
   never silently substitutes an in-memory database.
 - In-memory SQLite remains available only for explicit tests and other non-persistent test fixtures.
+- Every SQLite connection enables `PRAGMA secure_delete=ON` before migrations or normal CRUD so deleted private
+  row payloads are overwritten in SQLite database pages instead of waiting for later page reuse. This is database-level
+  hardening, not a claim of forensic erasure from storage media, filesystem snapshots, or user-created backups.
 
 ## Transcript policy
 
@@ -39,8 +42,33 @@ memory records, and conversation summaries.
 - Records carry both `created_at` and `updated_at` timestamps.
 - Remembering the same normalized fact again updates its category/source/confidence/`updated_at` metadata
   instead of silently creating another copy.
-- Memory remains behind the existing `memory_enabled` privacy gate and `Forget Everything` continues to
-  delete persisted memories and transcripts.
+- Memory remains behind the existing `memory_enabled` privacy gate.
+
+## Observation-retention policy
+
+V1 has **zero persistent desktop-observation retention**. The P8 runtime keeps only minimized, bounded
+derived state in memory (for example an active-app fingerprint, recent switch timestamps, an idle bucket,
+and the previous battery percentage). No observation summary or raw observation value is written to SQLite.
+
+Schema version 4 removes the legacy `observations` table that existed before this policy was finalized.
+Migrating an older profile therefore deletes any stale rows from that table instead of assigning them a new
+TTL. This is the V1 hard limit: zero persisted observation rows and no observation write API.
+
+`Forget Everything` also interrupts queued ambient observation work, clears P7 event-dedup fingerprints, and
+resets the live P8 summarizer state so derived observation history from before the reset cannot influence later
+ambient events. Disabling active-application observation independently clears
+its derived fingerprint/switch history at the privacy boundary.
+
+## Forget and credential policy
+
+- Deleting one memory removes only that semantic-memory record.
+- Transcript rows can be cleared independently at the persistence layer, and the full reset clears all
+  persisted transcript rows.
+- `Forget Everything` atomically deletes persisted semantic memories and transcripts and defensively drops
+  any legacy `observations` table. Ordinary application preferences are preserved.
+- The Google API credential is deliberately separate from `Forget Everything`: it lives in the operating
+  system secure credential store rather than SQLite and is removed only through the explicit credential-clear
+  operation. This prevents a data-history reset from unexpectedly destroying connectivity configuration.
 
 ## Conversation-summary decision
 

@@ -17,6 +17,7 @@ struct DesktopRuntimeState {
     cancellation: CancellationToken,
     shutdown_complete: watch::Sender<bool>,
     power_observer: Option<SystemPowerObserver>,
+    summarizer: Arc<Mutex<DesktopEventSummarizer>>,
 }
 
 struct ShutdownSignal(watch::Sender<bool>);
@@ -31,6 +32,22 @@ static DESKTOP_RUNTIME: OnceLock<Mutex<Option<DesktopRuntimeState>>> = OnceLock:
 
 fn runtime_state() -> &'static Mutex<Option<DesktopRuntimeState>> {
     DESKTOP_RUNTIME.get_or_init(|| Mutex::new(None))
+}
+
+fn reset_summarizer(summarizer: &Mutex<DesktopEventSummarizer>) {
+    let mut summarizer = summarizer
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *summarizer = DesktopEventSummarizer::new();
+}
+
+pub fn reset_observation_state() {
+    let state = runtime_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(runtime) = state.as_ref() {
+        reset_summarizer(runtime.summarizer.as_ref());
+    }
 }
 
 fn log_observer_result<T>(kind: ObserverKind, result: &ObserverResult<T>) {
@@ -122,13 +139,13 @@ async fn run_observer_loop(
     scheduler: AmbientScheduler,
     cancellation: CancellationToken,
     shutdown_complete: watch::Sender<bool>,
+    summarizer: Arc<Mutex<DesktopEventSummarizer>>,
     mut power_rx: mpsc::UnboundedReceiver<PowerEvent>,
     _power_sender_keepalive: mpsc::UnboundedSender<PowerEvent>,
 ) {
     let _shutdown_signal = ShutdownSignal(shutdown_complete);
     let mut interval = tokio::time::interval(OBSERVER_POLL_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let mut summarizer = DesktopEventSummarizer::new();
     let mut poll_tick = 0_u32;
 
     loop {
@@ -136,10 +153,16 @@ async fn run_observer_loop(
             _ = cancellation.cancelled() => break,
             power = power_rx.recv() => {
                 if let Some(power) = power {
+                    let mut summarizer = summarizer
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
                     handle_power_event(&mut summarizer, &scheduler, power);
                 }
             }
             _ = interval.tick() => {
+                let mut summarizer = summarizer
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 poll_observers(&settings, &scheduler, &mut summarizer, poll_tick);
                 poll_tick = poll_tick.wrapping_add(1);
             }
@@ -168,13 +191,16 @@ pub fn start(
     let title_result = SystemDesktopMonitor::get_window_title(true);
     log_observer_result(ObserverKind::WindowTitle, &title_result);
 
+    let summarizer = Arc::new(Mutex::new(DesktopEventSummarizer::new()));
     let task_cancellation = cancellation.clone();
     let task_shutdown = shutdown_complete.clone();
+    let task_summarizer = summarizer.clone();
     tauri::async_runtime::spawn(run_observer_loop(
         settings,
         scheduler,
         task_cancellation,
         task_shutdown,
+        task_summarizer,
         power_rx,
         power_tx,
     ));
@@ -183,6 +209,7 @@ pub fn start(
         cancellation,
         shutdown_complete,
         power_observer,
+        summarizer,
     });
     Ok(())
 }
@@ -210,7 +237,7 @@ pub async fn stop() {
 mod tests {
     use super::*;
     use crate::desktop::observation::{
-        ActiveApplicationObservation, ObserverErrorCode, ObserverStatus,
+        ActiveApplicationObservation, IdleObservation, ObserverErrorCode, ObserverStatus,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -232,6 +259,39 @@ mod tests {
             );
         }
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn observation_state_reset_clears_derived_idle_and_application_history() {
+        let summarizer = Mutex::new(DesktopEventSummarizer::new());
+        {
+            let mut state = summarizer.lock().unwrap();
+            assert!(state
+                .record_idle(IdleObservation { seconds: 301 })
+                .is_some());
+            assert!(state
+                .record_app_switch(ActiveApplicationObservation {
+                    name: "Terminal".to_string(),
+                })
+                .is_none());
+            assert!(state
+                .record_app_switch(ActiveApplicationObservation {
+                    name: "Browser".to_string(),
+                })
+                .is_some());
+        }
+
+        reset_summarizer(&summarizer);
+
+        let mut state = summarizer.lock().unwrap();
+        assert!(state
+            .record_idle(IdleObservation { seconds: 301 })
+            .is_some());
+        assert!(state
+            .record_app_switch(ActiveApplicationObservation {
+                name: "Browser".to_string(),
+            })
+            .is_none());
     }
 
     #[test]
