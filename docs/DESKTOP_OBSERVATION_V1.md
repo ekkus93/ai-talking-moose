@@ -35,10 +35,10 @@ Reconsidering window titles requires a separate design review, explicit user opt
 
 The summarizer accepts only values extracted from `ObserverResult::Available`.
 
-- Active-application names are whitespace-normalized and capped at 80 characters before transient event construction.
+- Active-application names are whitespace-normalized and capped at 80 characters before transient event construction. Turning the active-app opt-in Off immediately clears the derived last-app fingerprint and switch-timestamp history; the first observation after re-enable only seeds fresh local state.
 - Only a SHA-256 fingerprint of the last application identity is retained for change detection; prior names are not kept in history.
 - Rapid-switch history retains timestamps only, is limited to a 120-second window, and clears after the six-switch pattern event. The pattern summary contains a count, not historical application names.
-- Idle time is reduced to five-minute buckets and bounded to 24 hours.
+- Idle time is reduced to five-minute buckets and bounded to 24 hours. Activity/sub-threshold readings reset the episode-local bucket so a later independent idle episode can emit its own five-minute event.
 - Battery state retains only the previous percentage and emits on the 20% and 10% downward thresholds.
 - Sleep/wake has no retained payload beyond the event currently being submitted.
 

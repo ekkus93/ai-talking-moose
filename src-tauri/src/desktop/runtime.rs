@@ -88,6 +88,12 @@ fn poll_observers(
     );
 
     let active_app_allowed = settings.read().active_app_observation;
+    if !active_app_allowed {
+        // Treat privacy opt-out as an observation boundary. Derived fingerprints and
+        // switch timestamps from the previously enabled period must not survive the
+        // transition or influence the first observation after re-enable.
+        summarizer.clear_active_application_history();
+    }
     handle_available(
         ObserverKind::ActiveApplication,
         SystemDesktopMonitor::get_active_application(active_app_allowed),

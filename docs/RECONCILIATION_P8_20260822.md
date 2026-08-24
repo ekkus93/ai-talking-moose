@@ -56,3 +56,13 @@ P8 is **accepted complete**. GitHub Actions run `32612793246` completed successf
 - [x] Summarized events enter the existing P7 scheduler, inheriting dedup/cooldown/annoyance/privacy policy.
 
 See `docs/DESKTOP_OBSERVATION_V1.md` for the V1 source/permission/retention contract.
+
+## 2026-08-23 regression audit
+
+A later cross-phase audit found two bounded-local-state gaps in the accepted P8 implementation. The repair candidate:
+
+- resets the five-minute idle bucket when activity resumes (and on a decreasing idle bucket), so separate idle episodes cannot suppress one another;
+- clears the derived active-application fingerprint and switch timestamps whenever the active-app privacy opt-in is Off, so pre-opt-out observation state cannot survive the privacy boundary or influence the first observation after re-enable; and
+- adds deterministic regression coverage for both behaviors.
+
+The observer sources, permissions, model-facing privacy gate, and V1 window-title decision are unchanged. This repair remains pending the ordinary GitHub Actions quality gate before the regression audit is accepted closed.

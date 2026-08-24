@@ -63,11 +63,33 @@ impl DesktopEventSummarizer {
     pub fn record_idle(&mut self, observation: IdleObservation) -> Option<DesktopEvent> {
         let seconds = observation.seconds.min(MAX_IDLE_SECONDS);
         let bucket = seconds / IDLE_BUCKET_SECONDS * IDLE_BUCKET_SECONDS;
-        if bucket < IDLE_BUCKET_SECONDS || self.last_idle_bucket == Some(bucket) {
+
+        // A sub-threshold reading means the user became active again. Reset the
+        // episode-local bucket so a later independent five-minute idle period is
+        // eligible to emit instead of being mistaken for the previous episode.
+        if bucket < IDLE_BUCKET_SECONDS {
+            self.last_idle_bucket = None;
+            return None;
+        }
+
+        // Idle duration should normally be monotonic within one episode. A lower
+        // non-zero bucket therefore also marks a new episode (for example after a
+        // long scheduling gap where the first post-activity poll already exceeds
+        // five minutes).
+        if self.last_idle_bucket.is_some_and(|last_bucket| bucket < last_bucket) {
+            self.last_idle_bucket = None;
+        }
+
+        if self.last_idle_bucket == Some(bucket) {
             return None;
         }
         self.last_idle_bucket = Some(bucket);
         Some(DesktopEvent::IdleTime { seconds: bucket })
+    }
+
+    pub fn clear_active_application_history(&mut self) {
+        self.last_application_fingerprint = None;
+        self.recent_app_switches.clear();
     }
 
     pub fn record_app_switch(
@@ -254,6 +276,47 @@ mod tests {
                 seconds: MAX_IDLE_SECONDS
             }
         );
+    }
+
+    #[test]
+    fn idle_bucket_resets_after_activity_for_a_new_idle_episode() {
+        let mut summarizer = DesktopEventSummarizer::new();
+
+        assert_eq!(
+            summarizer
+                .record_idle(IdleObservation { seconds: 301 })
+                .unwrap(),
+            DesktopEvent::IdleTime { seconds: 300 }
+        );
+        assert!(summarizer
+            .record_idle(IdleObservation { seconds: 10 })
+            .is_none());
+        assert_eq!(
+            summarizer
+                .record_idle(IdleObservation { seconds: 301 })
+                .unwrap(),
+            DesktopEvent::IdleTime { seconds: 300 }
+        );
+    }
+
+    #[test]
+    fn active_app_history_is_cleared_when_privacy_opt_out_resets_observation() {
+        let mut summarizer = DesktopEventSummarizer::new();
+        let start = Utc.with_ymd_and_hms(2026, 8, 23, 12, 0, 0).unwrap();
+
+        assert!(summarizer
+            .record_app_switch_at(start, app("Secret Project Alpha"))
+            .is_none());
+        assert!(summarizer
+            .record_app_switch_at(start + Duration::seconds(1), app("Terminal"))
+            .is_some());
+        assert_eq!(summarizer.retained_app_switch_count(), 1);
+
+        summarizer.clear_active_application_history();
+        assert_eq!(summarizer.retained_app_switch_count(), 0);
+        assert!(summarizer
+            .record_app_switch_at(start + Duration::seconds(2), app("Terminal"))
+            .is_none());
     }
 
     #[test]
