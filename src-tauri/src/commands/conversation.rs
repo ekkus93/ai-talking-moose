@@ -192,7 +192,10 @@ pub async fn stop_conversation(
 }
 
 #[tauri::command]
-pub async fn barge_in(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn barge_in<R: Runtime>(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<(), String> {
     state.ambient_scheduler.interrupt();
     state
         .standalone_speech
