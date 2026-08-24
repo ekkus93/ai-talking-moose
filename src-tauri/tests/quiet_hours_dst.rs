@@ -38,5 +38,9 @@ fn pacific_fall_back_repeated_hour_has_identical_quiet_hour_policy() {
     assert_eq!(first_one_thirty.hour(), 1);
     assert_eq!(second_one_thirty.hour(), 1);
     assert!(CooldownTracker::is_in_quiet_hours(&first_one_thirty, 22, 8));
-    assert!(CooldownTracker::is_in_quiet_hours(&second_one_thirty, 22, 8));
+    assert!(CooldownTracker::is_in_quiet_hours(
+        &second_one_thirty,
+        22,
+        8
+    ));
 }
