@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *.ts|*.tsx|*.css|*.json) case \"$f\" in */src/*) npx --no-install prettier --write \"$f\" ;; esac ;; *.rs) case \"$f\" in */src-tauri/*) cargo fmt --manifest-path src-tauri/Cargo.toml -- \"$f\" ;; esac ;; esac; } 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
