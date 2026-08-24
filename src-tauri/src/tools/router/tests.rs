@@ -252,7 +252,7 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
         .with_writer(captured.clone())
         .finish();
 
-    let unknown_audit = tracing::subscriber::with_default(subscriber, || {
+    let (remembered_audit, unknown_audit) = tracing::subscriber::with_default(subscriber, || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -268,6 +268,7 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
                 .dispatch("remember_fact", &json!({ "fact": private_payload }))
                 .await
                 .unwrap();
+            let remembered_audit = router.audit_snapshot().last().cloned().unwrap();
 
             let private_unknown_name = format!("unregistered_{SECRET_SENTINEL}");
             let error = router
@@ -284,7 +285,8 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
                 .unwrap_err();
             assert_eq!(error.kind, ToolErrorKind::NotFound);
 
-            router.audit_snapshot().last().cloned().unwrap()
+            let unknown_audit = router.audit_snapshot().last().cloned().unwrap();
+            (remembered_audit, unknown_audit)
         })
     });
 
@@ -303,8 +305,14 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
             "private value leaked into log output"
         );
     }
-    assert!(logs.contains("remember_fact"));
-    assert!(logs.contains("Tool call rejected"));
+    // Positive routing assertions use the structured audit rather than formatted
+    // tracing text. Tracing callsite interest is process-global, so parallel
+    // tests can legitimately suppress a callsite in this thread-local formatter.
+    assert_eq!(remembered_audit.tool_name, "remember_fact");
+    assert_eq!(
+        remembered_audit.result_category,
+        ToolResultCategory::Success
+    );
     assert_eq!(unknown_audit.tool_name, UNREGISTERED_AUDIT_NAME);
     assert_eq!(unknown_audit.result_category, ToolResultCategory::NotFound);
 }
