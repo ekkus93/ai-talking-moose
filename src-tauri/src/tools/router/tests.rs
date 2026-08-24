@@ -235,8 +235,8 @@ async fn audit_is_bounded_and_contains_no_raw_arguments_or_results() {
         .all(|record| V1_TOOL_NAMES.contains(&record.tool_name.as_str())));
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
+#[test]
+fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
     const TRANSCRIPT_SENTINEL: &str = "PRIVATE_TRANSCRIPT_SENTINEL_7c2a";
     const PROMPT_SENTINEL: &str = "PRIVATE_SYSTEM_PROMPT_SENTINEL_91bd";
     const SECRET_SENTINEL: &str = "AIzaSyPRIVATE_SECRET_SENTINEL_d41f";
@@ -245,36 +245,44 @@ async fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
     const ACTIVE_APP_SENTINEL: &str = "PRIVATE_ACTIVE_APP_SENTINEL_a885";
     const RAW_AUDIO_SENTINEL: &str = "AAECAwQFBgcICQoLDA0ODw_PRIVATE_AUDIO_5ef0";
 
-    let (router, settings) = router();
-    settings.write().memory_enabled = true;
     let captured = CapturedLogs::default();
     let subscriber = tracing_subscriber::fmt()
         .without_time()
         .with_ansi(false)
         .with_writer(captured.clone())
         .finish();
-    let _default = tracing::subscriber::set_default(subscriber);
 
-    let private_payload = format!(
-        "{TRANSCRIPT_SENTINEL} {PROMPT_SENTINEL} {SECRET_SENTINEL} {MEMORY_SENTINEL} {WINDOW_SENTINEL} {ACTIVE_APP_SENTINEL} {RAW_AUDIO_SENTINEL}"
-    );
-    router
-        .dispatch("remember_fact", &json!({ "fact": private_payload }))
-        .await
-        .unwrap();
+    tracing::subscriber::with_default(subscriber, || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (router, settings) = router();
+            settings.write().memory_enabled = true;
 
-    let private_unknown_name = format!("unregistered_{SECRET_SENTINEL}");
-    let _ = router
-        .dispatch(
-            &private_unknown_name,
-            &json!({
-                "window_title": WINDOW_SENTINEL,
-                "active_app": ACTIVE_APP_SENTINEL,
-                "raw_audio_base64": RAW_AUDIO_SENTINEL,
-                "secret": SECRET_SENTINEL
-            }),
-        )
-        .await;
+            let private_payload = format!(
+                "{TRANSCRIPT_SENTINEL} {PROMPT_SENTINEL} {SECRET_SENTINEL} {MEMORY_SENTINEL} {WINDOW_SENTINEL} {ACTIVE_APP_SENTINEL} {RAW_AUDIO_SENTINEL}"
+            );
+            router
+                .dispatch("remember_fact", &json!({ "fact": private_payload }))
+                .await
+                .unwrap();
+
+            let private_unknown_name = format!("unregistered_{SECRET_SENTINEL}");
+            let _ = router
+                .dispatch(
+                    &private_unknown_name,
+                    &json!({
+                        "window_title": WINDOW_SENTINEL,
+                        "active_app": ACTIVE_APP_SENTINEL,
+                        "raw_audio_base64": RAW_AUDIO_SENTINEL,
+                        "secret": SECRET_SENTINEL
+                    }),
+                )
+                .await;
+        });
+    });
 
     let logs = captured.text();
     for sentinel in [
