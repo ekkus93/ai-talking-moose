@@ -80,4 +80,34 @@ describe("P6VoiceAcceptancePanel", () => {
     auditionSpy.mockRestore();
     cancelSpy.mockRestore();
   });
+  it("scopes Escape to the active voice panel and restores launcher focus", async () => {
+    render(<P6VoiceAcceptancePanel />);
+    const launcher = screen.getByRole("button", {
+      name: "P6 Voice Acceptance",
+    });
+    launcher.focus();
+    fireEvent.click(launcher);
+
+    const panel = await screen.findByRole("dialog", {
+      name: "P6 Voice Acceptance",
+    });
+    expect(panel).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Close P6 Voice Acceptance" }),
+      ).toHaveFocus(),
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "P6 Voice Acceptance" }),
+      ).not.toBeInTheDocument();
+      expect(useMooseStore.getState().isSettingsOpen).toBe(true);
+      expect(
+        screen.getByRole("button", { name: "P6 Voice Acceptance" }),
+      ).toHaveFocus();
+    });
+  });
 });

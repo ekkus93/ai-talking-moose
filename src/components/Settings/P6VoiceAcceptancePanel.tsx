@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Volume2, X } from "lucide-react";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { useMooseStore } from "../../stores/mooseStore";
@@ -12,6 +12,9 @@ export const P6VoiceAcceptancePanel: React.FC = () => {
   const [selectedVoice, setSelectedVoice] = useState("Fenrir");
   const [isAuditioning, setIsAuditioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreLauncherFocusRef = useRef(false);
 
   useEffect(() => {
     if (!isSettingsOpen) {
@@ -26,11 +29,35 @@ export const P6VoiceAcceptancePanel: React.FC = () => {
       .catch((reason) => setError(String(reason)));
   }, [isSettingsOpen, settings?.tts_voice]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      if (restoreLauncherFocusRef.current) {
+        launcherRef.current?.focus();
+        restoreLauncherFocusRef.current = false;
+      }
+      return;
+    }
+
+    restoreLauncherFocusRef.current = true;
+    closeButtonRef.current?.focus();
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setIsOpen(false);
+    };
+
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
+  }, [isOpen]);
+
   if (!isSettingsOpen) return null;
 
   if (!isOpen) {
     return (
       <button
+        ref={launcherRef}
         type="button"
         onClick={() => setIsOpen(true)}
         className="fixed right-4 bottom-12 z-[60] px-3 py-1.5 bg-black text-white border-2 border-black rounded font-mono text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
@@ -42,15 +69,20 @@ export const P6VoiceAcceptancePanel: React.FC = () => {
 
   return (
     <section
-      aria-label="P6 Voice Acceptance"
+      role="dialog"
+      aria-labelledby="p6-voice-acceptance-title"
       className="fixed right-4 bottom-12 z-[60] w-80 bg-[#fbf9f5] border-2 border-black rounded p-3 font-mono text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
     >
       <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5 font-bold">
+        <div
+          id="p6-voice-acceptance-title"
+          className="flex items-center gap-1.5 font-bold"
+        >
           <Volume2 className="w-4 h-4" aria-hidden="true" />
           P6 Voice Acceptance
         </div>
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={() => setIsOpen(false)}
           aria-label="Close P6 Voice Acceptance"

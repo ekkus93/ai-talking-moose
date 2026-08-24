@@ -75,3 +75,22 @@ Local frontend acceptance completed before publication: TypeScript, ESLint with 
 - [x] Moose sprite sizing is quantized to integer multiples of its 32×32 source grid when renderer space permits.
 - [x] Removes fractional active-scale animation from the Moose sprite.
 - [x] Enforces pixelated/crisp-edge image and SVG shape rendering for the Moose artwork.
+
+## 2026-08-23 current-master regression audit
+
+A current-master regression audit after P6/P7/P8/P9/P10 found that the accepted onboarding,
+privacy dashboard, tray, quiet-hours, talkativeness, renderer, and focused-window shortcut
+implementations remain intact. The only post-acceptance P11-facing UI addition was the P6 voice
+acceptance overlay layered over Settings.
+
+That overlay exposed one keyboard/accessibility regression: while it was open, `Escape` propagated
+to the parent `MooseWindow` handler and closed the entire Settings experience instead of the active
+voice panel. The regression hardening candidate therefore:
+
+- [x] gives the voice-acceptance overlay explicit dialog semantics and an accessible title;
+- [x] moves focus into the overlay when it opens;
+- [x] scopes `Escape` to the active overlay before the parent Settings shortcut handler;
+- [x] restores focus to the overlay launcher when it closes; and
+- [x] adds a regression test proving Settings remains open when `Escape` dismisses the voice panel.
+
+This P11 regression hardening remains **pending GitHub Actions acceptance**.
