@@ -37,9 +37,11 @@ export const DataTab: React.FC = () => {
               </div>
               <button
                 onClick={() => deleteMemory(m.id)}
+                title={`Forget: ${m.fact}`}
+                aria-label={`Forget memory: ${m.fact}`}
                 className="hover:bg-red-100 p-1 rounded text-red-600"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
           ))

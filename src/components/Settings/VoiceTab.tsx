@@ -1,12 +1,21 @@
-import React, { useState } from "react";
+import React from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { Volume2 } from "lucide-react";
 
-export const VoiceTab: React.FC = () => {
+// Owned by SettingsModalBase so the audition debounce survives a tab switch;
+// held locally it would reset on unmount and allow overlapping playback.
+interface VoiceTabProps {
+  isAuditioning: boolean;
+  setIsAuditioning: (value: boolean) => void;
+}
+
+export const VoiceTab: React.FC<VoiceTabProps> = ({
+  isAuditioning,
+  setIsAuditioning,
+}) => {
   const { settings, updateSettings, inputDevices, outputDevices } =
     useMooseStore();
-  const [isAuditioning, setIsAuditioning] = useState(false);
   if (!settings) return null;
 
   return (

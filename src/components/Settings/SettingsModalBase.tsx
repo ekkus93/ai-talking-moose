@@ -7,7 +7,7 @@ import { BehaviorTab } from "./BehaviorTab";
 import { VoiceTab } from "./VoiceTab";
 import { AsrSettingsPanel } from "./AsrSettingsPanel";
 import { PersonalityTab } from "./PersonalityTab";
-import { AiTab } from "./AiTab";
+import { AiTab, type AiTabTestResult } from "./AiTab";
 import { PrivacyTab } from "./PrivacyTab";
 import { DataTab } from "./DataTab";
 import { DiagnosticsTab } from "./DiagnosticsTab";
@@ -46,6 +46,15 @@ export const SettingsModal: React.FC = () => {
   >("general");
 
   const [googleModels, setGoogleModels] = useState<GoogleModelDescriptor[]>([]);
+
+  // Transient per-tab state lives here, not in the tab components: tabs are
+  // conditionally rendered and unmount on every tab switch, which would discard
+  // a half-typed API key, drop the result of an in-flight connection test, and
+  // reset the voice-audition debounce.
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [testResult, setTestResult] = useState<AiTabTestResult | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [isAuditioning, setIsAuditioning] = useState(false);
 
   useEffect(() => {
     if (isSettingsOpen) {
@@ -131,10 +140,25 @@ export const SettingsModal: React.FC = () => {
         <div className="flex-1 p-4 overflow-y-auto bg-white">
           {activeTab === "general" && <GeneralTab />}
           {activeTab === "behavior" && <BehaviorTab />}
-          {activeTab === "voice" && <VoiceTab />}
+          {activeTab === "voice" && (
+            <VoiceTab
+              isAuditioning={isAuditioning}
+              setIsAuditioning={setIsAuditioning}
+            />
+          )}
           {activeTab === "speech" && <AsrSettingsPanel />}
           {activeTab === "personality" && <PersonalityTab />}
-          {activeTab === "ai" && <AiTab googleModels={googleModels} />}
+          {activeTab === "ai" && (
+            <AiTab
+              googleModels={googleModels}
+              apiKeyInput={apiKeyInput}
+              setApiKeyInput={setApiKeyInput}
+              testResult={testResult}
+              setTestResult={setTestResult}
+              isTesting={isTesting}
+              setIsTesting={setIsTesting}
+            />
+          )}
           {activeTab === "privacy" && <PrivacyTab />}
           {activeTab === "data" && <DataTab />}
           {activeTab === "diagnostics" && <DiagnosticsTab />}

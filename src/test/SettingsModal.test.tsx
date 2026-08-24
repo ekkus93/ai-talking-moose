@@ -234,4 +234,36 @@ describe("SettingsModal Component", () => {
       screen.getByText(/No global keyboard capture is registered/i),
     ).toBeInTheDocument();
   });
+
+  // Tabs unmount when the user switches away, so transient tab state has to be
+  // owned by the modal shell. Held inside a tab it would be silently discarded.
+  it("preserves a half-typed API key across a tab switch", () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Gemini AI"));
+
+    const keyField = screen.getByLabelText(/Google Gemini API Key/i);
+    fireEvent.change(keyField, { target: { value: "AIzaSyPartialDraft" } });
+
+    fireEvent.click(screen.getByText("Privacy"));
+    fireEvent.click(screen.getByText("Gemini AI"));
+
+    expect(screen.getByLabelText(/Google Gemini API Key/i)).toHaveValue(
+      "AIzaSyPartialDraft",
+    );
+  });
+
+  it("keeps a connection-test result visible across a tab switch", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Test Gemini Connection/i }),
+    );
+
+    const banner = await screen.findByText(/Mock API connection successful/i);
+
+    fireEvent.click(screen.getByText("Privacy"));
+    fireEvent.click(screen.getByText("Gemini AI"));
+
+    expect(screen.getByText(banner.textContent as string)).toBeInTheDocument();
+  });
 });

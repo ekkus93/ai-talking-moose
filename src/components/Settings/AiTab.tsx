@@ -1,21 +1,38 @@
-import React, { useState } from "react";
+import React from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
 import type { GoogleModelDescriptor } from "../../types/moose";
 import { CheckCircle, AlertCircle } from "lucide-react";
 
-interface AiTabProps {
-  googleModels: GoogleModelDescriptor[];
+export interface AiTabTestResult {
+  success: boolean;
+  message: string;
 }
 
-export const AiTab: React.FC<AiTabProps> = ({ googleModels }) => {
+// This tab's transient state (draft key, test result, in-flight flag) is owned by
+// SettingsModalBase rather than held locally: tabs unmount when the user switches
+// away, which would otherwise discard a half-typed key and drop the result of a
+// connection test that was still in flight.
+interface AiTabProps {
+  googleModels: GoogleModelDescriptor[];
+  apiKeyInput: string;
+  setApiKeyInput: (value: string) => void;
+  testResult: AiTabTestResult | null;
+  setTestResult: (value: AiTabTestResult | null) => void;
+  isTesting: boolean;
+  setIsTesting: (value: boolean) => void;
+}
+
+export const AiTab: React.FC<AiTabProps> = ({
+  googleModels,
+  apiKeyInput,
+  setApiKeyInput,
+  testResult,
+  setTestResult,
+  isTesting,
+  setIsTesting,
+}) => {
   const { settings, updateSettings } = useMooseStore();
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
 
   if (!settings) return null;
 
