@@ -99,9 +99,7 @@ impl ToolError {
             ToolErrorKind::ConfirmationRequired => {
                 "Tool requires explicit user confirmation before execution."
             }
-            ToolErrorKind::ConcurrencyLimit => {
-                "Tool execution capacity is temporarily exhausted."
-            }
+            ToolErrorKind::ConcurrencyLimit => "Tool execution capacity is temporarily exhausted.",
             ToolErrorKind::Timeout => "Tool execution exceeded its time limit.",
             ToolErrorKind::OutputTooLarge => "Tool output exceeds the allowed size.",
             ToolErrorKind::ExecutionFailed => "Tool execution failed.",
