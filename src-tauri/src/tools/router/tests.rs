@@ -252,7 +252,7 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
         .with_writer(captured.clone())
         .finish();
 
-    tracing::subscriber::with_default(subscriber, || {
+    let unknown_audit = tracing::subscriber::with_default(subscriber, || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -270,7 +270,7 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
                 .unwrap();
 
             let private_unknown_name = format!("unregistered_{SECRET_SENTINEL}");
-            let _ = router
+            let error = router
                 .dispatch(
                     &private_unknown_name,
                     &json!({
@@ -280,8 +280,12 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
                         "secret": SECRET_SENTINEL
                     }),
                 )
-                .await;
-        });
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind, ToolErrorKind::NotFound);
+
+            router.audit_snapshot().last().cloned().unwrap()
+        })
     });
 
     let logs = captured.text();
@@ -300,5 +304,7 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
         );
     }
     assert!(logs.contains("remember_fact"));
-    assert!(logs.contains(UNREGISTERED_AUDIT_NAME));
+    assert!(logs.contains("Tool call rejected"));
+    assert_eq!(unknown_audit.tool_name, UNREGISTERED_AUDIT_NAME);
+    assert_eq!(unknown_audit.result_category, ToolResultCategory::NotFound);
 }
