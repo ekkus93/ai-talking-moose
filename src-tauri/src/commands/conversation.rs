@@ -486,7 +486,10 @@ mod tests {
             .db
             .add_transcript("session", "user", "private transcript")
             .unwrap();
-        app_state.db.set_setting("non_secret_preference", "keep").unwrap();
+        app_state
+            .db
+            .set_setting("non_secret_preference", "keep")
+            .unwrap();
         app_state
             .secrets
             .set_google_api_key("test-api-key".to_string())
