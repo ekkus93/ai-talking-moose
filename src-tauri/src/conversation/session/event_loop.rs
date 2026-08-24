@@ -151,8 +151,8 @@ impl ConversationManager {
                     // echo an untrusted identifier into normal logs here.
                     info!("Handling model tool call");
                     let router = tool_router.clone();
-                    let live_ref = self.live_session.clone();
-                    let generation_ref = self.generation.clone();
+                    let manager_for_tool = self.clone();
+                    let session_id_for_tool = session_id.clone();
                     let provider_error_for_tool = provider_error_callback.clone();
 
                     tauri::async_runtime::spawn(async move {
@@ -160,23 +160,26 @@ impl ConversationManager {
                             |error_value| serde_json::json!({ "error": error_value }),
                         );
 
-                        if generation_ref.load(Ordering::SeqCst) != generation {
-                            return;
-                        }
-                        let mut session_lock = live_ref.lock().await;
-                        if let Some(ref mut live_session) = *session_lock {
-                            if let Err(error_value) = live_session
-                                .send_tool_response(ToolCallResponse {
+                        match manager_for_tool
+                            .send_tool_response_if_current(
+                                generation,
+                                &session_id_for_tool,
+                                ToolCallResponse {
                                     id,
                                     name,
                                     output: result,
-                                })
-                                .await
+                                },
+                            )
+                            .await
+                        {
+                            Ok(_) => {}
+                            Err(error_value)
+                                if manager_for_tool.generation.load(Ordering::SeqCst)
+                                    == generation =>
                             {
-                                if generation_ref.load(Ordering::SeqCst) == generation {
-                                    provider_error_for_tool(error_value);
-                                }
+                                provider_error_for_tool(error_value);
                             }
+                            Err(_) => {}
                         }
                     });
                 }

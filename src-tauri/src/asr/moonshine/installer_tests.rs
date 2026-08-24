@@ -719,3 +719,13 @@ async fn public_delete_is_architecture_scoped_and_idempotent() {
         .unwrap());
     assert!(!tiny.exists());
 }
+
+#[test]
+fn install_operation_locks_are_scoped_per_model() {
+    let tiny_a = install_operation_lock("moonshine-tiny-streaming-en");
+    let tiny_b = install_operation_lock("moonshine-tiny-streaming-en");
+    let small = install_operation_lock("moonshine-small-streaming-en");
+
+    assert!(Arc::ptr_eq(&tiny_a, &tiny_b));
+    assert!(!Arc::ptr_eq(&tiny_a, &small));
+}

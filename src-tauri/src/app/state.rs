@@ -25,6 +25,7 @@ use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -227,9 +228,17 @@ fn migrate_legacy_google_api_key(db: &Database, secrets: &SecretStore) -> Result
     }
 
     if !secrets.has_google_api_key() {
-        secrets.set_google_api_key(trimmed.to_string())?;
+        if let Err(error) = secrets.set_google_api_key(trimmed.to_string()) {
+            // A transient Keychain failure must not brick application startup. Keep
+            // the legacy row as the only known-good copy and retry migration later.
+            warn!(error = %error, "Deferring legacy Google API key migration because the secure store is unavailable");
+            return Ok(());
+        }
         if secrets.get_google_api_key().as_deref() != Some(trimmed) {
-            return Err("secure credential verification failed during migration".to_string());
+            warn!(
+                "Deferring legacy Google API key migration because secure credential verification failed"
+            );
+            return Ok(());
         }
     }
 
@@ -557,21 +566,26 @@ mod tests {
     }
 
     #[test]
-    fn failed_secure_migration_preserves_legacy_plaintext_row() {
-        let db = Database::new_in_memory().unwrap();
+    fn failing_secure_store_during_legacy_migration_does_not_abort_startup() {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let db = Database::new(&path).unwrap();
         db.seed_legacy_setting_for_test(LEGACY_GOOGLE_API_KEY_SETTING, "AIzaSyOnlyCopyMustSurvive")
             .unwrap();
+        drop(db);
 
         let secret_store = SecretStore::with_backend(Arc::new(RejectWriteBackend)).unwrap();
-        let result = migrate_legacy_google_api_key(&db, &secret_store);
+        let state = AppState::new_with_secret_store(Some(&path), secret_store)
+            .expect("transient secure-store migration failure must not abort startup");
 
-        assert!(result.is_err());
         assert_eq!(
-            db.get_setting(LEGACY_GOOGLE_API_KEY_SETTING)
+            state
+                .db
+                .get_setting(LEGACY_GOOGLE_API_KEY_SETTING)
                 .unwrap()
                 .as_deref(),
             Some("AIzaSyOnlyCopyMustSurvive")
         );
-        assert!(!secret_store.has_google_api_key());
+        assert!(!state.secrets.has_google_api_key());
     }
 }

@@ -101,6 +101,29 @@ impl std::fmt::Display for ProviderError {
 
 impl std::error::Error for ProviderError {}
 
+/// Delivery lifecycle for one outbound Gemini Live message.
+///
+/// `Queued` is the public LiveSession success boundary: the message has been accepted by the
+/// bounded local queue. `Written` means the WebSocket sink accepted the frame; it does not imply
+/// an application-level acknowledgement from Gemini.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveOutboundDeliveryState {
+    Queued,
+    Written,
+    Retried,
+    TerminallyFailed,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveOutboundDiagnostics {
+    pub queued: u64,
+    pub written: u64,
+    pub retried: u64,
+    pub dropped: u64,
+    pub terminally_failed: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiveSessionConfig {
     pub model: String,

@@ -9,11 +9,18 @@ use crate::character::state::CharacterState;
 use crate::tools::router::ToolRouter;
 use parking_lot::{Mutex as SyncMutex, RwLock};
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{mpsc, Mutex as AsyncMutex};
 use tracing::warn;
 use uuid::Uuid;
+
+#[cfg(not(test))]
+const PROVIDER_OPERATION_TIMEOUT: Duration = Duration::from_secs(8);
+#[cfg(test)]
+const PROVIDER_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);
 
 mod event_loop;
 mod local_asr;
@@ -190,6 +197,14 @@ impl ConversationManager {
         self.local_asr.clone()
     }
 
+    pub async fn live_outbound_diagnostics(&self) -> Option<LiveOutboundDiagnostics> {
+        self.live_session
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|session| session.outbound_diagnostics())
+    }
+
     pub async fn local_asr_callback_is_current(&self, generation: u64) -> bool {
         self.is_active()
             && self.generation.load(Ordering::SeqCst) == generation
@@ -219,8 +234,26 @@ impl ConversationManager {
         }
     }
 
+    fn provider_timeout_error() -> ProviderError {
+        ProviderError {
+            kind: ProviderErrorKind::Network,
+            message: "The conversation provider did not respond before the operation timeout."
+                .to_string(),
+            retryable: true,
+        }
+    }
+
+    async fn bounded_provider_operation<T, F>(operation: F) -> Result<T, ProviderError>
+    where
+        F: Future<Output = Result<T, ProviderError>>,
+    {
+        tokio::time::timeout(PROVIDER_OPERATION_TIMEOUT, operation)
+            .await
+            .map_err(|_| Self::provider_timeout_error())?
+    }
+
     async fn close_provisional_session(session: &mut Box<dyn LiveSession>) {
-        if let Err(error_value) = session.close().await {
+        if let Err(error_value) = Self::bounded_provider_operation(session.close()).await {
             warn!(
                 kind = ?error_value.kind,
                 "Failed to close provisional conversation session"
@@ -228,12 +261,12 @@ impl ConversationManager {
         }
     }
 
-    async fn shutdown_locked(
+    async fn begin_shutdown_locked(
         &self,
         capture: Arc<SyncMutex<AudioCapture>>,
         playback: Arc<AudioPlayback>,
         final_lifecycle: ConversationLifecycle,
-    ) {
+    ) -> Option<Box<dyn LiveSession>> {
         let lifecycle_callback = self.lifecycle_callback.lock().clone();
         self.generation.fetch_add(1, Ordering::SeqCst);
         self.is_in_conversation.store(false, Ordering::SeqCst);
@@ -250,15 +283,7 @@ impl ConversationManager {
         self.stop_local_asr_for_shutdown(active_asr_mode, &capture)
             .await;
 
-        let mut session_lock = self.live_session.lock().await;
-        if let Some(mut session) = session_lock.take() {
-            if let Err(error_value) = session.close().await {
-                warn!(
-                    kind = ?error_value.kind,
-                    "Failed to close conversation session"
-                );
-            }
-        }
+        let session = self.live_session.lock().await.take();
         *self.active_session_id.lock() = None;
         *self.active_asr_mode.lock() = None;
         Self::set_lifecycle(
@@ -269,6 +294,18 @@ impl ConversationManager {
         *self.state_callback.lock() = None;
         *self.lifecycle_callback.lock() = None;
         *self.transcript_callback.lock() = None;
+        session
+    }
+
+    async fn close_detached_session(mut session: Option<Box<dyn LiveSession>>) {
+        if let Some(ref mut session) = session {
+            if let Err(error_value) = Self::bounded_provider_operation(session.close()).await {
+                warn!(
+                    kind = ?error_value.kind,
+                    "Failed to close conversation session"
+                );
+            }
+        }
     }
 
     async fn shutdown_if_generation_current(
@@ -278,30 +315,66 @@ impl ConversationManager {
         playback: Arc<AudioPlayback>,
         final_lifecycle: ConversationLifecycle,
     ) -> bool {
-        let _operation_guard = self.operation_lock.lock().await;
+        let operation_guard = self.operation_lock.lock().await;
         if self.generation.load(Ordering::SeqCst) != expected_generation {
             return false;
         }
 
-        self.shutdown_locked(capture, playback, final_lifecycle)
+        let session = self
+            .begin_shutdown_locked(capture, playback, final_lifecycle)
             .await;
+        drop(operation_guard);
+        Self::close_detached_session(session).await;
         true
     }
 
     async fn forward_microphone_chunk(
         &self,
+        expected_generation: u64,
         asr_mode: AsrMode,
         chunk: &[u8],
-    ) -> Result<(), ProviderError> {
+    ) -> Result<bool, ProviderError> {
         if asr_mode != AsrMode::GeminiLiveAudio {
-            return Ok(());
+            return Ok(false);
         }
 
+        // The session mutex is the replacement boundary: start/stop cannot swap the LiveSession
+        // between this final generation check and send acceptance. Provider I/O is bounded below,
+        // so teardown can wait on this mutex only for a finite interval.
         let mut session_lock = self.live_session.lock().await;
-        match session_lock.as_mut() {
-            Some(live_session) => live_session.send_audio_chunk(chunk).await,
-            None => Err(ProviderError::from_kind(ProviderErrorKind::Closed)),
+        if !self.is_in_conversation.load(Ordering::SeqCst)
+            || self.generation.load(Ordering::SeqCst) != expected_generation
+            || *self.active_asr_mode.lock() != Some(AsrMode::GeminiLiveAudio)
+        {
+            return Ok(false);
         }
+        let Some(live_session) = session_lock.as_mut() else {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
+        };
+        Self::bounded_provider_operation(live_session.send_audio_chunk(chunk)).await?;
+        Ok(true)
+    }
+
+    pub(super) async fn send_tool_response_if_current(
+        &self,
+        expected_generation: u64,
+        expected_session_id: &str,
+        response: ToolCallResponse,
+    ) -> Result<bool, ProviderError> {
+        // As with microphone forwarding, the final identity check occurs while holding the slot
+        // that start/stop must acquire to replace the provider session.
+        let mut session_lock = self.live_session.lock().await;
+        if !self.is_in_conversation.load(Ordering::SeqCst)
+            || self.generation.load(Ordering::SeqCst) != expected_generation
+            || self.active_session_id.lock().as_deref() != Some(expected_session_id)
+        {
+            return Ok(false);
+        }
+        let Some(live_session) = session_lock.as_mut() else {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
+        };
+        Self::bounded_provider_operation(live_session.send_tool_response(response)).await?;
+        Ok(true)
     }
 
     fn accept_user_transcript(
@@ -341,9 +414,6 @@ impl ConversationManager {
             return Ok(false);
         }
 
-        // Serialize the final-turn handoff with start/stop/barge-in so a callback that was
-        // current at admission cannot race teardown and land in a replacement Live session.
-        let _operation_guard = self.operation_lock.lock().await;
         if !self.is_in_conversation.load(Ordering::SeqCst)
             || self.generation.load(Ordering::SeqCst) != generation
             || !self.local_asr.accepts_callback(generation).await
@@ -372,7 +442,20 @@ impl ConversationManager {
             .clone()
             .ok_or(ProviderError::from_kind(ProviderErrorKind::Internal))?;
 
+        // Acquire the replaceable session slot, then revalidate identity immediately before the
+        // provider call. A stale callback may keep running after Stop, but it can never acquire a
+        // replacement generation and send into that newer session.
         let mut session_lock = self.live_session.lock().await;
+        if !self.is_in_conversation.load(Ordering::SeqCst)
+            || self.generation.load(Ordering::SeqCst) != generation
+            || self.active_session_id.lock().as_deref() != Some(expected_session_id)
+            || !matches!(
+                *self.active_asr_mode.lock(),
+                Some(AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming)
+            )
+        {
+            return Ok(false);
+        }
         let Some(live_session) = session_lock.as_mut() else {
             return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
         };
@@ -386,23 +469,11 @@ impl ConversationManager {
             &lifecycle_callback,
             &transcript_callback,
         );
-        live_session.send_text_turn(&text).await?;
+        Self::bounded_provider_operation(live_session.send_text_turn(&text)).await?;
         Ok(true)
     }
 
     pub async fn start_session(&self, request: ConversationStartRequest) -> Result<String, String> {
-        let _operation_guard = self.operation_lock.lock().await;
-        self.shutdown_locked(
-            request.capture.clone(),
-            request.playback.clone(),
-            ConversationLifecycle::Idle,
-        )
-        .await;
-
-        if *request.muted.read() {
-            return Err("Moose is currently muted".to_string());
-        }
-
         let ConversationStartRequest {
             provider,
             config,
@@ -412,7 +483,7 @@ impl ConversationManager {
             input_device,
             playback,
             output_device,
-            muted: _,
+            muted,
             tool_router,
             callbacks,
         } = request;
@@ -424,6 +495,29 @@ impl ConversationManager {
             speech_bubble: speech_bubble_callback,
             input_level: input_level_callback,
         } = callbacks;
+
+        // Invalidate and detach any prior session while serialized, but close its provider handle
+        // only after releasing the global operation lock. If Stop races that close it increments
+        // generation, and this start notices the invalidation before doing any new provider I/O.
+        let operation_guard = self.operation_lock.lock().await;
+        let previous_session = self
+            .begin_shutdown_locked(
+                capture.clone(),
+                playback.clone(),
+                ConversationLifecycle::Idle,
+            )
+            .await;
+        let teardown_generation = self.generation.load(Ordering::SeqCst);
+        drop(operation_guard);
+        Self::close_detached_session(previous_session).await;
+
+        let operation_guard = self.operation_lock.lock().await;
+        if self.generation.load(Ordering::SeqCst) != teardown_generation {
+            return Err("Conversation start was cancelled".to_string());
+        }
+        if *muted.read() {
+            return Err("Moose is currently muted".to_string());
+        }
 
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let session_id = Uuid::new_v4().to_string();
@@ -453,7 +547,24 @@ impl ConversationManager {
         let input_sample_rate = config.sample_rate_in;
         let output_sample_rate = config.sample_rate_out;
         let (server_ev_tx, server_ev_rx) = mpsc::channel::<LiveServerEvent>(64);
-        let mut session = match provider.connect(config, server_ev_tx).await {
+        drop(operation_guard);
+
+        // connect() is intentionally outside operation_lock. A concurrent Stop can invalidate
+        // generation immediately; timeout bounds providers that do not cooperate with cancellation.
+        let connect_result =
+            Self::bounded_provider_operation(provider.connect(config, server_ev_tx)).await;
+
+        let operation_guard = self.operation_lock.lock().await;
+        if self.generation.load(Ordering::SeqCst) != generation {
+            drop(operation_guard);
+            if let Ok(mut session) = connect_result {
+                Self::close_provisional_session(&mut session).await;
+            }
+            Self::stop_provisional_local_asr(&mut local_pipeline).await;
+            return Err("Conversation start was cancelled".to_string());
+        }
+
+        let mut session = match connect_result {
             Ok(session) => session,
             Err(error_value) => {
                 Self::stop_provisional_local_asr(&mut local_pipeline).await;
@@ -469,7 +580,6 @@ impl ConversationManager {
         };
 
         if let Err(error_value) = playback.start(output_device) {
-            Self::close_provisional_session(&mut session).await;
             Self::stop_provisional_local_asr(&mut local_pipeline).await;
             playback.flush();
             Self::set_lifecycle(
@@ -478,6 +588,8 @@ impl ConversationManager {
                 Some(&lifecycle_callback),
             );
             state_callback(CharacterState::Error);
+            drop(operation_guard);
+            Self::close_provisional_session(&mut session).await;
             return Err(format!("failed to start audio output: {error_value}"));
         }
 
@@ -509,7 +621,6 @@ impl ConversationManager {
         if let Err(error_value) = capture_result {
             capture.lock().stop();
             playback.flush();
-            Self::close_provisional_session(&mut session).await;
             Self::stop_provisional_local_asr(&mut local_pipeline).await;
             Self::set_lifecycle(
                 &self.lifecycle,
@@ -517,6 +628,8 @@ impl ConversationManager {
                 Some(&lifecycle_callback),
             );
             state_callback(CharacterState::Error);
+            drop(operation_guard);
+            Self::close_provisional_session(&mut session).await;
             return Err(error_value);
         }
 
@@ -526,13 +639,14 @@ impl ConversationManager {
                     .remember_error(asr_mode, error.clone());
                 capture.lock().stop();
                 playback.flush();
-                Self::close_provisional_session(&mut session).await;
                 Self::set_lifecycle(
                     &self.lifecycle,
                     ConversationLifecycle::Failed,
                     Some(&lifecycle_callback),
                 );
                 state_callback(CharacterState::Error);
+                drop(operation_guard);
+                Self::close_provisional_session(&mut session).await;
                 return Err(error.message);
             }
         }
@@ -550,6 +664,7 @@ impl ConversationManager {
             Some(&lifecycle_callback),
         );
         state_callback(CharacterState::Listening);
+        drop(operation_guard);
 
         if let Some(mut pcm_rx) = cloud_pcm_rx {
             let manager_for_pcm = self.clone();
@@ -566,7 +681,7 @@ impl ConversationManager {
                     }
 
                     let send_error = manager_for_pcm
-                        .forward_microphone_chunk(asr_mode, &chunk)
+                        .forward_microphone_chunk(generation, asr_mode, &chunk)
                         .await
                         .err();
 
@@ -630,17 +745,22 @@ impl ConversationManager {
     }
 
     pub async fn barge_in(&self, playback: Arc<AudioPlayback>) -> Result<(), String> {
-        let _operation_guard = self.operation_lock.lock().await;
+        let operation_guard = self.operation_lock.lock().await;
         if !self.is_active() {
             return Ok(());
         }
 
+        let generation = self.generation.load(Ordering::SeqCst);
         playback.flush();
         self.output_suppressed.store(true, Ordering::SeqCst);
+        drop(operation_guard);
+
         let mut session_lock = self.live_session.lock().await;
+        if !self.is_active() || self.generation.load(Ordering::SeqCst) != generation {
+            return Ok(());
+        }
         if let Some(ref mut session) = *session_lock {
-            session
-                .interrupt()
+            Self::bounded_provider_operation(session.interrupt())
                 .await
                 .map_err(|error| error.to_string())?;
         }
@@ -652,9 +772,12 @@ impl ConversationManager {
         capture: Arc<SyncMutex<AudioCapture>>,
         playback: Arc<AudioPlayback>,
     ) {
-        let _operation_guard = self.operation_lock.lock().await;
-        self.shutdown_locked(capture, playback, ConversationLifecycle::Idle)
+        let operation_guard = self.operation_lock.lock().await;
+        let session = self
+            .begin_shutdown_locked(capture, playback, ConversationLifecycle::Idle)
             .await;
+        drop(operation_guard);
+        Self::close_detached_session(session).await;
     }
 
     pub async fn shutdown_application(
@@ -662,9 +785,12 @@ impl ConversationManager {
         capture: Arc<SyncMutex<AudioCapture>>,
         playback: Arc<AudioPlayback>,
     ) {
-        let _operation_guard = self.operation_lock.lock().await;
-        self.shutdown_locked(capture, playback.clone(), ConversationLifecycle::Idle)
+        let operation_guard = self.operation_lock.lock().await;
+        let session = self
+            .begin_shutdown_locked(capture, playback.clone(), ConversationLifecycle::Idle)
             .await;
+        drop(operation_guard);
+        Self::close_detached_session(session).await;
         playback.stop();
     }
 }

@@ -17,12 +17,24 @@ impl GoogleAuth {
     }
 
     pub fn masked_key(&self) -> String {
-        if self.api_key.len() <= 8 {
-            "********".to_string()
-        } else {
-            let prefix = &self.api_key[..4];
-            let suffix = &self.api_key[self.api_key.len() - 4..];
-            format!("{}...{}", prefix, suffix)
+        if self.api_key.chars().count() <= 8 {
+            return "********".to_string();
         }
+
+        let prefix: String = self.api_key.chars().take(4).collect();
+        let suffix_chars: Vec<char> = self.api_key.chars().rev().take(4).collect();
+        let suffix: String = suffix_chars.into_iter().rev().collect();
+        format!("{prefix}...{suffix}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn masked_key_uses_character_boundaries_for_non_ascii_keys() {
+        let auth = GoogleAuth::new("密钥ABCD1234終".to_string());
+        assert_eq!(auth.masked_key(), "密钥AB...234終");
     }
 }

@@ -1,4 +1,14 @@
 impl Database {
+    fn connection(&self) -> MutexGuard<'_, Connection> {
+        match self.conn.lock() {
+            Ok(conn) => conn,
+            Err(poisoned) => {
+                warn!("Recovering SQLite connection after a poisoned database mutex");
+                poisoned.into_inner()
+            }
+        }
+    }
+
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
         let mut conn = Connection::open(path)?;
@@ -23,7 +33,7 @@ impl Database {
     }
 
     pub fn schema_version(&self) -> Result<u32> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         read_schema_version(&conn)
     }
 
@@ -34,7 +44,7 @@ impl Database {
             return Err(rusqlite::Error::InvalidParameterName(key.to_string()));
         }
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         conn.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = ?2",
@@ -44,7 +54,7 @@ impl Database {
     }
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = ?1")?;
         let mut rows = stmt.query(params![key])?;
         if let Some(row) = rows.next()? {
@@ -55,14 +65,14 @@ impl Database {
     }
 
     pub fn delete_setting(&self, key: &str) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         let affected = conn.execute("DELETE FROM settings WHERE key = ?1", params![key])?;
         Ok(affected > 0)
     }
 
     #[cfg(test)]
     pub(crate) fn seed_legacy_setting_for_test(&self, key: &str, value: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         conn.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = ?2",
@@ -76,7 +86,7 @@ impl Database {
     pub fn add_memory(&self, fact: &str, category: &str) -> Result<i64> {
         let fact = bounded_text(fact, "memory fact", MAX_MEMORY_FACT_CHARS)?;
         let category = bounded_text(category, "memory category", MAX_METADATA_CHARS)?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
 
         let existing = conn
             .query_row(
@@ -116,7 +126,7 @@ impl Database {
     }
 
     pub fn get_memories(&self) -> Result<Vec<MemoryRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         let mut stmt = conn.prepare(
             "SELECT id, fact, category, source, confidence, created_at,
                     COALESCE(updated_at, created_at)
@@ -134,7 +144,7 @@ impl Database {
         }
         let bounded_limit =
             i64::try_from(bounded_limit).map_err(|_| rusqlite::Error::InvalidQuery)?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         let mut stmt = conn.prepare(
             "SELECT id, fact, category, source, confidence, created_at,
                     COALESCE(updated_at, created_at)
@@ -147,7 +157,7 @@ impl Database {
     }
 
     pub fn delete_memory(&self, id: i64) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         let affected = conn.execute("DELETE FROM memories WHERE id = ?1", params![id])?;
         Ok(affected > 0)
     }
@@ -162,7 +172,7 @@ impl Database {
             ));
         }
         let text = bounded_text(text, "transcript text", MAX_TRANSCRIPT_TEXT_CHARS)?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
 
         let latest = conn
             .query_row(
@@ -207,7 +217,7 @@ impl Database {
     }
 
     pub fn clear_transcripts(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         conn.execute("DELETE FROM conversation_history", [])?;
         Ok(())
     }
@@ -219,7 +229,7 @@ impl Database {
         let bounded_limit = limit.min(MAX_TRANSCRIPT_QUERY_LIMIT);
         let bounded_limit =
             i64::try_from(bounded_limit).map_err(|_| rusqlite::Error::InvalidQuery)?;
-        let conn = self.conn.lock().unwrap();
+        let conn = self.connection();
         let mut stmt = conn.prepare(
             "SELECT id, session_id, role, text, created_at
              FROM (
@@ -251,7 +261,7 @@ impl Database {
     // --- Forget Everything ---
 
     pub fn forget_everything(&self) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.connection();
         let tx = conn.transaction()?;
         tx.execute("DELETE FROM memories", [])?;
         tx.execute("DELETE FROM conversation_history", [])?;

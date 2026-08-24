@@ -29,6 +29,11 @@ pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 8;
 
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
+#[cfg(not(test))]
+const WORKER_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const WORKER_STARTUP_TIMEOUT: Duration = Duration::from_millis(250);
+
 /// Provider-neutral event emitted by the dedicated local-ASR inference worker.
 pub type LocalAsrPipelineEvent = AsrEvent;
 
@@ -108,6 +113,7 @@ impl LocalAsrPipeline {
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
             },
             event_callback,
+            None,
         )
         .await
     }
@@ -125,6 +131,7 @@ impl LocalAsrPipeline {
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
             },
             event_callback,
+            None,
         )
         .await
     }
@@ -229,6 +236,25 @@ impl LocalAsrPipeline {
             MoonshineModelArchitecture::TinyStreaming,
             factory,
             event_callback,
+            None,
+        )
+        .await
+    }
+
+    #[cfg(test)]
+    async fn start_with_factory_and_reaper_probe<F>(
+        factory: F,
+        event_callback: LocalAsrPipelineEventCallback,
+        reaped_probe: Arc<AtomicBool>,
+    ) -> Result<Self, AsrError>
+    where
+        F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
+    {
+        Self::start_architecture(
+            MoonshineModelArchitecture::TinyStreaming,
+            factory,
+            event_callback,
+            Some(reaped_probe),
         )
         .await
     }
@@ -237,6 +263,7 @@ impl LocalAsrPipeline {
         architecture: MoonshineModelArchitecture,
         factory: F,
         event_callback: LocalAsrPipelineEventCallback,
+        startup_reaped_probe: Option<Arc<AtomicBool>>,
     ) -> Result<Self, AsrError>
     where
         F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
@@ -264,6 +291,9 @@ impl LocalAsrPipeline {
                         return Err(error);
                     }
                 };
+                if worker_stop.load(Ordering::SeqCst) {
+                    return engine.stop();
+                }
                 worker_metrics.lock().mark_engine_ready();
 
                 if engine.input_sample_rate_hz() != MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ {
@@ -301,8 +331,13 @@ impl LocalAsrPipeline {
                 retryable: true,
             })?;
 
-        match ready_rx.await {
-            Ok(Ok(())) => {
+        let mut startup_worker = StartupWorkerGuard::new(
+            worker,
+            stop_requested.clone(),
+            startup_reaped_probe,
+        );
+        match tokio::time::timeout(WORKER_STARTUP_TIMEOUT, ready_rx).await {
+            Ok(Ok(Ok(()))) => {
                 let pipeline = Self {
                     architecture,
                     input_sample_rate_hz: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
@@ -310,7 +345,7 @@ impl LocalAsrPipeline {
                     running,
                     stop_requested,
                     metrics,
-                    worker: Some(worker),
+                    worker: Some(startup_worker.take_worker()),
                 };
                 let diagnostics = pipeline.diagnostics();
                 debug!(
@@ -324,14 +359,15 @@ impl LocalAsrPipeline {
                 );
                 Ok(pipeline)
             }
-            Ok(Err(error)) => {
-                join_finished_startup_worker(worker).await?;
+            Ok(Ok(Err(error))) => {
+                join_finished_startup_worker(startup_worker.take_worker()).await?;
                 Err(error)
             }
-            Err(_) => {
-                join_finished_startup_worker(worker).await?;
+            Ok(Err(_)) => {
+                join_finished_startup_worker(startup_worker.take_worker()).await?;
                 Err(worker_join_error())
             }
+            Err(_) => Err(worker_startup_timeout_error()),
         }
     }
 
@@ -362,6 +398,75 @@ impl Drop for LocalAsrPipeline {
             let _ = worker.join();
         }
         self.running.store(false, Ordering::SeqCst);
+    }
+}
+
+struct StartupWorkerGuard {
+    worker: Option<JoinHandle<Result<(), AsrError>>>,
+    stop_requested: Arc<AtomicBool>,
+    reaped_probe: Option<Arc<AtomicBool>>,
+}
+
+impl StartupWorkerGuard {
+    fn new(
+        worker: JoinHandle<Result<(), AsrError>>,
+        stop_requested: Arc<AtomicBool>,
+        reaped_probe: Option<Arc<AtomicBool>>,
+    ) -> Self {
+        Self {
+            worker: Some(worker),
+            stop_requested,
+            reaped_probe,
+        }
+    }
+
+    fn take_worker(&mut self) -> JoinHandle<Result<(), AsrError>> {
+        self.worker
+            .take()
+            .expect("startup worker ownership must be available exactly once")
+    }
+}
+
+impl Drop for StartupWorkerGuard {
+    fn drop(&mut self) {
+        let Some(worker) = self.worker.take() else {
+            return;
+        };
+        self.stop_requested.store(true, Ordering::SeqCst);
+        reap_cancelled_startup_worker(worker, self.reaped_probe.clone());
+    }
+}
+
+fn reap_cancelled_startup_worker(
+    worker: JoinHandle<Result<(), AsrError>>,
+    reaped_probe: Option<Arc<AtomicBool>>,
+) {
+    // Keep the JoinHandle owned after an async startup future is cancelled. The
+    // dedicated reaper may block until a native factory call returns, without
+    // blocking a Tokio worker thread or detaching the Moonshine inference thread.
+    let worker_slot = Arc::new(Mutex::new(Some(worker)));
+    let reaper_slot = worker_slot.clone();
+    let reaper_probe = reaped_probe.clone();
+    let spawn_result = thread::Builder::new()
+        .name("moonshine-startup-reaper".to_string())
+        .spawn(move || {
+            if let Some(worker) = reaper_slot.lock().take() {
+                let _ = worker.join();
+            }
+            if let Some(probe) = reaper_probe {
+                probe.store(true, Ordering::SeqCst);
+            }
+        });
+
+    if spawn_result.is_err() {
+        // Thread creation failure is exceptional, but even here do not detach the
+        // inference worker: synchronously join as the fail-closed fallback.
+        if let Some(worker) = worker_slot.lock().take() {
+            let _ = worker.join();
+        }
+        if let Some(probe) = reaped_probe {
+            probe.store(true, Ordering::SeqCst);
+        }
     }
 }
 
@@ -492,6 +597,15 @@ fn worker_join_error() -> AsrError {
     AsrError {
         kind: AsrErrorKind::Internal,
         message: "The Moonshine inference worker terminated unexpectedly.".to_string(),
+        retryable: true,
+    }
+}
+
+fn worker_startup_timeout_error() -> AsrError {
+    AsrError {
+        kind: AsrErrorKind::RuntimeUnavailable,
+        message: "Moonshine inference worker did not become ready before the startup timeout."
+            .to_string(),
         retryable: true,
     }
 }

@@ -11,18 +11,21 @@ async fn moonshine_mode_never_calls_provider_audio_upload_api() {
     }));
 
     manager
-        .forward_microphone_chunk(AsrMode::MoonshineTinyStreaming, &[1, 2, 3, 4])
+        .forward_microphone_chunk(0, AsrMode::MoonshineTinyStreaming, &[1, 2, 3, 4])
         .await
         .unwrap();
     manager
-        .forward_microphone_chunk(AsrMode::MoonshineSmallStreaming, &[5, 6, 7, 8])
+        .forward_microphone_chunk(0, AsrMode::MoonshineSmallStreaming, &[5, 6, 7, 8])
         .await
         .unwrap();
 
     assert_eq!(audio_upload_count.load(AtomicOrdering::SeqCst), 0);
 
+    manager.generation.store(1, Ordering::SeqCst);
+    manager.is_in_conversation.store(true, Ordering::SeqCst);
+    *manager.active_asr_mode.lock() = Some(AsrMode::GeminiLiveAudio);
     manager
-        .forward_microphone_chunk(AsrMode::GeminiLiveAudio, &[9, 10])
+        .forward_microphone_chunk(1, AsrMode::GeminiLiveAudio, &[9, 10])
         .await
         .unwrap();
     assert_eq!(audio_upload_count.load(AtomicOrdering::SeqCst), 1);

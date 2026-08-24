@@ -8,8 +8,8 @@ use crate::ai::google::protocol::{
 };
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::{
-    LiveServerEvent, LiveSessionConfig, ProviderError, ProviderErrorKind, ToolCallResponse,
-    TranscriptUpdate,
+    LiveOutboundDeliveryState, LiveOutboundDiagnostics, LiveServerEvent, LiveSessionConfig,
+    ProviderError, ProviderErrorKind, ToolCallResponse, TranscriptUpdate,
 };
 use async_trait::async_trait;
 use base64::Engine;
@@ -17,13 +17,14 @@ use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde_json::json;
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::{Error as WebSocketError, Message};
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
@@ -33,11 +34,71 @@ const MAX_RECONNECT_ELAPSED: Duration = Duration::from_secs(20);
 const BASE_RECONNECT_DELAY_MS: u64 = 250;
 const MAX_RECONNECT_DELAY_MS: u64 = 2_000;
 const MAX_RECONNECT_JITTER_MS: u64 = 125;
+const OUTBOUND_QUEUE_CAPACITY: usize = 64;
 
 type GeminiSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub struct GoogleLiveProvider {
     auth: GoogleAuth,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutboundKind {
+    Audio,
+    TextTurn,
+    ToolResponse,
+    Close,
+}
+
+#[derive(Debug, Clone)]
+struct OutboundEnvelope {
+    message: Message,
+    kind: OutboundKind,
+}
+
+impl OutboundEnvelope {
+    fn new(message: Message, kind: OutboundKind) -> Self {
+        Self { message, kind }
+    }
+
+    fn is_close(&self) -> bool {
+        self.kind == OutboundKind::Close
+    }
+}
+
+#[derive(Default)]
+struct LiveOutboundDiagnosticsStore {
+    queued: AtomicU64,
+    written: AtomicU64,
+    retried: AtomicU64,
+    dropped: AtomicU64,
+    terminally_failed: AtomicU64,
+}
+
+impl LiveOutboundDiagnosticsStore {
+    fn record(&self, state: LiveOutboundDeliveryState) {
+        let counter = match state {
+            LiveOutboundDeliveryState::Queued => &self.queued,
+            LiveOutboundDeliveryState::Written => &self.written,
+            LiveOutboundDeliveryState::Retried => &self.retried,
+            LiveOutboundDeliveryState::TerminallyFailed => &self.terminally_failed,
+        };
+        counter.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn record_drop(&self) {
+        self.dropped.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn snapshot(&self) -> LiveOutboundDiagnostics {
+        LiveOutboundDiagnostics {
+            queued: self.queued.load(Ordering::SeqCst),
+            written: self.written.load(Ordering::SeqCst),
+            retried: self.retried.load(Ordering::SeqCst),
+            dropped: self.dropped.load(Ordering::SeqCst),
+            terminally_failed: self.terminally_failed.load(Ordering::SeqCst),
+        }
+    }
 }
 
 impl GoogleLiveProvider {
@@ -423,41 +484,16 @@ fn reconnect_delay(attempt: u32, jitter_ms: u64) -> Duration {
     Duration::from_millis(base.min(MAX_RECONNECT_DELAY_MS) + jitter_ms.min(MAX_RECONNECT_JITTER_MS))
 }
 
-fn drain_disconnected_messages(
-    receiver: &mut mpsc::Receiver<Message>,
-    is_active: &AtomicBool,
-) -> bool {
-    while let Ok(message) = receiver.try_recv() {
-        if matches!(message, Message::Close(_)) {
-            is_active.store(false, Ordering::SeqCst);
-            return false;
-        }
-    }
-    is_active.load(Ordering::SeqCst)
-}
-
 async fn await_reconnect_attempt<T, F>(
     attempt: F,
-    receiver: &mut mpsc::Receiver<Message>,
-    is_active: &AtomicBool,
+    cancellation: &CancellationToken,
 ) -> Result<T, ProviderError>
 where
     F: Future<Output = Result<T, ProviderError>>,
 {
-    tokio::pin!(attempt);
-    loop {
-        tokio::select! {
-            result = &mut attempt => return result,
-            outbound = receiver.recv() => {
-                match outbound {
-                    Some(Message::Close(_)) | None => {
-                        is_active.store(false, Ordering::SeqCst);
-                        return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
-                    }
-                    Some(_) => {}
-                }
-            }
-        }
+    tokio::select! {
+        result = attempt => result,
+        () = cancellation.cancelled() => Err(ProviderError::from_kind(ProviderErrorKind::Closed)),
     }
 }
 
@@ -465,52 +501,36 @@ async fn reconnect(
     api_key: &str,
     config: &LiveSessionConfig,
     resume_handle: Option<&str>,
-    receiver: &mut mpsc::Receiver<Message>,
     is_active: &AtomicBool,
+    cancellation: &CancellationToken,
 ) -> Result<GeminiSocket, ProviderError> {
     let started = Instant::now();
     let mut last_error = ProviderError::from_kind(ProviderErrorKind::Network);
     for attempt in 1..=MAX_RECONNECT_ATTEMPTS {
-        if !is_active.load(Ordering::SeqCst) || started.elapsed() >= MAX_RECONNECT_ELAPSED {
+        if !is_active.load(Ordering::SeqCst)
+            || cancellation.is_cancelled()
+            || started.elapsed() >= MAX_RECONNECT_ELAPSED
+        {
             break;
-        }
-        if !drain_disconnected_messages(receiver, is_active) {
-            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
         }
         let jitter = rand::thread_rng().gen_range(0..=MAX_RECONNECT_JITTER_MS);
         let delay = reconnect_delay(attempt, jitter);
-        let sleep = tokio::time::sleep(delay);
-        tokio::pin!(sleep);
-        loop {
-            tokio::select! {
-                () = &mut sleep => break,
-                outbound = receiver.recv() => {
-                    match outbound {
-                        Some(Message::Close(_)) | None => {
-                            is_active.store(false, Ordering::SeqCst);
-                            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
-                        }
-                        Some(_) => {}
-                    }
-                }
+        tokio::select! {
+            () = tokio::time::sleep(delay) => {}
+            () = cancellation.cancelled() => {
+                return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
             }
         }
 
         let reconnect_result = await_reconnect_attempt(
             open_and_setup(api_key, config, resume_handle),
-            receiver,
-            is_active,
+            cancellation,
         )
         .await;
         match reconnect_result {
-            Ok(socket) => {
-                if !drain_disconnected_messages(receiver, is_active) {
-                    return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
-                }
-                return Ok(socket);
-            }
+            Ok(socket) => return Ok(socket),
             Err(error) => {
-                if !is_active.load(Ordering::SeqCst) {
+                if !is_active.load(Ordering::SeqCst) || cancellation.is_cancelled() {
                     return Err(error);
                 }
                 if !error.retryable {
@@ -523,68 +543,147 @@ async fn reconnect(
     Err(last_error)
 }
 
+fn retain_for_retry(
+    pending_outbound: &mut Option<OutboundEnvelope>,
+    envelope: OutboundEnvelope,
+    diagnostics: &LiveOutboundDiagnosticsStore,
+) {
+    debug_assert!(!envelope.is_close());
+    diagnostics.record(LiveOutboundDeliveryState::Retried);
+    *pending_outbound = Some(envelope);
+}
+
+fn record_terminal_outbound_failures(
+    pending_outbound: &mut Option<OutboundEnvelope>,
+    receiver: &mut mpsc::Receiver<OutboundEnvelope>,
+    diagnostics: &LiveOutboundDiagnosticsStore,
+) -> usize {
+    let mut failed = 0;
+    if let Some(envelope) = pending_outbound.take() {
+        if !envelope.is_close() {
+            diagnostics.record(LiveOutboundDeliveryState::TerminallyFailed);
+            diagnostics.record_drop();
+            failed += 1;
+        }
+    }
+    while let Ok(envelope) = receiver.try_recv() {
+        if !envelope.is_close() {
+            diagnostics.record(LiveOutboundDeliveryState::TerminallyFailed);
+            diagnostics.record_drop();
+            failed += 1;
+        }
+    }
+    failed
+}
+
 async fn supervise_socket(
     mut socket: GeminiSocket,
     api_key: String,
     config: LiveSessionConfig,
-    mut receiver: mpsc::Receiver<Message>,
+    mut receiver: mpsc::Receiver<OutboundEnvelope>,
     sender: mpsc::Sender<LiveServerEvent>,
     is_active: Arc<AtomicBool>,
+    cancellation: CancellationToken,
+    diagnostics: Arc<LiveOutboundDiagnosticsStore>,
 ) {
     let mut input_transcript = String::new();
     let mut output_transcript = String::new();
     let mut resume_handle = None;
+    let mut pending_outbound: Option<OutboundEnvelope> = None;
 
     'connection: loop {
-        if !is_active.load(Ordering::SeqCst) {
+        if !is_active.load(Ordering::SeqCst) || cancellation.is_cancelled() {
             break;
         }
-        let action = tokio::select! {
-            outbound = receiver.recv() => {
-                match outbound {
-                    Some(message) => {
-                        let is_close = matches!(message, Message::Close(_));
-                        if socket.send(message).await.is_err() {
-                            ServerAction::Reconnect
-                        } else if is_close {
-                            is_active.store(false, Ordering::SeqCst);
-                            break 'connection;
-                        } else {
-                            ServerAction::Continue
-                        }
-                    }
-                    None => break 'connection,
+
+        let action = if let Some(envelope) = pending_outbound.take() {
+            let is_close = envelope.is_close();
+            if socket.send(envelope.message.clone()).await.is_err() {
+                if is_close {
+                    is_active.store(false, Ordering::SeqCst);
+                    break 'connection;
                 }
+                retain_for_retry(&mut pending_outbound, envelope, &diagnostics);
+                ServerAction::Reconnect
+            } else if is_close {
+                is_active.store(false, Ordering::SeqCst);
+                break 'connection;
+            } else {
+                diagnostics.record(LiveOutboundDeliveryState::Written);
+                ServerAction::Continue
             }
-            inbound = socket.next() => {
-                match inbound {
-                    Some(Ok(Message::Close(frame))) => {
-                        let code = frame.as_ref().map(|value| u16::from(value.code));
-                        match provider_error_for_close(code) {
-                            Some(error) if error.retryable => ServerAction::Reconnect,
-                            Some(error) => ServerAction::Terminal(error),
-                            None => {
-                                let _ = sender.send(LiveServerEvent::Closed).await;
+        } else {
+            tokio::select! {
+                () = cancellation.cancelled() => break 'connection,
+                outbound = receiver.recv() => {
+                    match outbound {
+                        Some(envelope) => {
+                            let is_close = envelope.is_close();
+                            if socket.send(envelope.message.clone()).await.is_err() {
+                                if is_close {
+                                    is_active.store(false, Ordering::SeqCst);
+                                    break 'connection;
+                                }
+                                retain_for_retry(&mut pending_outbound, envelope, &diagnostics);
+                                ServerAction::Reconnect
+                            } else if is_close {
+                                is_active.store(false, Ordering::SeqCst);
                                 break 'connection;
+                            } else {
+                                diagnostics.record(LiveOutboundDeliveryState::Written);
+                                ServerAction::Continue
                             }
                         }
+                        None => break 'connection,
                     }
-                    Some(Ok(message)) => match decode_server_frame(message) {
-                        Ok(Some(server)) => handle_server_message(
-                            server,
-                            &sender,
-                            &mut input_transcript,
-                            &mut output_transcript,
-                            &mut resume_handle,
-                        ).await,
-                        Ok(None) => ServerAction::Continue,
-                        Err(error) => ServerAction::Terminal(error),
-                    },
-                    Some(Err(error)) => {
-                        let error = provider_error_for_connect(error);
-                        if error.retryable { ServerAction::Reconnect } else { ServerAction::Terminal(error) }
+                }
+                inbound = socket.next() => {
+                    match inbound {
+                        Some(Ok(Message::Close(frame))) => {
+                            let code = frame.as_ref().map(|value| u16::from(value.code));
+                            match provider_error_for_close(code) {
+                                Some(error) if error.retryable => ServerAction::Reconnect,
+                                Some(error) => ServerAction::Terminal(error),
+                                None => {
+                                    let failed = record_terminal_outbound_failures(
+                                        &mut pending_outbound,
+                                        &mut receiver,
+                                        &diagnostics,
+                                    );
+                                    if failed > 0 {
+                                        let _ = sender
+                                            .send(LiveServerEvent::Error(ProviderError::from_kind(
+                                                ProviderErrorKind::Closed,
+                                            )))
+                                            .await;
+                                    } else {
+                                        let _ = sender.send(LiveServerEvent::Closed).await;
+                                    }
+                                    break 'connection;
+                                }
+                            }
+                        }
+                        Some(Ok(message)) => match decode_server_frame(message) {
+                            Ok(Some(server)) => handle_server_message(
+                                server,
+                                &sender,
+                                &mut input_transcript,
+                                &mut output_transcript,
+                                &mut resume_handle,
+                            ).await,
+                            Ok(None) => ServerAction::Continue,
+                            Err(error) => ServerAction::Terminal(error),
+                        },
+                        Some(Err(error)) => {
+                            let error = provider_error_for_connect(error);
+                            if error.retryable {
+                                ServerAction::Reconnect
+                            } else {
+                                ServerAction::Terminal(error)
+                            }
+                        }
+                        None => ServerAction::Reconnect,
                     }
-                    None => ServerAction::Reconnect,
                 }
             }
         };
@@ -592,11 +691,16 @@ async fn supervise_socket(
         match action {
             ServerAction::Continue => {}
             ServerAction::Terminal(error) => {
+                record_terminal_outbound_failures(
+                    &mut pending_outbound,
+                    &mut receiver,
+                    &diagnostics,
+                );
                 let _ = sender.send(LiveServerEvent::Error(error)).await;
                 break;
             }
             ServerAction::Reconnect => {
-                if !is_active.load(Ordering::SeqCst) {
+                if !is_active.load(Ordering::SeqCst) || cancellation.is_cancelled() {
                     break;
                 }
                 info!("Reconnecting Gemini Live session with bounded backoff");
@@ -604,8 +708,8 @@ async fn supervise_socket(
                     &api_key,
                     &config,
                     resume_handle.as_deref(),
-                    &mut receiver,
                     &is_active,
+                    &cancellation,
                 )
                 .await
                 {
@@ -613,8 +717,17 @@ async fn supervise_socket(
                         socket = new_socket;
                         let _ = sender.send(LiveServerEvent::Connected).await;
                     }
-                    Err(_error) if !is_active.load(Ordering::SeqCst) => break,
+                    Err(_error)
+                        if !is_active.load(Ordering::SeqCst) || cancellation.is_cancelled() =>
+                    {
+                        break;
+                    }
                     Err(error) => {
+                        record_terminal_outbound_failures(
+                            &mut pending_outbound,
+                            &mut receiver,
+                            &diagnostics,
+                        );
                         let _ = sender.send(LiveServerEvent::Error(error)).await;
                         break;
                     }
@@ -627,47 +740,54 @@ async fn supervise_socket(
 }
 
 pub struct GoogleLiveSession {
-    sender: mpsc::Sender<Message>,
+    sender: mpsc::Sender<OutboundEnvelope>,
     is_active: Arc<AtomicBool>,
+    cancellation: CancellationToken,
+    diagnostics: Arc<LiveOutboundDiagnosticsStore>,
     sample_rate_in: u32,
+}
+
+impl GoogleLiveSession {
+    /// `Ok(())` means the message was accepted into this bounded local outbound queue. It does
+    /// not mean the WebSocket write completed, nor that Gemini acknowledged or processed it.
+    async fn enqueue(&self, envelope: OutboundEnvelope) -> Result<(), ProviderError> {
+        if !self.is_active.load(Ordering::SeqCst) || self.cancellation.is_cancelled() {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
+        }
+        self.sender
+            .send(envelope)
+            .await
+            .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Closed))?;
+        self.diagnostics.record(LiveOutboundDeliveryState::Queued);
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl LiveSession for GoogleLiveSession {
+    fn outbound_diagnostics(&self) -> Option<LiveOutboundDiagnostics> {
+        Some(self.diagnostics.snapshot())
+    }
+
     async fn send_audio_chunk(&mut self, pcm_bytes: &[u8]) -> Result<(), ProviderError> {
-        if !self.is_active.load(Ordering::SeqCst) {
-            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
-        }
         let message = encode_client_message(&audio_message(pcm_bytes, self.sample_rate_in))?;
-        self.sender
-            .send(message)
+        self.enqueue(OutboundEnvelope::new(message, OutboundKind::Audio))
             .await
-            .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Closed))
     }
 
     async fn send_text_turn(&mut self, text: &str) -> Result<(), ProviderError> {
-        if !self.is_active.load(Ordering::SeqCst) {
-            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
-        }
         let message = encode_client_message(&text_turn_message(text))?;
-        self.sender
-            .send(message)
+        self.enqueue(OutboundEnvelope::new(message, OutboundKind::TextTurn))
             .await
-            .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Closed))
     }
 
     async fn send_tool_response(
         &mut self,
         response: ToolCallResponse,
     ) -> Result<(), ProviderError> {
-        if !self.is_active.load(Ordering::SeqCst) {
-            return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
-        }
         let message = encode_client_message(&tool_response_message(response))?;
-        self.sender
-            .send(message)
+        self.enqueue(OutboundEnvelope::new(message, OutboundKind::ToolResponse))
             .await
-            .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Closed))
     }
 
     async fn interrupt(&mut self) -> Result<(), ProviderError> {
@@ -677,7 +797,11 @@ impl LiveSession for GoogleLiveSession {
 
     async fn close(&mut self) -> Result<(), ProviderError> {
         self.is_active.store(false, Ordering::SeqCst);
-        let _ = self.sender.send(Message::Close(None)).await;
+        let _ = self.sender.try_send(OutboundEnvelope::new(
+            Message::Close(None),
+            OutboundKind::Close,
+        ));
+        self.cancellation.cancel();
         Ok(())
     }
 }
@@ -696,12 +820,16 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
             .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Model))?;
 
         let socket = open_and_setup(&self.auth.api_key, &config, None).await?;
-        let (out_tx, out_rx) = mpsc::channel::<Message>(64);
+        let (out_tx, out_rx) = mpsc::channel::<OutboundEnvelope>(OUTBOUND_QUEUE_CAPACITY);
         let is_active = Arc::new(AtomicBool::new(true));
         let supervisor_active = is_active.clone();
         let supervisor_sender = event_sender.clone();
         let supervisor_key = self.auth.api_key.clone();
         let supervisor_config = config.clone();
+        let cancellation = CancellationToken::new();
+        let supervisor_cancellation = cancellation.clone();
+        let diagnostics = Arc::new(LiveOutboundDiagnosticsStore::default());
+        let supervisor_diagnostics = diagnostics.clone();
         tauri::async_runtime::spawn(async move {
             supervise_socket(
                 socket,
@@ -710,6 +838,8 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
                 out_rx,
                 supervisor_sender,
                 supervisor_active,
+                supervisor_cancellation,
+                supervisor_diagnostics,
             )
             .await;
         });
@@ -718,6 +848,8 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
         Ok(Box::new(GoogleLiveSession {
             sender: out_tx,
             is_active,
+            cancellation,
+            diagnostics,
             sample_rate_in: config.sample_rate_in,
         }))
     }

@@ -42,6 +42,29 @@ mod tests {
     }
 
     #[test]
+    fn poisoned_database_mutex_does_not_brick_private_persistence() {
+        let db = Database::new_in_memory().unwrap();
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _conn = db.conn.lock().unwrap();
+            panic!("inject database mutex poison");
+        }));
+        assert!(poisoned.is_err());
+
+        db.set_setting("app_settings", "survives-poison").unwrap();
+        db.add_memory("User likes resilient storage", "preference")
+            .unwrap();
+        db.add_transcript("poison-test", "user", "still persisted")
+            .unwrap();
+
+        assert_eq!(
+            db.get_setting("app_settings").unwrap().as_deref(),
+            Some("survives-poison")
+        );
+        assert_eq!(db.get_memories().unwrap().len(), 1);
+        assert_eq!(db.get_transcripts(10).unwrap().len(), 1);
+    }
+
+    #[test]
     fn database_crud_and_forget() {
         let db = Database::new_in_memory().unwrap();
         assert_eq!(db.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);

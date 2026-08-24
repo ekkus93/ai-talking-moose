@@ -73,6 +73,7 @@ async fn fake_pipeline_for_architecture(
             }))
         },
         callback,
+        None,
     )
     .await
     .unwrap()
@@ -84,6 +85,84 @@ fn wait_until(predicate: impl Fn() -> bool) {
         assert!(Instant::now() < deadline, "timed out waiting for worker");
         thread::sleep(Duration::from_millis(1));
     }
+}
+
+async fn wait_until_async(predicate: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !predicate() {
+        assert!(Instant::now() < deadline, "timed out waiting for worker");
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
+
+#[tokio::test]
+async fn cancel_during_readiness_cooperatively_stops_and_reaps_worker() {
+    let state = Arc::new(FakeState::default());
+    let factory_entered = Arc::new(AtomicBool::new(false));
+    let release_factory = Arc::new(AtomicBool::new(false));
+    let reaped = Arc::new(AtomicBool::new(false));
+    let (callback, _) = callback_events();
+
+    let worker_state = state.clone();
+    let entered = factory_entered.clone();
+    let release = release_factory.clone();
+    let reaped_for_start = reaped.clone();
+    let start_task = tokio::spawn(async move {
+        LocalAsrPipeline::start_with_factory_and_reaper_probe(
+            move || {
+                entered.store(true, Ordering::SeqCst);
+                while !release.load(Ordering::SeqCst) {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                Ok(Box::new(FakeEngine {
+                    state: worker_state,
+                    sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                }) as Box<dyn PipelineEngine>)
+            },
+            callback,
+            reaped_for_start,
+        )
+        .await
+    });
+
+    wait_until_async(|| factory_entered.load(Ordering::SeqCst)).await;
+    start_task.abort();
+    assert!(start_task.await.unwrap_err().is_cancelled());
+
+    release_factory.store(true, Ordering::SeqCst);
+    wait_until_async(|| state.stops.load(Ordering::SeqCst) == 1).await;
+    wait_until_async(|| reaped.load(Ordering::SeqCst)).await;
+}
+
+#[tokio::test]
+async fn readiness_timeout_returns_without_detaching_worker() {
+    let state = Arc::new(FakeState::default());
+    let reaped = Arc::new(AtomicBool::new(false));
+    let (callback, _) = callback_events();
+    let worker_state = state.clone();
+    let reaped_for_start = reaped.clone();
+
+    let started = Instant::now();
+    let result = LocalAsrPipeline::start_with_factory_and_reaper_probe(
+        move || {
+            thread::sleep(WORKER_STARTUP_TIMEOUT + Duration::from_millis(75));
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        reaped_for_start,
+    )
+    .await;
+
+    let error = result
+        .err()
+        .expect("startup should have a bounded readiness timeout");
+    assert_eq!(error.kind, AsrErrorKind::RuntimeUnavailable);
+    assert!(started.elapsed() < WORKER_STARTUP_TIMEOUT + Duration::from_millis(200));
+    wait_until_async(|| state.stops.load(Ordering::SeqCst) == 1).await;
+    wait_until_async(|| reaped.load(Ordering::SeqCst)).await;
 }
 
 #[tokio::test]

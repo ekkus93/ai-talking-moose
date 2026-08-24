@@ -194,12 +194,14 @@ impl MoonshineStream {
         if !self.started {
             return Ok(());
         }
+        // The stop request is single-shot from Rust's perspective. Mark the stream
+        // stopped before crossing the FFI boundary so an error cannot leave Drop to
+        // invoke stop_stream a second time on an already-transitioned native stream.
+        self.started = false;
         self.parent
             .api
             .stop_stream(self.parent.handle, self.handle)
-            .map_err(|error| map_ffi_error(AsrErrorKind::InvalidState, error, true))?;
-        self.started = false;
-        Ok(())
+            .map_err(|error| map_ffi_error(AsrErrorKind::InvalidState, error, true))
     }
 }
 
@@ -253,6 +255,7 @@ mod tests {
         runtime_version: i32,
         load_result: Mutex<Result<i32, FfiError>>,
         create_stream_result: Mutex<Result<i32, FfiError>>,
+        stop_stream_result: Mutex<Result<(), FfiError>>,
         transcript: Mutex<OwnedNativeTranscript>,
     }
 
@@ -263,6 +266,7 @@ mod tests {
                 runtime_version: MOONSHINE_HEADER_VERSION,
                 load_result: Mutex::new(Ok(10)),
                 create_stream_result: Mutex::new(Ok(20)),
+                stop_stream_result: Mutex::new(Ok(())),
                 transcript: Mutex::new(OwnedNativeTranscript::default()),
             }
         }
@@ -308,7 +312,7 @@ mod tests {
 
         fn stop_stream(&self, transcriber_handle: i32, stream_handle: i32) -> Result<(), FfiError> {
             self.record(format!("stop:{transcriber_handle}:{stream_handle}"));
-            Ok(())
+            self.stop_stream_result.lock().clone()
         }
 
         fn add_audio(
@@ -465,6 +469,43 @@ mod tests {
             calls
                 .iter()
                 .filter(|call| call.as_str() == "free_transcriber:10")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn stop_error_does_not_make_drop_stop_native_stream_twice() {
+        let api = Arc::new(FakeApi::healthy());
+        *api.stop_stream_result.lock() = Err(FfiError {
+            code: -9,
+            message: "native stop failed after transition".to_string(),
+        });
+        let transcriber = MoonshineTranscriber::load_with_api(
+            Path::new("/tmp/model"),
+            MoonshineModelArchitecture::TinyStreaming,
+            api.clone(),
+        )
+        .unwrap();
+        let mut stream = transcriber.create_stream().unwrap();
+        stream.start().unwrap();
+
+        let error = stream.stop().expect_err("native stop failure must be surfaced");
+        assert_eq!(error.kind, AsrErrorKind::InvalidState);
+        drop(stream);
+
+        let calls = api.calls.lock();
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|call| call.as_str() == "stop:10:20")
+                .count(),
+            1
+        );
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|call| call.as_str() == "free_stream:10:20")
                 .count(),
             1
         );

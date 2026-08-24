@@ -2,20 +2,9 @@ use crate::ai::types::TtsRequest;
 use crate::app::state::AppState;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::state::{transition_character_state, CharacterState};
-#[cfg(test)]
-use crate::memory::MemoryManager;
 use tauri::{Emitter, Runtime, State};
 
 pub(crate) const VOICE_AUDITION_SCRIPT: &str = "Hello, I'm Moose. Oh good, another button. Professionally disappointed. Short version: it works. Longer version: I explain things while looking bewildered.";
-
-#[cfg(test)]
-fn model_prompt_memories(memory_enabled: bool, memory: &MemoryManager) -> Vec<String> {
-    if memory_enabled {
-        memory.get_memory_strings()
-    } else {
-        Vec::new()
-    }
-}
 
 fn transition_and_emit<R: Runtime>(
     state: &AppState,
@@ -226,7 +215,6 @@ pub async fn trigger_canned_reaction<R: Runtime>(
 mod tests {
     use super::*;
     use crate::audio::capture::AudioCapture;
-    use crate::persistence::sqlite::Database;
     use serde_json::json;
     use std::sync::Arc;
     use tauri::ipc::{CallbackFn, InvokeBody};
@@ -478,21 +466,4 @@ mod tests {
         assert_eq!(*authoritative_state.read(), CharacterState::Idle);
     }
 
-    #[test]
-    fn ambient_prompt_memories_obey_memory_setting_and_restore_on_reenable() {
-        let db = Arc::new(Database::new_in_memory().unwrap());
-        let memory = MemoryManager::new(db);
-        memory
-            .remember(
-                "User prefers local speech recognition",
-                Some("conversation"),
-            )
-            .unwrap();
-
-        assert!(model_prompt_memories(false, &memory).is_empty());
-        assert_eq!(
-            model_prompt_memories(true, &memory),
-            vec!["User prefers local speech recognition".to_string()]
-        );
-    }
 }

@@ -1,5 +1,6 @@
 use crate::ai::types::{TextRequest, TtsRequest};
 use crate::app::state::AppState;
+use crate::commands::conversation::model_prompt_memories;
 use crate::character::ambient::{AmbientEvent, AmbientEventCategory};
 use crate::character::behavior::AmbientPolicyContext;
 #[cfg(test)]
@@ -42,6 +43,13 @@ fn bound_ambient_output(text: &str) -> Option<String> {
         return None;
     }
     Some(trimmed.chars().take(MAX_AMBIENT_OUTPUT_CHARS).collect())
+}
+
+fn build_ambient_model_prompt(state: &AppState, event_summary: &str) -> String {
+    let memory_enabled = state.settings.read().memory_enabled;
+    let memories = model_prompt_memories(state, memory_enabled);
+    let config = state.behavior_engine.lock().config.clone();
+    PromptBuilder::build_ambient_prompt(&config, event_summary, &memories)
 }
 
 async fn speak_standalone(text: &str, state: &AppState) -> Result<Duration, String> {
@@ -190,13 +198,7 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
     }
     transition_and_emit(state, app, CharacterState::Thinking)?;
 
-    let memories = if state.settings.read().memory_enabled {
-        state.memory.get_memory_strings()
-    } else {
-        Vec::new()
-    };
-    let config = state.behavior_engine.lock().config.clone();
-    let prompt = PromptBuilder::build_ambient_prompt(&config, &event.summary, &memories);
+    let prompt = build_ambient_model_prompt(state, &event.summary);
     let generated = match state
         .get_text_model()
         .generate(TextRequest {
@@ -297,6 +299,31 @@ mod tests {
             &state,
             AmbientEventCategory::WindowTitle
         ));
+    }
+
+    #[test]
+    fn production_ambient_prompt_obeys_memory_privacy_gate() {
+        const PRIVATE_MEMORY: &str = "User prefers local speech recognition";
+
+        let state = AppState::new_for_tests().unwrap();
+        state
+            .memory
+            .remember(PRIVATE_MEMORY, Some("conversation"))
+            .unwrap();
+
+        state.settings.write().memory_enabled = false;
+        let disabled_prompt = build_ambient_model_prompt(&state, "A harmless ambient event");
+        assert!(
+            !disabled_prompt.contains(PRIVATE_MEMORY),
+            "memory-disabled ambient prompt must not contain retained memory"
+        );
+
+        state.settings.write().memory_enabled = true;
+        let enabled_prompt = build_ambient_model_prompt(&state, "A harmless ambient event");
+        assert!(
+            enabled_prompt.contains(PRIVATE_MEMORY),
+            "re-enabling memory must restore retained memory to the ambient prompt"
+        );
     }
 
     #[test]

@@ -2,9 +2,10 @@ use super::manifest::{manifest_for_architecture, MoonshineModelFile, MoonshineMo
 use super::runtime::MoonshineModelArchitecture;
 #[cfg(test)]
 use async_trait::async_trait;
+use parking_lot::Mutex as SyncMutex;
 use ring::digest::{Context as Sha256Context, SHA256};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
@@ -310,10 +311,16 @@ pub struct MoonshineModelInstaller {
     disk_space: Arc<dyn DiskSpaceProbe>,
 }
 
-static INSTALL_OPERATION_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
+static INSTALL_OPERATION_LOCKS: OnceLock<SyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
+    OnceLock::new();
 
-fn install_operation_lock() -> &'static AsyncMutex<()> {
-    INSTALL_OPERATION_LOCK.get_or_init(|| AsyncMutex::new(()))
+fn install_operation_lock(model_id: &str) -> Arc<AsyncMutex<()>> {
+    let locks = INSTALL_OPERATION_LOCKS.get_or_init(|| SyncMutex::new(HashMap::new()));
+    let mut locks = locks.lock();
+    locks
+        .entry(model_id.to_string())
+        .or_insert_with(|| Arc::new(AsyncMutex::new(())))
+        .clone()
 }
 
 impl MoonshineModelInstaller {
@@ -379,8 +386,9 @@ impl MoonshineModelInstaller {
         &self,
         architecture: MoonshineModelArchitecture,
     ) -> Result<bool, MoonshineModelInstallError> {
-        let _operation_guard = install_operation_lock().lock().await;
         let manifest = manifest_for_architecture(architecture);
+        let operation_lock = install_operation_lock(manifest.id);
+        let _operation_guard = operation_lock.lock().await;
         manifest
             .validate()
             .map_err(|_| MoonshineModelInstallError::invalid_manifest())?;
@@ -403,9 +411,10 @@ impl MoonshineModelInstaller {
         cancellation: &MoonshineModelInstallCancellation,
         progress: Option<MoonshineModelInstallProgressCallback>,
     ) -> Result<MoonshineModelInstallOutcome, MoonshineModelInstallError> {
+        let operation_lock = install_operation_lock(manifest.id);
         let _operation_guard = tokio::select! {
             () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
-            guard = install_operation_lock().lock() => guard,
+            guard = operation_lock.lock() => guard,
         };
         cancellation.check()?;
         self.validate_install_manifest(manifest)?;

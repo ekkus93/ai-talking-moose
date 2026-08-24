@@ -184,6 +184,7 @@ pub fn run() {
             test_audio_output,
             get_character_state,
             get_conversation_lifecycle,
+            get_live_outbound_diagnostics,
             set_character_state,
             show_moose,
             hide_moose,

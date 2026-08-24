@@ -14,6 +14,11 @@ pub trait SpeechSynthesizer: Send + Sync {
 
 #[async_trait]
 pub trait LiveSession: Send + Sync {
+    /// Snapshot outbound delivery counters when the provider exposes them.
+    fn outbound_diagnostics(&self) -> Option<LiveOutboundDiagnostics> {
+        None
+    }
+
     async fn send_audio_chunk(&mut self, pcm_bytes: &[u8]) -> Result<(), ProviderError>;
     async fn send_text_turn(&mut self, text: &str) -> Result<(), ProviderError>;
     async fn send_tool_response(&mut self, response: ToolCallResponse)

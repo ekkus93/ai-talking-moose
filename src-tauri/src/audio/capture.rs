@@ -104,6 +104,24 @@ fn start_error(message: String) -> AudioCaptureError {
     }
 }
 
+fn start_capture_stream<F>(
+    is_running: &AtomicBool,
+    start_stream: F,
+) -> Result<(), AudioCaptureError>
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    // CPAL may begin delivering input callbacks as soon as `play()` starts. Arm the
+    // processor first so a callback that races with `play()` cannot be discarded as
+    // though capture were still stopped. A failed start rolls the state back.
+    is_running.store(true, Ordering::SeqCst);
+    if let Err(message) = start_stream() {
+        is_running.store(false, Ordering::SeqCst);
+        return Err(start_error(message));
+    }
+    Ok(())
+}
+
 fn mark_runtime_stream_failure(
     message: &str,
     is_running: &AtomicBool,
@@ -429,16 +447,15 @@ impl AudioCapture {
         };
 
         let stream = stream_result.map_err(|error_value| build_error(error_value.to_string()))?;
-        stream
-            .play()
-            .map_err(|error_value| start_error(error_value.to_string()))?;
+        start_capture_stream(&self.is_running, || {
+            stream.play().map_err(|error_value| error_value.to_string())
+        })?;
 
         self.selected_device = selected_device;
         self.sample_rate_hz = Some(sample_rate);
         self.sample_format = Some(format!("{sample_format:?}"));
         self.channels = Some(channels);
         self._stream = Some(SafeStream(stream));
-        self.is_running.store(true, Ordering::SeqCst);
         info!(
             sample_rate,
             ?sample_format,
@@ -544,6 +561,50 @@ mod tests {
             diagnostics.last_error.as_deref(),
             Some("runtime microphone stream error: device disconnected")
         );
+    }
+
+    #[test]
+    fn capture_is_armed_before_stream_start_can_deliver_audio() {
+        let is_running = Arc::new(AtomicBool::new(false));
+        let input_level = Arc::new(AtomicU32::new(0.0_f32.to_bits()));
+        let dropped_chunks = Arc::new(AtomicU64::new(0));
+        let (pcm_sender, mut pcm_receiver) = mpsc::channel(1);
+        let mut processor = CaptureProcessor::new(
+            CaptureProcessorConfig {
+                channels: 1,
+                source_sample_rate: 100,
+                target_sample_rate: 100,
+            },
+            pcm_sender,
+            None,
+            is_running.clone(),
+            input_level,
+            dropped_chunks,
+        );
+
+        start_capture_stream(&is_running, || {
+            // Model the strongest startup race: CPAL delivers the first callback
+            // synchronously from inside `play()` before it returns to start_inner.
+            processor.process_f32(&[0.25; 10]);
+            Ok(())
+        })
+        .unwrap();
+
+        assert!(is_running.load(Ordering::SeqCst));
+        let first_chunk = pcm_receiver
+            .try_recv()
+            .expect("the first startup callback must not be discarded");
+        assert!(!first_chunk.is_empty());
+    }
+
+    #[test]
+    fn failed_stream_start_rolls_back_armed_capture_state() {
+        let is_running = AtomicBool::new(false);
+        let error_value = start_capture_stream(&is_running, || Err("start failed".to_string()))
+            .expect_err("start failure must be reported");
+
+        assert!(matches!(error_value, AudioCaptureError::StartStream(_)));
+        assert!(!is_running.load(Ordering::SeqCst));
     }
 
     #[test]

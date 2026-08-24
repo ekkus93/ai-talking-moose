@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension, Result, Transaction};
 use std::path::Path;
-use std::sync::Mutex;
-use tracing::info;
+use std::sync::{Mutex, MutexGuard};
+use tracing::{info, warn};
 
 const SECRET_SETTING_KEYS: &[&str] = &["google_api_key"];
 const CURRENT_SCHEMA_VERSION: u32 = 4;

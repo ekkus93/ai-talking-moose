@@ -41,8 +41,8 @@ async fn shutdown_preserves_last_local_asr_diagnostics_for_selected_mode() {
         .await
         .unwrap();
 
-    manager
-        .shutdown_locked(
+    let _ = manager
+        .begin_shutdown_locked(
             Arc::new(SyncMutex::new(AudioCapture::new_mock())),
             Arc::new(AudioPlayback::new()),
             ConversationLifecycle::Idle,

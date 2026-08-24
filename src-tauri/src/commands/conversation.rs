@@ -1,4 +1,4 @@
-use crate::ai::types::{LiveSessionConfig, TtsRequest};
+use crate::ai::types::{LiveOutboundDiagnostics, LiveSessionConfig, TtsRequest};
 use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 #[cfg(test)]
@@ -13,6 +13,22 @@ use tauri::{Emitter, Runtime, State};
 use tracing::{info, warn};
 
 const MAX_TEXT_MESSAGE_CHARS: usize = 16_384;
+
+/// Return only memories permitted to enter model prompts for the captured settings snapshot.
+/// This is the production privacy gate shared by conversational and ambient prompt construction.
+pub(super) fn model_prompt_memories(state: &AppState, memory_enabled: bool) -> Vec<String> {
+    if memory_enabled {
+        state.memory.get_memory_strings()
+    } else {
+        Vec::new()
+    }
+}
+
+fn build_conversation_system_instruction(state: &AppState, memory_enabled: bool) -> String {
+    let memories = model_prompt_memories(state, memory_enabled);
+    let character_config = state.behavior_engine.lock().config.clone();
+    PromptBuilder::build_system_instruction(&character_config, &memories, None, false)
+}
 
 fn normalize_text_message(message: String) -> Result<Option<String>, String> {
     let trimmed = message.trim();
@@ -90,15 +106,8 @@ pub async fn start_conversation<R: Runtime>(
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
 
-    let memories = if settings.memory_enabled {
-        state.memory.get_memory_strings()
-    } else {
-        vec![]
-    };
-
-    let character_config = state.behavior_engine.lock().config.clone();
     let system_instruction =
-        PromptBuilder::build_system_instruction(&character_config, &memories, None, false);
+        build_conversation_system_instruction(state.inner(), settings.memory_enabled);
 
     let config = LiveSessionConfig {
         model: settings.live_model.clone(),
@@ -228,6 +237,13 @@ pub fn get_conversation_lifecycle(
 }
 
 #[tauri::command]
+pub async fn get_live_outbound_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<Option<LiveOutboundDiagnostics>, String> {
+    Ok(state.conversation_mgr.live_outbound_diagnostics().await)
+}
+
+#[tauri::command]
 pub fn get_memories(state: State<'_, AppState>) -> Result<Vec<MemoryRecord>, String> {
     state.memory.get_all_memories()
 }
@@ -280,14 +296,8 @@ pub async fn send_text_message(
 
     transition_and_emit(&state.character_state, &app, CharacterState::Thinking)?;
 
-    let memories = if settings.memory_enabled {
-        state.memory.get_memory_strings()
-    } else {
-        vec![]
-    };
-    let character_config = state.behavior_engine.lock().config.clone();
     let system_instruction =
-        PromptBuilder::build_system_instruction(&character_config, &memories, None, false);
+        build_conversation_system_instruction(state.inner(), settings.memory_enabled);
 
     let text_model = state.get_text_model();
     let text_res = text_model
@@ -379,6 +389,29 @@ mod tests {
         let oversized = "x".repeat(MAX_TEXT_MESSAGE_CHARS + 1);
         let error = normalize_text_message(oversized).unwrap_err();
         assert!(error.contains("character limit"));
+    }
+
+    #[test]
+    fn production_conversation_prompt_obeys_memory_privacy_gate() {
+        const PRIVATE_MEMORY: &str = "User prefers local speech recognition";
+
+        let state = AppState::new_for_tests().unwrap();
+        state
+            .memory
+            .remember(PRIVATE_MEMORY, Some("conversation"))
+            .unwrap();
+
+        let disabled_prompt = build_conversation_system_instruction(&state, false);
+        assert!(
+            !disabled_prompt.contains(PRIVATE_MEMORY),
+            "memory-disabled production prompt must not contain retained memory"
+        );
+
+        let enabled_prompt = build_conversation_system_instruction(&state, true);
+        assert!(
+            enabled_prompt.contains(PRIVATE_MEMORY),
+            "re-enabling memory must restore retained memory to the production prompt"
+        );
     }
 
     #[test]

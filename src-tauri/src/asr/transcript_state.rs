@@ -36,7 +36,11 @@ impl TranscriptStateMachine {
             StreamingTranscriptUpdate::Final { segment_id, text } => (segment_id, text, true),
         };
 
-        if text.trim().is_empty() || self.closed_segments.contains(&segment_id) {
+        if self.closed_segments.contains(&segment_id) {
+            return Vec::new();
+        }
+
+        if !is_final && text.trim().is_empty() {
             return Vec::new();
         }
 
@@ -44,7 +48,12 @@ impl TranscriptStateMachine {
         self.activate_segment(segment_id, &mut events);
 
         if is_final {
-            events.push(AsrEvent::FinalTranscript { text });
+            // A final update is a segment boundary even when the provider supplies no
+            // transcript text. Suppress empty FinalTranscript payloads so they cannot
+            // enter retention, but always close speaking state with SpeechEnded.
+            if !text.trim().is_empty() {
+                events.push(AsrEvent::FinalTranscript { text });
+            }
             events.push(AsrEvent::SpeechEnded { monotonic_ms: None });
             self.active = None;
             self.closed_segments.insert(segment_id);
@@ -194,11 +203,43 @@ mod tests {
     }
 
     #[test]
-    fn blank_updates_do_not_create_speech_or_transcript_events() {
+    fn blank_partial_is_ignored_but_blank_final_closes_its_segment() {
         let mut state = TranscriptStateMachine::default();
 
         assert!(state.apply(partial(1, "   ")).is_empty());
-        assert!(state.apply(final_update(1, "\t")).is_empty());
+        assert_eq!(
+            state.apply(final_update(1, "\t")),
+            vec![
+                AsrEvent::SpeechStarted { monotonic_ms: None },
+                AsrEvent::SpeechEnded { monotonic_ms: None },
+            ]
+        );
+        assert!(state.active.is_none());
+        assert!(state.closed_segments.contains(&1));
+    }
+
+    #[test]
+    fn blank_final_ends_active_speech_without_emitting_empty_transcript() {
+        let mut state = TranscriptStateMachine::default();
+        let _ = state.apply(partial(7, "temporary words"));
+
+        assert_eq!(
+            state.apply(final_update(7, "   ")),
+            vec![AsrEvent::SpeechEnded { monotonic_ms: None }]
+        );
+        assert!(state.active.is_none());
+
+        // A new segment must start normally; speaking state cannot remain stuck on
+        // the utterance that ended with an empty final update.
+        assert_eq!(
+            state.apply(partial(8, "next utterance")),
+            vec![
+                AsrEvent::SpeechStarted { monotonic_ms: None },
+                AsrEvent::PartialTranscript {
+                    text: "next utterance".to_string(),
+                },
+            ]
+        );
     }
 
     #[test]
