@@ -76,7 +76,10 @@ impl DesktopEventSummarizer {
         // non-zero bucket therefore also marks a new episode (for example after a
         // long scheduling gap where the first post-activity poll already exceeds
         // five minutes).
-        if self.last_idle_bucket.is_some_and(|last_bucket| bucket < last_bucket) {
+        if self
+            .last_idle_bucket
+            .is_some_and(|last_bucket| bucket < last_bucket)
+        {
             self.last_idle_bucket = None;
         }
 
