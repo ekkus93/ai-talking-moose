@@ -1,3 +1,4 @@
+pub(crate) mod runtime_preferences;
 pub(crate) mod settings_policy;
 pub mod state;
 pub(crate) mod tray;

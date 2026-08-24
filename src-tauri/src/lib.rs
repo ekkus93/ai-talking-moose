@@ -70,6 +70,13 @@ pub fn run() {
             };
 
             let app_state = AppState::new(db_path.as_deref()).map_err(std::io::Error::other)?;
+            let startup_settings = app_state.settings.read().clone();
+            if let Err(error) = app::runtime_preferences::apply_startup_runtime_preferences(
+                app.handle(),
+                &startup_settings,
+            ) {
+                warn!(error = %error, "Failed to apply persisted runtime preferences during startup");
+            }
             let ambient_scheduler = app_state.ambient_scheduler.clone();
             let ambient_state = app_state.clone();
             let ambient_app = app.handle().clone();

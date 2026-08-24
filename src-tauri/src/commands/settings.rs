@@ -4,6 +4,7 @@ use crate::ai::google::{
 };
 use crate::ai::traits::RealtimeConversationProvider;
 use crate::ai::types::LiveSessionConfig;
+use crate::app::runtime_preferences::apply_changed_runtime_preferences;
 use crate::app::settings_policy::{
     conversation_restart_required, persist_and_apply_settings, settings_runtime_lock,
     validate_app_settings, validate_selected_device,
@@ -122,20 +123,22 @@ pub async fn update_settings<R: Runtime>(
     validate_changed_audio_devices(&previous, &new_settings)?;
     let restart_required = conversation_restart_required(&previous, &new_settings);
 
-    // Persist first. If SQLite rejects the write, no runtime settings or active conversation
-    // state has been changed.
-    persist_and_apply_settings(
+    // Apply reversible OS/window preferences before persistence. If a runtime side effect fails,
+    // the persisted settings remain unchanged. If persistence then fails, restore the previous
+    // runtime preferences so the settings update remains transactional.
+    apply_changed_runtime_preferences(&app, &previous, &new_settings)?;
+    if let Err(error) = persist_and_apply_settings(
         state.db.as_ref(),
         state.settings.as_ref(),
         state.behavior_engine.as_ref(),
         &new_settings,
-    )?;
-
-    if previous.show_in_menu_bar != new_settings.show_in_menu_bar {
-        if let Some(tray) = app.tray_by_id(crate::app::tray::TRAY_ID) {
-            tray.set_visible(new_settings.show_in_menu_bar)
-                .map_err(|error| error.to_string())?;
+    ) {
+        if let Err(rollback_error) =
+            apply_changed_runtime_preferences(&app, &new_settings, &previous)
+        {
+            warn!(error = %rollback_error, "Failed to roll back runtime preferences after settings persistence failure");
         }
+        return Err(error);
     }
 
     if restart_required && state.conversation_mgr.is_active() {
