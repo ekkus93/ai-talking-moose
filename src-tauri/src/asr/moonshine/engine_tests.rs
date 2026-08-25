@@ -2,6 +2,7 @@ use super::super::manifest::MOONSHINE_MODEL_REVISION;
 use super::super::runtime::MoonshineLine;
 use super::*;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 fn asr_error(kind: AsrErrorKind, message: &str) -> AsrError {
@@ -12,16 +13,32 @@ fn asr_error(kind: AsrErrorKind, message: &str) -> AsrError {
     }
 }
 
+struct LeaseDropProbe(Arc<AtomicBool>);
+
+impl Drop for LeaseDropProbe {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+impl ModelLoadLease for LeaseDropProbe {}
+
 struct FakeResolver {
     result: Result<PathBuf, AsrError>,
+    lease_dropped: Option<Arc<AtomicBool>>,
 }
 
 impl ModelResolver for FakeResolver {
     fn resolve_verified_model(
         &self,
         _architecture: MoonshineModelArchitecture,
-    ) -> Result<PathBuf, AsrError> {
-        self.result.clone()
+    ) -> Result<ResolvedModel, AsrError> {
+        self.result.clone().map(|model_path| ResolvedModel {
+            model_path,
+            _lease: self.lease_dropped.as_ref().map(|dropped| {
+                Box::new(LeaseDropProbe(dropped.clone())) as Box<dyn ModelLoadLease>
+            }),
+        })
     }
 }
 
@@ -99,6 +116,7 @@ fn fixture() -> (FakeResolver, FakeFactory, Arc<Mutex<BackendState>>) {
     (
         FakeResolver {
             result: Ok(PathBuf::from("/verified/tiny")),
+            lease_dropped: None,
         },
         FakeFactory {
             state: state.clone(),
@@ -235,6 +253,7 @@ fn missing_model_fails_before_native_factory_is_called() {
     let state = Arc::new(Mutex::new(BackendState::default()));
     let resolver = FakeResolver {
         result: Err(asr_error(AsrErrorKind::ModelNotInstalled, "missing")),
+        lease_dropped: None,
     };
     let factory = FakeFactory {
         state: state.clone(),
@@ -261,6 +280,51 @@ fn native_load_error_is_typed_and_not_replaced_with_fallback() {
         .expect("native load error must be returned");
     assert_eq!(error.kind, AsrErrorKind::RuntimeUnavailable);
     assert!(state.lock().unwrap().opened_path.is_none());
+}
+
+struct LeaseCheckingFactory {
+    state: Arc<Mutex<BackendState>>,
+    lease_dropped: Arc<AtomicBool>,
+}
+
+impl StreamFactory for LeaseCheckingFactory {
+    fn open(
+        &self,
+        model_path: &Path,
+        architecture: MoonshineModelArchitecture,
+    ) -> Result<Box<dyn StreamBackend>, AsrError> {
+        assert!(
+            !self.lease_dropped.load(Ordering::SeqCst),
+            "verified-model lease must remain held through native factory open"
+        );
+        let mut state = self.state.lock().unwrap();
+        state.opened_path = Some(model_path.to_path_buf());
+        state.opened_architecture = Some(architecture);
+        drop(state);
+        Ok(Box::new(FakeBackend {
+            state: self.state.clone(),
+        }))
+    }
+}
+
+#[test]
+fn verified_model_lease_is_held_through_native_open() {
+    let lease_dropped = Arc::new(AtomicBool::new(false));
+    let resolver = FakeResolver {
+        result: Ok(PathBuf::from("/verified/tiny")),
+        lease_dropped: Some(lease_dropped.clone()),
+    };
+    let state = Arc::new(Mutex::new(BackendState::default()));
+    let factory = LeaseCheckingFactory {
+        state,
+        lease_dropped: lease_dropped.clone(),
+    };
+
+    let _engine = MoonshineTinyEngine::open_with_components(&resolver, &factory).unwrap();
+    assert!(
+        lease_dropped.load(Ordering::SeqCst),
+        "verified-model lease should release immediately after native open completes"
+    );
 }
 
 #[test]

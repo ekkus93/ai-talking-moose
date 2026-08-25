@@ -1,5 +1,6 @@
 use super::installer::{
     MoonshineModelInstallError, MoonshineModelInstallErrorKind, MoonshineModelInstaller,
+    MoonshineVerifiedModelLease,
 };
 use super::runtime::{
     MoonshineModelArchitecture, MoonshineStream, MoonshineTranscriber, MoonshineTranscript,
@@ -43,20 +44,35 @@ struct EmittedLineState {
     is_final: bool,
 }
 
+trait ModelLoadLease: Send {}
+
+impl ModelLoadLease for MoonshineVerifiedModelLease {}
+
+struct ResolvedModel {
+    model_path: PathBuf,
+    // Retain the verification/mutation lease until the native factory has
+    // completed opening the model. The trait object lets tests prove the exact
+    // lifetime without constructing a production installer guard.
+    _lease: Option<Box<dyn ModelLoadLease>>,
+}
+
 trait ModelResolver {
     fn resolve_verified_model(
         &self,
         architecture: MoonshineModelArchitecture,
-    ) -> Result<PathBuf, AsrError>;
+    ) -> Result<ResolvedModel, AsrError>;
 }
 
 impl ModelResolver for MoonshineModelInstaller {
     fn resolve_verified_model(
         &self,
         architecture: MoonshineModelArchitecture,
-    ) -> Result<PathBuf, AsrError> {
-        match self.verify_installed(architecture) {
-            Ok(Some(installed)) => Ok(installed.model_path),
+    ) -> Result<ResolvedModel, AsrError> {
+        match self.acquire_verified_model_lease(architecture) {
+            Ok(Some(lease)) => Ok(ResolvedModel {
+                model_path: lease.model_path().to_path_buf(),
+                _lease: Some(Box::new(lease)),
+            }),
             Ok(None) => Err(AsrError {
                 kind: AsrErrorKind::ModelNotInstalled,
                 message: format!(
@@ -230,8 +246,12 @@ impl MoonshineStreamingEngine {
         resolver: &dyn ModelResolver,
         factory: &dyn StreamFactory,
     ) -> Result<Self, AsrError> {
-        let model_path = resolver.resolve_verified_model(architecture)?;
-        let stream = factory.open(&model_path, architecture)?;
+        let resolved_model = resolver.resolve_verified_model(architecture)?;
+        let stream = factory.open(&resolved_model.model_path, architecture)?;
+        // Keep `resolved_model` (and therefore its production installer lease)
+        // alive until the native factory has finished opening the stream.
+        let model_path = resolved_model.model_path;
+        drop(resolved_model._lease);
         Ok(Self {
             architecture,
             #[cfg(test)]

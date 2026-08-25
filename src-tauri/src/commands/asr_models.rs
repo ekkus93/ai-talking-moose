@@ -1,3 +1,4 @@
+use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 use crate::asr::moonshine::{
     model_manifest_info, MoonshineModelArchitecture, MoonshineModelInstallCancellation,
@@ -140,6 +141,18 @@ fn ensure_model_mutation_allowed(state: &AppState, mode: AsrMode) -> Result<(), 
     Ok(())
 }
 
+async fn acquire_model_mutation_guard(
+    state: &AppState,
+    mode: AsrMode,
+) -> Result<tokio::sync::MutexGuard<'static, ()>, String> {
+    // Conversation start takes this same guard before reading settings and keeps
+    // it through graph activation. Holding it for the entire model mutation
+    // makes the check-and-mutate decision atomic with respect to a new start.
+    let guard = settings_runtime_lock().lock().await;
+    ensure_model_mutation_allowed(state, mode)?;
+    Ok(guard)
+}
+
 #[tauri::command]
 pub async fn get_asr_models(state: State<'_, AppState>) -> Result<Vec<AsrModelDescriptor>, String> {
     let tiny_active = model_in_use(state.inner(), AsrMode::MoonshineTinyStreaming);
@@ -165,7 +178,7 @@ pub async fn install_asr_model<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<AsrModelDescriptor, String> {
     let architecture = architecture_for_mode(mode)?;
-    ensure_model_mutation_allowed(state.inner(), mode)?;
+    let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
 
     let progress_app = app.clone();
     let progress: MoonshineModelInstallProgressCallback =
@@ -206,7 +219,7 @@ pub async fn delete_asr_model(
     state: State<'_, AppState>,
 ) -> Result<AsrModelDescriptor, String> {
     let architecture = architecture_for_mode(mode)?;
-    ensure_model_mutation_allowed(state.inner(), mode)?;
+    let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
     state
         .moonshine_installer
         .delete_installed(architecture)
@@ -275,5 +288,39 @@ mod tests {
             AsrMode::MoonshineTinyStreaming,
             AsrMode::MoonshineSmallStreaming
         ));
+    }
+
+    #[tokio::test]
+    async fn model_mutation_and_conversation_start_share_one_runtime_guard() {
+        use std::time::Duration;
+
+        let state = AppState::new_for_tests().unwrap();
+
+        // Simulate a conversation start already inside its settings snapshot /
+        // graph-activation critical section. Model mutation must wait.
+        let conversation_guard = settings_runtime_lock().lock().await;
+        let mutation = acquire_model_mutation_guard(&state, AsrMode::MoonshineTinyStreaming);
+        tokio::pin!(mutation);
+        assert!(tokio::time::timeout(Duration::from_millis(20), &mut mutation)
+            .await
+            .is_err());
+        drop(conversation_guard);
+        let mutation_guard = tokio::time::timeout(Duration::from_secs(1), &mut mutation)
+            .await
+            .expect("model mutation should proceed after conversation guard releases")
+            .unwrap();
+
+        // And the reverse interleaving is blocked by the same lock: once a
+        // mutation has passed its in-use check, a new conversation start cannot
+        // enter its settings critical section until the mutation completes.
+        let conversation_start = settings_runtime_lock().lock();
+        tokio::pin!(conversation_start);
+        assert!(tokio::time::timeout(Duration::from_millis(20), &mut conversation_start)
+            .await
+            .is_err());
+        drop(mutation_guard);
+        tokio::time::timeout(Duration::from_secs(1), &mut conversation_start)
+            .await
+            .expect("conversation start should proceed after model mutation releases");
     }
 }

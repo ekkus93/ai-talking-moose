@@ -721,11 +721,124 @@ async fn public_delete_is_architecture_scoped_and_idempotent() {
 }
 
 #[test]
-fn install_operation_locks_are_scoped_per_model() {
+fn operation_locks_are_scoped_per_model_id() {
     let tiny_a = install_operation_lock("moonshine-tiny-streaming-en");
     let tiny_b = install_operation_lock("moonshine-tiny-streaming-en");
     let small = install_operation_lock("moonshine-small-streaming-en");
 
     assert!(Arc::ptr_eq(&tiny_a, &tiny_b));
     assert!(!Arc::ptr_eq(&tiny_a, &small));
+}
+
+#[tokio::test]
+async fn verified_model_lease_blocks_delete_until_native_load_finishes() {
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    let temp = TempDir::new().unwrap();
+    let transport = FakeTransport::with_fixture_manifest();
+    let installer = Arc::new(installer(&temp, transport));
+    installer
+        .install_manifest(
+            &TEST_MANIFEST,
+            &MoonshineModelInstallCancellation::default(),
+        )
+        .await
+        .unwrap();
+
+    let (lease_acquired_tx, lease_acquired_rx) = mpsc::channel();
+    let (release_lease_tx, release_lease_rx) = mpsc::channel();
+    let lease_installer = installer.clone();
+    let lease_thread = thread::spawn(move || {
+        let lease = lease_installer
+            .acquire_verified_model_lease_for_manifest(&TEST_MANIFEST)
+            .unwrap()
+            .expect("fixture install must verify");
+        lease_acquired_tx.send(()).unwrap();
+        release_lease_rx.recv().unwrap();
+        drop(lease);
+    });
+    lease_acquired_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("verified-model lease should be acquired");
+
+    let delete_installer = installer.clone();
+    let delete = tokio::spawn(async move {
+        delete_installer
+            .delete_installed_manifest(&TEST_MANIFEST)
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(
+        !delete.is_finished(),
+        "delete must wait while verified model is leased for native load"
+    );
+
+    release_lease_tx.send(()).unwrap();
+    lease_thread.join().unwrap();
+    assert!(tokio::time::timeout(Duration::from_secs(5), delete)
+        .await
+        .expect("delete should proceed after verified-model lease releases")
+        .unwrap()
+        .unwrap());
+    assert!(!installer.model_path_for_manifest(&TEST_MANIFEST).exists());
+}
+
+#[tokio::test]
+async fn stale_partial_and_replaced_directories_are_removed_before_retry() {
+    let temp = TempDir::new().unwrap();
+    let transport = FakeTransport::with_fixture_manifest();
+    let installer = installer(&temp, transport);
+    let model_parent = temp.path().join(TEST_MANIFEST.id);
+    fs::create_dir_all(&model_parent).unwrap();
+    let stale_partial =
+        model_parent.join(format!(".{}.stale.partial", TEST_MANIFEST.revision));
+    let stale_replaced =
+        model_parent.join(format!(".{}.stale.replaced", TEST_MANIFEST.revision));
+    let unrelated = model_parent.join("keep-me.replaced");
+    for path in [&stale_partial, &stale_replaced, &unrelated] {
+        fs::create_dir(path).unwrap();
+        fs::write(path.join("junk"), b"stale").unwrap();
+    }
+
+    installer
+        .install_manifest(
+            &TEST_MANIFEST,
+            &MoonshineModelInstallCancellation::default(),
+        )
+        .await
+        .unwrap();
+
+    assert!(!stale_partial.exists());
+    assert!(!stale_replaced.exists());
+    assert!(unrelated.exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn verification_does_not_follow_swapped_artifact_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let temp = TempDir::new().unwrap();
+    let transport = FakeTransport::with_fixture_manifest();
+    let installer = installer(&temp, transport);
+    let outcome = installer
+        .install_manifest(
+            &TEST_MANIFEST,
+            &MoonshineModelInstallCancellation::default(),
+        )
+        .await
+        .unwrap();
+
+    let artifact = outcome.model_path.join("adapter.ort");
+    let outside = temp.path().join("outside-adapter.ort");
+    fs::write(&outside, FILE_A_BYTES).unwrap();
+    fs::remove_file(&artifact).unwrap();
+    symlink(&outside, &artifact).unwrap();
+
+    let error = installer
+        .verify_manifest_at_path(&outcome.model_path, &TEST_MANIFEST)
+        .unwrap_err();
+    assert_eq!(error.kind, MoonshineModelInstallErrorKind::CorruptInstall);
 }

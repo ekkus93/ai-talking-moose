@@ -11,7 +11,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 use uuid::Uuid;
@@ -323,6 +323,21 @@ fn install_operation_lock(model_id: &str) -> Arc<AsyncMutex<()>> {
         .clone()
 }
 
+/// Holds the per-model mutation lock from verified-path resolution through native load.
+///
+/// The engine opens models on its dedicated OS inference worker, so the synchronous
+/// blocking lock acquisition here cannot block a Tokio executor thread.
+pub(crate) struct MoonshineVerifiedModelLease {
+    model_path: PathBuf,
+    _operation_guard: OwnedMutexGuard<()>,
+}
+
+impl MoonshineVerifiedModelLease {
+    pub(crate) fn model_path(&self) -> &Path {
+        &self.model_path
+    }
+}
+
 impl MoonshineModelInstaller {
     pub fn new(install_root: impl Into<PathBuf>) -> Result<Self, MoonshineModelInstallError> {
         Ok(Self {
@@ -361,6 +376,33 @@ impl MoonshineModelInstaller {
         self.verify_installed_manifest(manifest)
     }
 
+    /// Resolve a verified model while retaining the same per-model lock used by
+    /// install/delete. The returned lease must remain alive until native loading
+    /// has finished so deletion cannot invalidate the verified path in between.
+    pub(crate) fn acquire_verified_model_lease(
+        &self,
+        architecture: MoonshineModelArchitecture,
+    ) -> Result<Option<MoonshineVerifiedModelLease>, MoonshineModelInstallError> {
+        self.acquire_verified_model_lease_for_manifest(manifest_for_architecture(architecture))
+    }
+
+    fn acquire_verified_model_lease_for_manifest(
+        &self,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<Option<MoonshineVerifiedModelLease>, MoonshineModelInstallError> {
+        manifest
+            .validate()
+            .map_err(|_| MoonshineModelInstallError::invalid_manifest())?;
+        let operation_guard = install_operation_lock(manifest.id).blocking_lock_owned();
+        let Some(installed) = self.verify_installed_manifest(manifest)? else {
+            return Ok(None);
+        };
+        Ok(Some(MoonshineVerifiedModelLease {
+            model_path: installed.model_path,
+            _operation_guard: operation_guard,
+        }))
+    }
+
     pub async fn install(
         &self,
         architecture: MoonshineModelArchitecture,
@@ -386,7 +428,14 @@ impl MoonshineModelInstaller {
         &self,
         architecture: MoonshineModelArchitecture,
     ) -> Result<bool, MoonshineModelInstallError> {
-        let manifest = manifest_for_architecture(architecture);
+        self.delete_installed_manifest(manifest_for_architecture(architecture))
+            .await
+    }
+
+    async fn delete_installed_manifest(
+        &self,
+        manifest: &MoonshineModelManifest,
+    ) -> Result<bool, MoonshineModelInstallError> {
         let operation_lock = install_operation_lock(manifest.id);
         let _operation_guard = operation_lock.lock().await;
         manifest
@@ -618,31 +667,66 @@ impl MoonshineModelInstaller {
         self.verify_install_marker(path, manifest)
     }
 
+    fn open_regular_file_no_follow(
+        &self,
+        path: &Path,
+        io_context: &'static str,
+    ) -> Result<File, MoonshineModelInstallError> {
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        }
+
+        let file = match options.open(path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            }
+            #[cfg(unix)]
+            Err(error) if error.raw_os_error() == Some(libc::ELOOP) => {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            }
+            Err(_) => return Err(MoonshineModelInstallError::io(io_context)),
+        };
+
+        let metadata = file
+            .metadata()
+            .map_err(|_| MoonshineModelInstallError::io(io_context))?;
+        if !metadata.is_file() {
+            return Err(MoonshineModelInstallError::corrupt_install());
+        }
+
+        // `O_NOFOLLOW` closes the check/open race on the macOS/Linux release
+        // path. Keep an explicit post-open symlink check on other platforms so
+        // a static symlink is still rejected rather than silently accepted.
+        #[cfg(not(unix))]
+        {
+            let path_metadata = fs::symlink_metadata(path)
+                .map_err(|_| MoonshineModelInstallError::io(io_context))?;
+            if path_metadata.file_type().is_symlink() {
+                return Err(MoonshineModelInstallError::corrupt_install());
+            }
+        }
+
+        Ok(file)
+    }
+
     fn verify_file(
         &self,
         path: &Path,
         manifest_file: &MoonshineModelFile,
     ) -> Result<(), MoonshineModelInstallError> {
-        let metadata = match fs::symlink_metadata(path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(MoonshineModelInstallError::corrupt_install());
-            }
-            Err(_) => {
-                return Err(MoonshineModelInstallError::io(
-                    "inspect an installed Moonshine model artifact",
-                ));
-            }
-        };
-        if !metadata.is_file()
-            || metadata.file_type().is_symlink()
-            || metadata.len() != manifest_file.bytes
-        {
+        let file = self.open_regular_file_no_follow(path, "open an installed model artifact")?;
+        let metadata = file
+            .metadata()
+            .map_err(|_| MoonshineModelInstallError::io("inspect an installed model artifact"))?;
+        if metadata.len() != manifest_file.bytes {
             return Err(MoonshineModelInstallError::corrupt_install());
         }
 
-        let file = File::open(path)
-            .map_err(|_| MoonshineModelInstallError::io("open an installed model artifact"))?;
         let mut reader = BufReader::with_capacity(VERIFY_BUFFER_BYTES, file);
         let mut buffer = vec![0_u8; VERIFY_BUFFER_BYTES];
         let mut sha256 = Sha256Context::new(&SHA256);
@@ -691,21 +775,11 @@ impl MoonshineModelInstaller {
         manifest: &MoonshineModelManifest,
     ) -> Result<(), MoonshineModelInstallError> {
         let marker_path = path.join(INSTALL_MARKER_FILE);
-        let metadata = match fs::symlink_metadata(&marker_path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(MoonshineModelInstallError::corrupt_install());
-            }
-            Err(_) => {
-                return Err(MoonshineModelInstallError::io(
-                    "inspect the Moonshine install marker",
-                ));
-            }
-        };
-        if !metadata.is_file() || metadata.file_type().is_symlink() {
-            return Err(MoonshineModelInstallError::corrupt_install());
-        }
-        let marker_bytes = fs::read(marker_path)
+        let mut marker_file = self
+            .open_regular_file_no_follow(&marker_path, "open the Moonshine install marker")?;
+        let mut marker_bytes = Vec::new();
+        marker_file
+            .read_to_end(&mut marker_bytes)
             .map_err(|_| MoonshineModelInstallError::io("read the Moonshine install marker"))?;
         let marker: InstallMarker = serde_json::from_slice(&marker_bytes)
             .map_err(|_| MoonshineModelInstallError::corrupt_install())?;
@@ -774,19 +848,21 @@ impl MoonshineModelInstaller {
             let Some(name) = name.to_str() else {
                 continue;
             };
-            if !name.starts_with(&prefix) || !name.ends_with(".partial") {
+            let stale_partial = name.ends_with(".partial");
+            let stale_replaced = name.ends_with(".replaced");
+            if !name.starts_with(&prefix) || (!stale_partial && !stale_replaced) {
                 continue;
             }
             let metadata = entry
                 .file_type()
-                .map_err(|_| MoonshineModelInstallError::io("inspect a partial download"))?;
+                .map_err(|_| MoonshineModelInstallError::io("inspect stale model staging data"))?;
             if metadata.is_dir() {
                 fs::remove_dir_all(entry.path()).map_err(|_| {
-                    MoonshineModelInstallError::io("remove an interrupted partial download")
+                    MoonshineModelInstallError::io("remove stale model staging data")
                 })?;
             } else {
                 fs::remove_file(entry.path()).map_err(|_| {
-                    MoonshineModelInstallError::io("remove an interrupted partial download")
+                    MoonshineModelInstallError::io("remove stale model staging data")
                 })?;
             }
         }
