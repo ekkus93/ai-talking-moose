@@ -490,7 +490,9 @@ mod tests {
         let mut stream = transcriber.create_stream().unwrap();
         stream.start().unwrap();
 
-        let error = stream.stop().expect_err("native stop failure must be surfaced");
+        let error = stream
+            .stop()
+            .expect_err("native stop failure must be surfaced");
         assert_eq!(error.kind, AsrErrorKind::InvalidState);
         drop(stream);
 

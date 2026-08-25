@@ -331,11 +331,8 @@ impl LocalAsrPipeline {
                 retryable: true,
             })?;
 
-        let mut startup_worker = StartupWorkerGuard::new(
-            worker,
-            stop_requested.clone(),
-            startup_reaped_probe,
-        );
+        let mut startup_worker =
+            StartupWorkerGuard::new(worker, stop_requested.clone(), startup_reaped_probe);
         match tokio::time::timeout(WORKER_STARTUP_TIMEOUT, ready_rx).await {
             Ok(Ok(Ok(()))) => {
                 let pipeline = Self {

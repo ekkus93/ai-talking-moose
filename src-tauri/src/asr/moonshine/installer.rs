@@ -775,8 +775,8 @@ impl MoonshineModelInstaller {
         manifest: &MoonshineModelManifest,
     ) -> Result<(), MoonshineModelInstallError> {
         let marker_path = path.join(INSTALL_MARKER_FILE);
-        let mut marker_file = self
-            .open_regular_file_no_follow(&marker_path, "open the Moonshine install marker")?;
+        let mut marker_file =
+            self.open_regular_file_no_follow(&marker_path, "open the Moonshine install marker")?;
         let mut marker_bytes = Vec::new();
         marker_file
             .read_to_end(&mut marker_bytes)

@@ -259,16 +259,20 @@ mod tests {
         quiet.personality.talkativeness = 0.0;
         let mut quiet_engine = BehaviorEngine::new(quiet);
         let event = AmbientEvent::new("event", "safe event".to_string(), 0.5);
-        assert!(!quiet_engine
-            .evaluate_ambient_event_at(now, &event, permissive_context())
-            .should_speak);
+        assert!(
+            !quiet_engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .should_speak
+        );
 
         let mut chatty = permissive_config();
         chatty.personality.talkativeness = 1.0;
         let mut chatty_engine = BehaviorEngine::new(chatty);
-        assert!(chatty_engine
-            .evaluate_ambient_event_at(now, &event, permissive_context())
-            .should_speak);
+        assert!(
+            chatty_engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .should_speak
+        );
     }
 
     #[test]
@@ -352,8 +356,7 @@ mod tests {
             let suffix = char::from(b'a' + index as u8);
             let event = AmbientEvent::new("system", format!("unique event alpha {suffix}"), 1.0);
             let now = start + Duration::seconds(i64::from(index));
-            let decision =
-                engine.evaluate_ambient_event_at(now, &event, permissive_context());
+            let decision = engine.evaluate_ambient_event_at(now, &event, permissive_context());
             assert!(decision.should_speak);
             engine.record_ambient_delivery_at(now, &event);
         }
@@ -374,11 +377,7 @@ mod tests {
         let dismissed_at = Utc::now();
         engine.cooldowns.record_dismissal(dismissed_at);
 
-        let event = AmbientEvent::new(
-            "window_change",
-            "safe synthetic event".to_string(),
-            1.0,
-        );
+        let event = AmbientEvent::new("window_change", "safe synthetic event".to_string(), 1.0);
         let blocked = engine.evaluate_ambient_event_at(
             dismissed_at + Duration::seconds(DISMISSAL_COOLDOWN_SECONDS - 1),
             &event,

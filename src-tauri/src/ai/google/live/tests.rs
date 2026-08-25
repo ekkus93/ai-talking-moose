@@ -87,7 +87,14 @@ fn websocket_auth_uses_documented_query_parameter_with_url_encoding() {
     let url = live_websocket_url(KEY).unwrap();
     let parsed = Url::parse(&url).unwrap();
 
-    assert_eq!(parsed.query_pairs().find(|(name, _)| name == "key").unwrap().1, KEY);
+    assert_eq!(
+        parsed
+            .query_pairs()
+            .find(|(name, _)| name == "key")
+            .unwrap()
+            .1,
+        KEY
+    );
     assert!(!url.contains("LIVE key+with/specials"));
 }
 
@@ -346,7 +353,9 @@ async fn reconnect_wait_does_not_consume_queued_tool_response() {
     });
     tokio::task::yield_now().await;
 
-    let retained = rx.try_recv().expect("reconnect must leave outbound queue intact");
+    let retained = rx
+        .try_recv()
+        .expect("reconnect must leave outbound queue intact");
     assert_eq!(retained.kind, OutboundKind::ToolResponse);
     assert_eq!(diagnostics.snapshot().queued, 1);
 
@@ -367,7 +376,10 @@ fn failed_tool_response_is_retained_for_retry_then_counted_on_terminal_failure()
         ),
         &diagnostics,
     );
-    assert_eq!(pending.as_ref().map(|item| item.kind), Some(OutboundKind::ToolResponse));
+    assert_eq!(
+        pending.as_ref().map(|item| item.kind),
+        Some(OutboundKind::ToolResponse)
+    );
     assert_eq!(diagnostics.snapshot().retried, 1);
 
     let (_tx, mut rx) = mpsc::channel(1);

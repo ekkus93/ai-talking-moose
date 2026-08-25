@@ -435,10 +435,9 @@ mod tests {
 
     #[test]
     fn frontend_contract_matches_authoritative_rust_defaults_and_catalogs() {
-        let contract: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../src/generated/backendContract.json"
-        ))
-        .unwrap();
+        let contract: serde_json::Value =
+            serde_json::from_str(include_str!("../../../src/generated/backendContract.json"))
+                .unwrap();
 
         assert_eq!(
             contract.get("settings").unwrap(),

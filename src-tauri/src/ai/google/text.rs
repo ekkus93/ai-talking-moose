@@ -22,9 +22,7 @@ impl GoogleTextModel {
     }
 
     fn generation_url(model: &str) -> String {
-        format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        )
+        format!("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent")
     }
 
     fn generation_request(&self, model: &str, body: &serde_json::Value) -> RequestBuilder {

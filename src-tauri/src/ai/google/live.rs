@@ -540,11 +540,9 @@ async fn reconnect(
             }
         }
 
-        let reconnect_result = await_reconnect_attempt(
-            open_and_setup(api_key, config, resume_handle),
-            cancellation,
-        )
-        .await;
+        let reconnect_result =
+            await_reconnect_attempt(open_and_setup(api_key, config, resume_handle), cancellation)
+                .await;
         match reconnect_result {
             Ok(socket) => return Ok(socket),
             Err(error) => {

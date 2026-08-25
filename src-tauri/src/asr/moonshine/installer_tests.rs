@@ -792,10 +792,8 @@ async fn stale_partial_and_replaced_directories_are_removed_before_retry() {
     let installer = installer(&temp, transport);
     let model_parent = temp.path().join(TEST_MANIFEST.id);
     fs::create_dir_all(&model_parent).unwrap();
-    let stale_partial =
-        model_parent.join(format!(".{}.stale.partial", TEST_MANIFEST.revision));
-    let stale_replaced =
-        model_parent.join(format!(".{}.stale.replaced", TEST_MANIFEST.revision));
+    let stale_partial = model_parent.join(format!(".{}.stale.partial", TEST_MANIFEST.revision));
+    let stale_replaced = model_parent.join(format!(".{}.stale.replaced", TEST_MANIFEST.revision));
     let unrelated = model_parent.join("keep-me.replaced");
     for path in [&stale_partial, &stale_replaced, &unrelated] {
         fs::create_dir(path).unwrap();

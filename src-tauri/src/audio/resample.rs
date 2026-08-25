@@ -152,8 +152,7 @@ mod tests {
         let to_rate = 2_333_858_686u32;
         let ratio = from_rate as f64 / to_rate as f64;
         let output_len = resample_output_len(input_len, ratio);
-        let (idx0, idx1, _frac) =
-            resample_source_position(output_len - 1, input_len, ratio);
+        let (idx0, idx1, _frac) = resample_source_position(output_len - 1, input_len, ratio);
 
         assert_eq!(
             ((output_len - 1) as f64 * ratio).floor() as usize,

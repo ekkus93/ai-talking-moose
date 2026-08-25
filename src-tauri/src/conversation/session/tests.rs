@@ -111,7 +111,6 @@ impl LiveSession for ToolRecordingSession {
     }
 }
 
-
 struct AudioRecordingSession {
     chunks: Arc<SyncMutex<Vec<Vec<u8>>>>,
 }

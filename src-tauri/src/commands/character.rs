@@ -465,5 +465,4 @@ mod tests {
         );
         assert_eq!(*authoritative_state.read(), CharacterState::Idle);
     }
-
 }

@@ -301,9 +301,11 @@ mod tests {
         let conversation_guard = settings_runtime_lock().lock().await;
         let mutation = acquire_model_mutation_guard(&state, AsrMode::MoonshineTinyStreaming);
         tokio::pin!(mutation);
-        assert!(tokio::time::timeout(Duration::from_millis(20), &mut mutation)
-            .await
-            .is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut mutation)
+                .await
+                .is_err()
+        );
         drop(conversation_guard);
         let mutation_guard = tokio::time::timeout(Duration::from_secs(1), &mut mutation)
             .await
@@ -315,9 +317,11 @@ mod tests {
         // enter its settings critical section until the mutation completes.
         let conversation_start = settings_runtime_lock().lock();
         tokio::pin!(conversation_start);
-        assert!(tokio::time::timeout(Duration::from_millis(20), &mut conversation_start)
-            .await
-            .is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut conversation_start)
+                .await
+                .is_err()
+        );
         drop(mutation_guard);
         tokio::time::timeout(Duration::from_secs(1), &mut conversation_start)
             .await

@@ -1,12 +1,12 @@
 use crate::ai::types::{TextRequest, TtsRequest};
 use crate::app::state::AppState;
-use crate::commands::conversation::model_prompt_memories;
 use crate::character::ambient::{AmbientEvent, AmbientEventCategory};
 use crate::character::behavior::AmbientPolicyContext;
 #[cfg(test)]
 use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
 use crate::character::state::{transition_character_state, CharacterState};
+use crate::commands::conversation::model_prompt_memories;
 use std::time::Duration;
 use tauri::{Emitter, Runtime, State};
 
