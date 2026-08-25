@@ -75,6 +75,7 @@ async fn fake_pipeline_for_architecture(
             }))
         },
         callback,
+        WORKER_STARTUP_TIMEOUT,
         None,
     )
     .await
