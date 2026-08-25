@@ -1,6 +1,23 @@
 /// Resampling and audio format conversion utilities
 pub struct AudioResampler;
 
+fn resample_output_len(input_len: usize, ratio: f64) -> usize {
+    (input_len as f64 / ratio).round() as usize
+}
+
+fn resample_source_position(
+    output_index: usize,
+    input_len: usize,
+    ratio: f64,
+) -> (usize, usize, f32) {
+    let src_idx = output_index as f64 * ratio;
+    let raw_idx0 = src_idx.floor() as usize;
+    let idx0 = raw_idx0.min(input_len - 1);
+    let idx1 = (idx0 + 1).min(input_len - 1);
+    let frac = (src_idx - raw_idx0 as f64) as f32;
+    (idx0, idx1, frac)
+}
+
 impl AudioResampler {
     /// Downmix multi-channel interleaved float audio to mono
     pub fn downmix_to_mono(channels: usize, interleaved_samples: &[f32]) -> Vec<f32> {
@@ -24,19 +41,13 @@ impl AudioResampler {
         }
 
         let ratio = from_rate as f64 / to_rate as f64;
-        let output_len = (input.len() as f64 / ratio).round() as usize;
+        let output_len = resample_output_len(input.len(), ratio);
         let mut output = Vec::with_capacity(output_len);
 
         for i in 0..output_len {
-            let src_idx = i as f64 * ratio;
-            let idx0 = src_idx.floor() as usize;
-            let idx1 = (idx0 + 1).min(input.len() - 1);
-            let frac = (src_idx - idx0 as f64) as f32;
-
-            if idx0 < input.len() {
-                let sample = input[idx0] * (1.0 - frac) + input[idx1] * frac;
-                output.push(sample);
-            }
+            let (idx0, idx1, frac) = resample_source_position(i, input.len(), ratio);
+            let sample = input[idx0] * (1.0 - frac) + input[idx1] * frac;
+            output.push(sample);
         }
 
         output
@@ -103,6 +114,54 @@ mod tests {
         // Downsample 48kHz -> 24kHz (half length)
         let output = AudioResampler::resample_linear(48000, 24000, &input);
         assert_eq!(output.len(), 3);
+    }
+
+    #[test]
+    fn resample_linear_always_honors_rounded_output_length() {
+        for input_len in 1..=64 {
+            let input = vec![0.25; input_len];
+            for (from_rate, to_rate) in [
+                (8_000, 44_100),
+                (11_025, 48_000),
+                (16_000, 44_100),
+                (44_100, 16_000),
+                (44_100, 48_000),
+                (48_000, 44_100),
+            ] {
+                let ratio = from_rate as f64 / to_rate as f64;
+                let expected_len = (input_len as f64 / ratio).round() as usize;
+                let output = AudioResampler::resample_linear(from_rate, to_rate, &input);
+                assert_eq!(
+                    output.len(),
+                    expected_len,
+                    "input_len={input_len}, from={from_rate}, to={to_rate}"
+                );
+            }
+        }
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn rounding_edge_clamps_the_last_source_index() {
+        // This is a concrete f64 boundary where the rounded output length makes
+        // the final source position round to exactly `input_len`. Allocating a
+        // slice this large is neither practical nor necessary: this helper is
+        // the production index calculation used by `resample_linear`.
+        let input_len = 2_430_022_687_152_955usize;
+        let from_rate = 1_976_296_948u32;
+        let to_rate = 2_333_858_686u32;
+        let ratio = from_rate as f64 / to_rate as f64;
+        let output_len = resample_output_len(input_len, ratio);
+        let (idx0, idx1, _frac) =
+            resample_source_position(output_len - 1, input_len, ratio);
+
+        assert_eq!(
+            ((output_len - 1) as f64 * ratio).floor() as usize,
+            input_len,
+            "fixture must exercise the historical out-of-range rounding edge"
+        );
+        assert_eq!(idx0, input_len - 1);
+        assert_eq!(idx1, input_len - 1);
     }
 
     #[test]

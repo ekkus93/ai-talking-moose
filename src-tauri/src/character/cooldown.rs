@@ -36,7 +36,10 @@ impl Default for AnnoyanceBudget {
 
 impl AnnoyanceBudget {
     pub fn update_decay(&mut self, now: DateTime<Utc>) {
-        let elapsed_seconds = (now - self.last_decay_check).num_seconds().max(0);
+        let elapsed_seconds = (now - self.last_decay_check).num_seconds();
+        if elapsed_seconds <= 0 {
+            return;
+        }
         let decay_amount = (elapsed_seconds as f32 / 60.0) * self.decay_per_minute;
         self.score = (self.score - decay_amount).max(0.0);
         self.last_decay_check = now;
@@ -246,6 +249,25 @@ mod tests {
         budget.update_decay(future);
         assert!(!budget.is_suppressed_at(future));
         assert_eq!(budget.score, 0.0);
+    }
+
+    #[test]
+    fn backward_clock_step_preserves_decay_checkpoint_and_future_credit() {
+        let checkpoint = Utc.with_ymd_and_hms(2026, 8, 22, 12, 0, 0).unwrap();
+        let mut budget = AnnoyanceBudget {
+            score: 60.0,
+            threshold: 100.0,
+            decay_per_minute: 5.0,
+            last_decay_check: checkpoint,
+        };
+
+        budget.update_decay(checkpoint - Duration::minutes(5));
+        assert_eq!(budget.score, 60.0);
+        assert_eq!(budget.last_decay_check, checkpoint);
+
+        budget.update_decay(checkpoint + Duration::minutes(1));
+        assert_eq!(budget.score, 55.0);
+        assert_eq!(budget.last_decay_check, checkpoint + Duration::minutes(1));
     }
 
     #[test]
