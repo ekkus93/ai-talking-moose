@@ -1,7 +1,8 @@
 use crate::ai::fake::{FakeConversationProvider, FakeSpeechSynthesizer, FakeTextModel};
 use crate::ai::google::{
-    normalize_live_model, normalize_text_model, GoogleAuth, GoogleLiveProvider,
-    GoogleSpeechSynthesizer, GoogleTextModel, DEFAULT_LIVE_MODEL, DEFAULT_TEXT_MODEL,
+    normalize_live_model, normalize_text_model, normalize_tts_model, GoogleAuth,
+    GoogleLiveProvider, GoogleSpeechSynthesizer, GoogleTextModel, DEFAULT_LIVE_MODEL,
+    DEFAULT_TEXT_MODEL, DEFAULT_TTS_MODEL,
 };
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::asr::moonshine::MoonshineModelInstaller;
@@ -118,7 +119,7 @@ impl Default for AppSettings {
             provider: "google".to_string(),
             live_model: DEFAULT_LIVE_MODEL.to_string(),
             text_model: DEFAULT_TEXT_MODEL.to_string(),
-            tts_model: "en-US-Standard-B".to_string(),
+            tts_model: DEFAULT_TTS_MODEL.to_string(),
 
             active_app_observation: false,
             window_title_observation: false,
@@ -148,6 +149,10 @@ impl AppSettings {
             .get("settings_version")
             .and_then(serde_json::Value::as_u64)
             == Some(u64::from(CURRENT_SETTINGS_VERSION));
+        let had_enabled_window_title_observation = value
+            .get("window_title_observation")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true);
 
         let mut settings: Self = serde_json::from_value(value)?;
         if !had_asr_mode {
@@ -155,10 +160,16 @@ impl AppSettings {
         }
         let normalized_live_model = normalize_live_model(&settings.live_model).to_string();
         let normalized_text_model = normalize_text_model(&settings.text_model).to_string();
+        let normalized_tts_model = normalize_tts_model(&settings.tts_model).to_string();
         let models_migrated = normalized_live_model != settings.live_model
-            || normalized_text_model != settings.text_model;
+            || normalized_text_model != settings.text_model
+            || normalized_tts_model != settings.tts_model;
         settings.live_model = normalized_live_model;
         settings.text_model = normalized_text_model;
+        settings.tts_model = normalized_tts_model;
+        // Window-title observation is an unsupported V1 compatibility field, not an
+        // authoritative preference. Persist it fail-closed even for legacy profiles.
+        settings.window_title_observation = false;
         settings.settings_version = CURRENT_SETTINGS_VERSION;
 
         Ok((
@@ -166,7 +177,8 @@ impl AppSettings {
             !had_asr_mode
                 || had_legacy_microphone_permission
                 || !had_current_version
-                || models_migrated,
+                || models_migrated
+                || had_enabled_window_title_observation,
         ))
     }
 
@@ -334,6 +346,7 @@ impl AppState {
         let behavior_engine = Arc::new(Mutex::new(BehaviorEngine::new(character_config.clone())));
         let audio_capture = Arc::new(Mutex::new(AudioCapture::new()));
         let audio_playback = Arc::new(AudioPlayback::new());
+        audio_playback.set_volume(settings.read().volume);
         let standalone_speech = StandaloneSpeechController::new();
         let conversation_mgr = Arc::new(ConversationManager::new());
         let moonshine_installer = Arc::new(
@@ -387,6 +400,7 @@ impl AppState {
             let key = self.secrets.get_google_api_key().unwrap_or_default();
             Box::new(GoogleSpeechSynthesizer::new(
                 GoogleAuth::new(key),
+                settings.tts_model.clone(),
                 settings.tts_voice.clone(),
             ))
         }
@@ -494,6 +508,32 @@ mod tests {
 
         assert_eq!(state.settings.read().asr_mode, AsrMode::GeminiLiveAudio);
         assert!(state.onboarding_status().unwrap().needs_acknowledgement);
+    }
+
+    #[test]
+    fn legacy_tts_model_is_normalized_to_current_configured_model() {
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "tts_model".to_string(),
+            serde_json::Value::String("en-US-Standard-B".to_string()),
+        );
+        let (settings, migrated) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
+        assert!(migrated);
+        assert_eq!(settings.tts_model, DEFAULT_TTS_MODEL);
+    }
+
+    #[test]
+    fn unsupported_window_title_setting_is_normalized_fail_closed() {
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "window_title_observation".to_string(),
+            serde_json::Value::Bool(true),
+        );
+        let (settings, migrated) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
+        assert!(migrated);
+        assert!(!settings.window_title_observation);
     }
 
     #[test]

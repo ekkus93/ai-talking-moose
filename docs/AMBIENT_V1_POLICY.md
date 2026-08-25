@@ -30,7 +30,7 @@ For an ambient remark that begins while Moose is hidden/dismissed and is locally
 2. successful bounded generation/TTS transitions to `Talking`;
 3. `Talking` is retained for the calculated queued-audio duration, hard-bounded to 10 seconds;
 4. the bubble is cleared and state returns to `Idle`;
-5. after a short 750 ms idle, Moose returns to `Hidden` if no user action changed the state.
+5. after the persisted `hide_delay_seconds` interval, Moose returns to `Hidden` if no user action changed the state.
 
 If Moose was already visible and idle before the ambient event, the lifecycle returns to `Idle` and does not hide the user-visible character.
 

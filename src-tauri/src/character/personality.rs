@@ -61,6 +61,11 @@ impl Default for SpeechRules {
     }
 }
 
+/// Fixed V1 anti-annoyance floor between ambient remarks. This is deliberately
+/// not a user preference: talkativeness and the hourly budget are configurable,
+/// while this local cooldown remains a safety guardrail.
+pub const V1_MIN_AMBIENT_COOLDOWN_SECONDS: u64 = 300;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BehaviorConfig {
     pub unsolicited_comments: bool,
@@ -80,7 +85,7 @@ impl Default for BehaviorConfig {
             quiet_hours_start: settings.quiet_hours_start,
             quiet_hours_end: settings.quiet_hours_end,
             max_comments_per_hour: settings.max_comments_per_hour,
-            min_cooldown_seconds: 300, // 5 minutes
+            min_cooldown_seconds: V1_MIN_AMBIENT_COOLDOWN_SECONDS,
         }
     }
 }

@@ -125,6 +125,9 @@ pub async fn update_settings<R: Runtime>(
     let _settings_guard = settings_runtime_lock().lock().await;
 
     new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
+    // Window-title observation remains unsupported in V1. Treat the serialized field
+    // as compatibility metadata and never allow a settings write to enable it.
+    new_settings.window_title_observation = false;
     validate_app_settings(&new_settings)?;
 
     let previous = state.settings.read().clone();
@@ -148,6 +151,10 @@ pub async fn update_settings<R: Runtime>(
         }
         return Err(error);
     }
+
+    // Apply gain only after the settings transaction commits so persistence failure
+    // cannot leave live playback using a value the runtime settings rejected.
+    state.audio_playback.set_volume(new_settings.volume);
 
     if restart_required && state.conversation_mgr.is_active() {
         // Privacy-preserving restart policy: tear down the old graph and require a fresh explicit

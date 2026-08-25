@@ -67,6 +67,7 @@ struct PlaybackCallbackState {
     buffer: Arc<Mutex<VecDeque<f32>>>,
     is_playing: Arc<AtomicBool>,
     output_level: Arc<AtomicU32>,
+    volume: Arc<AtomicU32>,
     level_meter: Arc<Mutex<LevelMeter>>,
     mouth_sender: Arc<Mutex<Option<mpsc::Sender<MouthShape>>>>,
     output_level_sender: Arc<Mutex<Option<mpsc::Sender<f32>>>>,
@@ -75,10 +76,11 @@ struct PlaybackCallbackState {
 
 impl PlaybackCallbackState {
     fn take_mono_frames(&self, frame_count: usize) -> Vec<f32> {
+        let volume = f32::from_bits(self.volume.load(Ordering::Relaxed)).clamp(0.0, 1.0);
         let mut buffer = self.buffer.lock();
         let mut mono = Vec::with_capacity(frame_count);
         for _ in 0..frame_count {
-            mono.push(buffer.pop_front().unwrap_or(0.0));
+            mono.push(buffer.pop_front().unwrap_or(0.0) * volume);
         }
         let has_non_silent_sample = mono.iter().any(|sample| sample.abs() > 0.001);
         self.is_playing.store(
@@ -167,6 +169,7 @@ pub struct AudioPlayback {
     buffer: Arc<Mutex<VecDeque<f32>>>,
     is_playing: Arc<AtomicBool>,
     output_level: Arc<AtomicU32>,
+    volume: Arc<AtomicU32>,
     level_meter: Arc<Mutex<LevelMeter>>,
     _stream: Mutex<Option<SafeStream>>,
     mouth_sender: Arc<Mutex<Option<mpsc::Sender<MouthShape>>>>,
@@ -189,6 +192,7 @@ impl AudioPlayback {
             buffer: Arc::new(Mutex::new(VecDeque::new())),
             is_playing: Arc::new(AtomicBool::new(false)),
             output_level: Arc::new(AtomicU32::new(0.0_f32.to_bits())),
+            volume: Arc::new(AtomicU32::new(1.0_f32.to_bits())),
             level_meter: Arc::new(Mutex::new(LevelMeter::new())),
             _stream: Mutex::new(None),
             mouth_sender: Arc::new(Mutex::new(None)),
@@ -226,6 +230,15 @@ impl AudioPlayback {
 
     pub fn set_output_level_sender(&self, tx: mpsc::Sender<f32>) {
         *self.output_level_sender.lock() = Some(tx);
+    }
+
+    pub fn set_volume(&self, volume: f32) {
+        let volume = if volume.is_finite() {
+            volume.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        self.volume.store(volume.to_bits(), Ordering::Relaxed);
     }
 
     pub fn start(&self, device_name: Option<String>) -> Result<(), AudioPlaybackError> {
@@ -290,6 +303,7 @@ impl AudioPlayback {
             buffer: self.buffer.clone(),
             is_playing: self.is_playing.clone(),
             output_level: self.output_level.clone(),
+            volume: self.volume.clone(),
             level_meter: self.level_meter.clone(),
             mouth_sender: self.mouth_sender.clone(),
             output_level_sender: self.output_level_sender.clone(),
@@ -547,6 +561,32 @@ mod tests {
         let report = playback.enqueue_pcm_i16(&samples, 24_000).unwrap();
         assert_eq!(report.queued_samples, samples.len());
         assert_eq!(report.dropped_samples, 0);
+    }
+
+    #[test]
+    fn live_volume_gain_scales_rendered_audio_and_reported_level() {
+        let playback = AudioPlayback::new();
+        playback.set_volume(0.25);
+        playback.buffer.lock().extend([0.8, -0.4]);
+
+        let callback = PlaybackCallbackState {
+            buffer: playback.buffer.clone(),
+            is_playing: playback.is_playing.clone(),
+            output_level: playback.output_level.clone(),
+            volume: playback.volume.clone(),
+            level_meter: playback.level_meter.clone(),
+            mouth_sender: playback.mouth_sender.clone(),
+            output_level_sender: playback.output_level_sender.clone(),
+            channels: 1,
+        };
+        let mut output = [0.0_f32; 2];
+        callback.render_f32(&mut output);
+
+        assert!((output[0] - 0.2).abs() < 1e-6);
+        assert!((output[1] + 0.1).abs() < 1e-6);
+        let output_level = f32::from_bits(playback.output_level.load(Ordering::Relaxed));
+        assert!(output_level > 0.0);
+        assert!(output_level < 0.25);
     }
 
     #[test]

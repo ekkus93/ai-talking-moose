@@ -1,7 +1,6 @@
 use crate::ai::google::auth::{trace_google_transport_error, GoogleAuth, GOOGLE_API_KEY_HEADER};
 use crate::ai::google::config::{
     normalize_tts_model, normalize_tts_voice, validate_tts_model, validate_tts_voice,
-    DEFAULT_TTS_MODEL,
 };
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
@@ -22,11 +21,7 @@ pub struct GoogleSpeechSynthesizer {
 }
 
 impl GoogleSpeechSynthesizer {
-    pub fn new(auth: GoogleAuth, default_voice: String) -> Self {
-        Self::new_with_model(auth, DEFAULT_TTS_MODEL.to_string(), default_voice)
-    }
-
-    fn new_with_model(auth: GoogleAuth, model: String, default_voice: String) -> Self {
+    pub fn new(auth: GoogleAuth, model: String, default_voice: String) -> Self {
         Self {
             auth,
             model: normalize_tts_model(&model).to_string(),
@@ -190,7 +185,7 @@ mod tests {
 
     #[test]
     fn constructor_normalizes_legacy_model_and_unknown_voice() {
-        let synthesizer = GoogleSpeechSynthesizer::new_with_model(
+        let synthesizer = GoogleSpeechSynthesizer::new(
             GoogleAuth::new("test-key".to_string()),
             "en-US-Standard-B".to_string(),
             "not-a-real-voice".to_string(),
@@ -207,11 +202,24 @@ mod tests {
     }
 
     #[test]
+    fn public_constructor_uses_selected_tts_model() {
+        let synthesizer = GoogleSpeechSynthesizer::new(
+            GoogleAuth::new("test-key".to_string()),
+            crate::ai::google::config::DEFAULT_TTS_MODEL.to_string(),
+            "Puck".to_string(),
+        );
+        assert!(synthesizer.generation_url().contains(&format!(
+            "/models/{}:generateContent",
+            crate::ai::google::config::DEFAULT_TTS_MODEL
+        )));
+    }
+
+    #[test]
     fn generation_request_uses_api_key_header_and_secret_free_url() {
         const KEY: &str = "AIzaSyTTS_HEADER_ONLY_248a";
-        let synthesizer = GoogleSpeechSynthesizer::new_with_model(
+        let synthesizer = GoogleSpeechSynthesizer::new(
             GoogleAuth::new(KEY.to_string()),
-            DEFAULT_TTS_MODEL.to_string(),
+            crate::ai::google::config::DEFAULT_TTS_MODEL.to_string(),
             "Puck".to_string(),
         );
         let request = synthesizer

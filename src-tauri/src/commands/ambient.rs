@@ -12,7 +12,6 @@ use tauri::{Emitter, Runtime, State};
 
 const MAX_AMBIENT_OUTPUT_CHARS: usize = 320;
 const MAX_AMBIENT_PLAYBACK_WAIT: Duration = Duration::from_secs(10);
-const AMBIENT_IDLE_AFTER_SPEECH: Duration = Duration::from_millis(750);
 
 fn transition_and_emit<R: Runtime>(
     state: &AppState,
@@ -124,6 +123,10 @@ fn ambient_policy_context(
     }
 }
 
+fn configured_ambient_hide_delay(state: &AppState) -> Duration {
+    Duration::from_secs(u64::from(state.settings.read().hide_delay_seconds))
+}
+
 fn clear_ambient_bubble<R: Runtime>(app: &tauri::AppHandle<R>) {
     let _ = app.emit("moose://speech-bubble", "");
 }
@@ -159,7 +162,7 @@ async fn complete_ambient_appearance<R: Runtime>(
     clear_ambient_bubble(app);
 
     if appeared_for_ambient && *state.character_state.read() == CharacterState::Idle {
-        tokio::time::sleep(AMBIENT_IDLE_AFTER_SPEECH).await;
+        tokio::time::sleep(configured_ambient_hide_delay(state)).await;
         if *state.character_state.read() == CharacterState::Idle {
             transition_and_emit(state, app, CharacterState::Hidden)?;
         }
@@ -356,8 +359,17 @@ mod tests {
     }
 
     #[test]
-    fn ambient_lifecycle_waits_are_hard_bounded() {
+    fn ambient_lifecycle_playback_wait_is_hard_bounded() {
         assert!(MAX_AMBIENT_PLAYBACK_WAIT <= Duration::from_secs(10));
-        assert!(AMBIENT_IDLE_AFTER_SPEECH <= Duration::from_secs(1));
+    }
+
+    #[test]
+    fn configured_hide_delay_reads_live_app_setting() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().hide_delay_seconds = 17;
+        assert_eq!(
+            configured_ambient_hide_delay(&state),
+            Duration::from_secs(17)
+        );
     }
 }
