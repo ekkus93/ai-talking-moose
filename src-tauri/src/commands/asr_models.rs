@@ -323,8 +323,10 @@ mod tests {
                 .is_err()
         );
         drop(mutation_guard);
-        tokio::time::timeout(Duration::from_secs(1), &mut conversation_start)
-            .await
-            .expect("conversation start should proceed after model mutation releases");
+        let conversation_guard =
+            tokio::time::timeout(Duration::from_secs(1), &mut conversation_start)
+                .await
+                .expect("conversation start should proceed after model mutation releases");
+        drop(conversation_guard);
     }
 }
