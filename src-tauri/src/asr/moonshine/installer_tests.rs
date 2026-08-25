@@ -371,7 +371,8 @@ async fn cancellation_while_waiting_for_global_install_lock_returns_without_netw
     let transport = FakeTransport::with_fixture_manifest();
     let installer = installer(&temp, transport.clone());
     let cancellation = MoonshineModelInstallCancellation::default();
-    let guard = install_operation_lock(TEST_MANIFEST.id).lock().await;
+    let operation_lock = install_operation_lock(TEST_MANIFEST.id);
+    let guard = operation_lock.lock().await;
     cancellation.cancel();
 
     let error = installer
