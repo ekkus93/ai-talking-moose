@@ -517,9 +517,20 @@ mod tests {
             serde_json::from_str(include_str!("../../../src/generated/backendContract.json"))
                 .unwrap();
 
+        let contract_settings = contract.get("settings").unwrap();
+        let authoritative_settings = serde_json::to_value(AppSettings::default()).unwrap();
+        let contract_keys = contract_settings.as_object().unwrap();
+        let authoritative_keys = authoritative_settings.as_object().unwrap();
+        assert_eq!(contract_keys.len(), authoritative_keys.len());
+        assert!(authoritative_keys
+            .keys()
+            .all(|key| contract_keys.contains_key(key)));
+
+        let decoded_settings: AppSettings =
+            serde_json::from_value(contract_settings.clone()).unwrap();
         assert_eq!(
-            contract.get("settings").unwrap(),
-            &serde_json::to_value(AppSettings::default()).unwrap()
+            serde_json::to_value(decoded_settings).unwrap(),
+            authoritative_settings
         );
         assert_eq!(
             contract.get("google_models").unwrap(),

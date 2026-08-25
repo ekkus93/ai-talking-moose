@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn local_final_waits_for_serialized_conversation_operation_boundary() {
+async fn local_final_does_not_wait_for_global_operation_lock() {
     let manager = ConversationManager::new();
     let generation = 55;
     let session_id = "serialized-moonshine-session";
@@ -23,25 +23,24 @@ async fn local_final_waits_for_serialized_conversation_operation_boundary() {
     *manager.transcript_callback.lock() = Some(Arc::new(|_, _, _| {}));
 
     let operation_guard = manager.operation_lock.lock().await;
-    let manager_for_final = manager.clone();
-    let final_task = tokio::spawn(async move {
-        manager_for_final
-            .handle_local_asr_event(
-                generation,
-                session_id,
-                AsrEvent::FinalTranscript {
-                    text: "serialized final".to_string(),
-                },
-            )
-            .await
-    });
-    tokio::task::yield_now().await;
-    assert!(text_turns.lock().is_empty());
+    let handled = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        manager.handle_local_asr_event(
+            generation,
+            session_id,
+            AsrEvent::FinalTranscript {
+                text: "serialized final".to_string(),
+            },
+        ),
+    )
+    .await
+    .expect("local final must not wait for the global conversation operation lock")
+    .unwrap();
 
-    drop(operation_guard);
-    assert!(final_task.await.unwrap().unwrap());
+    assert!(handled);
     assert_eq!(
         text_turns.lock().as_slice(),
         &["serialized final".to_string()]
     );
+    drop(operation_guard);
 }
