@@ -9,7 +9,7 @@ use crate::app::settings_policy::{
     conversation_restart_required, persist_and_apply_settings, settings_runtime_lock,
     validate_app_settings, validate_selected_device,
 };
-use crate::app::state::{AppSettings, AppState};
+use crate::app::state::{AppSettings, AppState, OnboardingStatus};
 use crate::audio::capture::AudioCaptureDiagnostics;
 use crate::audio::devices::{AudioDeviceInfo, AudioDeviceManager};
 use crate::audio::permissions::{
@@ -92,6 +92,16 @@ fn generate_output_test_tone(sample_rate_hz: u32, duration_ms: u32) -> Vec<i16> 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
     Ok(state.settings.read().clone())
+}
+
+#[tauri::command]
+pub fn get_onboarding_status(state: State<'_, AppState>) -> Result<OnboardingStatus, String> {
+    state.onboarding_status()
+}
+
+#[tauri::command]
+pub fn acknowledge_onboarding(state: State<'_, AppState>) -> Result<OnboardingStatus, String> {
+    state.acknowledge_current_onboarding()
 }
 
 #[tauri::command]

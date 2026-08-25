@@ -24,6 +24,7 @@ export const OnboardingModal: React.FC = () => {
   const [tinyModel, setTinyModel] = useState<AsrModelDescriptor | null>(null);
   const [isInstallingTiny, setIsInstallingTiny] = useState(false);
   const [modelStatus, setModelStatus] = useState<string | null>(null);
+  const [completionStatus, setCompletionStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOnboardingOpen) return;
@@ -75,9 +76,21 @@ export const OnboardingModal: React.FC = () => {
     }
   };
 
+  const closeAfterAcknowledgement = async (greet: boolean) => {
+    setCompletionStatus(null);
+    try {
+      await tauriBridge.acknowledgeOnboarding();
+      toggleOnboarding(false);
+      if (greet) {
+        await triggerCanned("greeting");
+      }
+    } catch (error) {
+      setCompletionStatus(`Could not save onboarding completion: ${error}`);
+    }
+  };
+
   const handleFinish = async () => {
-    toggleOnboarding(false);
-    await triggerCanned("greeting");
+    await closeAfterAcknowledgement(true);
   };
 
   return (
@@ -102,7 +115,7 @@ export const OnboardingModal: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => toggleOnboarding(false)}
+            onClick={() => void closeAfterAcknowledgement(false)}
             className="p-1 hover:bg-gray-300 rounded border border-black"
             title="Skip Onboarding"
             aria-label="Skip onboarding"
@@ -110,6 +123,8 @@ export const OnboardingModal: React.FC = () => {
             <X className="w-3 h-3" aria-hidden="true" />
           </button>
         </div>
+
+        {completionStatus ? <p role="status">{completionStatus}</p> : null}
 
         {step === 1 && (
           <div className="space-y-2.5">

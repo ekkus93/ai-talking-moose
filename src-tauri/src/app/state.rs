@@ -79,6 +79,16 @@ pub struct AppSettings {
 
 pub const CURRENT_SETTINGS_VERSION: u32 = 2;
 
+pub const CURRENT_ONBOARDING_VERSION: u32 = 1;
+const ONBOARDING_ACKNOWLEDGED_VERSION_SETTING: &str = "onboarding_acknowledged_version";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OnboardingStatus {
+    pub current_version: u32,
+    pub acknowledged_version: Option<u32>,
+    pub needs_acknowledgement: bool,
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -251,6 +261,29 @@ fn migrate_legacy_google_api_key(db: &Database, secrets: &SecretStore) -> Result
 }
 
 impl AppState {
+    pub fn onboarding_status(&self) -> Result<OnboardingStatus, String> {
+        let acknowledged_version = self
+            .db
+            .get_setting(ONBOARDING_ACKNOWLEDGED_VERSION_SETTING)
+            .map_err(|error| error.to_string())?
+            .and_then(|value| value.parse::<u32>().ok());
+        Ok(OnboardingStatus {
+            current_version: CURRENT_ONBOARDING_VERSION,
+            acknowledged_version,
+            needs_acknowledgement: acknowledged_version != Some(CURRENT_ONBOARDING_VERSION),
+        })
+    }
+
+    pub fn acknowledge_current_onboarding(&self) -> Result<OnboardingStatus, String> {
+        self.db
+            .set_setting(
+                ONBOARDING_ACKNOWLEDGED_VERSION_SETTING,
+                &CURRENT_ONBOARDING_VERSION.to_string(),
+            )
+            .map_err(|error| error.to_string())?;
+        self.onboarding_status()
+    }
+
     pub fn new(db_path: Option<&str>) -> Result<Self, String> {
         Self::new_with_secret_store(db_path, SecretStore::new()?)
     }
@@ -405,6 +438,30 @@ mod tests {
     }
 
     #[test]
+    fn onboarding_acknowledgement_is_versioned_and_independent_of_settings() {
+        let state = AppState::new_for_tests().unwrap();
+        let initial = state.onboarding_status().unwrap();
+        assert_eq!(initial.current_version, CURRENT_ONBOARDING_VERSION);
+        assert_eq!(initial.acknowledged_version, None);
+        assert!(initial.needs_acknowledgement);
+
+        state
+            .db
+            .set_setting(ONBOARDING_ACKNOWLEDGED_VERSION_SETTING, "0")
+            .unwrap();
+        assert!(state.onboarding_status().unwrap().needs_acknowledgement);
+
+        let acknowledged = state.acknowledge_current_onboarding().unwrap();
+        assert_eq!(
+            acknowledged.acknowledged_version,
+            Some(CURRENT_ONBOARDING_VERSION)
+        );
+        assert!(!acknowledged.needs_acknowledgement);
+        assert!(!state.settings.read().memory_enabled);
+        assert!(!state.settings.read().save_transcripts);
+    }
+
+    #[test]
     fn legacy_settings_migrate_to_gemini_live_audio() {
         let mut value = serde_json::to_value(AppSettings::default()).unwrap();
         let object = value.as_object_mut().unwrap();
@@ -416,6 +473,27 @@ mod tests {
         assert!(migrated);
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::GeminiLiveAudio);
+    }
+
+    #[test]
+    fn migrated_cloud_audio_profile_still_requires_current_onboarding() {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let db = Database::new(&path).unwrap();
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("settings_version");
+        object.remove("asr_mode");
+        db.set_setting("app_settings", &serde_json::to_string(&value).unwrap())
+            .unwrap();
+        drop(db);
+
+        let secret_store =
+            SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        let state = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+
+        assert_eq!(state.settings.read().asr_mode, AsrMode::GeminiLiveAudio);
+        assert!(state.onboarding_status().unwrap().needs_acknowledgement);
     }
 
     #[test]

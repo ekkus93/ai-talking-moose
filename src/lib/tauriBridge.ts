@@ -14,6 +14,7 @@ import {
   MemoryRecord,
   MicrophonePermissionState,
   MicrophoneTestResult,
+  OnboardingStatus,
   TranscriptRecord,
 } from "../types/moose";
 import {
@@ -132,6 +133,30 @@ export const tauriBridge = {
     if (!isTauri()) return frontendDefaultSettings();
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<AppSettings>("get_settings");
+  },
+
+  async getOnboardingStatus(): Promise<OnboardingStatus> {
+    if (!isTauri()) {
+      return {
+        current_version: 1,
+        acknowledged_version: null,
+        needs_acknowledgement: true,
+      };
+    }
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<OnboardingStatus>("get_onboarding_status");
+  },
+
+  async acknowledgeOnboarding(): Promise<OnboardingStatus> {
+    if (!isTauri()) {
+      return {
+        current_version: 1,
+        acknowledged_version: 1,
+        needs_acknowledgement: false,
+      };
+    }
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<OnboardingStatus>("acknowledge_onboarding");
   },
 
   async updateSettings(settings: AppSettings): Promise<void> {

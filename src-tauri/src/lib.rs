@@ -167,6 +167,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            get_onboarding_status,
+            acknowledge_onboarding,
             get_google_models,
             get_google_tts_voices,
             update_settings,

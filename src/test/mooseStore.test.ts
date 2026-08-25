@@ -6,10 +6,14 @@ describe("mooseStore State Management", () => {
   beforeEach(() => {
     useMooseStore.setState({
       characterState: "idle",
+      conversationLifecycle: "idle",
       mouthShape: "closed",
       isMuted: false,
       inputLevel: 0,
       outputLevel: 0,
+      isOnboardingOpen: false,
+      settings: null,
+      hasApiKey: false,
     });
   });
 
@@ -87,6 +91,49 @@ describe("mooseStore State Management", () => {
     expect(useMooseStore.getState().speechBubbleText).toBeNull();
     cleanup();
   });
+  it("opens versioned onboarding even when an API key already exists", async () => {
+    const settings = await tauriBridge.getSettings();
+    vi.spyOn(tauriBridge, "getSettings").mockResolvedValue(settings);
+    vi.spyOn(tauriBridge, "isMuted").mockResolvedValue(false);
+    vi.spyOn(tauriBridge, "hasGoogleApiKey").mockResolvedValue(true);
+    vi.spyOn(tauriBridge, "getOnboardingStatus").mockResolvedValue({
+      current_version: 1,
+      acknowledged_version: null,
+      needs_acknowledgement: true,
+    });
+    vi.spyOn(tauriBridge, "getConversationLifecycle").mockResolvedValue("idle");
+    vi.spyOn(tauriBridge, "getCharacterState").mockResolvedValue("idle");
+
+    await useMooseStore.getState().loadSettings();
+
+    expect(useMooseStore.getState().hasApiKey).toBe(true);
+    expect(useMooseStore.getState().isOnboardingOpen).toBe(true);
+  });
+
+  it("keeps a migrated Gemini Live profile in onboarding until the version is acknowledged", async () => {
+    const settings = {
+      ...(await tauriBridge.getSettings()),
+      asr_mode: "gemini_live_audio" as const,
+    };
+    vi.spyOn(tauriBridge, "getSettings").mockResolvedValue(settings);
+    vi.spyOn(tauriBridge, "isMuted").mockResolvedValue(false);
+    vi.spyOn(tauriBridge, "hasGoogleApiKey").mockResolvedValue(true);
+    vi.spyOn(tauriBridge, "getOnboardingStatus").mockResolvedValue({
+      current_version: 1,
+      acknowledged_version: null,
+      needs_acknowledgement: true,
+    });
+    vi.spyOn(tauriBridge, "getConversationLifecycle").mockResolvedValue("idle");
+    vi.spyOn(tauriBridge, "getCharacterState").mockResolvedValue("idle");
+
+    await useMooseStore.getState().loadSettings();
+
+    expect(useMooseStore.getState().settings?.asr_mode).toBe(
+      "gemini_live_audio",
+    );
+    expect(useMooseStore.getState().isOnboardingOpen).toBe(true);
+  });
+
   it("routes tray and menu-bar actions through bounded store commands", async () => {
     const handlers = new Map<string, (payload: unknown) => void>();
     vi.spyOn(tauriBridge, "listenEvent").mockImplementation(

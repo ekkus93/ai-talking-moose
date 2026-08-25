@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingModal } from "../components/Onboarding/OnboardingModal";
 import { tauriBridge } from "../lib/tauriBridge";
 import { useMooseStore } from "../stores/mooseStore";
@@ -95,5 +95,28 @@ describe("OnboardingModal P11 onboarding controls", () => {
       screen.getByText(/never stored in the app settings database/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/stored in Keychain/i)).toBeInTheDocument();
+  });
+  it("acknowledges onboarding without changing privacy settings", async () => {
+    const current = useMooseStore.getState().settings!;
+    expect(current.memory_enabled).toBe(false);
+    expect(current.save_transcripts).toBe(false);
+
+    const updateSettings = vi.spyOn(tauriBridge, "updateSettings");
+    const acknowledge = vi
+      .spyOn(tauriBridge, "acknowledgeOnboarding")
+      .mockResolvedValue({
+        current_version: 1,
+        acknowledged_version: 1,
+        needs_acknowledgement: false,
+      });
+
+    render(<OnboardingModal />);
+    fireEvent.click(screen.getByRole("button", { name: /Skip onboarding/i }));
+
+    await waitFor(() => expect(acknowledge).toHaveBeenCalledTimes(1));
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(useMooseStore.getState().settings?.memory_enabled).toBe(false);
+    expect(useMooseStore.getState().settings?.save_transcripts).toBe(false);
+    expect(useMooseStore.getState().isOnboardingOpen).toBe(false);
   });
 });

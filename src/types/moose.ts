@@ -158,6 +158,12 @@ export interface MicrophoneTestResult {
   diagnostics: AudioDiagnostics;
 }
 
+export interface OnboardingStatus {
+  current_version: number;
+  acknowledged_version: number | null;
+  needs_acknowledgement: boolean;
+}
+
 export interface AppSettings {
   settings_version: number;
   asr_mode: AsrMode;

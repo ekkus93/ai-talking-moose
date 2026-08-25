@@ -202,14 +202,21 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   },
 
   loadSettings: async () => {
-    const [settings, isMuted, hasKey, conversationLifecycle, characterState] =
-      await Promise.all([
-        tauriBridge.getSettings(),
-        tauriBridge.isMuted(),
-        tauriBridge.hasGoogleApiKey(),
-        tauriBridge.getConversationLifecycle(),
-        tauriBridge.getCharacterState(),
-      ]);
+    const [
+      settings,
+      isMuted,
+      hasKey,
+      onboardingStatus,
+      conversationLifecycle,
+      characterState,
+    ] = await Promise.all([
+      tauriBridge.getSettings(),
+      tauriBridge.isMuted(),
+      tauriBridge.hasGoogleApiKey(),
+      tauriBridge.getOnboardingStatus(),
+      tauriBridge.getConversationLifecycle(),
+      tauriBridge.getCharacterState(),
+    ]);
     set({
       settings,
       isMuted,
@@ -217,11 +224,8 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       conversationLifecycle,
       characterState,
       isConversationActive: lifecycleIsActive(conversationLifecycle),
+      isOnboardingOpen: onboardingStatus.needs_acknowledgement,
     });
-
-    if (!hasKey) {
-      set({ isOnboardingOpen: true });
-    }
   },
 
   updateSettings: async (newSettings) => {
