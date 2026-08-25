@@ -319,7 +319,8 @@ pub fn test_audio_output(state: State<'_, AppState>) -> Result<AudioDiagnostics,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::character::behavior::BehaviorEngine;
+    use crate::character::ambient::AmbientEvent;
+    use crate::character::behavior::{AmbientDecisionReason, AmbientPolicyContext, BehaviorEngine};
     use crate::character::personality::CharacterConfig;
 
     #[test]
@@ -343,9 +344,16 @@ mod tests {
         assert_eq!(engine.config.behavior.quiet_hours_start, 3);
         assert_eq!(engine.config.behavior.quiet_hours_end, 7);
         assert_eq!(engine.config.behavior.max_comments_per_hour, 1);
-        assert!(engine
-            .evaluate_event("test", "runtime settings applied", 1.0)
-            .is_none());
+        let decision = engine.evaluate_ambient_event(
+            &AmbientEvent::new("test", "runtime settings applied".to_string(), 1.0),
+            AmbientPolicyContext {
+                privacy_allowed: true,
+                muted: false,
+                conversation_active: false,
+            },
+        );
+        assert!(!decision.should_speak);
+        assert_eq!(decision.reason, AmbientDecisionReason::UnsolicitedDisabled);
     }
 
     #[test]

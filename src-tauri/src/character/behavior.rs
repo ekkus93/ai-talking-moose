@@ -33,7 +33,7 @@ pub struct AmbientPolicyContext {
 impl Default for AmbientPolicyContext {
     fn default() -> Self {
         Self {
-            privacy_allowed: true,
+            privacy_allowed: false,
             muted: false,
             conversation_active: false,
         }
@@ -217,6 +217,14 @@ mod tests {
         config
     }
 
+    fn permissive_context() -> AmbientPolicyContext {
+        AmbientPolicyContext {
+            privacy_allowed: true,
+            muted: false,
+            conversation_active: false,
+        }
+    }
+
     #[test]
     fn local_policy_denial_cannot_be_bypassed_by_model_controlled_event_text() {
         let mut config = permissive_config();
@@ -228,9 +236,20 @@ mod tests {
             1.0,
         );
 
-        let decision = engine.evaluate_ambient_event(&event, AmbientPolicyContext::default());
+        let decision = engine.evaluate_ambient_event(&event, permissive_context());
         assert!(!decision.should_speak);
         assert_eq!(decision.reason, AmbientDecisionReason::UnsolicitedDisabled);
+    }
+
+    #[test]
+    fn default_policy_context_denies_ambient_speech() {
+        let mut engine = BehaviorEngine::new(permissive_config());
+        let event = AmbientEvent::new("system", "safe synthetic event".to_string(), 1.0);
+
+        let decision = engine.evaluate_ambient_event(&event, AmbientPolicyContext::default());
+
+        assert!(!decision.should_speak);
+        assert_eq!(decision.reason, AmbientDecisionReason::PrivacyDenied);
     }
 
     #[test]
@@ -239,16 +258,17 @@ mod tests {
         let mut quiet = permissive_config();
         quiet.personality.talkativeness = 0.0;
         let mut quiet_engine = BehaviorEngine::new(quiet);
-        assert!(quiet_engine
-            .evaluate_event_at(now, "event", "safe event", 0.5)
-            .is_none());
+        let event = AmbientEvent::new("event", "safe event".to_string(), 0.5);
+        assert!(!quiet_engine
+            .evaluate_ambient_event_at(now, &event, permissive_context())
+            .should_speak);
 
         let mut chatty = permissive_config();
         chatty.personality.talkativeness = 1.0;
         let mut chatty_engine = BehaviorEngine::new(chatty);
         assert!(chatty_engine
-            .evaluate_event_at(now, "event", "safe event", 0.5)
-            .is_some());
+            .evaluate_ambient_event_at(now, &event, permissive_context())
+            .should_speak);
     }
 
     #[test]
@@ -270,15 +290,17 @@ mod tests {
             ),
             (
                 AmbientPolicyContext {
+                    privacy_allowed: true,
                     muted: true,
-                    ..Default::default()
+                    conversation_active: false,
                 },
                 AmbientDecisionReason::Muted,
             ),
             (
                 AmbientPolicyContext {
+                    privacy_allowed: true,
+                    muted: false,
                     conversation_active: true,
-                    ..Default::default()
                 },
                 AmbientDecisionReason::ConversationActive,
             ),
@@ -305,14 +327,14 @@ mod tests {
 
         assert!(
             engine
-                .evaluate_ambient_event_at(now, &first, AmbientPolicyContext::default())
+                .evaluate_ambient_event_at(now, &first, permissive_context())
                 .should_speak
         );
         engine.record_ambient_delivery_at(now, &first);
         let decision = engine.evaluate_ambient_event_at(
             now + Duration::seconds(1),
             &duplicate,
-            AmbientPolicyContext::default(),
+            permissive_context(),
         );
         assert!(!decision.should_speak);
         assert_eq!(decision.reason, AmbientDecisionReason::DuplicateEvent);
@@ -331,7 +353,7 @@ mod tests {
             let event = AmbientEvent::new("system", format!("unique event alpha {suffix}"), 1.0);
             let now = start + Duration::seconds(i64::from(index));
             let decision =
-                engine.evaluate_ambient_event_at(now, &event, AmbientPolicyContext::default());
+                engine.evaluate_ambient_event_at(now, &event, permissive_context());
             assert!(decision.should_speak);
             engine.record_ambient_delivery_at(now, &event);
         }
@@ -339,7 +361,7 @@ mod tests {
         let blocked = engine.evaluate_ambient_event_at(
             start + Duration::seconds(i64::from(HARD_MAX_AMBIENT_COMMENTS_PER_HOUR)),
             &AmbientEvent::new("system", "unique final event".to_string(), 1.0),
-            AmbientPolicyContext::default(),
+            permissive_context(),
         );
         assert!(!blocked.should_speak);
         assert_eq!(blocked.reason, AmbientDecisionReason::HourlyLimit);
@@ -352,22 +374,24 @@ mod tests {
         let dismissed_at = Utc::now();
         engine.cooldowns.record_dismissal(dismissed_at);
 
-        assert!(engine
-            .evaluate_event_at(
-                dismissed_at + Duration::seconds(DISMISSAL_COOLDOWN_SECONDS - 1),
-                "window_change",
-                "safe synthetic event",
-                1.0,
-            )
-            .is_none());
+        let event = AmbientEvent::new(
+            "window_change",
+            "safe synthetic event".to_string(),
+            1.0,
+        );
+        let blocked = engine.evaluate_ambient_event_at(
+            dismissed_at + Duration::seconds(DISMISSAL_COOLDOWN_SECONDS - 1),
+            &event,
+            permissive_context(),
+        );
+        assert!(!blocked.should_speak);
+        assert_eq!(blocked.reason, AmbientDecisionReason::DismissalCooldown);
 
-        assert!(engine
-            .evaluate_event_at(
-                dismissed_at + Duration::seconds(DISMISSAL_COOLDOWN_SECONDS),
-                "window_change",
-                "safe synthetic event",
-                1.0,
-            )
-            .is_some());
+        let allowed = engine.evaluate_ambient_event_at(
+            dismissed_at + Duration::seconds(DISMISSAL_COOLDOWN_SECONDS),
+            &event,
+            permissive_context(),
+        );
+        assert!(allowed.should_speak);
     }
 }
