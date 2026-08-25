@@ -108,6 +108,10 @@ export const TranscriptDrawer: React.FC = () => {
       {/* Transcript Log Output Area */}
       <div
         ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-label="Conversation transcript"
         className="flex-1 overflow-y-auto p-3 space-y-2.5 select-text"
       >
         {transcripts.length === 0 ? (

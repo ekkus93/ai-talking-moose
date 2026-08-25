@@ -73,12 +73,12 @@ export const AsrDiagnosticsPanel: React.FC = () => {
           disabled={loading}
           className="p-1 border border-black rounded hover:bg-gray-100 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-black"
           title="Refresh speech-recognition diagnostics"
+          aria-label="Refresh ASR diagnostics"
         >
           <RefreshCw
             aria-hidden="true"
             className={`w-3 h-3 ${loading ? "animate-spin" : ""}`}
           />
-          <span className="sr-only">Refresh ASR diagnostics</span>
         </button>
       </div>
 

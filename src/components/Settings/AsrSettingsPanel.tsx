@@ -214,7 +214,18 @@ export const AsrSettingsPanel: React.FC = () => {
               <div aria-live="polite" className="space-y-1">
                 <div
                   className="h-2 border border-black bg-white"
+                  role="progressbar"
                   aria-label={`${title} download progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={
+                    modelProgress.install_state === "verifying" ? 100 : percent
+                  }
+                  aria-valuetext={
+                    modelProgress.install_state === "verifying"
+                      ? "Verifying downloaded model"
+                      : `${percent}% downloaded`
+                  }
                 >
                   <div
                     className="h-full bg-black"
@@ -308,8 +319,10 @@ export const AsrSettingsPanel: React.FC = () => {
           disabled={isLoading}
           className="p-1 border border-black rounded hover:bg-gray-100 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-black"
           title="Re-check local model integrity"
+          aria-label="Re-check local ASR model integrity"
         >
           <RefreshCw
+            aria-hidden="true"
             className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`}
           />
         </button>
