@@ -33,8 +33,8 @@ export const ToolAuditDiagnosticsPanel: React.FC = () => {
         <div className="space-y-1">
           <p className="font-bold">Tool Activity</p>
           <p className="text-[11px] text-gray-600">
-            Session-local audit metadata only. Raw tool arguments and results are
-            never included.
+            Session-local audit metadata only. Raw tool arguments and results
+            are never included.
           </p>
         </div>
         <button
