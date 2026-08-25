@@ -48,9 +48,24 @@ The complete provider-visible V1 tool surface is:
 | `remember_fact` | memory mutation | default-off `memory_enabled` setting is the user's standing opt-in |
 
 No generic filesystem, network/HTTP, shell, AppleScript, command, or process-execution tool exists in V1.
-There is no provider-visible `CharacterAction` tool in V1. The router requires that any future declaration
-of that class use per-invocation confirmation and that the invocation carry explicit local user confirmation,
-so model origin can never become sufficient authorization by itself.
+There is no provider-visible `CharacterAction` tool in V1.
+
+### V1 confirmation status
+
+The confirmation-required membership set is **empty in V1**. None of the four provider-visible declarations
+uses `ToolConfirmationPolicy::PerInvocation`.
+
+`ToolConfirmationPolicy::PerInvocation` and `ToolInvocationContext.user_confirmed` are forward-looking,
+fail-closed router primitives; they are **not** an implemented end-to-end V1 confirmation feature. V1 has no
+confirmation UI, no shipped declaration that requests per-invocation confirmation, and no non-test caller that
+supplies a user-confirmed invocation context. The router nevertheless requires any future `CharacterAction`
+declaration to use `PerInvocation` and requires `user_confirmed = true` before that hypothetical declaration can
+execute, so model origin can never become sufficient authorization by itself.
+
+If a future shipping tool requires per-invocation confirmation, the confirmation requirement must be reopened and
+implemented end to end: the tool must declare the policy, production dispatch must carry locally established
+`user_confirmed` state, the UI must obtain confirmation for the specific invocation, and a non-test
+`dispatch_with_context` caller plus production-path tests must prove the flow.
 
 ## Audit and retention
 

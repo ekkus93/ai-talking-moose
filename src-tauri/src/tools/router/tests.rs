@@ -151,7 +151,7 @@ fn output_size_guard_rejects_oversized_results() {
 }
 
 #[test]
-fn character_actions_require_explicit_local_confirmation() {
+fn hypothetical_character_action_policy_requires_explicit_local_confirmation() {
     let (router, _) = router();
     let mut declaration = router.get_declarations()[0].clone();
     declaration.permission = ToolPermissionLevel::CharacterAction;
