@@ -250,8 +250,9 @@ impl MoonshineStreamingEngine {
         let stream = factory.open(&resolved_model.model_path, architecture)?;
         // Keep `resolved_model` (and therefore its production installer lease)
         // alive until the native factory has finished opening the stream.
-        let model_path = resolved_model.model_path;
-        drop(resolved_model._lease);
+        #[cfg(test)]
+        let model_path = resolved_model.model_path.clone();
+        drop(resolved_model);
         Ok(Self {
             architecture,
             #[cfg(test)]

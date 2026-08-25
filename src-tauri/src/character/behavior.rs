@@ -23,21 +23,11 @@ pub enum AmbientDecisionReason {
     BelowImportanceThreshold,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AmbientPolicyContext {
     pub privacy_allowed: bool,
     pub muted: bool,
     pub conversation_active: bool,
-}
-
-impl Default for AmbientPolicyContext {
-    fn default() -> Self {
-        Self {
-            privacy_allowed: false,
-            muted: false,
-            conversation_active: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

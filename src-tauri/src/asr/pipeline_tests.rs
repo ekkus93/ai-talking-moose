@@ -129,7 +129,11 @@ async fn cancel_during_readiness_cooperatively_stops_and_reaps_worker() {
 
     wait_until_async(|| factory_entered.load(Ordering::SeqCst)).await;
     start_task.abort();
-    assert!(start_task.await.unwrap_err().is_cancelled());
+    let join_error = match start_task.await {
+        Ok(_) => panic!("aborted startup task unexpectedly completed"),
+        Err(error) => error,
+    };
+    assert!(join_error.is_cancelled());
 
     release_factory.store(true, Ordering::SeqCst);
     wait_until_async(|| state.stops.load(Ordering::SeqCst) == 1).await;
