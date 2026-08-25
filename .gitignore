@@ -45,3 +45,7 @@ node_modules/@tauri-apps/cli-linux-x64-musl/
 run_opencode*.sh*
 run_claude*.sh*
 *~
+
+__pycache__/
+*.py[cod]
+
