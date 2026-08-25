@@ -101,7 +101,7 @@ export const OnboardingModal: React.FC = () => {
   return (
     <div
       data-testid="onboarding-modal"
-      className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 animate-in fade-in duration-150 select-none font-mono text-xs"
+      className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 select-none font-mono text-xs"
     >
       <section
         role="dialog"

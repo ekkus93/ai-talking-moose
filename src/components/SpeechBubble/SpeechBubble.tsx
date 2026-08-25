@@ -16,7 +16,7 @@ export const SpeechBubble: React.FC = () => {
       aria-label="Dismiss Moose speech"
       aria-live="polite"
       onClick={hideSpeechBubble}
-      className="relative w-auto text-left z-20 mx-3 my-2 p-3 bg-white border-2 border-black rounded-lg shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] cursor-pointer select-text transition-all duration-150 animate-in fade-in zoom-in-95"
+      className="relative w-auto text-left z-20 mx-3 my-2 p-3 bg-white border-2 border-black rounded-lg shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] cursor-pointer select-text transition-all duration-150"
     >
       {/* Speech bubble text */}
       <p className="text-xs font-mono font-semibold text-black leading-relaxed tracking-tight">

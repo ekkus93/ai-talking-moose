@@ -59,7 +59,7 @@ export const TranscriptDrawer: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-labelledby="transcript-title"
-      className="absolute inset-0 z-30 bg-[#ece7de] flex flex-col border-2 border-black animate-in slide-in-from-bottom-5 duration-150 select-none font-mono text-xs"
+      className="absolute inset-0 z-30 bg-[#ece7de] flex flex-col border-2 border-black select-none font-mono text-xs"
     >
       {/* Terminal Title Bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-black text-white text-xs font-bold">

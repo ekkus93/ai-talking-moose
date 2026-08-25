@@ -1,6 +1,13 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { MooseSprite } from "./MooseSprite";
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+const reducedMotionPreference = () =>
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(REDUCED_MOTION_QUERY).matches
+    : false;
 
 export const MooseController: React.FC = () => {
   const {
@@ -13,9 +20,27 @@ export const MooseController: React.FC = () => {
     triggerCanned,
     bargeIn,
   } = useMooseStore();
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    reducedMotionPreference,
+  );
 
-  // Natural idle blinking scheduler
   useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia(REDUCED_MOTION_QUERY);
+    const updatePreference = (event: MediaQueryListEvent) =>
+      setPrefersReducedMotion(event.matches);
+    setPrefersReducedMotion(media.matches);
+    media.addEventListener("change", updatePreference);
+    return () => media.removeEventListener("change", updatePreference);
+  }, []);
+
+  // Natural idle blinking scheduler. Reduced-motion users get a stable open-eye frame.
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      setBlinking(false);
+      return;
+    }
+
     let blinkTimeout: NodeJS.Timeout;
     let nextBlinkTimeout: NodeJS.Timeout;
 
@@ -36,7 +61,7 @@ export const MooseController: React.FC = () => {
       clearTimeout(blinkTimeout);
       clearTimeout(nextBlinkTimeout);
     };
-  }, [setBlinking]);
+  }, [prefersReducedMotion, setBlinking]);
 
   if (characterState === "hidden" || characterState === "dismissed") {
     return null;
@@ -58,8 +83,8 @@ export const MooseController: React.FC = () => {
     <div className="w-full h-full flex items-center justify-center overflow-hidden">
       <MooseSprite
         state={characterState}
-        mouth={mouthShape}
-        isBlinking={isBlinking}
+        mouth={prefersReducedMotion ? "closed" : mouthShape}
+        isBlinking={prefersReducedMotion ? false : isBlinking}
         className="w-full h-full max-w-[85vw] max-h-[55vh] aspect-square drop-shadow-md"
         onClick={handleClick}
       />

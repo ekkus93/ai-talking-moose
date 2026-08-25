@@ -89,7 +89,7 @@ export const SettingsModal: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
-      className="absolute inset-0 z-50 bg-[#ece7de] flex flex-col font-mono text-xs overflow-hidden select-none animate-in fade-in duration-100"
+      className="absolute inset-0 z-50 bg-[#ece7de] flex flex-col font-mono text-xs overflow-hidden select-none"
     >
       {/* Title bar */}
       <div
