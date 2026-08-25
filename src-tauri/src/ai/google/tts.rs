@@ -105,6 +105,11 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
             .unwrap_or_else(|| self.default_voice.clone());
         validate_tts_voice(&voice).map_err(|_| Self::safe_error(ProviderErrorKind::Setup))?;
 
+        #[cfg(test)]
+        if crate::test_support::network_denied() {
+            return Err(Self::safe_error(ProviderErrorKind::Network));
+        }
+
         let body = json!({
             "contents": [
                 {
@@ -168,6 +173,26 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn network_denial_harness_blocks_tts_before_http_send() {
+        let _guard = crate::test_support::deny_network_for_scope();
+        let synthesizer = GoogleSpeechSynthesizer::new(
+            GoogleAuth::new("valid-test-key".to_string()),
+            crate::ai::google::config::DEFAULT_TTS_MODEL.to_string(),
+            "Fenrir".to_string(),
+        );
+        let error = synthesizer
+            .synthesize(TtsRequest {
+                text: "network must be denied".to_string(),
+                voice_name: Some("Fenrir".to_string()),
+                speaking_rate: Some(1.0),
+                pitch: Some(0.0),
+            })
+            .await
+            .expect_err("test network denial must stop TTS before HTTP I/O");
+        assert_eq!(error.kind, ProviderErrorKind::Network);
+    }
 
     #[test]
     fn performance_prompt_maps_rate_and_pitch_without_changing_text() {

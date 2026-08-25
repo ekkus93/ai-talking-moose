@@ -105,11 +105,54 @@ mod tests {
 
     struct NeverSynthesizer;
 
+    struct OversizedSynthesizer;
+
+    #[async_trait]
+    impl SpeechSynthesizer for OversizedSynthesizer {
+        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
+            let samples = 24_000 * 6;
+            Ok(AudioStreamData {
+                pcm_bytes: vec![0_u8; samples * 2],
+                sample_rate: 24_000,
+            })
+        }
+    }
+
     #[async_trait]
     impl SpeechSynthesizer for NeverSynthesizer {
         async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
             std::future::pending().await
         }
+    }
+
+    #[tokio::test]
+    async fn standalone_speech_queue_overload_is_bounded_and_reported() {
+        let playback = AudioPlayback::new_mock();
+        let report = synthesize_and_queue(
+            &OversizedSynthesizer,
+            &playback,
+            TtsRequest {
+                text: "oversized speech".to_string(),
+                voice_name: Some("Fenrir".to_string()),
+                speaking_rate: Some(1.0),
+                pitch: Some(0.0),
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.queued_samples, playback.max_queued_samples());
+        assert!(report.dropped_samples > 0);
+        assert_eq!(playback.queue_length(), playback.max_queued_samples());
+        assert_eq!(
+            playback.dropped_samples(),
+            u64::try_from(report.dropped_samples).unwrap()
+        );
+
+        StandaloneSpeechController::new().cancel(&playback);
+        assert_eq!(playback.queue_length(), 0);
+        assert!(!playback.is_playing());
     }
 
     #[tokio::test]

@@ -65,6 +65,11 @@ impl GoogleTextModel {
             });
         }
 
+        #[cfg(test)]
+        if crate::test_support::network_denied() {
+            return Err("network denied by test harness".to_string());
+        }
+
         let resp = self
             .generation_request(model, &body)
             .send()
@@ -122,6 +127,25 @@ impl TextModel for GoogleTextModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn network_denial_harness_blocks_text_before_http_send() {
+        let _guard = crate::test_support::deny_network_for_scope();
+        let model = GoogleTextModel::new(
+            GoogleAuth::new("valid-test-key".to_string()),
+            "gemini-3.6-flash".to_string(),
+        );
+        let error = model
+            .generate(TextRequest {
+                prompt: "network must be denied".to_string(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(8),
+            })
+            .await
+            .expect_err("test network denial must stop text generation before HTTP I/O");
+        assert_eq!(error, "network denied by test harness");
+    }
 
     #[test]
     fn generation_request_uses_api_key_header_and_secret_free_url() {
