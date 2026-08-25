@@ -15,6 +15,7 @@ export interface AiTabTestResult {
 // connection test that was still in flight.
 interface AiTabProps {
   googleModels: GoogleModelDescriptor[];
+  googleModelsStatus: "loading" | "ready" | "error";
   apiKeyInput: string;
   setApiKeyInput: (value: string) => void;
   testResult: AiTabTestResult | null;
@@ -25,6 +26,7 @@ interface AiTabProps {
 
 export const AiTab: React.FC<AiTabProps> = ({
   googleModels,
+  googleModelsStatus,
   apiKeyInput,
   setApiKeyInput,
   testResult,
@@ -35,6 +37,20 @@ export const AiTab: React.FC<AiTabProps> = ({
   const { settings, updateSettings, saveGoogleApiKey } = useMooseStore();
 
   if (!settings) return null;
+
+  const liveModels = googleModels.filter((model) =>
+    model.capabilities.includes("live_audio"),
+  );
+  const textModels = googleModels.filter((model) =>
+    model.capabilities.includes("text_generation"),
+  );
+  const liveModelAvailable = liveModels.some(
+    (model) => model.id === settings.live_model,
+  );
+  const textModelAvailable = textModels.some(
+    (model) => model.id === settings.text_model,
+  );
+  const modelSelectorsDisabled = googleModelsStatus !== "ready";
 
   const handleSaveApiKey = async () => {
     if (apiKeyInput.trim()) {
@@ -105,18 +121,40 @@ export const AiTab: React.FC<AiTabProps> = ({
             <select
               id="settings-live-model"
               value={settings.live_model}
-              onChange={(e) =>
-                updateSettings({ ...settings, live_model: e.target.value })
-              }
-              className="w-full p-1.5 border border-black rounded bg-white font-bold"
+              disabled={modelSelectorsDisabled}
+              aria-busy={googleModelsStatus === "loading"}
+              onChange={(e) => {
+                if (!modelSelectorsDisabled) {
+                  void updateSettings({
+                    ...settings,
+                    live_model: e.target.value,
+                  });
+                }
+              }}
+              className="w-full p-1.5 border border-black rounded bg-white font-bold disabled:opacity-60"
             >
-              {googleModels
-                .filter((model) => model.capabilities.includes("live_audio"))
-                .map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.display_name} ({model.id})
-                  </option>
-                ))}
+              {googleModelsStatus === "loading" ? (
+                <option value={settings.live_model}>
+                  Current: {settings.live_model} (loading catalog…)
+                </option>
+              ) : googleModelsStatus === "error" ? (
+                <option value={settings.live_model}>
+                  Current: {settings.live_model} (catalog unavailable)
+                </option>
+              ) : (
+                <>
+                  {!liveModelAvailable && (
+                    <option value={settings.live_model} disabled>
+                      Unavailable: {settings.live_model}
+                    </option>
+                  )}
+                  {liveModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.display_name} ({model.id})
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
 
@@ -130,20 +168,40 @@ export const AiTab: React.FC<AiTabProps> = ({
             <select
               id="settings-text-model"
               value={settings.text_model}
-              onChange={(e) =>
-                updateSettings({ ...settings, text_model: e.target.value })
-              }
-              className="w-full p-1.5 border border-black rounded bg-white font-bold"
+              disabled={modelSelectorsDisabled}
+              aria-busy={googleModelsStatus === "loading"}
+              onChange={(e) => {
+                if (!modelSelectorsDisabled) {
+                  void updateSettings({
+                    ...settings,
+                    text_model: e.target.value,
+                  });
+                }
+              }}
+              className="w-full p-1.5 border border-black rounded bg-white font-bold disabled:opacity-60"
             >
-              {googleModels
-                .filter((model) =>
-                  model.capabilities.includes("text_generation"),
-                )
-                .map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.display_name} ({model.id})
-                  </option>
-                ))}
+              {googleModelsStatus === "loading" ? (
+                <option value={settings.text_model}>
+                  Current: {settings.text_model} (loading catalog…)
+                </option>
+              ) : googleModelsStatus === "error" ? (
+                <option value={settings.text_model}>
+                  Current: {settings.text_model} (catalog unavailable)
+                </option>
+              ) : (
+                <>
+                  {!textModelAvailable && (
+                    <option value={settings.text_model} disabled>
+                      Unavailable: {settings.text_model}
+                    </option>
+                  )}
+                  {textModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.display_name} ({model.id})
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
         </div>

@@ -46,6 +46,9 @@ export const SettingsModal: React.FC = () => {
   >("general");
 
   const [googleModels, setGoogleModels] = useState<GoogleModelDescriptor[]>([]);
+  const [googleModelsStatus, setGoogleModelsStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
 
   // Transient per-tab state lives here, not in the tab components: tabs are
   // conditionally rendered and unmount on every tab switch, which would discard
@@ -60,9 +63,17 @@ export const SettingsModal: React.FC = () => {
     if (isSettingsOpen) {
       loadDevices();
       loadMemories();
+      setGoogleModelsStatus("loading");
       void tauriBridge
         .getGoogleModels()
-        .then((models) => setGoogleModels(models ?? []));
+        .then((models) => {
+          setGoogleModels(models ?? []);
+          setGoogleModelsStatus("ready");
+        })
+        .catch(() => {
+          setGoogleModels([]);
+          setGoogleModelsStatus("error");
+        });
     }
   }, [isSettingsOpen, loadDevices, loadMemories]);
 
@@ -151,6 +162,7 @@ export const SettingsModal: React.FC = () => {
           {activeTab === "ai" && (
             <AiTab
               googleModels={googleModels}
+              googleModelsStatus={googleModelsStatus}
               apiKeyInput={apiKeyInput}
               setApiKeyInput={setApiKeyInput}
               testResult={testResult}

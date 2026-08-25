@@ -1,8 +1,11 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SettingsModal } from "../components/Settings/SettingsModal";
 import { useMooseStore } from "../stores/mooseStore";
-import { frontendDefaultSettings } from "../lib/backendContract";
+import {
+  frontendDefaultSettings,
+  frontendGoogleModels,
+} from "../lib/backendContract";
 import { tauriBridge } from "../lib/tauriBridge";
 
 describe("SettingsModal Component", () => {
@@ -12,6 +15,10 @@ describe("SettingsModal Component", () => {
       settings: frontendDefaultSettings(),
       hasApiKey: false,
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("renders tabs and navigates to personality", () => {
@@ -108,6 +115,91 @@ describe("SettingsModal Component", () => {
         /never switch to cloud microphone upload automatically/i,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("preserves model selections and blocks writes while the catalog is loading", async () => {
+    let resolveModels: (
+      models: ReturnType<typeof frontendGoogleModels>,
+    ) => void = () => undefined;
+    const pendingModels = new Promise<ReturnType<typeof frontendGoogleModels>>(
+      (resolve) => {
+        resolveModels = resolve;
+      },
+    );
+    vi.spyOn(tauriBridge, "getGoogleModels").mockReturnValue(pendingModels);
+    const updateSpy = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockResolvedValue(undefined);
+
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Gemini AI"));
+
+    const liveSelect = screen.getByLabelText("Realtime Live Voice Model");
+    const textSelect = screen.getByLabelText("Text & Ambient Remark Model");
+    const settings = frontendDefaultSettings();
+
+    expect(liveSelect).toBeDisabled();
+    expect(textSelect).toBeDisabled();
+    expect(liveSelect).toHaveValue(settings.live_model);
+    expect(textSelect).toHaveValue(settings.text_model);
+    expect(
+      screen.getByRole("option", {
+        name: new RegExp(
+          `Current: ${settings.live_model}.*loading catalog`,
+          "i",
+        ),
+      }),
+    ).toBeInTheDocument();
+
+    // Even a synthetic change during the disabled/loading window cannot persist.
+    fireEvent.change(liveSelect, {
+      target: { value: "unexpected-live-model" },
+    });
+    expect(updateSpy).not.toHaveBeenCalled();
+
+    resolveModels(frontendGoogleModels());
+    await waitFor(() => expect(liveSelect).not.toBeDisabled());
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows a persisted model as unavailable after catalog resolution without rewriting it", async () => {
+    const settings = frontendDefaultSettings();
+    vi.spyOn(tauriBridge, "getGoogleModels").mockResolvedValue([
+      {
+        id: "replacement-live",
+        display_name: "Replacement Live",
+        capabilities: ["live_audio"],
+      },
+      {
+        id: "replacement-text",
+        display_name: "Replacement Text",
+        capabilities: ["text_generation"],
+      },
+    ]);
+    const updateSpy = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockResolvedValue(undefined);
+
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Gemini AI"));
+
+    const liveSelect = screen.getByLabelText("Realtime Live Voice Model");
+    const textSelect = screen.getByLabelText("Text & Ambient Remark Model");
+    await waitFor(() => expect(liveSelect).not.toBeDisabled());
+
+    expect(liveSelect).toHaveValue(settings.live_model);
+    expect(textSelect).toHaveValue(settings.text_model);
+    expect(
+      screen.getByRole("option", {
+        name: `Unavailable: ${settings.live_model}`,
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("option", {
+        name: `Unavailable: ${settings.text_model}`,
+      }),
+    ).toBeDisabled();
+    expect(updateSpy).not.toHaveBeenCalled();
   });
 
   it("shows only current capability-filtered Gemini model options", async () => {
