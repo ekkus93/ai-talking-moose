@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MooseWindow } from "../windows/MooseWindow";
 import { useMooseStore } from "../stores/mooseStore";
@@ -75,6 +81,29 @@ describe("MooseWindow focused keyboard shortcuts", () => {
     await waitFor(() =>
       expect(screen.getByText("AI: READY")).toBeInTheDocument(),
     );
+  });
+
+  it("uses AA contrast classes for state badges and the active Stop control", async () => {
+    render(<MooseWindow />);
+
+    const expectedBadgeClasses = [
+      ["listening", "LISTENING...", "bg-green-700"],
+      ["thinking", "THINKING...", "bg-amber-700"],
+      ["annoyed", "ANNOYED", "bg-orange-700"],
+    ] as const;
+
+    for (const [characterState, label, expectedClass] of expectedBadgeClasses) {
+      act(() => useMooseStore.setState({ characterState }));
+      const badge = await screen.findByRole("status");
+      expect(badge).toHaveTextContent(label);
+      expect(badge).toHaveClass(expectedClass, "text-white");
+    }
+
+    act(() => useMooseStore.setState({ isConversationActive: true }));
+    const stop = await screen.findByRole("button", {
+      name: "Stop conversation",
+    });
+    expect(stop).toHaveClass("bg-red-600", "text-white", "hover:bg-red-700");
   });
 
   it("stops an active conversation with the focused-window shortcut", () => {

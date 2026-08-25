@@ -114,12 +114,12 @@ export const MooseWindow: React.FC = () => {
       case "listening":
         return {
           label: "LISTENING...",
-          color: "bg-green-600 text-white animate-pulse",
+          color: "bg-green-700 text-white animate-pulse",
         };
       case "thinking":
         return {
           label: "THINKING...",
-          color: "bg-amber-600 text-white animate-pulse",
+          color: "bg-amber-700 text-white animate-pulse",
         };
       case "talking":
         return { label: "TALKING", color: "bg-blue-600 text-white" };
@@ -128,7 +128,7 @@ export const MooseWindow: React.FC = () => {
       case "muted":
         return { label: "MUTED", color: "bg-gray-600 text-white" };
       case "annoyed":
-        return { label: "ANNOYED", color: "bg-orange-600 text-white" };
+        return { label: "ANNOYED", color: "bg-orange-700 text-white" };
       case "sleeping":
         return { label: "SLEEPING", color: "bg-indigo-600 text-white" };
       case "error":
@@ -305,7 +305,7 @@ export const MooseWindow: React.FC = () => {
             }
             className={`flex-1 py-1.5 px-2 rounded border-2 border-black font-bold text-xs flex items-center justify-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 transition-colors ${
               isConversationActive
-                ? "bg-red-500 text-white hover:bg-red-600"
+                ? "bg-red-600 text-white hover:bg-red-700"
                 : "bg-white hover:bg-gray-100 text-black"
             }`}
           >

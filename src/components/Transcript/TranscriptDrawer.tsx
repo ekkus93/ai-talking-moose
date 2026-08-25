@@ -120,7 +120,7 @@ export const TranscriptDrawer: React.FC = () => {
         className="flex-1 overflow-y-auto p-3 space-y-2.5 select-text"
       >
         {transcripts.length === 0 ? (
-          <div className="text-center text-gray-500 italic py-8 space-y-1">
+          <div className="text-center text-gray-600 italic py-8 space-y-1">
             <p className="font-bold">Interactive Debug Terminal</p>
             <p className="text-[11px]">
               Type a prompt below to bypass microphone input and test Gemini
@@ -178,7 +178,7 @@ export const TranscriptDrawer: React.FC = () => {
         onSubmit={handleSend}
         className="p-2.5 bg-[#dcd6cd] border-t-2 border-black flex gap-1.5 items-center"
       >
-        <span className="text-green-700 font-bold text-sm select-none">
+        <span className="text-green-800 font-bold text-sm select-none">
           &gt;
         </span>
         <label htmlFor="moose-text-message" className="sr-only">

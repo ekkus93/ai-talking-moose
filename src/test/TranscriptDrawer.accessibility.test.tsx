@@ -21,6 +21,19 @@ describe("TranscriptDrawer accessibility", () => {
     });
   });
 
+  it("uses audited readable colors for empty guidance and the prompt marker", () => {
+    useMooseStore.setState({ transcripts: [], partialUserTranscript: null });
+    render(<TranscriptDrawer />);
+
+    const emptyState = screen.getByText(
+      "Interactive Debug Terminal",
+    ).parentElement;
+    expect(emptyState).toHaveClass("text-gray-600");
+    expect(screen.getByText(">", { selector: "span" })).toHaveClass(
+      "text-green-800",
+    );
+  });
+
   it("announces finalized and streaming transcript updates as a polite log", () => {
     render(<TranscriptDrawer />);
 
