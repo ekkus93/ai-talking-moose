@@ -11,7 +11,7 @@ const SLIDERS = [
 ] as const;
 
 export const PersonalityTab: React.FC = () => {
-  const { settings, updateSettings } = useMooseStore();
+  const { settings, updateSettingsContinuous } = useMooseStore();
   if (!settings) return null;
 
   return (
@@ -39,7 +39,7 @@ export const PersonalityTab: React.FC = () => {
             value={settings[slider.key as keyof typeof settings] as number}
             aria-label={slider.label}
             onChange={(e) =>
-              updateSettings({
+              updateSettingsContinuous({
                 ...settings,
                 [slider.key]: parseFloat(e.target.value),
               })

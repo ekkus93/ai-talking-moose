@@ -14,6 +14,36 @@ import { tauriBridge } from "../lib/tauriBridge";
 const lifecycleIsActive = (lifecycle: ConversationLifecycle) =>
   lifecycle !== "idle" && lifecycle !== "failed";
 
+const CONTINUOUS_SETTINGS_WRITE_DELAY_MS = 100;
+let continuousSettingsWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingContinuousSettings: AppSettings | null = null;
+
+const cancelPendingContinuousSettingsWrite = () => {
+  if (continuousSettingsWriteTimer) {
+    clearTimeout(continuousSettingsWriteTimer);
+  }
+  continuousSettingsWriteTimer = null;
+  pendingContinuousSettings = null;
+};
+
+const scheduleContinuousSettingsWrite = (settings: AppSettings) => {
+  pendingContinuousSettings = settings;
+  if (continuousSettingsWriteTimer) {
+    clearTimeout(continuousSettingsWriteTimer);
+  }
+  continuousSettingsWriteTimer = setTimeout(() => {
+    const pending = pendingContinuousSettings;
+    continuousSettingsWriteTimer = null;
+    pendingContinuousSettings = null;
+    if (pending) {
+      void tauriBridge.updateSettings(pending).catch(() => {
+        // The next explicit settings action or reload reconciles persistence. Keep
+        // provider/backend error details out of the frontend console.
+      });
+    }
+  }, CONTINUOUS_SETTINGS_WRITE_DELAY_MS);
+};
+
 // Persisted SQLite transcript ids are positive. Frontend-only active-session rows use
 // a decreasing negative sequence so rapid finalizations cannot collide with each other
 // or with records loaded from persistence.
@@ -69,6 +99,7 @@ interface MooseStoreState {
 
   loadSettings: () => Promise<void>;
   updateSettings: (newSettings: AppSettings) => Promise<void>;
+  updateSettingsContinuous: (newSettings: AppSettings) => void;
   loadDevices: () => Promise<void>;
   loadMemories: () => Promise<void>;
   deleteMemory: (id: number) => Promise<void>;
@@ -241,8 +272,17 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   },
 
   updateSettings: async (newSettings) => {
+    cancelPendingContinuousSettingsWrite();
     await tauriBridge.updateSettings(newSettings);
     set({ settings: newSettings });
+  },
+
+  updateSettingsContinuous: (newSettings) => {
+    // Continuous controls must feel immediate without persisting every pointer
+    // movement. Update the frontend/runtime-facing store now and persist only the
+    // latest snapshot once the input burst settles.
+    set({ settings: newSettings });
+    scheduleContinuousSettingsWrite(newSettings);
   },
 
   loadDevices: async () => {

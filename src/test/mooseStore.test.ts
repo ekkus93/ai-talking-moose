@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tauriBridge } from "../lib/tauriBridge";
 import { useMooseStore } from "../stores/mooseStore";
+import { frontendDefaultSettings } from "../lib/backendContract";
 
 describe("mooseStore State Management", () => {
   beforeEach(() => {
@@ -21,6 +22,7 @@ describe("mooseStore State Management", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     useMooseStore.getState().hideSpeechBubble();
   });
@@ -40,6 +42,61 @@ describe("mooseStore State Management", () => {
     expect(useMooseStore.getState().mouthShape).toBe("wide");
     expect(useMooseStore.getState().inputLevel).toBe(0.75);
     expect(useMooseStore.getState().outputLevel).toBe(0.9);
+  });
+
+  it("coalesces continuous settings writes while updating local state immediately", async () => {
+    vi.useFakeTimers();
+    const persist = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockResolvedValue(undefined);
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({ settings: initial });
+
+    useMooseStore.getState().updateSettingsContinuous({
+      ...initial,
+      talkativeness: 0.2,
+    });
+    useMooseStore.getState().updateSettingsContinuous({
+      ...useMooseStore.getState().settings!,
+      talkativeness: 0.4,
+    });
+    useMooseStore.getState().updateSettingsContinuous({
+      ...useMooseStore.getState().settings!,
+      talkativeness: 0.6,
+    });
+
+    expect(useMooseStore.getState().settings?.talkativeness).toBe(0.6);
+    expect(persist).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0][0].talkativeness).toBe(0.6);
+  });
+
+  it("cancels a pending continuous write before a discrete settings write", async () => {
+    vi.useFakeTimers();
+    const persist = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockResolvedValue(undefined);
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({ settings: initial });
+
+    useMooseStore.getState().updateSettingsContinuous({
+      ...initial,
+      talkativeness: 0.7,
+    });
+    const latest = useMooseStore.getState().settings!;
+    await useMooseStore.getState().updateSettings({
+      ...latest,
+      unsolicited_comments: false,
+    });
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist.mock.calls[0][0]).toMatchObject({
+      talkativeness: 0.7,
+      unsolicited_comments: false,
+    });
   });
 
   it("marks the API key present immediately after a successful secure save", async () => {

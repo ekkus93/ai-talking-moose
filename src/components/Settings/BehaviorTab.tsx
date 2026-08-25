@@ -3,7 +3,8 @@ import { useMooseStore } from "../../stores/mooseStore";
 import { formatLocalHour } from "./formatLocalHour";
 
 export const BehaviorTab: React.FC = () => {
-  const { settings, updateSettings } = useMooseStore();
+  const { settings, updateSettings, updateSettingsContinuous } =
+    useMooseStore();
   if (!settings) return null;
 
   return (
@@ -41,7 +42,7 @@ export const BehaviorTab: React.FC = () => {
           value={settings.talkativeness}
           aria-label="Talkativeness"
           onChange={(e) =>
-            updateSettings({
+            updateSettingsContinuous({
               ...settings,
               talkativeness: parseFloat(e.target.value),
             })
@@ -68,7 +69,7 @@ export const BehaviorTab: React.FC = () => {
           value={settings.max_comments_per_hour}
           aria-label="Maximum ambient comments per hour"
           onChange={(e) =>
-            updateSettings({
+            updateSettingsContinuous({
               ...settings,
               max_comments_per_hour: parseInt(e.target.value),
             })
