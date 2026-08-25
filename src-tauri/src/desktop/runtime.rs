@@ -243,6 +243,7 @@ mod tests {
     use crate::desktop::observation::{
         ActiveApplicationObservation, IdleObservation, ObserverErrorCode, ObserverStatus,
     };
+    use crate::test_support::capture_logs;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
@@ -278,6 +279,26 @@ mod tests {
             );
         }
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn private_desktop_observation_is_consumed_without_entering_tracing() {
+        const PRIVATE_APP: &str = "PRIVATE_DESKTOP_APP_84a17e";
+        let mut observed = None;
+
+        let (_, logs) = capture_logs(|| {
+            handle_available(
+                ObserverKind::ActiveApplication,
+                ObserverResult::Available(ActiveApplicationObservation {
+                    name: PRIVATE_APP.to_string(),
+                }),
+                |observation| observed = Some(observation.name),
+            );
+        });
+
+        assert_eq!(observed.as_deref(), Some(PRIVATE_APP));
+        assert!(logs.contains("Desktop observer result"));
+        assert!(!logs.contains(PRIVATE_APP));
     }
 
     #[test]

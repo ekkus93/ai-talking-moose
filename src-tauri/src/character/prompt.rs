@@ -156,6 +156,7 @@ impl PromptBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::capture_logs;
 
     #[test]
     fn test_prompt_builder_contains_persona_and_rules() {
@@ -172,6 +173,23 @@ mod tests {
         assert!(prompt.contains("User is a software developer"));
         assert!(prompt.contains("Active App: VS Code"));
         assert!(prompt.contains("ABSOLUTELY FORBIDDEN"));
+    }
+
+    #[test]
+    fn private_prompt_inputs_are_not_written_to_tracing() {
+        const PRIVATE_RULE: &str = "PRIVATE_PROMPT_RULE_3cf971";
+        let mut cfg = CharacterConfig::default();
+        cfg.identity.name = PRIVATE_RULE.to_string();
+
+        let (prompt, logs) = capture_logs(|| {
+            PromptBuilder::build_system_instruction(&cfg, &[], None, false)
+        });
+
+        assert!(
+            prompt.contains(PRIVATE_RULE),
+            "production prompt builder must process the sentinel"
+        );
+        assert!(!logs.contains(PRIVATE_RULE));
     }
 
     #[test]

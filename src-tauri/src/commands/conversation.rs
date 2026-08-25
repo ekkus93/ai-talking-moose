@@ -354,6 +354,7 @@ pub async fn send_text_message(
 mod tests {
     use super::*;
     use crate::audio::capture::AudioCapture;
+    use crate::test_support::capture_logs;
     use serde_json::json;
     use std::sync::Arc;
     use tauri::ipc::{CallbackFn, InvokeBody};
@@ -412,6 +413,24 @@ mod tests {
             enabled_prompt.contains(PRIVATE_MEMORY),
             "re-enabling memory must restore retained memory to the production prompt"
         );
+    }
+
+    #[test]
+    fn private_memory_consumed_by_conversation_prompt_never_enters_tracing() {
+        const PRIVATE_MEMORY: &str = "PRIVATE_MEMORY_FACT_915db4";
+        let state = AppState::new_for_tests().unwrap();
+        state
+            .memory
+            .remember(PRIVATE_MEMORY, Some("privacy-test"))
+            .unwrap();
+
+        let (prompt, logs) = capture_logs(|| build_conversation_system_instruction(&state, true));
+
+        assert!(
+            prompt.contains(PRIVATE_MEMORY),
+            "production memory path must consume the sentinel"
+        );
+        assert!(!logs.contains(PRIVATE_MEMORY));
     }
 
     #[test]

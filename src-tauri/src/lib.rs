@@ -10,6 +10,8 @@ pub mod memory;
 pub mod persistence;
 pub mod secrets;
 pub mod tools;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 use app::state::AppState;
 use app::window_position::{
