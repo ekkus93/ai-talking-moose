@@ -42,6 +42,7 @@ vi.mock("@tauri-apps/api/core", () => {
       }
       if (cmd === "get_microphone_permission") return "granted";
       if (cmd === "request_microphone_access") return "granted";
+      if (cmd === "get_tool_audit") return [];
       if (cmd === "get_audio_diagnostics") return mockAudioDiagnostics;
       if (cmd === "test_microphone") {
         return { peak_level: 0.42, diagnostics: mockAudioDiagnostics };

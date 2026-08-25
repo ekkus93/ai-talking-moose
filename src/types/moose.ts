@@ -145,6 +145,39 @@ export interface AudioPlaybackDiagnostics {
   last_error: string | null;
 }
 
+export type ToolPermissionLevel =
+  | "safe_read_only"
+  | "character_action"
+  | "memory_mutation"
+  | "denied";
+
+export type ToolPermissionOutcome =
+  | "not_evaluated"
+  | "allowed"
+  | "denied"
+  | "confirmation_required";
+
+export type ToolResultCategory =
+  | "success"
+  | "not_found"
+  | "input_too_large"
+  | "invalid_arguments"
+  | "permission_denied"
+  | "confirmation_required"
+  | "concurrency_limit"
+  | "timeout"
+  | "output_too_large"
+  | "execution_failed";
+
+export interface ToolAuditRecord {
+  tool_name: string;
+  timestamp: string;
+  duration_ms: number;
+  permission: ToolPermissionLevel;
+  permission_outcome: ToolPermissionOutcome;
+  result_category: ToolResultCategory;
+}
+
 export interface AudioDiagnostics {
   configured_input_device: string | null;
   configured_output_device: string | null;

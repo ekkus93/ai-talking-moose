@@ -1,6 +1,7 @@
 import React from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { AudioDiagnosticsPanel } from "./AudioDiagnosticsPanel";
+import { ToolAuditDiagnosticsPanel } from "./ToolAuditDiagnosticsPanel";
 
 export const DiagnosticsTab: React.FC = () => {
   const { triggerCanned } = useMooseStore();
@@ -12,6 +13,13 @@ export const DiagnosticsTab: React.FC = () => {
           Audio Diagnostics
         </h3>
         <AudioDiagnosticsPanel />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="font-bold text-sm border-b border-black pb-1">
+          Tool Diagnostics
+        </h3>
+        <ToolAuditDiagnosticsPanel />
       </section>
 
       <section className="space-y-3">

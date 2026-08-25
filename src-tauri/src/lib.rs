@@ -184,6 +184,7 @@ pub fn run() {
             get_microphone_permission,
             request_microphone_access,
             get_audio_diagnostics,
+            get_tool_audit,
             test_microphone,
             test_audio_output,
             get_character_state,

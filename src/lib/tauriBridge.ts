@@ -16,6 +16,7 @@ import {
   MicrophoneTestResult,
   OnboardingStatus,
   TranscriptRecord,
+  ToolAuditRecord,
 } from "../types/moose";
 import {
   frontendDefaultSettings,
@@ -274,6 +275,12 @@ export const tauriBridge = {
     if (!isTauri()) return "unavailable";
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<MicrophonePermissionState>("request_microphone_access");
+  },
+
+  async getToolAudit(): Promise<ToolAuditRecord[]> {
+    if (!isTauri()) return [];
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<ToolAuditRecord[]>("get_tool_audit");
   },
 
   async getAudioDiagnostics(): Promise<AudioDiagnostics> {
