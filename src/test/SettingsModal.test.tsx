@@ -202,6 +202,22 @@ describe("SettingsModal Component", () => {
     expect(updateSpy).not.toHaveBeenCalled();
   });
 
+  it("uses the backend-derived voice catalog in the primary voice selector", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Voice & Audio"));
+
+    const voiceSelect = screen.getByLabelText("Moose Voice Preset");
+    await waitFor(() =>
+      expect(voiceSelect.querySelectorAll("option")).toHaveLength(30),
+    );
+    expect(
+      screen.getByRole("option", { name: /Fenrir \(Excitable\).*Default/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Sulafat \(Warm\)/i }),
+    ).toBeInTheDocument();
+  });
+
   it("shows only current capability-filtered Gemini model options", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Gemini AI"));

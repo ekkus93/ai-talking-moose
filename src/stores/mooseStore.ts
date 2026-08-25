@@ -4,6 +4,7 @@ import {
   AudioDeviceInfo,
   CharacterState,
   ConversationLifecycle,
+  GoogleTtsVoiceDescriptor,
   MemoryRecord,
   MouthShape,
   ProviderError,
@@ -74,6 +75,7 @@ interface MooseStoreState {
   memories: MemoryRecord[];
   inputDevices: AudioDeviceInfo[];
   outputDevices: AudioDeviceInfo[];
+  googleTtsVoices: GoogleTtsVoiceDescriptor[];
   settings: AppSettings | null;
   hasApiKey: boolean;
 
@@ -101,6 +103,7 @@ interface MooseStoreState {
   updateSettings: (newSettings: AppSettings) => Promise<void>;
   updateSettingsContinuous: (newSettings: AppSettings) => void;
   loadDevices: () => Promise<void>;
+  loadGoogleTtsVoices: () => Promise<void>;
   loadMemories: () => Promise<void>;
   deleteMemory: (id: number) => Promise<void>;
   forgetEverything: () => Promise<void>;
@@ -134,6 +137,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   memories: [],
   inputDevices: [],
   outputDevices: [],
+  googleTtsVoices: [],
   settings: null,
   hasApiKey: false,
 
@@ -288,6 +292,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   loadDevices: async () => {
     const [inputDevices, outputDevices] = await tauriBridge.listAudioDevices();
     set({ inputDevices, outputDevices });
+  },
+
+  loadGoogleTtsVoices: async () => {
+    const googleTtsVoices = await tauriBridge.getGoogleTtsVoices();
+    set({ googleTtsVoices });
   },
 
   loadMemories: async () => {

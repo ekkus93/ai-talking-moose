@@ -2,13 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { Volume2, X } from "lucide-react";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { useMooseStore } from "../../stores/mooseStore";
-import type { GoogleTtsVoiceDescriptor } from "../../types/moose";
 
 export const P6VoiceAcceptancePanel: React.FC = () => {
   const isSettingsOpen = useMooseStore((state) => state.isSettingsOpen);
   const settings = useMooseStore((state) => state.settings);
+  const voices = useMooseStore((state) => state.googleTtsVoices);
   const [isOpen, setIsOpen] = useState(false);
-  const [voices, setVoices] = useState<GoogleTtsVoiceDescriptor[]>([]);
   const [selectedVoice, setSelectedVoice] = useState("Fenrir");
   const [isAuditioning, setIsAuditioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,10 +22,6 @@ export const P6VoiceAcceptancePanel: React.FC = () => {
       return;
     }
     setSelectedVoice(settings?.tts_voice ?? "Fenrir");
-    void tauriBridge
-      .getGoogleTtsVoices()
-      .then((catalog) => setVoices(catalog ?? []))
-      .catch((reason) => setError(String(reason)));
   }, [isSettingsOpen, settings?.tts_voice]);
 
   useEffect(() => {

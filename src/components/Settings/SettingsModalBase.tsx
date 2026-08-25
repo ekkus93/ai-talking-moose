@@ -31,6 +31,7 @@ export const SettingsModal: React.FC = () => {
     settings,
     loadMemories,
     loadDevices,
+    loadGoogleTtsVoices,
   } = useMooseStore();
 
   const [activeTab, setActiveTab] = useState<
@@ -62,6 +63,7 @@ export const SettingsModal: React.FC = () => {
   useEffect(() => {
     if (isSettingsOpen) {
       loadDevices();
+      loadGoogleTtsVoices();
       loadMemories();
       setGoogleModelsStatus("loading");
       void tauriBridge
@@ -75,7 +77,7 @@ export const SettingsModal: React.FC = () => {
           setGoogleModelsStatus("error");
         });
     }
-  }, [isSettingsOpen, loadDevices, loadMemories]);
+  }, [isSettingsOpen, loadDevices, loadGoogleTtsVoices, loadMemories]);
 
   if (!isSettingsOpen || !settings) {
     return null;

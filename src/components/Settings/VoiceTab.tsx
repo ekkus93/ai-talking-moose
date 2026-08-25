@@ -14,8 +14,13 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
   isAuditioning,
   setIsAuditioning,
 }) => {
-  const { settings, updateSettings, inputDevices, outputDevices } =
-    useMooseStore();
+  const {
+    settings,
+    updateSettings,
+    inputDevices,
+    outputDevices,
+    googleTtsVoices,
+  } = useMooseStore();
   if (!settings) return null;
 
   return (
@@ -88,14 +93,19 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             }
             className="w-full p-1.5 border border-black rounded bg-white font-bold"
           >
-            <option value="Fenrir">
-              Fenrir (Deeper, Gravelly Cartoon Moose - Recommended)
-            </option>
-            <option value="Charon">Charon (Deep, Slow & Deadpan)</option>
-            <option value="Orus">Orus (Warm, Low-Pitched & Relaxed)</option>
-            <option value="Kore">Kore (Smooth & Natural)</option>
-            <option value="Puck">Puck (High-Pitched & Squeaky)</option>
-            <option value="Aoede">Aoede (Higher Register)</option>
+            {!googleTtsVoices.some(
+              (voice) => voice.id === settings.tts_voice,
+            ) && (
+              <option value={settings.tts_voice} disabled>
+                Unavailable: {settings.tts_voice}
+              </option>
+            )}
+            {googleTtsVoices.map((voice) => (
+              <option key={voice.id} value={voice.id}>
+                {voice.id} ({voice.style})
+                {voice.id === "Fenrir" ? " - Default" : ""}
+              </option>
+            ))}
           </select>
         </div>
 

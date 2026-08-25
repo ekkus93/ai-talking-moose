@@ -3,13 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { P6VoiceAcceptancePanel } from "../components/Settings/P6VoiceAcceptancePanel";
 import { tauriBridge } from "../lib/tauriBridge";
 import { useMooseStore } from "../stores/mooseStore";
-import { frontendDefaultSettings } from "../lib/backendContract";
+import {
+  frontendDefaultSettings,
+  frontendGoogleTtsVoices,
+} from "../lib/backendContract";
 
 describe("P6VoiceAcceptancePanel", () => {
   beforeEach(() => {
     useMooseStore.setState({
       isSettingsOpen: true,
       settings: frontendDefaultSettings(),
+      googleTtsVoices: frontendGoogleTtsVoices(),
     });
   });
 
