@@ -181,9 +181,8 @@ mod tests {
         let mut cfg = CharacterConfig::default();
         cfg.identity.name = PRIVATE_RULE.to_string();
 
-        let (prompt, logs) = capture_logs(|| {
-            PromptBuilder::build_system_instruction(&cfg, &[], None, false)
-        });
+        let (prompt, logs) =
+            capture_logs(|| PromptBuilder::build_system_instruction(&cfg, &[], None, false));
 
         assert!(
             prompt.contains(PRIVATE_RULE),

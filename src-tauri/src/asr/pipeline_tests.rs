@@ -532,7 +532,11 @@ fn sensitive_asr_payloads_are_processed_without_entering_tracing() {
                 ] if text.as_str() == TRANSCRIPT
             ));
             let received = state.received_pcm.lock().unwrap();
-            assert_eq!(received.len(), 1, "raw PCM must cross the production worker boundary");
+            assert_eq!(
+                received.len(),
+                1,
+                "raw PCM must cross the production worker boundary"
+            );
             assert!(!received[0].is_empty());
             drop(received);
             pipeline.stop_and_join().await.unwrap();
