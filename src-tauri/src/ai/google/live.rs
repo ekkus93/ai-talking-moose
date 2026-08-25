@@ -1,4 +1,4 @@
-use crate::ai::google::auth::GoogleAuth;
+use crate::ai::google::auth::{trace_google_transport_error, GoogleAuth};
 use crate::ai::google::config::{validate_live_model, LIVE_WEBSOCKET_ENDPOINT};
 use crate::ai::google::protocol::{
     LiveBlob, LiveClientMessage, LiveContent, LiveFunctionResponse, LiveGenerationConfig, LivePart,
@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
+use reqwest::Url;
 use serde_json::json;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -264,22 +265,36 @@ fn decode_server_frame(message: Message) -> Result<Option<LiveServerMessage>, Pr
         .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Protocol))
 }
 
+fn live_websocket_url(api_key: &str) -> Result<String, ProviderError> {
+    let mut url = Url::parse(LIVE_WEBSOCKET_ENDPOINT)
+        .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Internal))?;
+    url.query_pairs_mut().append_pair("key", api_key);
+    Ok(url.to_string())
+}
+
+fn trace_live_transport_error(api_key: &str, error: &WebSocketError) {
+    trace_google_transport_error("live", &error.to_string(), api_key);
+}
+
 async fn open_and_setup(
     api_key: &str,
     config: &LiveSessionConfig,
     resume_handle: Option<&str>,
 ) -> Result<GeminiSocket, ProviderError> {
-    let url = format!("{LIVE_WEBSOCKET_ENDPOINT}?key={api_key}");
+    let url = live_websocket_url(api_key)?;
     let connect_result = tokio::time::timeout(CONNECT_TIMEOUT, connect_async(&url))
         .await
         .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Network))?;
-    let (mut socket, _) = connect_result.map_err(provider_error_for_connect)?;
+    let (mut socket, _) = connect_result.map_err(|error| {
+        trace_live_transport_error(api_key, &error);
+        provider_error_for_connect(error)
+    })?;
 
     let setup = encode_client_message(&setup_message(config, resume_handle))?;
-    socket
-        .send(setup)
-        .await
-        .map_err(provider_error_for_connect)?;
+    socket.send(setup).await.map_err(|error| {
+        trace_live_transport_error(api_key, &error);
+        provider_error_for_connect(error)
+    })?;
 
     let setup_deadline = tokio::time::Instant::now() + SETUP_TIMEOUT;
     loop {
@@ -307,7 +322,10 @@ async fn open_and_setup(
                 }
                 return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
             }
-            Err(error) => return Err(provider_error_for_connect(error)),
+            Err(error) => {
+                trace_live_transport_error(api_key, &error);
+                return Err(provider_error_for_connect(error));
+            }
         }
     }
 }

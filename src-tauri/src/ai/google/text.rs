@@ -1,8 +1,8 @@
-use crate::ai::google::auth::GoogleAuth;
+use crate::ai::google::auth::{trace_google_transport_error, GoogleAuth, GOOGLE_API_KEY_HEADER};
 use crate::ai::traits::TextModel;
 use crate::ai::types::{TextRequest, TextResponse};
 use async_trait::async_trait;
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder};
 use serde_json::json;
 use tracing::{error, info};
 
@@ -21,16 +21,24 @@ impl GoogleTextModel {
         }
     }
 
+    fn generation_url(model: &str) -> String {
+        format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        )
+    }
+
+    fn generation_request(&self, model: &str, body: &serde_json::Value) -> RequestBuilder {
+        self.client
+            .post(Self::generation_url(model))
+            .header(GOOGLE_API_KEY_HEADER, &self.auth.api_key)
+            .json(body)
+    }
+
     async fn try_generate_with_model(
         &self,
         model: &str,
         request: &TextRequest,
     ) -> Result<TextResponse, String> {
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-            model, self.auth.api_key
-        );
-
         let mut generation_config = json!({
             "maxOutputTokens": request.max_tokens.unwrap_or(1024)
         });
@@ -60,15 +68,15 @@ impl GoogleTextModel {
         }
 
         let resp = self
-            .client
-            .post(&url)
-            .json(&body)
+            .generation_request(model, &body)
             .send()
             .await
-            .map_err(|e| {
+            .map_err(|error| {
+                let detail = error.to_string();
+                trace_google_transport_error("text", &detail, &self.auth.api_key);
                 format!(
                     "HTTP request to Gemini failed: {}",
-                    self.auth.redact(&e.to_string())
+                    self.auth.redact(&detail)
                 )
             })?;
 
@@ -110,5 +118,35 @@ impl TextModel for GoogleTextModel {
 
         self.try_generate_with_model(&self.model_name, &request)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generation_request_uses_api_key_header_and_secret_free_url() {
+        const KEY: &str = "AIzaSyTEXT_HEADER_ONLY_73c1";
+        let model = GoogleTextModel::new(
+            GoogleAuth::new(KEY.to_string()),
+            "gemini-3.6-flash".to_string(),
+        );
+        let request = model
+            .generation_request("gemini-3.6-flash", &json!({"contents": []}))
+            .build()
+            .unwrap();
+
+        assert!(request.url().query().is_none());
+        assert!(!request.url().as_str().contains(KEY));
+        assert_eq!(
+            request
+                .headers()
+                .get(GOOGLE_API_KEY_HEADER)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            KEY
+        );
     }
 }

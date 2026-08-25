@@ -1,4 +1,4 @@
-use crate::ai::google::auth::GoogleAuth;
+use crate::ai::google::auth::{trace_google_transport_error, GoogleAuth, GOOGLE_API_KEY_HEADER};
 use crate::ai::google::config::{
     normalize_tts_model, normalize_tts_voice, validate_tts_model, validate_tts_voice,
     DEFAULT_TTS_MODEL,
@@ -7,7 +7,7 @@ use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
 use async_trait::async_trait;
 use base64::Engine;
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, RequestBuilder, StatusCode};
 use serde_json::json;
 use std::time::Duration;
 use tracing::info;
@@ -47,6 +47,20 @@ impl GoogleSpeechSynthesizer {
             400..=499 => Self::safe_error(ProviderErrorKind::Setup),
             _ => Self::safe_error(ProviderErrorKind::Network),
         }
+    }
+
+    fn generation_url(&self) -> String {
+        format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+            self.model
+        )
+    }
+
+    fn generation_request(&self, body: &serde_json::Value) -> RequestBuilder {
+        self.client
+            .post(self.generation_url())
+            .header(GOOGLE_API_KEY_HEADER, &self.auth.api_key)
+            .json(body)
     }
 
     fn performance_instruction(request: &TtsRequest) -> String {
@@ -96,10 +110,6 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
             .unwrap_or_else(|| self.default_voice.clone());
         validate_tts_voice(&voice).map_err(|_| Self::safe_error(ProviderErrorKind::Setup))?;
 
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-            self.model, self.auth.api_key
-        );
         let body = json!({
             "contents": [
                 {
@@ -121,13 +131,14 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
         });
 
         let response = self
-            .client
-            .post(&url)
+            .generation_request(&body)
             .timeout(TTS_REQUEST_TIMEOUT)
-            .json(&body)
             .send()
             .await
-            .map_err(|_| Self::safe_error(ProviderErrorKind::Network))?;
+            .map_err(|error| {
+                trace_google_transport_error("tts", &error.to_string(), &self.auth.api_key);
+                Self::safe_error(ProviderErrorKind::Network)
+            })?;
         if !response.status().is_success() {
             return Err(Self::classify_status(response.status()));
         }
@@ -192,6 +203,32 @@ mod tests {
         assert_eq!(
             synthesizer.default_voice,
             crate::ai::google::config::DEFAULT_TTS_VOICE
+        );
+    }
+
+    #[test]
+    fn generation_request_uses_api_key_header_and_secret_free_url() {
+        const KEY: &str = "AIzaSyTTS_HEADER_ONLY_248a";
+        let synthesizer = GoogleSpeechSynthesizer::new_with_model(
+            GoogleAuth::new(KEY.to_string()),
+            DEFAULT_TTS_MODEL.to_string(),
+            "Puck".to_string(),
+        );
+        let request = synthesizer
+            .generation_request(&json!({"contents": []}))
+            .build()
+            .unwrap();
+
+        assert!(request.url().query().is_none());
+        assert!(!request.url().as_str().contains(KEY));
+        assert_eq!(
+            request
+                .headers()
+                .get(GOOGLE_API_KEY_HEADER)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            KEY
         );
     }
 

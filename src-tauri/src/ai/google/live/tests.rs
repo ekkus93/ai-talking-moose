@@ -82,6 +82,16 @@ fn tool_response_preserves_call_id_and_name() {
 }
 
 #[test]
+fn websocket_auth_uses_documented_query_parameter_with_url_encoding() {
+    const KEY: &str = "AIzaSyLIVE key+with/specials";
+    let url = live_websocket_url(KEY).unwrap();
+    let parsed = Url::parse(&url).unwrap();
+
+    assert_eq!(parsed.query_pairs().find(|(name, _)| name == "key").unwrap().1, KEY);
+    assert!(!url.contains("LIVE key+with/specials"));
+}
+
+#[test]
 fn reconnect_backoff_is_bounded() {
     assert_eq!(reconnect_delay(1, 0), Duration::from_millis(250));
     assert!(reconnect_delay(8, 500) <= Duration::from_millis(2_125));
