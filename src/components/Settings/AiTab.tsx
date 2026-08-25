@@ -32,13 +32,13 @@ export const AiTab: React.FC<AiTabProps> = ({
   isTesting,
   setIsTesting,
 }) => {
-  const { settings, updateSettings } = useMooseStore();
+  const { settings, updateSettings, saveGoogleApiKey } = useMooseStore();
 
   if (!settings) return null;
 
   const handleSaveApiKey = async () => {
     if (apiKeyInput.trim()) {
-      await tauriBridge.setGoogleApiKey(apiKeyInput.trim());
+      await saveGoogleApiKey(apiKeyInput.trim());
       setApiKeyInput("");
       setTestResult({
         success: true,

@@ -1,14 +1,16 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { SettingsModal } from "../components/Settings/SettingsModal";
 import { useMooseStore } from "../stores/mooseStore";
 import { frontendDefaultSettings } from "../lib/backendContract";
+import { tauriBridge } from "../lib/tauriBridge";
 
 describe("SettingsModal Component", () => {
   beforeEach(() => {
     useMooseStore.setState({
       isSettingsOpen: true,
       settings: frontendDefaultSettings(),
+      hasApiKey: false,
     });
   });
 
@@ -216,6 +218,19 @@ describe("SettingsModal Component", () => {
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toHaveValue(
       "AIzaSyPartialDraft",
     );
+  });
+
+  it("updates key-presence state immediately when Settings saves a key", async () => {
+    vi.spyOn(tauriBridge, "setGoogleApiKey").mockResolvedValue(undefined);
+
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.change(screen.getByLabelText(/Google Gemini API Key/i), {
+      target: { value: "AIzaSySettingsKey" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save Key/i }));
+
+    await waitFor(() => expect(useMooseStore.getState().hasApiKey).toBe(true));
   });
 
   it("keeps a connection-test result visible across a tab switch", async () => {

@@ -14,6 +14,12 @@ import { tauriBridge } from "../lib/tauriBridge";
 const lifecycleIsActive = (lifecycle: ConversationLifecycle) =>
   lifecycle !== "idle" && lifecycle !== "failed";
 
+// Persisted SQLite transcript ids are positive. Frontend-only active-session rows use
+// a decreasing negative sequence so rapid finalizations cannot collide with each other
+// or with records loaded from persistence.
+let nextLocalTranscriptId = -1;
+const allocateLocalTranscriptId = () => nextLocalTranscriptId--;
+
 interface MooseStoreState {
   characterState: CharacterState;
   conversationLifecycle: ConversationLifecycle;
@@ -48,6 +54,7 @@ interface MooseStoreState {
   hideSpeechBubble: () => void;
   setInputLevel: (level: number) => void;
   setOutputLevel: (level: number) => void;
+  saveGoogleApiKey: (apiKey: string) => Promise<void>;
 
   toggleSettings: (open?: boolean) => void;
   toggleOnboarding: (open?: boolean) => void;
@@ -136,6 +143,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
 
   setInputLevel: (inputLevel) => set({ inputLevel }),
   setOutputLevel: (outputLevel) => set({ outputLevel }),
+
+  saveGoogleApiKey: async (apiKey) => {
+    await tauriBridge.setGoogleApiKey(apiKey);
+    set({ hasApiKey: true });
+  },
 
   toggleSettings: (open) => {
     const shouldOpen = open !== undefined ? open : !get().isSettingsOpen;
@@ -320,7 +332,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       "moose://transcript/user",
       (text) => {
         const entry: TranscriptRecord = {
-          id: Date.now(),
+          id: allocateLocalTranscriptId(),
           session_id: "active",
           role: "user",
           text,
@@ -342,7 +354,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       "moose://transcript/moose",
       (text) => {
         const entry: TranscriptRecord = {
-          id: Date.now(),
+          id: allocateLocalTranscriptId(),
           session_id: "active",
           role: "moose",
           text,

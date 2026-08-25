@@ -14,6 +14,9 @@ describe("mooseStore State Management", () => {
       isOnboardingOpen: false,
       settings: null,
       hasApiKey: false,
+      transcripts: [],
+      partialUserTranscript: null,
+      partialMooseTranscript: null,
     });
   });
 
@@ -37,6 +40,38 @@ describe("mooseStore State Management", () => {
     expect(useMooseStore.getState().mouthShape).toBe("wide");
     expect(useMooseStore.getState().inputLevel).toBe(0.75);
     expect(useMooseStore.getState().outputLevel).toBe(0.9);
+  });
+
+  it("marks the API key present immediately after a successful secure save", async () => {
+    const save = vi
+      .spyOn(tauriBridge, "setGoogleApiKey")
+      .mockResolvedValue(undefined);
+
+    await useMooseStore.getState().saveGoogleApiKey("AIzaSyFreshKey");
+
+    expect(save).toHaveBeenCalledWith("AIzaSyFreshKey");
+    expect(useMooseStore.getState().hasApiKey).toBe(true);
+  });
+
+  it("allocates collision-free ids for transcript finals in the same millisecond", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
+      async (eventName: string, handler: (payload: unknown) => void) => {
+        handlers.set(eventName, handler);
+        return () => {};
+      },
+    );
+    vi.spyOn(Date, "now").mockReturnValue(1_725_000_000_000);
+
+    const cleanup = await useMooseStore.getState().initEventListeners();
+    handlers.get("moose://transcript/user")?.("first final");
+    handlers.get("moose://transcript/moose")?.("second final");
+
+    const ids = useMooseStore.getState().transcripts.map((entry) => entry.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids.every((id) => id < 0)).toBe(true);
+    cleanup();
   });
 
   it("shows sanitized provider errors from backend events", async () => {

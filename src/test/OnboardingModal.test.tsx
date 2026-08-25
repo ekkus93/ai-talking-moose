@@ -9,6 +9,7 @@ describe("OnboardingModal ASR privacy", () => {
     useMooseStore.setState({
       isOnboardingOpen: true,
       settings: await tauriBridge.getSettings(),
+      hasApiKey: false,
     });
   });
 
@@ -63,6 +64,7 @@ describe("OnboardingModal P11 onboarding controls", () => {
     useMooseStore.setState({
       isOnboardingOpen: true,
       settings: await tauriBridge.getSettings(),
+      hasApiKey: false,
     });
   });
 
@@ -96,6 +98,22 @@ describe("OnboardingModal P11 onboarding controls", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/stored in Keychain/i)).toBeInTheDocument();
   });
+
+  it("updates key-presence state immediately when onboarding saves a key", async () => {
+    vi.spyOn(tauriBridge, "setGoogleApiKey").mockResolvedValue(undefined);
+
+    render(<OnboardingModal />);
+    fireEvent.click(screen.getByText("Next: Voice"));
+    fireEvent.click(screen.getByText("Next: Local Model"));
+    fireEvent.click(screen.getByText("Continue to Gemini Key"));
+    fireEvent.change(screen.getByLabelText(/Google Gemini API key/i), {
+      target: { value: "AIzaSyOnboardingKey" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save Key Securely/i }));
+
+    await waitFor(() => expect(useMooseStore.getState().hasApiKey).toBe(true));
+  });
+
   it("acknowledges onboarding without changing privacy settings", async () => {
     const current = useMooseStore.getState().settings!;
     expect(current.memory_enabled).toBe(false);

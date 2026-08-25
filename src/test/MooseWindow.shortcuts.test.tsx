@@ -1,7 +1,8 @@
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MooseWindow } from "../windows/MooseWindow";
 import { useMooseStore } from "../stores/mooseStore";
+import { tauriBridge } from "../lib/tauriBridge";
 
 vi.mock("../components/Moose/MooseController", () => ({
   MooseController: () => <div data-testid="moose-controller" />,
@@ -61,6 +62,19 @@ describe("MooseWindow focused keyboard shortcuts", () => {
 
     fireEvent.keyDown(window, { key: ",", metaKey: true });
     expect(toggleSettings).toHaveBeenCalledWith(true);
+  });
+
+  it("updates the title-bar AI badge immediately after saving a key", async () => {
+    useMooseStore.setState({ hasApiKey: false });
+    vi.spyOn(tauriBridge, "setGoogleApiKey").mockResolvedValue(undefined);
+    render(<MooseWindow />);
+
+    expect(screen.getByText("AI: NO KEY")).toBeInTheDocument();
+    await useMooseStore.getState().saveGoogleApiKey("AIzaSyBadgeKey");
+
+    await waitFor(() =>
+      expect(screen.getByText("AI: READY")).toBeInTheDocument(),
+    );
   });
 
   it("stops an active conversation with the focused-window shortcut", () => {

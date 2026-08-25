@@ -16,8 +16,13 @@ import {
 const TINY_MODE = "moonshine_tiny_streaming" as const;
 
 export const OnboardingModal: React.FC = () => {
-  const { isOnboardingOpen, toggleOnboarding, triggerCanned, settings } =
-    useMooseStore();
+  const {
+    isOnboardingOpen,
+    toggleOnboarding,
+    triggerCanned,
+    settings,
+    saveGoogleApiKey,
+  } = useMooseStore();
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
   const [keyStatus, setKeyStatus] = useState<string | null>(null);
@@ -68,7 +73,7 @@ export const OnboardingModal: React.FC = () => {
     if (!apiKey.trim()) return;
     setKeyStatus(null);
     try {
-      await tauriBridge.setGoogleApiKey(apiKey.trim());
+      await saveGoogleApiKey(apiKey.trim());
       setApiKey("");
       setKeyStatus("Key saved securely.");
     } catch (error) {
