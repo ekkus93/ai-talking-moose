@@ -6,6 +6,14 @@ description = "Talking Moose AI Desktop Character"
 authors = ["Talking Moose Team"]
 edition = "2021"
 
+[features]
+frontend-contract-export = []
+
+[[bin]]
+name = "export_frontend_contract"
+path = "src/bin/export_frontend_contract.rs"
+required-features = ["frontend-contract-export"]
+
 [lib]
 name = "talking_moose_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

@@ -15,6 +15,8 @@ EXPECTED_PRODUCT = "Talking Moose AI"
 EXPECTED_IDENTIFIER = "com.talkingmoose.ai"
 EXPECTED_MIN_MACOS = "13.4"
 EXPECTED_CARGO_BINARY = "talking-moose-ai"
+EXPECTED_FRONTEND_CONTRACT_BINARY = "export_frontend_contract"
+EXPECTED_FRONTEND_CONTRACT_FEATURE = "frontend-contract-export"
 
 
 def fail(message: str) -> None:
@@ -35,6 +37,23 @@ def parse_cargo_package_value(path: Path, key: str) -> str:
             if match:
                 return match.group(1)
     fail(f"could not read package {key!r} from {path}")
+    raise AssertionError
+
+
+def parse_cargo_bin_required_features(path: Path, binary_name: str) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    for match in re.finditer(r"(?ms)^\[\[bin\]\]\s*$(.*?)(?=^\[|\Z)", text):
+        block = match.group(1)
+        name_match = re.search(r'(?m)^name\s*=\s*"([^"]+)"\s*$', block)
+        if name_match is None or name_match.group(1) != binary_name:
+            continue
+        features_match = re.search(
+            r"(?m)^required-features\s*=\s*\[(.*?)\]\s*$", block
+        )
+        if features_match is None:
+            return []
+        return re.findall(r'"([^"]+)"', features_match.group(1))
+    fail(f"could not find Cargo binary target {binary_name!r} in {path}")
     raise AssertionError
 
 
@@ -127,6 +146,9 @@ def main() -> None:
     cargo_version = parse_cargo_package_value(cargo_manifest, "version")
     cargo_name = parse_cargo_package_value(cargo_manifest, "name")
     cargo_default_run = parse_cargo_package_value(cargo_manifest, "default-run")
+    contract_export_features = parse_cargo_bin_required_features(
+        cargo_manifest, EXPECTED_FRONTEND_CONTRACT_BINARY
+    )
     lock_root_version = package_lock.get("packages", {}).get("", {}).get("version")
     versions = {package["version"], package_lock.get("version"), lock_root_version, tauri["version"], cargo_version}
     if None in versions or len(versions) != 1:
@@ -146,6 +168,20 @@ def main() -> None:
             "Cargo package default-run must select the Tauri application binary; "
             f"expected {EXPECTED_CARGO_BINARY!r}, got {cargo_default_run!r}"
         )
+    if contract_export_features != [EXPECTED_FRONTEND_CONTRACT_FEATURE]:
+        fail(
+            "frontend contract helper must be feature-gated so Tauri does not bundle it; "
+            f"expected {[EXPECTED_FRONTEND_CONTRACT_FEATURE]!r}, got {contract_export_features!r}"
+        )
+    generator_script = (ROOT / "scripts/generate_frontend_contract.sh").read_text(
+        encoding="utf-8"
+    )
+    expected_generator_args = (
+        f"--features {EXPECTED_FRONTEND_CONTRACT_FEATURE} "
+        f"--bin {EXPECTED_FRONTEND_CONTRACT_BINARY}"
+    )
+    if expected_generator_args not in generator_script:
+        fail("frontend contract generator must explicitly enable its helper binary feature")
     if tauri.get("productName") != EXPECTED_PRODUCT:
         fail(f"productName must be {EXPECTED_PRODUCT!r}")
     if tauri.get("identifier") != EXPECTED_IDENTIFIER:
