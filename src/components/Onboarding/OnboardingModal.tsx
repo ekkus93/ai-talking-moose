@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import type { AsrModelDescriptor } from "../../types/moose";
 import {
   ArrowRight,
@@ -30,6 +31,10 @@ export const OnboardingModal: React.FC = () => {
   const [isInstallingTiny, setIsInstallingTiny] = useState(false);
   const [modelStatus, setModelStatus] = useState<string | null>(null);
   const [completionStatus, setCompletionStatus] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useModalFocusTrap(isOnboardingOpen, dialogRef, closeButtonRef);
 
   useEffect(() => {
     if (!isOnboardingOpen) return;
@@ -104,9 +109,11 @@ export const OnboardingModal: React.FC = () => {
       className="absolute inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 select-none font-mono text-xs"
     >
       <section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
+        tabIndex={-1}
         className="bg-[#ece7de] w-full max-h-[96%] border-2 border-black rounded shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3.5 flex flex-col justify-between overflow-y-auto space-y-3"
       >
         <div className="flex items-center justify-between border-b border-black pb-1.5">
@@ -119,6 +126,7 @@ export const OnboardingModal: React.FC = () => {
             </p>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={() => void closeAfterAcknowledgement(false)}
             className="p-1 hover:bg-gray-300 rounded border border-black"

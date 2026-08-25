@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import type { GoogleModelDescriptor } from "../../types/moose";
 import { GeneralTab } from "./GeneralTab";
 import { BehaviorTab } from "./BehaviorTab";
@@ -59,6 +60,14 @@ export const SettingsModal: React.FC = () => {
   const [testResult, setTestResult] = useState<AiTabTestResult | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isAuditioning, setIsAuditioning] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useModalFocusTrap(
+    isSettingsOpen && settings !== null,
+    dialogRef,
+    closeButtonRef,
+  );
 
   useEffect(() => {
     if (isSettingsOpen) {
@@ -85,10 +94,12 @@ export const SettingsModal: React.FC = () => {
 
   return (
     <div
+      ref={dialogRef}
       data-testid="settings-modal"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
+      tabIndex={-1}
       className="absolute inset-0 z-50 bg-[#ece7de] flex flex-col font-mono text-xs overflow-hidden select-none"
     >
       {/* Title bar */}
@@ -101,6 +112,7 @@ export const SettingsModal: React.FC = () => {
           <span id="settings-title">TALKING MOOSE CONTROL PANEL</span>
         </div>
         <button
+          ref={closeButtonRef}
           onClick={() => toggleSettings(false)}
           className="hover:bg-gray-300 p-1 rounded border border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5"
           title="Close Settings"

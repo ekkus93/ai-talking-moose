@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { Terminal, X, Send, Trash2, CornerDownLeft } from "lucide-react";
 
 export const TranscriptDrawer: React.FC = () => {
@@ -15,12 +16,14 @@ export const TranscriptDrawer: React.FC = () => {
 
   const [inputMessage, setInputMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  useModalFocusTrap(isTranscriptOpen, dialogRef, inputRef);
+
   useEffect(() => {
     if (isTranscriptOpen) {
-      inputRef.current?.focus();
       if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
@@ -55,10 +58,12 @@ export const TranscriptDrawer: React.FC = () => {
 
   return (
     <div
+      ref={dialogRef}
       data-testid="transcript-drawer"
       role="dialog"
       aria-modal="true"
       aria-labelledby="transcript-title"
+      tabIndex={-1}
       className="absolute inset-0 z-30 bg-[#ece7de] flex flex-col border-2 border-black select-none font-mono text-xs"
     >
       {/* Terminal Title Bar */}
