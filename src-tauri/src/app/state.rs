@@ -63,7 +63,6 @@ pub struct AppSettings {
     pub tts_model: String,
 
     // Privacy
-    pub microphone_permission_granted: bool,
     pub active_app_observation: bool,
     pub window_title_observation: bool,
     pub memory_enabled: bool,
@@ -111,7 +110,6 @@ impl Default for AppSettings {
             text_model: DEFAULT_TEXT_MODEL.to_string(),
             tts_model: "en-US-Standard-B".to_string(),
 
-            microphone_permission_granted: true,
             active_app_observation: false,
             window_title_observation: false,
             memory_enabled: false,
@@ -135,6 +133,7 @@ impl AppSettings {
     pub fn from_persisted_json(json: &str) -> Result<(Self, bool), serde_json::Error> {
         let value: serde_json::Value = serde_json::from_str(json)?;
         let had_asr_mode = value.get("asr_mode").is_some();
+        let had_legacy_microphone_permission = value.get("microphone_permission_granted").is_some();
         let had_current_version = value
             .get("settings_version")
             .and_then(serde_json::Value::as_u64)
@@ -154,7 +153,10 @@ impl AppSettings {
 
         Ok((
             settings,
-            !had_asr_mode || !had_current_version || models_migrated,
+            !had_asr_mode
+                || had_legacy_microphone_permission
+                || !had_current_version
+                || models_migrated,
         ))
     }
 
@@ -414,6 +416,42 @@ mod tests {
         assert!(migrated);
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::GeminiLiveAudio);
+    }
+
+    #[test]
+    fn legacy_microphone_permission_cache_is_removed_during_normalization() {
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "microphone_permission_granted".to_string(),
+            serde_json::Value::Bool(true),
+        );
+        let json = serde_json::to_string(&value).unwrap();
+
+        let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
+        assert!(migrated);
+        let normalized = serde_json::to_value(settings).unwrap();
+        assert!(normalized.get("microphone_permission_granted").is_none());
+    }
+
+    #[test]
+    fn frontend_contract_matches_authoritative_rust_defaults_and_catalogs() {
+        let contract: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../src/generated/backendContract.json"
+        ))
+        .unwrap();
+
+        assert_eq!(
+            contract.get("settings").unwrap(),
+            &serde_json::to_value(AppSettings::default()).unwrap()
+        );
+        assert_eq!(
+            contract.get("google_models").unwrap(),
+            &serde_json::to_value(crate::ai::google::GOOGLE_MODELS).unwrap()
+        );
+        assert_eq!(
+            contract.get("google_tts_voices").unwrap(),
+            &serde_json::to_value(crate::ai::google::GOOGLE_TTS_VOICES).unwrap()
+        );
     }
 
     #[test]

@@ -187,9 +187,6 @@ export interface AppSettings {
   text_model: string;
   tts_model: string;
 
-  // Legacy compatibility cache. Runtime permission state is authoritative and is
-  // queried through getMicrophonePermission/getAudioDiagnostics.
-  microphone_permission_granted: boolean;
   active_app_observation: boolean;
   window_title_observation: boolean;
   memory_enabled: boolean;

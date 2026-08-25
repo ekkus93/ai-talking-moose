@@ -16,6 +16,11 @@ import {
   MicrophoneTestResult,
   TranscriptRecord,
 } from "../types/moose";
+import {
+  frontendDefaultSettings,
+  frontendGoogleModels,
+  frontendGoogleTtsVoices,
+} from "./backendContract";
 
 // Check if running inside native Tauri runtime
 export const isTauri = () => {
@@ -83,39 +88,6 @@ const mockAsrDiagnostics = (): AsrDiagnostics => ({
   peak_resident_memory_bytes: null,
 });
 
-const mockGoogleTtsVoices = (): GoogleTtsVoiceDescriptor[] => [
-  { id: "Zephyr", style: "Bright" },
-  { id: "Puck", style: "Upbeat" },
-  { id: "Charon", style: "Informative" },
-  { id: "Kore", style: "Firm" },
-  { id: "Fenrir", style: "Excitable" },
-  { id: "Leda", style: "Youthful" },
-  { id: "Orus", style: "Firm" },
-  { id: "Aoede", style: "Breezy" },
-  { id: "Callirrhoe", style: "Easy-going" },
-  { id: "Autonoe", style: "Bright" },
-  { id: "Enceladus", style: "Breathy" },
-  { id: "Iapetus", style: "Clear" },
-  { id: "Umbriel", style: "Easy-going" },
-  { id: "Algieba", style: "Smooth" },
-  { id: "Despina", style: "Smooth" },
-  { id: "Erinome", style: "Clear" },
-  { id: "Algenib", style: "Gravelly" },
-  { id: "Rasalgethi", style: "Informative" },
-  { id: "Laomedeia", style: "Upbeat" },
-  { id: "Achernar", style: "Soft" },
-  { id: "Alnilam", style: "Firm" },
-  { id: "Schedar", style: "Even" },
-  { id: "Gacrux", style: "Mature" },
-  { id: "Pulcherrima", style: "Forward" },
-  { id: "Achird", style: "Friendly" },
-  { id: "Zubenelgenubi", style: "Casual" },
-  { id: "Vindemiatrix", style: "Gentle" },
-  { id: "Sadachbia", style: "Lively" },
-  { id: "Sadaltager", style: "Knowledgeable" },
-  { id: "Sulafat", style: "Warm" },
-];
-
 const mockAsrModels = (): AsrModelDescriptor[] => [
   {
     id: "moonshine-tiny-streaming-en",
@@ -157,44 +129,7 @@ export const tauriBridge = {
   },
 
   async getSettings(): Promise<AppSettings> {
-    if (!isTauri()) {
-      return {
-        settings_version: 2,
-        asr_mode: "moonshine_tiny_streaming",
-        launch_at_login: false,
-        show_in_menu_bar: true,
-        always_on_top: false,
-        restore_position: true,
-        unsolicited_comments: true,
-        talkativeness: 0.5,
-        quiet_hours_enabled: true,
-        quiet_hours_start: 22,
-        quiet_hours_end: 8,
-        max_comments_per_hour: 4,
-        hide_delay_seconds: 6,
-        input_device: null,
-        output_device: null,
-        volume: 1.0,
-        tts_voice: "Fenrir",
-        speaking_rate: 0.95,
-        pitch: -1.5,
-        provider: "google",
-        live_model: "gemini-3.1-flash-live-preview",
-        text_model: "gemini-3.7-flash",
-        tts_model: "en-US-Standard-B",
-        microphone_permission_granted: false,
-        active_app_observation: false,
-        window_title_observation: false,
-        memory_enabled: false,
-        save_transcripts: false,
-        dry: 0.85,
-        sarcastic: 0.7,
-        friendly: 0.55,
-        absurd: 0.65,
-        helpful: 0.35,
-        verbosity: 0.3,
-      };
-    }
+    if (!isTauri()) return frontendDefaultSettings();
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<AppSettings>("get_settings");
   },
@@ -206,31 +141,13 @@ export const tauriBridge = {
   },
 
   async getGoogleModels(): Promise<GoogleModelDescriptor[]> {
-    if (!isTauri()) {
-      return [
-        {
-          id: "gemini-3.1-flash-live-preview",
-          display_name: "Gemini 3.1 Flash Live Preview",
-          capabilities: ["live_audio"],
-        },
-        {
-          id: "gemini-3.7-flash",
-          display_name: "Gemini 3.7 Flash",
-          capabilities: ["text_generation"],
-        },
-        {
-          id: "gemini-3.6-flash",
-          display_name: "Gemini 3.6 Flash",
-          capabilities: ["text_generation"],
-        },
-      ];
-    }
+    if (!isTauri()) return frontendGoogleModels();
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<GoogleModelDescriptor[]>("get_google_models");
   },
 
   async getGoogleTtsVoices(): Promise<GoogleTtsVoiceDescriptor[]> {
-    if (!isTauri()) return mockGoogleTtsVoices();
+    if (!isTauri()) return frontendGoogleTtsVoices();
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<GoogleTtsVoiceDescriptor[]>("get_google_tts_voices");
   },

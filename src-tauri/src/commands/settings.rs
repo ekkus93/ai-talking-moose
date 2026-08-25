@@ -91,9 +91,7 @@ fn generate_output_test_tone(sample_rate_hz: u32, duration_ms: u32) -> Vec<i16> 
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
-    let mut settings = state.settings.read().clone();
-    settings.microphone_permission_granted = microphone_permission_state().is_granted();
-    Ok(settings)
+    Ok(state.settings.read().clone())
 }
 
 #[tauri::command]
