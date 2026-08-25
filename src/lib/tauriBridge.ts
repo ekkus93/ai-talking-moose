@@ -320,12 +320,6 @@ export const tauriBridge = {
     return invoke<string>("trigger_canned_reaction", { reactionType });
   },
 
-  async triggerAmbientRemark(eventSummary: string): Promise<string | null> {
-    if (!isTauri()) return "Did you really just switch applications 8 times?";
-    const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<string | null>("trigger_ambient_remark", { eventSummary });
-  },
-
   async auditionVoice(voiceName: string): Promise<string> {
     if (!isTauri()) return `Auditioning ${voiceName}`;
     const { invoke } = await import("@tauri-apps/api/core");

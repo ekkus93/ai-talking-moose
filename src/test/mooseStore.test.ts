@@ -153,15 +153,16 @@ describe("mooseStore State Management", () => {
     cleanup();
   });
 
-  it("does not re-show an ambient bubble after the backend lifecycle completes", async () => {
-    vi.spyOn(tauriBridge, "triggerAmbientRemark").mockResolvedValue(
-      "A bounded ambient remark.",
-    );
+  it("clears key-presence state after secure key removal succeeds", async () => {
+    const clear = vi
+      .spyOn(tauriBridge, "clearGoogleApiKey")
+      .mockResolvedValue(undefined);
+    useMooseStore.setState({ hasApiKey: true });
 
-    await useMooseStore.getState().triggerAmbient("safe event");
+    await useMooseStore.getState().clearGoogleApiKey();
 
-    expect(useMooseStore.getState().speechBubbleVisible).toBe(false);
-    expect(useMooseStore.getState().speechBubbleText).toBeNull();
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(useMooseStore.getState().hasApiKey).toBe(false);
   });
 
   it("hides the bubble when the backend explicitly clears speech text", async () => {

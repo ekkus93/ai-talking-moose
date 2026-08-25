@@ -34,7 +34,13 @@ export const AiTab: React.FC<AiTabProps> = ({
   isTesting,
   setIsTesting,
 }) => {
-  const { settings, updateSettings, saveGoogleApiKey } = useMooseStore();
+  const {
+    settings,
+    updateSettings,
+    saveGoogleApiKey,
+    clearGoogleApiKey,
+    hasApiKey,
+  } = useMooseStore();
 
   if (!settings) return null;
 
@@ -61,6 +67,14 @@ export const AiTab: React.FC<AiTabProps> = ({
         message: "API Key updated successfully!",
       });
     }
+  };
+
+  const handleClearApiKey = async () => {
+    await clearGoogleApiKey();
+    setTestResult({
+      success: true,
+      message: "Saved API key removed.",
+    });
   };
 
   const handleTestConnection = async () => {
@@ -107,6 +121,15 @@ export const AiTab: React.FC<AiTabProps> = ({
           Your key is stored in the operating system secure credential store and
           is never returned to this settings screen.
         </p>
+        {hasApiKey && (
+          <button
+            type="button"
+            onClick={() => void handleClearApiKey()}
+            className="px-3 py-1.5 bg-white border border-black rounded font-bold hover:bg-gray-100"
+          >
+            Remove Saved Key
+          </button>
+        )}
       </div>
 
       <div className="pt-2 border-t border-gray-200">

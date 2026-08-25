@@ -21,6 +21,11 @@ describe("SettingsModal Component", () => {
     vi.restoreAllMocks();
   });
 
+  it("does not mount the P6 acceptance harness in production Settings", () => {
+    render(<SettingsModal />);
+    expect(screen.queryByText(/P6 Voice Acceptance/i)).not.toBeInTheDocument();
+  });
+
   it("renders tabs and navigates to personality", () => {
     render(<SettingsModal />);
     expect(screen.getByTestId("settings-modal")).toBeInTheDocument();
@@ -339,6 +344,17 @@ describe("SettingsModal Component", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save Key/i }));
 
     await waitFor(() => expect(useMooseStore.getState().hasApiKey).toBe(true));
+  });
+
+  it("removes a saved key and updates key-presence state immediately", async () => {
+    vi.spyOn(tauriBridge, "clearGoogleApiKey").mockResolvedValue(undefined);
+    useMooseStore.setState({ hasApiKey: true });
+
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByRole("button", { name: /Remove Saved Key/i }));
+
+    await waitFor(() => expect(useMooseStore.getState().hasApiKey).toBe(false));
   });
 
   it("keeps a connection-test result visible across a tab switch", async () => {

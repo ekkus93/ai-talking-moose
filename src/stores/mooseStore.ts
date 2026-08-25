@@ -87,6 +87,7 @@ interface MooseStoreState {
   setInputLevel: (level: number) => void;
   setOutputLevel: (level: number) => void;
   saveGoogleApiKey: (apiKey: string) => Promise<void>;
+  clearGoogleApiKey: () => Promise<void>;
 
   toggleSettings: (open?: boolean) => void;
   toggleOnboarding: (open?: boolean) => void;
@@ -97,7 +98,6 @@ interface MooseStoreState {
   bargeIn: () => Promise<void>;
   toggleMute: () => Promise<void>;
   triggerCanned: (type: string) => Promise<void>;
-  triggerAmbient: (summary: string) => Promise<void>;
 
   loadSettings: () => Promise<void>;
   updateSettings: (newSettings: AppSettings) => Promise<void>;
@@ -184,6 +184,11 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     set({ hasApiKey: true });
   },
 
+  clearGoogleApiKey: async () => {
+    await tauriBridge.clearGoogleApiKey();
+    set({ hasApiKey: false });
+  },
+
   toggleSettings: (open) => {
     const shouldOpen = open !== undefined ? open : !get().isSettingsOpen;
     if (shouldOpen) {
@@ -240,12 +245,6 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     if (text) {
       get().showSpeechBubble(text);
     }
-  },
-
-  triggerAmbient: async (summary: string) => {
-    // Ambient speech-bubble visibility is backend-event driven so the Rust lifecycle can
-    // clear it before hiding Moose without this promise re-showing stale text afterward.
-    await tauriBridge.triggerAmbientRemark(summary);
   },
 
   loadSettings: async () => {
