@@ -1,5 +1,6 @@
 [package]
 name = "talking-moose-ai"
+default-run = "talking-moose-ai"
 version = "0.1.0"
 description = "Talking Moose AI Desktop Character"
 authors = ["Talking Moose Team"]

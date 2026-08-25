@@ -14,25 +14,27 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_PRODUCT = "Talking Moose AI"
 EXPECTED_IDENTIFIER = "com.talkingmoose.ai"
 EXPECTED_MIN_MACOS = "13.4"
+EXPECTED_CARGO_BINARY = "talking-moose-ai"
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"validate_release_metadata: {message}")
 
 
-def parse_cargo_version(path: Path) -> str:
+def parse_cargo_package_value(path: Path, key: str) -> str:
     # Avoid requiring a particular Python tomllib version in CI.
     in_package = False
+    pattern = re.compile(rf'{re.escape(key)}\s*=\s*"([^"]+)"')
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line.startswith("["):
             in_package = line == "[package]"
             continue
         if in_package:
-            match = re.fullmatch(r'version\s*=\s*"([^"]+)"', line)
+            match = pattern.fullmatch(line)
             if match:
                 return match.group(1)
-    fail(f"could not read package version from {path}")
+    fail(f"could not read package {key!r} from {path}")
     raise AssertionError
 
 
@@ -121,7 +123,10 @@ def main() -> None:
     package_lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
     tauri = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
     native_runtime = json.loads((ROOT / "src-tauri/native/moonshine-runtime.json").read_text(encoding="utf-8"))
-    cargo_version = parse_cargo_version(ROOT / "src-tauri/Cargo.toml")
+    cargo_manifest = ROOT / "src-tauri/Cargo.toml"
+    cargo_version = parse_cargo_package_value(cargo_manifest, "version")
+    cargo_name = parse_cargo_package_value(cargo_manifest, "name")
+    cargo_default_run = parse_cargo_package_value(cargo_manifest, "default-run")
     lock_root_version = package_lock.get("packages", {}).get("", {}).get("version")
     versions = {package["version"], package_lock.get("version"), lock_root_version, tauri["version"], cargo_version}
     if None in versions or len(versions) != 1:
@@ -134,6 +139,13 @@ def main() -> None:
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version):
         fail(f"application version is not release SemVer: {version!r}")
 
+    if cargo_name != EXPECTED_CARGO_BINARY:
+        fail(f"Cargo package name must be {EXPECTED_CARGO_BINARY!r}, got {cargo_name!r}")
+    if cargo_default_run != EXPECTED_CARGO_BINARY:
+        fail(
+            "Cargo package default-run must select the Tauri application binary; "
+            f"expected {EXPECTED_CARGO_BINARY!r}, got {cargo_default_run!r}"
+        )
     if tauri.get("productName") != EXPECTED_PRODUCT:
         fail(f"productName must be {EXPECTED_PRODUCT!r}")
     if tauri.get("identifier") != EXPECTED_IDENTIFIER:
