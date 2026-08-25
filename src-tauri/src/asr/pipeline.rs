@@ -29,8 +29,7 @@ pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 8;
 
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
-#[cfg(not(test))]
-const WORKER_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const PRODUCTION_WORKER_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(test)]
 const WORKER_STARTUP_TIMEOUT: Duration = Duration::from_millis(250);
 
@@ -113,6 +112,7 @@ impl LocalAsrPipeline {
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
             },
             event_callback,
+            PRODUCTION_WORKER_STARTUP_TIMEOUT,
             None,
         )
         .await
@@ -131,6 +131,7 @@ impl LocalAsrPipeline {
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
             },
             event_callback,
+            PRODUCTION_WORKER_STARTUP_TIMEOUT,
             None,
         )
         .await
@@ -236,6 +237,7 @@ impl LocalAsrPipeline {
             MoonshineModelArchitecture::TinyStreaming,
             factory,
             event_callback,
+            WORKER_STARTUP_TIMEOUT,
             None,
         )
         .await
@@ -254,6 +256,7 @@ impl LocalAsrPipeline {
             MoonshineModelArchitecture::TinyStreaming,
             factory,
             event_callback,
+            WORKER_STARTUP_TIMEOUT,
             Some(reaped_probe),
         )
         .await
@@ -263,6 +266,7 @@ impl LocalAsrPipeline {
         architecture: MoonshineModelArchitecture,
         factory: F,
         event_callback: LocalAsrPipelineEventCallback,
+        startup_timeout: Duration,
         startup_reaped_probe: Option<Arc<AtomicBool>>,
     ) -> Result<Self, AsrError>
     where
@@ -333,7 +337,7 @@ impl LocalAsrPipeline {
 
         let mut startup_worker =
             StartupWorkerGuard::new(worker, stop_requested.clone(), startup_reaped_probe);
-        match tokio::time::timeout(WORKER_STARTUP_TIMEOUT, ready_rx).await {
+        match tokio::time::timeout(startup_timeout, ready_rx).await {
             Ok(Ok(Ok(()))) => {
                 let pipeline = Self {
                     architecture,
