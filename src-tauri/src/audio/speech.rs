@@ -110,7 +110,7 @@ mod tests {
     #[async_trait]
     impl SpeechSynthesizer for OversizedSynthesizer {
         async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
-            let samples = 24_000 * 6;
+            let samples = 24_000 * (crate::audio::playback::MAX_QUEUED_PLAYBACK_SECONDS + 2);
             Ok(AudioStreamData {
                 pcm_bytes: vec![0_u8; samples * 2],
                 sample_rate: 24_000,
