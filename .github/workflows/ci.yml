@@ -111,6 +111,9 @@ jobs:
       - name: Run backend failure matrix
         run: bash scripts/run_backend_failure_matrix.sh
 
+      - name: Run backend stress matrix
+        run: bash scripts/run_backend_stress_matrix.sh
+
   dependency-audit:
     name: Dependency audit
     runs-on: ubuntu-latest
@@ -186,6 +189,7 @@ jobs:
           bash -n scripts/run_p2_p3_macos_physical_acceptance.sh
           bash -n scripts/run_p13_macos_release_acceptance.sh
           bash -n scripts/run_backend_failure_matrix.sh
+          bash -n scripts/run_backend_stress_matrix.sh
 
       - name: Validate dependency license collection
         run: python3 scripts/collect_release_licenses.py

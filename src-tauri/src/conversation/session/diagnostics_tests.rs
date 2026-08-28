@@ -2,7 +2,8 @@ use super::*;
 use crate::asr::pipeline::LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
 use async_trait::async_trait;
-use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
+use tokio::sync::Semaphore;
 
 #[tokio::test]
 async fn shutdown_preserves_last_local_asr_diagnostics_for_selected_mode() {
@@ -78,6 +79,34 @@ impl RealtimeConversationProvider for StableProvider {
             _event_sender: event_sender,
             close_count: self.close_count.clone(),
             interrupt_count: self.interrupt_count.clone(),
+        }))
+    }
+}
+
+struct GatedProvider {
+    entered: Arc<AtomicBool>,
+    release: Arc<Semaphore>,
+    close_count: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl RealtimeConversationProvider for GatedProvider {
+    async fn connect(
+        &self,
+        _config: LiveSessionConfig,
+        event_sender: mpsc::Sender<LiveServerEvent>,
+    ) -> Result<Box<dyn LiveSession>, ProviderError> {
+        self.entered.store(true, AtomicOrdering::SeqCst);
+        let permit = self
+            .release
+            .acquire()
+            .await
+            .expect("race-test release semaphore must remain open");
+        permit.forget();
+        Ok(Box::new(StableSession {
+            _event_sender: event_sender,
+            close_count: self.close_count.clone(),
+            interrupt_count: Arc::new(AtomicUsize::new(0)),
         }))
     }
 }
@@ -215,6 +244,66 @@ async fn repeated_start_stop_cycles_are_hardware_free_and_release_each_session()
 
     assert_eq!(close_count.load(AtomicOrdering::SeqCst), CYCLES);
     assert_eq!(interrupt_count.load(AtomicOrdering::SeqCst), 0);
+}
+
+async fn teardown_wins_race_against_in_flight_start(mark_muted: bool) {
+    let manager = ConversationManager::new();
+    let entered = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(Semaphore::new(0));
+    let close_count = Arc::new(AtomicUsize::new(0));
+    let playback = Arc::new(AudioPlayback::new_mock());
+    let muted = Arc::new(RwLock::new(false));
+    let mut request = stable_request(
+        close_count.clone(),
+        Arc::new(AtomicUsize::new(0)),
+        playback.clone(),
+    );
+    request.provider = Arc::new(GatedProvider {
+        entered: entered.clone(),
+        release: release.clone(),
+        close_count: close_count.clone(),
+    });
+    request.muted = muted.clone();
+    let capture = request.capture.clone();
+
+    let manager_for_start = manager.clone();
+    let start = tokio::spawn(async move { manager_for_start.start_session(request).await });
+
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        while !entered.load(AtomicOrdering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("provider connect did not enter the deterministic race window");
+
+    // set_mute sets the privacy gate before calling this same stop primitive.
+    // dismiss_moose calls the stop primitive directly. Exercise both interleavings.
+    if mark_muted {
+        *muted.write() = true;
+    }
+    manager
+        .stop_session(capture.clone(), playback.clone())
+        .await;
+    release.add_permits(1);
+
+    let error = start
+        .await
+        .unwrap()
+        .expect_err("teardown must invalidate the in-flight start generation");
+    assert_eq!(error, "Conversation start was cancelled");
+    assert_eq!(close_count.load(AtomicOrdering::SeqCst), 1);
+    assert!(!manager.is_active());
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Idle);
+    assert!(!capture.lock().is_active());
+    assert_eq!(playback.queue_length(), 0);
+    assert_eq!(*muted.read(), mark_muted);
+}
+
+#[tokio::test]
+async fn mute_and_dismiss_teardown_win_races_against_in_flight_start() {
+    teardown_wins_race_against_in_flight_start(true).await;
+    teardown_wins_race_against_in_flight_start(false).await;
 }
 
 #[tokio::test]

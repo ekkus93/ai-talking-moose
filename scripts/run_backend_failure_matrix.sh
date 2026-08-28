@@ -14,9 +14,12 @@ cases=(
   "no microphone|audio::capture::tests::missing_default_microphone_fails_closed_without_hardware"
   "microphone permission denied/not requested|audio::capture::tests::microphone_permission_states_fail_closed_without_touching_hardware"
   "selected input/output missing|app::settings_policy::tests::selected_device_must_come_from_current_enumeration"
+  "output start failure|conversation::session::diagnostics_tests::audio_output_start_failure_closes_provider_before_microphone_capture"
   "output runtime failure|audio::playback::tests::runtime_output_failure_stops_playback_and_records_bounded_diagnostics"
   "Moonshine runtime unavailable|asr::moonshine::engine::tests::native_load_error_is_typed_and_not_replaced_with_fallback"
+  "Moonshine model missing|conversation::session::tests::missing_tiny_model_fails_before_provider_connect_or_microphone_capture"
   "Moonshine corrupt model|asr::moonshine::engine::tests::production_open_reports_corrupt_install_without_native_fallback"
+  "Moonshine manifest incompatible|asr::moonshine::manifest::tests::runtime_header_mismatch_is_rejected_as_incompatible"
   "model download interrupted|asr::moonshine::installer::tests::interrupted_download_cleans_partial_and_can_be_retried_from_scratch"
   "model checksum mismatch|asr::moonshine::installer::tests::sha256_mismatch_cleans_staging_and_preserves_existing_install"
   "model out of disk|asr::moonshine::installer::tests::insufficient_disk_space_fails_before_network"
@@ -31,6 +34,7 @@ cases=(
   "network denial/text|ai::google::text::tests::network_denial_harness_blocks_text_before_http_send"
   "network denial/TTS|ai::google::tts::tests::network_denial_harness_blocks_tts_before_http_send"
   "network denial/Live|ai::google::live::lifecycle_tests::network_denial_harness_blocks_live_before_websocket_connect"
+  "ordinary Moonshine verification never downloads|asr::moonshine::installer::tests::verification_of_missing_model_performs_no_network_io"
   "standalone queue overload|audio::speech::tests::standalone_speech_queue_overload_is_bounded_and_reported"
 )
 

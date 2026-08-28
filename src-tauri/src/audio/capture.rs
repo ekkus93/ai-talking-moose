@@ -608,6 +608,36 @@ mod tests {
     }
 
     #[test]
+    fn microphone_queue_overload_drops_newest_and_counts_drop() {
+        let is_running = Arc::new(AtomicBool::new(true));
+        let input_level = Arc::new(AtomicU32::new(0.0_f32.to_bits()));
+        let dropped_chunks = Arc::new(AtomicU64::new(0));
+        let (pcm_sender, mut pcm_receiver) = mpsc::channel(1);
+        let mut processor = CaptureProcessor::new(
+            CaptureProcessorConfig {
+                channels: 1,
+                source_sample_rate: 100,
+                target_sample_rate: 100,
+            },
+            pcm_sender,
+            None,
+            is_running,
+            input_level,
+            dropped_chunks.clone(),
+        );
+
+        processor.process_f32(&[0.25; 10]);
+        processor.process_f32(&[0.5; 10]);
+
+        assert_eq!(dropped_chunks.load(Ordering::SeqCst), 1);
+        assert!(pcm_receiver.try_recv().is_ok());
+        assert!(matches!(
+            pcm_receiver.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+    }
+
+    #[test]
     fn dropped_chunk_counter_starts_at_zero() {
         let capture = AudioCapture::new();
         assert_eq!(capture.dropped_chunks(), 0);
