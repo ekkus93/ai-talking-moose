@@ -64,6 +64,29 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
+      - name: Smoke frontend-only Vite preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="$RUNNER_TEMP/vite-preview.log"
+          index_file="$RUNNER_TEMP/vite-preview-index.html"
+          npm run dev -- --host 127.0.0.1 --strictPort >"$log_file" 2>&1 &
+          vite_pid=$!
+          trap 'kill "$vite_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent --show-error http://127.0.0.1:5173/ -o "$index_file"; then
+              break
+            fi
+            if ! kill -0 "$vite_pid" 2>/dev/null; then
+              cat "$log_file"
+              exit 1
+            fi
+            sleep 0.25
+          done
+          test -s "$index_file"
+          grep -q 'id="root"' "$index_file"
+          curl --fail --silent --show-error http://127.0.0.1:5173/src/main.tsx >/dev/null
+
       - name: Build frontend
         run: npm run build
 
