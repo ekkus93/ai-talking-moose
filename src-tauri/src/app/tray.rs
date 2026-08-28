@@ -23,32 +23,58 @@ fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>, focus: bool) {
     }
 }
 
-fn handle_menu_action<R: Runtime>(app: &tauri::AppHandle<R>, action: &str) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrayMenuAction {
+    Show,
+    Hide,
+    Start,
+    Stop,
+    Mute,
+    Unmute,
+    Settings,
+    Quit,
+}
+
+fn parse_menu_action(action: &str) -> Option<TrayMenuAction> {
     match action {
-        ACTION_SHOW => show_main_window(app, true),
-        ACTION_HIDE => {
+        ACTION_SHOW => Some(TrayMenuAction::Show),
+        ACTION_HIDE => Some(TrayMenuAction::Hide),
+        ACTION_START => Some(TrayMenuAction::Start),
+        ACTION_STOP => Some(TrayMenuAction::Stop),
+        ACTION_MUTE => Some(TrayMenuAction::Mute),
+        ACTION_UNMUTE => Some(TrayMenuAction::Unmute),
+        ACTION_SETTINGS => Some(TrayMenuAction::Settings),
+        ACTION_QUIT => Some(TrayMenuAction::Quit),
+        _ => None,
+    }
+}
+
+fn handle_menu_action<R: Runtime>(app: &tauri::AppHandle<R>, action: &str) {
+    match parse_menu_action(action) {
+        Some(TrayMenuAction::Show) => show_main_window(app, true),
+        Some(TrayMenuAction::Hide) => {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
             }
         }
-        ACTION_SETTINGS => {
+        Some(TrayMenuAction::Settings) => {
             show_main_window(app, true);
             let _ = app.emit("moose://ui/open-settings", ());
         }
-        ACTION_START => {
+        Some(TrayMenuAction::Start) => {
             let _ = app.emit("moose://tray/action", "start_conversation");
         }
-        ACTION_STOP => {
+        Some(TrayMenuAction::Stop) => {
             let _ = app.emit("moose://tray/action", "stop_conversation");
         }
-        ACTION_MUTE => {
+        Some(TrayMenuAction::Mute) => {
             let _ = app.emit("moose://tray/action", "mute");
         }
-        ACTION_UNMUTE => {
+        Some(TrayMenuAction::Unmute) => {
             let _ = app.emit("moose://tray/action", "unmute");
         }
-        ACTION_QUIT => app.exit(0),
-        _ => {}
+        Some(TrayMenuAction::Quit) => app.exit(0),
+        None => {}
     }
 }
 
@@ -102,21 +128,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tray_actions_are_explicit_and_bounded() {
-        assert_eq!(
-            [
-                ACTION_SHOW,
-                ACTION_HIDE,
-                ACTION_START,
-                ACTION_STOP,
-                ACTION_MUTE,
-                ACTION_UNMUTE,
-                ACTION_SETTINGS,
-                ACTION_QUIT,
-            ]
-            .len(),
-            8
-        );
-        assert!(ACTION_QUIT.starts_with("tray-"));
+    fn tray_action_parser_maps_every_supported_action_and_rejects_unknown_ids() {
+        for (id, expected) in [
+            (ACTION_SHOW, TrayMenuAction::Show),
+            (ACTION_HIDE, TrayMenuAction::Hide),
+            (ACTION_START, TrayMenuAction::Start),
+            (ACTION_STOP, TrayMenuAction::Stop),
+            (ACTION_MUTE, TrayMenuAction::Mute),
+            (ACTION_UNMUTE, TrayMenuAction::Unmute),
+            (ACTION_SETTINGS, TrayMenuAction::Settings),
+            (ACTION_QUIT, TrayMenuAction::Quit),
+        ] {
+            assert_eq!(parse_menu_action(id), Some(expected), "{id}");
+        }
+
+        assert_eq!(parse_menu_action("tray-unknown"), None);
+        assert_eq!(parse_menu_action("quit"), None);
     }
 }

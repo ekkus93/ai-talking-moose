@@ -65,7 +65,7 @@ Original P12 local validation covered `git diff --check`, workflow YAML parsing,
 
 - [x] Repeated transactional start/stop is exercised for 16 hardware-free cycles, asserting every provider session closes and capture returns inactive (`repeated_start_stop_cycles_are_hardware_free_and_release_each_session`).
 - [x] Concurrent teardown requests are serialized through the conversation operation lock and close the provider exactly once (`concurrent_stop_requests_are_serialized_and_close_provider_once`). Existing mute and dismiss IPC tests prove both user actions route through that same teardown primitive.
-- [x] Barge-in is now exercised with a non-empty playback queue and verifies immediate queue/level/play-state reset while the current local ASR remains alive (`barge_in_keeps_current_local_asr_active`).
+- [x] Barge-in playback flush is exercised with a non-empty queue and verifies immediate queue/level/play-state reset plus exactly one provider interrupt (`barge_in_flushes_buffered_output_and_interrupts_once`). Local-ASR continuity is proven separately by `barge_in_keeps_current_local_asr_active`, which asserts the active Moonshine lifecycle is not stopped and its callback remains current.
 - [x] Provider close/error while capture is active converges through centralized shutdown (`provider_closed_event_loop_converges_through_centralized_cleanup`, `provider_error_event_loop_converges_to_failed_cleanup`).
 - [x] Playback, microphone, and Moonshine ingress overload policies are hard bounded with drop/flush diagnostics tests.
 - [x] Synthetic runtime microphone/output device failure updates state deterministically without hardware.
@@ -82,6 +82,15 @@ The audit did find two coupled resource-limit regressions introduced by the late
 - [x] regression tests prove both the power-event queue capacity and the ambient background-admission hard limit.
 
 This current-master P12 hardening remains **pending GitHub Actions acceptance**. The existing user-facing observation behavior and explicit/user ambient submission semantics are unchanged.
+
+## 2026-08-28 V1R-182 test-integrity correction
+
+The remediation audit corrected two proof-quality defects without changing the accepted P12 behavior:
+
+- the tray regression no longer proves the length of a literal it constructs itself; `tray_action_parser_maps_every_supported_action_and_rejects_unknown_ids` now exercises the production `parse_menu_action` allowlist used by tray dispatch and proves every supported action id maps to the intended effect category while unknown ids fail closed; and
+- the V1R-125 barge-in row now cites the production-path test that actually seeds and flushes buffered playback (`barge_in_flushes_buffered_output_and_interrupts_once`) separately from the test that proves local Moonshine ASR remains active (`barge_in_keeps_current_local_asr_active`).
+
+A repository-wide source sweep reviewed Rust `#[test]`/`#[tokio::test]` assertions and frontend Vitest assertions for the same literal-only anti-pattern. The tray test was the only test found that asserted the size/property of a literal assembled solely inside the test. Other count/length assertions found by the sweep are derived from production output (for example resampler output, the serialized TTS voice catalog, rendered select options, persistence query results, or bounded queues) and therefore remain capable of failing when production behavior regresses.
 
 ## Acceptance gate
 
