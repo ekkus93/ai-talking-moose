@@ -13,7 +13,7 @@ pub struct FakeTextModel {
 
 #[async_trait]
 impl TextModel for FakeTextModel {
-    async fn generate(&self, _request: TextRequest) -> Result<TextResponse, String> {
+    async fn generate(&self, _request: TextRequest) -> Result<TextResponse, ProviderError> {
         let text = self.custom_response.clone().unwrap_or_else(|| {
             "Well, look who's back at the terminal again. Don't strain yourself.".to_string()
         });

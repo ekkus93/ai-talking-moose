@@ -1,4 +1,4 @@
-use crate::ai::google::auth::{trace_google_transport_error, GoogleAuth};
+use crate::ai::google::auth::{trace_google_provider_failure, GoogleAuth};
 use crate::ai::google::config::{validate_live_model, LIVE_WEBSOCKET_ENDPOINT};
 use crate::ai::google::protocol::{
     LiveBlob, LiveClientMessage, LiveContent, LiveFunctionResponse, LiveGenerationConfig, LivePart,
@@ -100,30 +100,24 @@ where
 async fn write_socket_message(
     socket: &mut GeminiSocket,
     message: Message,
-    api_key: &str,
     cancellation: Option<&CancellationToken>,
     timeout: Duration,
 ) -> Result<(), ProviderError> {
     match await_bounded_write(socket.send(message), cancellation, timeout).await {
         Ok(Ok(())) => Ok(()),
         Ok(Err(error)) => {
-            trace_live_transport_error(api_key, &error);
-            Err(provider_error_for_connect(error))
+            let provider_error = provider_error_for_connect(error);
+            trace_live_provider_failure(&provider_error);
+            Err(provider_error)
         }
         Err(WriteWaitError::Cancelled) => Err(ProviderError::from_kind(ProviderErrorKind::Closed)),
         Err(WriteWaitError::TimedOut) => Err(ProviderError::from_kind(ProviderErrorKind::Network)),
     }
 }
 
-async fn complete_protocol_close(socket: &mut GeminiSocket, api_key: &str, request: CloseRequest) {
-    let result = write_socket_message(
-        socket,
-        Message::Close(None),
-        api_key,
-        None,
-        CLOSE_FRAME_TIMEOUT,
-    )
-    .await;
+async fn complete_protocol_close(socket: &mut GeminiSocket, request: CloseRequest) {
+    let result =
+        write_socket_message(socket, Message::Close(None), None, CLOSE_FRAME_TIMEOUT).await;
     request.complete(result);
 }
 

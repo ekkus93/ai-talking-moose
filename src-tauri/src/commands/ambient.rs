@@ -162,7 +162,7 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
         Ok(response) => response.text,
         Err(error_value) => {
             restore_after_ambient_failure(state, app, appeared_for_ambient)?;
-            return Err(state.secrets.redact(&error_value));
+            return Err(crate::ai::types::ProviderError::from_kind(error_value.kind).to_string());
         }
     };
     let Some(text) = bound_ambient_output(&generated) else {

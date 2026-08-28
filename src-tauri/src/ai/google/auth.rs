@@ -1,14 +1,15 @@
+use crate::ai::types::ProviderError;
 use tracing::warn;
 
 pub(crate) const GOOGLE_API_KEY_HEADER: &str = "x-goog-api-key";
 
-pub(crate) fn trace_google_transport_error(surface: &'static str, error: &str, api_key: &str) {
-    let safe_error = crate::secrets::redact_secret(error, api_key);
+pub(crate) fn trace_google_provider_failure(surface: &'static str, error: &ProviderError) {
     warn!(
         provider = "gemini",
         surface = surface,
-        error = %safe_error,
-        "Google provider transport failure"
+        error_kind = ?error.kind,
+        retryable = error.retryable,
+        "Google provider failure"
     );
 }
 
@@ -84,8 +85,9 @@ mod tests {
     }
 
     #[test]
-    fn google_transport_tracing_redacts_raw_key_for_every_surface() {
-        const KEY: &str = "AIzaSyPRIVATE_GOOGLE_KEY_65f2";
+    fn google_provider_failure_logging_never_includes_raw_error_detail() {
+        const PRIVATE_DETAIL: &str =
+            "request failed at https://private.example.invalid/?key=AIzaSyPRIVATE_GOOGLE_KEY_65f2";
         let captured = CapturedLogs::default();
         let subscriber = tracing_subscriber::fmt()
             .without_time()
@@ -95,17 +97,20 @@ mod tests {
 
         tracing::subscriber::with_default(subscriber, || {
             for surface in ["text", "tts", "live"] {
-                trace_google_transport_error(
-                    surface,
-                    &format!("request failed at https://example.invalid/?key={KEY}"),
-                    KEY,
-                );
+                let error = ProviderError {
+                    kind: crate::ai::types::ProviderErrorKind::Network,
+                    message: PRIVATE_DETAIL.to_string(),
+                    retryable: true,
+                };
+                trace_google_provider_failure(surface, &error);
             }
         });
 
         let logs = captured.text();
-        assert!(logs.contains("Google provider transport failure"));
-        assert!(logs.contains("[REDACTED_SECRET]"));
-        assert!(!logs.contains(KEY));
+        assert!(logs.contains("Google provider failure"));
+        assert!(logs.contains("Network"));
+        assert!(!logs.contains(PRIVATE_DETAIL));
+        assert!(!logs.contains("private.example.invalid"));
+        assert!(!logs.contains("AIzaSyPRIVATE_GOOGLE_KEY_65f2"));
     }
 }

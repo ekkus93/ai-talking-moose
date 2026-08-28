@@ -1,10 +1,10 @@
-use crate::ai::google::auth::{trace_google_transport_error, GoogleAuth, GOOGLE_API_KEY_HEADER};
+use crate::ai::google::auth::{trace_google_provider_failure, GoogleAuth, GOOGLE_API_KEY_HEADER};
 use crate::ai::traits::TextModel;
-use crate::ai::types::{TextRequest, TextResponse};
+use crate::ai::types::{ProviderError, ProviderErrorKind, TextRequest, TextResponse};
 use async_trait::async_trait;
-use reqwest::{Client, RequestBuilder};
+use reqwest::{Client, RequestBuilder, StatusCode};
 use serde_json::json;
-use tracing::{error, info};
+use tracing::info;
 
 pub struct GoogleTextModel {
     auth: GoogleAuth,
@@ -18,6 +18,20 @@ impl GoogleTextModel {
             auth,
             model_name,
             client: Client::new(),
+        }
+    }
+
+    fn safe_error(kind: ProviderErrorKind) -> ProviderError {
+        ProviderError::from_kind(kind)
+    }
+
+    fn classify_status(status: StatusCode) -> ProviderError {
+        match status.as_u16() {
+            401 | 403 => Self::safe_error(ProviderErrorKind::Auth),
+            429 => Self::safe_error(ProviderErrorKind::Quota),
+            404 => Self::safe_error(ProviderErrorKind::Model),
+            400..=499 => Self::safe_error(ProviderErrorKind::Setup),
+            _ => Self::safe_error(ProviderErrorKind::Network),
         }
     }
 
@@ -36,7 +50,7 @@ impl GoogleTextModel {
         &self,
         model: &str,
         request: &TextRequest,
-    ) -> Result<TextResponse, String> {
+    ) -> Result<TextResponse, ProviderError> {
         let mut generation_config = json!({
             "maxOutputTokens": request.max_tokens.unwrap_or(1024)
         });
@@ -67,32 +81,30 @@ impl GoogleTextModel {
 
         #[cfg(test)]
         if crate::test_support::network_denied() {
-            return Err("network denied by test harness".to_string());
+            return Err(Self::safe_error(ProviderErrorKind::Network));
         }
 
         let resp = self
             .generation_request(model, &body)
             .send()
             .await
-            .map_err(|error| {
-                let detail = error.to_string();
-                trace_google_transport_error("text", &detail, &self.auth.api_key);
-                format!(
-                    "HTTP request to Gemini failed: {}",
-                    self.auth.redact(&detail)
-                )
+            .map_err(|_| {
+                let error = Self::safe_error(ProviderErrorKind::Network);
+                trace_google_provider_failure("text", &error);
+                error
             })?;
 
         if !resp.status().is_success() {
-            let status = resp.status();
-            error!("Gemini API error with model {}: {}", model, status);
-            return Err(format!("Gemini API returned error code {}", status));
+            let error = Self::classify_status(resp.status());
+            trace_google_provider_failure("text", &error);
+            return Err(error);
         }
 
-        let json_val: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse Gemini response JSON: {}", e))?;
+        let json_val: serde_json::Value = resp.json().await.map_err(|_| {
+            let error = Self::safe_error(ProviderErrorKind::Protocol);
+            trace_google_provider_failure("text", &error);
+            error
+        })?;
 
         let text = json_val["candidates"][0]["content"]["parts"][0]["text"]
             .as_str()
@@ -114,9 +126,9 @@ impl GoogleTextModel {
 
 #[async_trait]
 impl TextModel for GoogleTextModel {
-    async fn generate(&self, request: TextRequest) -> Result<TextResponse, String> {
+    async fn generate(&self, request: TextRequest) -> Result<TextResponse, ProviderError> {
         if !self.auth.is_valid() {
-            return Err("Google API key is not configured".to_string());
+            return Err(Self::safe_error(ProviderErrorKind::Auth));
         }
 
         self.try_generate_with_model(&self.model_name, &request)
@@ -144,7 +156,32 @@ mod tests {
             })
             .await
             .expect_err("test network denial must stop text generation before HTTP I/O");
-        assert_eq!(error, "network denied by test harness");
+        assert_eq!(error.kind, ProviderErrorKind::Network);
+        assert_eq!(error, ProviderError::from_kind(ProviderErrorKind::Network));
+    }
+
+    #[test]
+    fn status_mapping_uses_fixed_provider_categories() {
+        assert_eq!(
+            GoogleTextModel::classify_status(StatusCode::UNAUTHORIZED).kind,
+            ProviderErrorKind::Auth
+        );
+        assert_eq!(
+            GoogleTextModel::classify_status(StatusCode::TOO_MANY_REQUESTS).kind,
+            ProviderErrorKind::Quota
+        );
+        assert_eq!(
+            GoogleTextModel::classify_status(StatusCode::NOT_FOUND).kind,
+            ProviderErrorKind::Model
+        );
+        assert_eq!(
+            GoogleTextModel::classify_status(StatusCode::BAD_REQUEST).kind,
+            ProviderErrorKind::Setup
+        );
+        assert_eq!(
+            GoogleTextModel::classify_status(StatusCode::INTERNAL_SERVER_ERROR).kind,
+            ProviderErrorKind::Network
+        );
     }
 
     #[test]

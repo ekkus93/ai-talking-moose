@@ -95,8 +95,8 @@ fn live_websocket_url(api_key: &str) -> Result<String, ProviderError> {
     Ok(url.to_string())
 }
 
-fn trace_live_transport_error(api_key: &str, error: &WebSocketError) {
-    trace_google_transport_error("live", &error.to_string(), api_key);
+fn trace_live_provider_failure(error: &ProviderError) {
+    trace_google_provider_failure("live", error);
 }
 
 async fn open_and_setup(
@@ -115,19 +115,13 @@ async fn open_and_setup(
         .await
         .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Network))?;
     let (mut socket, _) = connect_result.map_err(|error| {
-        trace_live_transport_error(api_key, &error);
-        provider_error_for_connect(error)
+        let provider_error = provider_error_for_connect(error);
+        trace_live_provider_failure(&provider_error);
+        provider_error
     })?;
 
     let setup = encode_client_message(&setup_message(config, resume_handle))?;
-    write_socket_message(
-        &mut socket,
-        setup,
-        api_key,
-        cancellation,
-        SOCKET_WRITE_TIMEOUT,
-    )
-    .await?;
+    write_socket_message(&mut socket, setup, cancellation, SOCKET_WRITE_TIMEOUT).await?;
 
     let setup_deadline = tokio::time::Instant::now() + SETUP_TIMEOUT;
     loop {
@@ -156,8 +150,9 @@ async fn open_and_setup(
                 return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
             }
             Err(error) => {
-                trace_live_transport_error(api_key, &error);
-                return Err(provider_error_for_connect(error));
+                let provider_error = provider_error_for_connect(error);
+                trace_live_provider_failure(&provider_error);
+                return Err(provider_error);
             }
         }
     }

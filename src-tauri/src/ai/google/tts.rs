@@ -1,4 +1,4 @@
-use crate::ai::google::auth::{trace_google_transport_error, GoogleAuth, GOOGLE_API_KEY_HEADER};
+use crate::ai::google::auth::{trace_google_provider_failure, GoogleAuth, GOOGLE_API_KEY_HEADER};
 use crate::ai::google::config::{
     normalize_tts_model, normalize_tts_voice, validate_tts_model, validate_tts_voice,
 };
@@ -135,12 +135,15 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
             .timeout(TTS_REQUEST_TIMEOUT)
             .send()
             .await
-            .map_err(|error| {
-                trace_google_transport_error("tts", &error.to_string(), &self.auth.api_key);
-                Self::safe_error(ProviderErrorKind::Network)
+            .map_err(|_| {
+                let error = Self::safe_error(ProviderErrorKind::Network);
+                trace_google_provider_failure("tts", &error);
+                error
             })?;
         if !response.status().is_success() {
-            return Err(Self::classify_status(response.status()));
+            let error = Self::classify_status(response.status());
+            trace_google_provider_failure("tts", &error);
+            return Err(error);
         }
 
         let payload = response
