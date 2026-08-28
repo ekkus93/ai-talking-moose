@@ -1,8 +1,8 @@
+#[cfg(any(target_os = "macos", test))]
+use crate::desktop::observation::ObserverErrorCode;
 use crate::desktop::observation::{
     ActiveApplicationObservation, BatteryObservation, IdleObservation, ObserverResult, PowerEvent,
 };
-#[cfg(any(target_os = "macos", test))]
-use crate::desktop::observation::ObserverErrorCode;
 use tokio::sync::mpsc::Sender;
 
 #[cfg(any(target_os = "macos", test))]
