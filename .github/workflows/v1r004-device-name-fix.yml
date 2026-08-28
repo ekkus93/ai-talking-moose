@@ -1,0 +1,85 @@
+name: V1R-004 device-name migration
+
+on:
+  push:
+    branches:
+      - ralph/v1r-004-cpal-lock-probe-20260828
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: ralph/v1r-004-cpal-lock-probe-20260828
+          fetch-depth: 0
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply CPAL 0.17 device-description migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          devices = Path('src-tauri/src/audio/devices.rs')
+          text = devices.read_text()
+          helper = '''pub(crate) fn device_display_name(device: &cpal::Device) -> Option<String> {
+              device
+                  .description()
+                  .ok()
+                  .map(|description| description.name().to_owned())
+          }
+          '''
+          if 'pub(crate) fn device_display_name' not in text:
+              text = text.replace('pub struct AudioDeviceManager;\n', 'pub struct AudioDeviceManager;\n\n' + helper + '\n')
+          text = text.replace('.and_then(|device| device.name().ok());', '.and_then(|device| device_display_name(&device));')
+          text = text.replace('if let Ok(name) = device.name() {', 'if let Some(name) = device_display_name(&device) {')
+          devices.write_text(text)
+
+          for path_string in ('src-tauri/src/audio/capture.rs', 'src-tauri/src/audio/playback.rs'):
+              path = Path(path_string)
+              text = path.read_text()
+              import_line = 'use crate::audio::devices::device_display_name;\n'
+              if import_line not in text:
+                  text = import_line + text
+              text = text.replace(
+                  '''device
+                              .name()
+                              .map(|candidate| candidate == *requested_name)
+                              .unwrap_or(false)''',
+                  '''device_display_name(device)
+                              .map(|candidate| candidate == *requested_name)
+                              .unwrap_or(false)''',
+              )
+              text = text.replace(
+                  'let selected_device = device.name().ok().or(device_name);',
+                  'let selected_device = device_display_name(&device).or(device_name);',
+              )
+              path.write_text(text)
+          PY
+          cargo fmt --manifest-path src-tauri/Cargo.toml
+          if rg '\.name\(\)' src-tauri/src/audio/capture.rs src-tauri/src/audio/playback.rs src-tauri/src/audio/devices.rs | grep -v 'description.name()'; then
+            echo 'Deprecated CPAL DeviceTrait::name() call remains' >&2
+            exit 1
+          fi
+          git diff --check
+      - name: Commit migration to probe branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No migration changes required.'
+            exit 0
+          fi
+          git config user.name 'Phillip Chin'
+          git config user.email 'ekkus93@gmail.com'
+          git add src-tauri/src/audio/capture.rs src-tauri/src/audio/playback.rs src-tauri/src/audio/devices.rs
+          git commit -m 'fix: use CPAL device descriptions'
+          git push origin HEAD:ralph/v1r-004-cpal-lock-probe-20260828
