@@ -1,3 +1,4 @@
+use crate::audio::devices::device_display_name;
 use crate::audio::levels::LevelMeter;
 use crate::audio::resample::AudioResampler;
 use crate::character::state::MouthShape;
@@ -12,15 +13,6 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 pub const MAX_QUEUED_PLAYBACK_SECONDS: usize = 10;
-
-pub struct SafeStream(pub cpal::Stream);
-
-// SAFETY: CPAL intentionally makes its cross-platform `Stream` wrapper !Send because
-// Android's AAudio stream API is not thread-safe. Talking Moose V1 supports macOS and
-// Linux desktop builds only; CPAL's CoreAudio/ALSA stream handles may be moved between
-// threads, and this wrapper is only accessed through exclusive ownership or a mutex.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-unsafe impl Send for SafeStream {}
 
 #[derive(Debug, Error)]
 pub enum AudioPlaybackError {
@@ -167,7 +159,7 @@ pub struct AudioPlayback {
     output_level: Arc<AtomicU32>,
     volume: Arc<AtomicU32>,
     level_meter: Arc<Mutex<LevelMeter>>,
-    _stream: Mutex<Option<SafeStream>>,
+    _stream: Mutex<Option<cpal::Stream>>,
     mouth_sender: Arc<Mutex<Option<mpsc::Sender<MouthShape>>>>,
     output_level_sender: Arc<Mutex<Option<mpsc::Sender<f32>>>>,
     output_sample_rate_hz: AtomicU32,
@@ -274,8 +266,7 @@ impl AudioPlayback {
                     AudioPlaybackError::DeviceEnumeration(error_value.to_string())
                 })?
                 .find(|device| {
-                    device
-                        .name()
+                    device_display_name(device)
                         .map(|candidate| candidate == *requested_name)
                         .unwrap_or(false)
                 })
@@ -286,13 +277,13 @@ impl AudioPlayback {
             require_default_output_device(host.default_output_device())?
         };
 
-        let selected_device = device.name().ok().or(device_name);
+        let selected_device = device_display_name(&device).or(device_name);
         let supported_config = device.default_output_config().map_err(|error_value| {
             AudioPlaybackError::OutputConfiguration(error_value.to_string())
         })?;
         let sample_format = supported_config.sample_format();
         let stream_config: cpal::StreamConfig = supported_config.into();
-        let sample_rate_hz = stream_config.sample_rate.0;
+        let sample_rate_hz = stream_config.sample_rate;
         let channels = stream_config.channels;
 
         let callback_state = PlaybackCallbackState {
@@ -353,7 +344,7 @@ impl AudioPlayback {
         stream
             .play()
             .map_err(|error_value| AudioPlaybackError::StartStream(error_value.to_string()))?;
-        *self._stream.lock() = Some(SafeStream(stream));
+        *self._stream.lock() = Some(stream);
         *self.selected_device.lock() = selected_device;
         *self.sample_format.lock() = Some(format!("{sample_format:?}"));
         self.output_channels
