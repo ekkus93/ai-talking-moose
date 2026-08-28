@@ -30,6 +30,7 @@ cases=(
   "tool timeout|tools::router::tests::timeout_wrapper_returns_structured_timeout"
   "network denial/text|ai::google::text::tests::network_denial_harness_blocks_text_before_http_send"
   "network denial/TTS|ai::google::tts::tests::network_denial_harness_blocks_tts_before_http_send"
+  "network denial/Live|ai::google::live::lifecycle_tests::network_denial_harness_blocks_live_before_websocket_connect"
   "standalone queue overload|audio::speech::tests::standalone_speech_queue_overload_is_bounded_and_reported"
 )
 
