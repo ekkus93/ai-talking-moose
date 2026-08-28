@@ -1,0 +1,28 @@
+name: V1R-004 CPAL lock probe
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve CPAL 0.17 lockfile
+        run: |
+          cargo update --manifest-path src-tauri/Cargo.toml -p cpal --precise 0.17.3
+          echo 'V1R004_LOCK_BASE64_BEGIN'
+          base64 -w0 src-tauri/Cargo.lock
+          echo
+          echo 'V1R004_LOCK_BASE64_END'
