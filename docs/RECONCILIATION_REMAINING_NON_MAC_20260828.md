@@ -73,13 +73,13 @@ The collector now fails closed for dependencies without usable licensing evidenc
 
 That review does not require a physical Mac; it can be performed from the tagged workflow artifacts/draft release once the signed run exists.
 
-## Optional non-Mac hardening
+## V1R-ASR-004 Miri hardening reconciliation
 
-### V1R-ASR-004 sanitizer/Miri-compatible coverage
+The initial residual-work sweep incorrectly said no repository evidence existed for Miri. That was stale: commit `83a3b0fa42ca5313a289b3334a7632aebeb22c19` added the dependency-free production-module Miri harness, and dedicated `ASR Rust Safety` workflow run `32544957896` passed all 15 tests under Miri. The monolithic TODO's checked V1R-ASR-004 Miri row was therefore correct.
 
-`RECONCILIATION_P3A_20260823.md` correctly leaves "Run Rust tests under sanitizers/Miri-compatible coverage where practical" open as optional hardening. No repository code/workflow evidence was found that actually runs Miri or an equivalent sanitizer pass.
+The 2026-08-28 hardening pass goes further instead of merely correcting that documentation error. The production Moonshine FFI transcript structs/layout assertions and `NativeMoonshineApi::copy_transcript` helper are made available to the unit-test/Miri configuration without linking the native library. New synthetic C-layout tests directly exercise the audited unsafe pointer-copy boundary, including null-pointer fail-closed behavior and copying C-string/metadata into Rust-owned data. The dedicated workflow is also pinned to the known-good `nightly-2026-08-22` toolchain used by the earlier accepted run.
 
-The legacy monolithic TODO contains a contradictory checked box for this row while later text in the same tracker and the authoritative P3A reconciliation say it remains open. Treat the P3A reconciliation as authoritative: this item is **optional and open**, and it does not reopen Gate P3A.
+Native Moonshine/ONNX dylib calls remain outside Miri's practical scope and continue to be covered by ASR-015's real supported-macOS Tiny/Small native acceptance. Once the strengthened ASR Rust Safety workflow passes on this change, there is no remaining V1R-ASR-004 sanitizer/Miri-compatible hardening item.
 
 ## Deferred until supported physical Mac access
 
@@ -100,4 +100,4 @@ With physical-Mac work deferred, there is no mandatory implementation task to co
 
 The next actionable V1 gate is therefore **P13 signed/notarized tagged release execution**, but only if the Apple release credentials are already available and the project owner intends to create the `v0.1.0` release candidate. The workflow creates a draft release; it does not publish the release publicly.
 
-If Apple release credentials are not yet available, the only remaining non-Mac engineering item is the optional sanitizer/Miri hardening. Otherwise, further mandatory V1 progress waits on physical Mac acceptance.
+Because Apple release credentials are currently deferred, acceptance of the strengthened V1R-ASR-004 Miri workflow leaves no remaining mandatory or optional V1 implementation task. Further V1 progress then waits on the deferred physical-Mac and release-execution prerequisites.

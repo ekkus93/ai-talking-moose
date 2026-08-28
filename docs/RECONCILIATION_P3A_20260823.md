@@ -4,7 +4,7 @@
 
 **P3A native-model acceptance gate: CLOSED.**
 
-This reconciliation closes the remaining evidence gap for real pinned Moonshine Tiny Streaming and Small Streaming native model load/stream/transcription plus the ASR-015 measured CPU benchmark. It does not close unrelated physical microphone/output-device acceptance in P2/P3, release signing/notarization, or the optional sanitizer/Miri hardening item in V1R-ASR-004.
+This reconciliation closes the remaining evidence gap for real pinned Moonshine Tiny Streaming and Small Streaming native model load/stream/transcription plus the ASR-015 measured CPU benchmark. It does not close unrelated physical microphone/output-device acceptance in P2/P3 or release signing/notarization. V1R-ASR-004 Miri-compatible hardening is separately recorded below.
 
 ## Evidence source
 
@@ -106,8 +106,10 @@ For both models the measured run numbers are exactly `1,2,3,4,5`; every record r
 ### V1R-ASR-004 — Safe Rust Moonshine wrapper
 
 - RAII/FFI/fake-seam implementation remains complete.
+- **Miri-compatible Rust safety coverage: ACCEPTED.** The dedicated `ASR Rust Safety` workflow run `32544957896` passed on commit `83a3b0fa42ca5313a289b3334a7632aebeb22c19`, executing 15 production-module tests under Miri, including the real RAII transcriber/stream ownership and drop-ordering code through the fake ABI seam. This evidence predates ASR-015 and was missed by the original reconciliation text; the checked row in `TODO(20260818-163801).md` was correct.
+- **2026-08-28 hardening:** the Miri harness is strengthened so the production `ffi.rs` C-layout transcript structs, ABI layout assertions, and `NativeMoonshineApi::copy_transcript` helper also compile under unit-test/Miri configuration without linking Moonshine. Synthetic C-layout fixtures exercise null transcript rejection, null line-array rejection, and the unsafe transcript-pointer/slice/C-string copy boundary while proving returned text/metadata are Rust-owned after backing native-style storage is released. The safety workflow pins the previously successful `nightly-2026-08-22` toolchain instead of floating on nightly.
+- Miri still does **not** execute Moonshine or ONNX Runtime dylib calls. That boundary is intentionally covered by the supported-macOS native acceptance below rather than overstated as Miri coverage.
 - **Real native stream lifecycle with an installed verified model: ACCEPTED.** Both Tiny and Small loaded the real pinned native runtime/model, accepted sustained streaming PCM, emitted partial/final transcription, and shut down through the benchmark lifecycle.
-- `Run Rust tests under sanitizers/Miri-compatible coverage where practical` remains open. This acceptance run did not provide sanitizer/Miri evidence, and that optional hardening item is not used to negate the now-demonstrated native runtime acceptance.
 
 ### V1R-ASR-015 — Diagnostics and CPU benchmark
 

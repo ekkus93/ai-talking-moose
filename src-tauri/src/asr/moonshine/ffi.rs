@@ -1,8 +1,10 @@
-#[cfg(moonshine_native_linked)]
+#[cfg(any(moonshine_native_linked, test))]
 use std::ffi::{c_char, c_void};
 use std::ffi::{CStr, CString};
 #[cfg(moonshine_native_linked)]
-use std::{ptr, slice};
+use std::ptr;
+#[cfg(any(moonshine_native_linked, test))]
+use std::slice;
 
 pub(super) const MOONSHINE_HEADER_VERSION: i32 = 30_000;
 pub(super) const MOONSHINE_MODEL_ARCH_TINY_STREAMING: u32 = 2;
@@ -10,7 +12,7 @@ pub(super) const MOONSHINE_MODEL_ARCH_SMALL_STREAMING: u32 = 4;
 #[cfg(moonshine_native_linked)]
 pub(super) const MOONSHINE_FLAG_FORCE_UPDATE: u32 = 1;
 
-#[cfg(moonshine_native_linked)]
+#[cfg(any(moonshine_native_linked, test))]
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct MoonshineTranscriptLine {
@@ -32,7 +34,7 @@ struct MoonshineTranscriptLine {
     _word_count: u64,
 }
 
-#[cfg(moonshine_native_linked)]
+#[cfg(any(moonshine_native_linked, test))]
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct MoonshineTranscript {
@@ -40,24 +42,24 @@ struct MoonshineTranscript {
     line_count: u64,
 }
 
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 88] = [(); std::mem::size_of::<MoonshineTranscriptLine>()];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 8] = [(); std::mem::align_of::<MoonshineTranscriptLine>()];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 16] = [(); std::mem::size_of::<MoonshineTranscript>()];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 0] = [(); std::mem::offset_of!(MoonshineTranscriptLine, text)];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 24] = [(); std::mem::offset_of!(MoonshineTranscriptLine, start_time)];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 32] = [(); std::mem::offset_of!(MoonshineTranscriptLine, id)];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 40] = [(); std::mem::offset_of!(MoonshineTranscriptLine, is_complete)];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 64] =
     [(); std::mem::offset_of!(MoonshineTranscriptLine, last_transcription_latency_ms)];
-#[cfg(all(moonshine_native_linked, target_pointer_width = "64"))]
+#[cfg(all(any(moonshine_native_linked, test), target_pointer_width = "64"))]
 const _: [(); 8] = [(); std::mem::offset_of!(MoonshineTranscript, line_count)];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,7 +163,7 @@ impl NativeMoonshineApi {
         }
     }
 
-    #[cfg(moonshine_native_linked)]
+    #[cfg(any(moonshine_native_linked, test))]
     fn copy_transcript(
         &self,
         transcript: *mut MoonshineTranscript,
@@ -399,6 +401,84 @@ pub(super) fn path_to_cstring(path: &std::path::Path) -> Result<CString, FfiErro
     CString::new(path.to_string_lossy().as_bytes()).map_err(|_| {
         FfiError::invalid_response("Moonshine model path contains an interior NUL byte")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ptr;
+
+    fn native_line(text: *const c_char) -> MoonshineTranscriptLine {
+        MoonshineTranscriptLine {
+            text,
+            _audio_data: ptr::null(),
+            _audio_data_count: 0,
+            start_time: 1.25,
+            duration: 0.75,
+            id: 42,
+            is_complete: 1,
+            is_updated: 1,
+            is_new: 0,
+            has_text_changed: 1,
+            _have_speakers_changed: 0,
+            _speaker_spans: ptr::null(),
+            _speaker_span_count: 0,
+            last_transcription_latency_ms: 17,
+            _words: ptr::null(),
+            _word_count: 0,
+        }
+    }
+
+    #[test]
+    fn transcript_copy_rejects_null_transcript_pointer() {
+        let error = NativeMoonshineApi
+            .copy_transcript(ptr::null_mut())
+            .expect_err("null transcript must fail closed");
+        assert_eq!(error.code, -1);
+        assert!(error.message.contains("null transcript pointer"));
+    }
+
+    #[test]
+    fn transcript_copy_rejects_null_line_array_with_nonzero_count() {
+        let mut transcript = MoonshineTranscript {
+            lines: ptr::null_mut(),
+            line_count: 1,
+        };
+        let error = NativeMoonshineApi
+            .copy_transcript(&mut transcript)
+            .expect_err("non-empty transcript requires a line array");
+        assert_eq!(error.code, -1);
+        assert!(error.message.contains("null line array"));
+    }
+
+    #[test]
+    fn transcript_copy_owns_text_and_metadata_after_native_storage_is_released() {
+        let text = CString::new("hello moose").unwrap();
+        let mut lines = [native_line(text.as_ptr()), native_line(ptr::null())];
+        lines[1].id = 43;
+        lines[1].is_complete = 0;
+        let mut transcript = MoonshineTranscript {
+            lines: lines.as_mut_ptr(),
+            line_count: u64::try_from(lines.len()).unwrap(),
+        };
+
+        let owned = NativeMoonshineApi.copy_transcript(&mut transcript).unwrap();
+        drop(text);
+
+        assert_eq!(owned.lines.len(), 2);
+        assert_eq!(owned.lines[0].text, "hello moose");
+        assert_eq!(owned.lines[0].start_time, 1.25);
+        assert_eq!(owned.lines[0].duration, 0.75);
+        assert_eq!(owned.lines[0].id, 42);
+        assert!(owned.lines[0].is_complete);
+        assert!(owned.lines[0].is_updated);
+        assert!(!owned.lines[0].is_new);
+        assert!(owned.lines[0].has_text_changed);
+        assert_eq!(owned.lines[0].last_transcription_latency_ms, 17);
+        assert_eq!(owned.lines[1].text, "");
+        assert_eq!(owned.lines[1].id, 43);
+        assert!(!owned.lines[1].is_complete);
+    }
 }
 
 // SAFETY: declarations below are copied from Moonshine Voice v0.1.3
