@@ -156,7 +156,7 @@ impl PromptBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::capture_logs;
+    use crate::test_support::{assert_log_capture_live, capture_logs};
 
     #[test]
     fn test_prompt_builder_contains_persona_and_rules() {
@@ -188,6 +188,7 @@ mod tests {
             prompt.contains(PRIVATE_RULE),
             "production prompt builder must process the sentinel"
         );
+        assert_log_capture_live(&logs);
         assert!(!logs.contains(PRIVATE_RULE));
     }
 

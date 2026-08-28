@@ -46,37 +46,7 @@ impl GoogleAuth {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{self, Write};
-    use std::sync::{Arc, Mutex};
-    use tracing_subscriber::fmt::MakeWriter;
-
-    #[derive(Clone, Default)]
-    struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
-
-    impl CapturedLogs {
-        fn text(&self) -> String {
-            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
-        }
-    }
-
-    impl Write for CapturedLogs {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<'a> MakeWriter<'a> for CapturedLogs {
-        type Writer = Self;
-
-        fn make_writer(&'a self) -> Self::Writer {
-            self.clone()
-        }
-    }
+    use crate::test_support::{assert_log_capture_live, capture_logs};
 
     #[test]
     fn masked_key_uses_character_boundaries_for_non_ascii_keys() {
@@ -88,14 +58,7 @@ mod tests {
     fn google_provider_failure_logging_never_includes_raw_error_detail() {
         const PRIVATE_DETAIL: &str =
             "request failed at https://private.example.invalid/?key=AIzaSyPRIVATE_GOOGLE_KEY_65f2";
-        let captured = CapturedLogs::default();
-        let subscriber = tracing_subscriber::fmt()
-            .without_time()
-            .with_ansi(false)
-            .with_writer(captured.clone())
-            .finish();
-
-        tracing::subscriber::with_default(subscriber, || {
+        let (_, logs) = capture_logs(|| {
             for surface in ["text", "tts", "live"] {
                 let error = ProviderError {
                     kind: crate::ai::types::ProviderErrorKind::Network,
@@ -106,7 +69,7 @@ mod tests {
             }
         });
 
-        let logs = captured.text();
+        assert_log_capture_live(&logs);
         assert!(logs.contains("Google provider failure"));
         assert!(logs.contains("Network"));
         assert!(!logs.contains(PRIVATE_DETAIL));

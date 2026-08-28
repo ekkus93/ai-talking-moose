@@ -243,7 +243,7 @@ mod tests {
     use crate::desktop::observation::{
         ActiveApplicationObservation, IdleObservation, ObserverErrorCode, ObserverStatus,
     };
-    use crate::test_support::capture_logs;
+    use crate::test_support::{assert_log_capture_live, capture_logs};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
@@ -297,7 +297,7 @@ mod tests {
         });
 
         assert_eq!(observed.as_deref(), Some(PRIVATE_APP));
-        assert!(logs.contains("Desktop observer result"));
+        assert_log_capture_live(&logs);
         assert!(!logs.contains(PRIVATE_APP));
     }
 

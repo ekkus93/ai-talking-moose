@@ -31,12 +31,23 @@ npm run check:rust
 # Index hygiene; runs without installed frontend dependencies
 npm run check:generated-trees
 
+# Cross-language IPC contract checks (after npm ci)
+npm run check:tauri-command-contract
+npm run check:frontend-contract-shapes
+
+# Regenerate Rust-derived contract and fail on committed drift
+npm run check:generated-backend-contract
+
 # Compile-only production checks
 npm run build
 cargo build --manifest-path src-tauri/Cargo.toml
 ```
 
 `npm run check:generated-trees` fails if generated `node_modules/` or `dist/` content is ever committed. Both directories are intentionally ignored; use `npm ci` to reproduce frontend dependencies and `npm run build`/Tauri's `beforeBuildCommand` to regenerate `dist/`. The hygiene check inspects the Git index only, so it can run before `npm ci` and does not require either directory to exist.
+
+`npm run check:tauri-command-contract` compares every command string invoked by `src/lib/tauriBridge.ts` with the commands registered in Rust's `tauri::generate_handler!`; registered backend-only commands are informational. `npm run check:frontend-contract-shapes` compares Rust-derived representative IPC objects in `src/generated/backendContract.json` with the interface keys and top-level JSON value categories declared in `src/types/moose.ts`. This intentionally does not prove numeric narrowing, complete enum variants, optionality semantics, primitive per-command argument signatures, or the per-command association between a command name and its parameter names/types/return type. The shape gate proves shared object shapes independently; it is not a generated full command-signature binding layer.
+
+`npm run check:generated-backend-contract` regenerates `src/generated/backendContract.json` from Rust and fails if the committed copy is stale, then reruns the shape check. Run `npm run generate:frontend-contract` intentionally when Rust defaults, provider catalogs, or an exported IPC shape changes, review the diff, and commit the regenerated JSON. These contract checks require no live Google credential, network access at runtime, audio device, or microphone permission; dependency/toolchain installation is the only setup requirement.
 
 `npm run check:rust` is the source of truth for the Rust quality gate: it runs Rustfmt plus Clippy and tests with `--all-targets --all-features`. Do not replace it with weaker hand-written Clippy/test commands when validating a change. Release/bundle-specific checks are defined in `.github/workflows/ci.yml` and the scripts it invokes.
 

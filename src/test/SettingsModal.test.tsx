@@ -8,17 +8,29 @@ import {
 } from "../lib/backendContract";
 import { tauriBridge } from "../lib/tauriBridge";
 
+const originalBridgeMethods = {
+  getGoogleModels: tauriBridge.getGoogleModels,
+  updateSettings: tauriBridge.updateSettings,
+  setGoogleApiKey: tauriBridge.setGoogleApiKey,
+  clearGoogleApiKey: tauriBridge.clearGoogleApiKey,
+};
+
 describe("SettingsModal Component", () => {
   beforeEach(() => {
     useMooseStore.setState({
       isSettingsOpen: true,
       settings: frontendDefaultSettings(),
       hasApiKey: false,
+      inputDevices: [],
+      outputDevices: [],
+      googleTtsVoices: [],
+      memories: [],
     });
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    Object.assign(tauriBridge, originalBridgeMethods);
+    vi.clearAllMocks();
   });
 
   it("does not mount the P6 acceptance harness in production Settings", () => {
@@ -251,7 +263,7 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Audio Diagnostics")).toBeInTheDocument();
     expect(screen.getByText("Test Microphone")).toBeInTheDocument();
     expect(screen.getByText("Test Output")).toBeInTheDocument();
-    expect(await screen.findByText("Unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Granted")).toBeInTheDocument();
   });
   it("exposes local-time quiet hours with explicit overnight UX", async () => {
     render(<SettingsModal />);
@@ -364,7 +376,7 @@ describe("SettingsModal Component", () => {
       screen.getByRole("button", { name: /Test Gemini Connection/i }),
     );
 
-    const banner = await screen.findByText(/Mock API connection successful/i);
+    const banner = await screen.findByText(/Test connection succeeded/i);
 
     fireEvent.click(screen.getByText("Privacy"));
     fireEvent.click(screen.getByText("Gemini AI"));

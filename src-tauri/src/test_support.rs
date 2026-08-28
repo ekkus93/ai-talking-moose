@@ -3,6 +3,9 @@ use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 use tracing_subscriber::fmt::MakeWriter;
 
+const LOG_CAPTURE_LIVENESS_MARKER: &str = "TALKING_MOOSE_TEST_LOG_CAPTURE_LIVE";
+static LOG_CAPTURE_LOCK: Mutex<()> = Mutex::new(());
+
 #[derive(Clone, Default)]
 pub(crate) struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
 
@@ -32,6 +35,15 @@ impl<'a> MakeWriter<'a> for CapturedLogs {
 }
 
 pub(crate) fn capture_logs<T>(run: impl FnOnce() -> T) -> (T, String) {
+    // `tracing` caches callsite interest process-wide while `with_default` installs
+    // the formatter only for the current thread. Parallel capture subscribers can
+    // therefore make an otherwise-live callsite disappear from another test. Keep
+    // every repository log-capture test behind one lock so the cache is rebuilt
+    // against exactly one capture subscriber at a time. Recover poisoning so a
+    // failed assertion does not cascade into unrelated privacy tests.
+    let _capture_guard = LOG_CAPTURE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let captured = CapturedLogs::default();
     let subscriber = tracing_subscriber::fmt()
         .without_time()
@@ -39,9 +51,39 @@ pub(crate) fn capture_logs<T>(run: impl FnOnce() -> T) -> (T, String) {
         .with_max_level(tracing::Level::TRACE)
         .with_writer(captured.clone())
         .finish();
-    let output = tracing::subscriber::with_default(subscriber, run);
-    (output, captured.text())
+    let output = tracing::subscriber::with_default(subscriber, || {
+        tracing::trace!("TALKING_MOOSE_TEST_LOG_CAPTURE_LIVE");
+        run()
+    });
+    let logs = captured.text();
+    assert_log_capture_live(&logs);
+    (output, logs)
 }
+
+pub(crate) fn assert_log_capture_live(logs: &str) {
+    assert!(
+        logs.contains(LOG_CAPTURE_LIVENESS_MARKER),
+        "tracing capture was not live; privacy assertions would be vacuous"
+    );
+}
+
+#[cfg(test)]
+mod log_capture_tests {
+    use super::{assert_log_capture_live, capture_logs};
+
+    #[test]
+    fn capture_logs_proves_its_liveness() {
+        let (_, logs) = capture_logs(|| ());
+        assert_log_capture_live(&logs);
+    }
+
+    #[test]
+    fn liveness_assertion_rejects_an_empty_capture() {
+        let result = std::panic::catch_unwind(|| assert_log_capture_live(""));
+        assert!(result.is_err());
+    }
+}
+
 thread_local! {
     static NETWORK_DENY_DEPTH: Cell<u32> = const { Cell::new(0) };
 }

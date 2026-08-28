@@ -16,33 +16,154 @@ const lifecycleIsActive = (lifecycle: ConversationLifecycle) =>
   lifecycle !== "idle" && lifecycle !== "failed";
 
 const CONTINUOUS_SETTINGS_WRITE_DELAY_MS = 100;
-let continuousSettingsWriteTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingContinuousSettings: AppSettings | null = null;
+type SettingsPatch = Partial<AppSettings>;
 
-const cancelPendingContinuousSettingsWrite = () => {
+interface QueuedSettingsWrite {
+  patch: SettingsPatch;
+  complete: () => void;
+}
+
+let continuousSettingsWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingContinuousSettingsPatch: SettingsPatch | null = null;
+let settingsWriteQueue: QueuedSettingsWrite[] = [];
+let settingsWriteWorkerRunning = false;
+let lastPersistedSettings: AppSettings | null = null;
+
+const cloneSettings = (settings: AppSettings): AppSettings => ({ ...settings });
+
+const settingsPatch = (
+  current: AppSettings,
+  next: AppSettings,
+): SettingsPatch => {
+  const patch: SettingsPatch = {};
+  for (const key of Object.keys(next) as Array<keyof AppSettings>) {
+    if (!Object.is(current[key], next[key])) {
+      Object.assign(patch, { [key]: next[key] });
+    }
+  }
+  return patch;
+};
+
+const applySettingsPatch = (
+  settings: AppSettings,
+  patch: SettingsPatch,
+): AppSettings => ({ ...settings, ...patch });
+
+const patchIsEmpty = (patch: SettingsPatch) => Object.keys(patch).length === 0;
+
+const ensurePersistedSettingsBaseline = (settings: AppSettings | null) => {
+  if (lastPersistedSettings === null && settings !== null) {
+    lastPersistedSettings = cloneSettings(settings);
+  }
+};
+
+const rebuildOptimisticSettings = (persisted: AppSettings): AppSettings => {
+  let rebuilt = cloneSettings(persisted);
+  for (const queued of settingsWriteQueue) {
+    rebuilt = applySettingsPatch(rebuilt, queued.patch);
+  }
+  if (pendingContinuousSettingsPatch) {
+    rebuilt = applySettingsPatch(rebuilt, pendingContinuousSettingsPatch);
+  }
+  return rebuilt;
+};
+
+const reconcileSettingsAfterWriteFailure = async () => {
+  let authoritative = lastPersistedSettings;
+  try {
+    authoritative = await tauriBridge.getSettings();
+  } catch {
+    // The last successfully persisted snapshot is the safe fallback. Backend
+    // error details intentionally stay out of the frontend console.
+  }
+
+  if (!authoritative) return;
+  lastPersistedSettings = cloneSettings(authoritative);
+  useMooseStore.setState({
+    settings: rebuildOptimisticSettings(authoritative),
+  });
+};
+
+const processSettingsWriteQueue = async () => {
+  if (settingsWriteWorkerRunning) return;
+  settingsWriteWorkerRunning = true;
+
+  try {
+    while (settingsWriteQueue.length > 0) {
+      const queued = settingsWriteQueue[0];
+      const baseline =
+        lastPersistedSettings ?? useMooseStore.getState().settings;
+      if (!baseline) {
+        settingsWriteQueue.shift();
+        queued.complete();
+        continue;
+      }
+
+      const candidate = applySettingsPatch(baseline, queued.patch);
+      try {
+        await tauriBridge.updateSettings(candidate);
+        lastPersistedSettings = cloneSettings(candidate);
+        settingsWriteQueue.shift();
+        queued.complete();
+      } catch {
+        settingsWriteQueue.shift();
+        queued.complete();
+        await reconcileSettingsAfterWriteFailure();
+      }
+    }
+  } finally {
+    settingsWriteWorkerRunning = false;
+    if (settingsWriteQueue.length > 0) {
+      void processSettingsWriteQueue();
+    }
+  }
+};
+
+const enqueueSettingsPatch = (patch: SettingsPatch): Promise<void> => {
+  if (patchIsEmpty(patch)) return Promise.resolve();
+  return new Promise((complete) => {
+    settingsWriteQueue.push({ patch, complete });
+    void processSettingsWriteQueue();
+  });
+};
+
+const cancelPendingContinuousSettingsTimer = () => {
   if (continuousSettingsWriteTimer) {
     clearTimeout(continuousSettingsWriteTimer);
   }
   continuousSettingsWriteTimer = null;
-  pendingContinuousSettings = null;
 };
 
-const scheduleContinuousSettingsWrite = (settings: AppSettings) => {
-  pendingContinuousSettings = settings;
-  if (continuousSettingsWriteTimer) {
-    clearTimeout(continuousSettingsWriteTimer);
-  }
+const takePendingContinuousSettingsPatch = (): SettingsPatch => {
+  cancelPendingContinuousSettingsTimer();
+  const patch = pendingContinuousSettingsPatch ?? {};
+  pendingContinuousSettingsPatch = null;
+  return patch;
+};
+
+const scheduleContinuousSettingsWrite = (patch: SettingsPatch) => {
+  pendingContinuousSettingsPatch = {
+    ...(pendingContinuousSettingsPatch ?? {}),
+    ...patch,
+  };
+  cancelPendingContinuousSettingsTimer();
   continuousSettingsWriteTimer = setTimeout(() => {
-    const pending = pendingContinuousSettings;
+    const pending = pendingContinuousSettingsPatch;
     continuousSettingsWriteTimer = null;
-    pendingContinuousSettings = null;
-    if (pending) {
-      void tauriBridge.updateSettings(pending).catch(() => {
-        // The next explicit settings action or reload reconciles persistence. Keep
-        // provider/backend error details out of the frontend console.
-      });
+    pendingContinuousSettingsPatch = null;
+    if (pending && !patchIsEmpty(pending)) {
+      void enqueueSettingsPatch(pending);
     }
   }, CONTINUOUS_SETTINGS_WRITE_DELAY_MS);
+};
+
+/** @internal Test isolation for the module-level persistence coordinator. */
+export const resetSettingsPersistenceForTests = () => {
+  cancelPendingContinuousSettingsTimer();
+  pendingContinuousSettingsPatch = null;
+  settingsWriteQueue = [];
+  settingsWriteWorkerRunning = false;
+  lastPersistedSettings = null;
 };
 
 // Persisted SQLite transcript ids are positive. Frontend-only active-session rows use
@@ -263,6 +384,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       tauriBridge.getConversationLifecycle(),
       tauriBridge.getCharacterState(),
     ]);
+    lastPersistedSettings = cloneSettings(settings);
     set({
       settings,
       isMuted,
@@ -275,17 +397,32 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   },
 
   updateSettings: async (newSettings) => {
-    cancelPendingContinuousSettingsWrite();
-    await tauriBridge.updateSettings(newSettings);
+    const current = get().settings;
+    ensurePersistedSettingsBaseline(current);
+    const discretePatch = current ? settingsPatch(current, newSettings) : {};
+    const patch = {
+      ...takePendingContinuousSettingsPatch(),
+      ...discretePatch,
+    };
+
+    // Discrete controls update optimistically too. Persistence is serialized, so
+    // an older completion can never overwrite a newer local edit.
     set({ settings: newSettings });
+    await enqueueSettingsPatch(patch);
   },
 
   updateSettingsContinuous: (newSettings) => {
-    // Continuous controls must feel immediate without persisting every pointer
-    // movement. Update the frontend/runtime-facing store now and persist only the
-    // latest snapshot once the input burst settles.
+    const current = get().settings;
+    ensurePersistedSettingsBaseline(current);
+    const patch = current ? settingsPatch(current, newSettings) : {};
+
+    // Continuous controls stay immediate and coalesce only the fields changed
+    // during the pointer/input burst. The patch is later rebased onto the last
+    // successfully persisted snapshot if an older write fails.
     set({ settings: newSettings });
-    scheduleContinuousSettingsWrite(newSettings);
+    if (!patchIsEmpty(patch)) {
+      scheduleContinuousSettingsWrite(patch);
+    }
   },
 
   loadDevices: async () => {

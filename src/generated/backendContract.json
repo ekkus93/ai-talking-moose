@@ -52,125 +52,26 @@
     }
   ],
   "google_tts_voices": [
-    {
-      "id": "Zephyr",
-      "style": "Bright"
-    },
-    {
-      "id": "Puck",
-      "style": "Upbeat"
-    },
-    {
-      "id": "Charon",
-      "style": "Informative"
-    },
-    {
-      "id": "Kore",
-      "style": "Firm"
-    },
-    {
-      "id": "Fenrir",
-      "style": "Excitable"
-    },
-    {
-      "id": "Leda",
-      "style": "Youthful"
-    },
-    {
-      "id": "Orus",
-      "style": "Firm"
-    },
-    {
-      "id": "Aoede",
-      "style": "Breezy"
-    },
-    {
-      "id": "Callirrhoe",
-      "style": "Easy-going"
-    },
-    {
-      "id": "Autonoe",
-      "style": "Bright"
-    },
-    {
-      "id": "Enceladus",
-      "style": "Breathy"
-    },
-    {
-      "id": "Iapetus",
-      "style": "Clear"
-    },
-    {
-      "id": "Umbriel",
-      "style": "Easy-going"
-    },
-    {
-      "id": "Algieba",
-      "style": "Smooth"
-    },
-    {
-      "id": "Despina",
-      "style": "Smooth"
-    },
-    {
-      "id": "Erinome",
-      "style": "Clear"
-    },
-    {
-      "id": "Algenib",
-      "style": "Gravelly"
-    },
-    {
-      "id": "Rasalgethi",
-      "style": "Informative"
-    },
-    {
-      "id": "Laomedeia",
-      "style": "Upbeat"
-    },
-    {
-      "id": "Achernar",
-      "style": "Soft"
-    },
-    {
-      "id": "Alnilam",
-      "style": "Firm"
-    },
-    {
-      "id": "Schedar",
-      "style": "Even"
-    },
-    {
-      "id": "Gacrux",
-      "style": "Mature"
-    },
-    {
-      "id": "Pulcherrima",
-      "style": "Forward"
-    },
-    {
-      "id": "Achird",
-      "style": "Friendly"
-    },
-    {
-      "id": "Zubenelgenubi",
-      "style": "Casual"
-    },
-    {
-      "id": "Vindemiatrix",
-      "style": "Gentle"
-    },
-    {
-      "id": "Sadachbia",
-      "style": "Lively"
-    },
-    {
-      "id": "Sadaltager",
-      "style": "Knowledgeable"
-    },
-    {
-      "id": "Sulafat",
-      "style": "Warm"
-    }
-  ]
+    {"id":"Zephyr","style":"Bright"},{"id":"Puck","style":"Upbeat"},{"id":"Charon","style":"Informative"},{"id":"Kore","style":"Firm"},{"id":"Fenrir","style":"Excitable"},{"id":"Leda","style":"Youthful"},{"id":"Orus","style":"Firm"},{"id":"Aoede","style":"Breezy"},{"id":"Callirrhoe","style":"Easy-going"},{"id":"Autonoe","style":"Bright"},{"id":"Enceladus","style":"Breathy"},{"id":"Iapetus","style":"Clear"},{"id":"Umbriel","style":"Easy-going"},{"id":"Algieba","style":"Smooth"},{"id":"Despina","style":"Smooth"},{"id":"Erinome","style":"Clear"},{"id":"Algenib","style":"Gravelly"},{"id":"Rasalgethi","style":"Informative"},{"id":"Laomedeia","style":"Upbeat"},{"id":"Achernar","style":"Soft"},{"id":"Alnilam","style":"Firm"},{"id":"Schedar","style":"Even"},{"id":"Gacrux","style":"Mature"},{"id":"Pulcherrima","style":"Forward"},{"id":"Achird","style":"Friendly"},{"id":"Zubenelgenubi","style":"Casual"},{"id":"Vindemiatrix","style":"Gentle"},{"id":"Sadachbia","style":"Lively"},{"id":"Sadaltager","style":"Knowledgeable"},{"id":"Sulafat","style":"Warm"}
+  ],
+  "ipc_shapes": {
+    "ProviderError":{"kind":"network","message":"contract provider error","retryable":true},
+    "AsrError":{"kind":"inference","message":"contract ASR error","retryable":true},
+    "AsrModelDescriptor":{"id":"contract-asr-model","display_name":"Contract ASR model","mode":"moonshine_tiny_streaming","install_state":"installed","revision":"contract-revision","runtime_release":"contract-runtime","installed_bytes":128,"expected_bytes":256,"active":true,"error_message":"contract model error"},
+    "AsrDiagnostics":{"selected_mode":"moonshine_tiny_streaming","engine_name":"Contract ASR engine","model_id":"contract-asr-model","model_revision":"contract-revision","install_state":"installed","input_sample_rate_hz":16000,"streaming":true,"metrics_snapshot":true,"cpu_threads":2,"queue_depth":1,"queue_capacity":8,"dropped_chunks":1,"last_error":{"kind":"inference","message":"contract ASR error","retryable":true},"first_partial_latency_ms":10,"first_final_latency_ms":20,"last_transcription_latency_ms":30,"processed_audio_ms":1000,"inference_wall_time_ms":100,"real_time_factor":0.1,"process_cpu_time_ms":50,"average_cpu_utilization_percent":25.0,"baseline_resident_memory_bytes":1000,"resident_memory_bytes":2000,"peak_resident_memory_bytes":3000},
+    "AsrModelProgressEvent":{"mode":"moonshine_tiny_streaming","install_state":"downloading","downloaded_bytes":128,"total_bytes":256,"current_file":"contract-model.bin"},
+    "AudioDeviceInfo":{"id":"contract-device","name":"Contract device","is_default":true},
+    "AudioCaptureDiagnostics":{"selected_device":"Contract microphone","sample_rate_hz":48000,"sample_format":"F32","channels":1,"active":true,"input_level":0.25,"dropped_chunks":1,"last_error":"contract capture error"},
+    "AudioPlaybackDiagnostics":{"selected_device":"Contract speakers","sample_rate_hz":48000,"sample_format":"F32","channels":2,"playing":true,"output_level":0.5,"queue_depth_samples":128,"queue_limit_samples":1024,"dropped_samples":2,"last_error":"contract playback error"},
+    "ToolAuditRecord":{"tool_name":"contract_tool","timestamp":"2026-01-01T00:00:00Z","duration_ms":1,"permission":"safe_read_only","permission_outcome":"allowed","result_category":"success"},
+    "AudioDiagnostics":{"configured_input_device":"Contract input device","configured_output_device":"Contract output device","microphone_permission":"granted","capture":{"selected_device":"Contract microphone","sample_rate_hz":48000,"sample_format":"F32","channels":1,"active":true,"input_level":0.25,"dropped_chunks":1,"last_error":"contract capture error"},"playback":{"selected_device":"Contract speakers","sample_rate_hz":48000,"sample_format":"F32","channels":2,"playing":true,"output_level":0.5,"queue_depth_samples":128,"queue_limit_samples":1024,"dropped_samples":2,"last_error":"contract playback error"}},
+    "MicrophoneTestResult":{"peak_level":0.5,"diagnostics":{"configured_input_device":"Contract input device","configured_output_device":"Contract output device","microphone_permission":"granted","capture":{"selected_device":"Contract microphone","sample_rate_hz":48000,"sample_format":"F32","channels":1,"active":true,"input_level":0.25,"dropped_chunks":1,"last_error":"contract capture error"},"playback":{"selected_device":"Contract speakers","sample_rate_hz":48000,"sample_format":"F32","channels":2,"playing":true,"output_level":0.5,"queue_depth_samples":128,"queue_limit_samples":1024,"dropped_samples":2,"last_error":"contract playback error"}}},
+    "OnboardingStatus":{"current_version":1,"acknowledged_version":1,"needs_acknowledgement":false},
+    "AppSettings":{"settings_version":2,"asr_mode":"moonshine_tiny_streaming","launch_at_login":false,"show_in_menu_bar":true,"always_on_top":false,"restore_position":true,"unsolicited_comments":true,"talkativeness":0.5,"quiet_hours_enabled":true,"quiet_hours_start":22,"quiet_hours_end":8,"max_comments_per_hour":4,"hide_delay_seconds":6,"input_device":"Contract input device","output_device":"Contract output device","volume":1.0,"tts_voice":"Fenrir","speaking_rate":0.95,"pitch":-1.5,"provider":"google","live_model":"gemini-3.1-flash-live-preview","text_model":"gemini-3.7-flash","tts_model":"gemini-2.5-flash-preview-tts","active_app_observation":false,"window_title_observation":false,"memory_enabled":false,"save_transcripts":false,"dry":0.85,"sarcastic":0.7,"friendly":0.55,"absurd":0.65,"helpful":0.35,"verbosity":0.3},
+    "MemoryRecord":{"id":1,"fact":"contract memory","category":"contract","source":"contract","confidence":1.0,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"},
+    "TranscriptRecord":{"id":1,"session_id":"contract-session","role":"user","text":"contract transcript","created_at":"2026-01-01T00:00:00Z"},
+    "GoogleModelDescriptor":{"id":"gemini-3.1-flash-live-preview","display_name":"Gemini 3.1 Flash Live Preview","capabilities":["live_audio"]},
+    "GoogleTtsVoiceDescriptor":{"id":"Zephyr","style":"Bright"},
+    "ConnectionTestResult":{"success":true,"message":"contract connection result"}
+  }
 }

@@ -2,40 +2,10 @@ use super::*;
 use crate::app::state::AppSettings;
 use crate::character::personality::CharacterConfig;
 use crate::persistence::sqlite::Database;
+use crate::test_support::{assert_log_capture_live, capture_logs};
 use crate::tools::builtin::V1_TOOL_NAMES;
 use parking_lot::RwLock;
 use serde_json::json;
-use std::io::{self, Write};
-use std::sync::Mutex as StdMutex;
-use tracing_subscriber::fmt::MakeWriter;
-
-#[derive(Clone, Default)]
-struct CapturedLogs(Arc<StdMutex<Vec<u8>>>);
-
-impl CapturedLogs {
-    fn text(&self) -> String {
-        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
-    }
-}
-
-impl Write for CapturedLogs {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.lock().unwrap().extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'a> MakeWriter<'a> for CapturedLogs {
-    type Writer = Self;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        self.clone()
-    }
-}
 
 fn router() -> (ToolRouter, Arc<RwLock<AppSettings>>) {
     let db = Arc::new(Database::new_in_memory().unwrap());
@@ -245,14 +215,7 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
     const ACTIVE_APP_SENTINEL: &str = "PRIVATE_ACTIVE_APP_SENTINEL_a885";
     const RAW_AUDIO_SENTINEL: &str = "AAECAwQFBgcICQoLDA0ODw_PRIVATE_AUDIO_5ef0";
 
-    let captured = CapturedLogs::default();
-    let subscriber = tracing_subscriber::fmt()
-        .without_time()
-        .with_ansi(false)
-        .with_writer(captured.clone())
-        .finish();
-
-    let (remembered_audit, unknown_audit) = tracing::subscriber::with_default(subscriber, || {
+    let ((remembered_audit, unknown_audit), logs) = capture_logs(|| {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -290,7 +253,7 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
         })
     });
 
-    let logs = captured.text();
+    assert_log_capture_live(&logs);
     for sentinel in [
         TRANSCRIPT_SENTINEL,
         PROMPT_SENTINEL,
@@ -305,9 +268,9 @@ fn private_tool_payloads_and_unknown_names_never_enter_normal_logs() {
             "private value leaked into log output"
         );
     }
-    // Positive routing assertions use the structured audit rather than formatted
-    // tracing text. Tracing callsite interest is process-global, so parallel
-    // tests can legitimately suppress a callsite in this thread-local formatter.
+    // Positive routing assertions stay on the structured audit rather than formatted
+    // tracing text. The shared capture harness separately proves log-capture
+    // liveness before these privacy assertions run.
     assert_eq!(remembered_audit.tool_name, "remember_fact");
     assert_eq!(
         remembered_audit.result_category,
