@@ -28,10 +28,15 @@ npm run check:all
 npm run check:frontend
 npm run check:rust
 
+# Index hygiene; runs without installed frontend dependencies
+npm run check:generated-trees
+
 # Compile-only production checks
 npm run build
 cargo build --manifest-path src-tauri/Cargo.toml
 ```
+
+`npm run check:generated-trees` fails if generated `node_modules/` or `dist/` content is ever committed. Both directories are intentionally ignored; use `npm ci` to reproduce frontend dependencies and `npm run build`/Tauri's `beforeBuildCommand` to regenerate `dist/`. The hygiene check inspects the Git index only, so it can run before `npm ci` and does not require either directory to exist.
 
 `npm run check:rust` is the source of truth for the Rust quality gate: it runs Rustfmt plus Clippy and tests with `--all-targets --all-features`. Do not replace it with weaker hand-written Clippy/test commands when validating a change. Release/bundle-specific checks are defined in `.github/workflows/ci.yml` and the scripts it invokes.
 
