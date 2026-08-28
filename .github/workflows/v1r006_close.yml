@@ -24,35 +24,29 @@ jobs:
           from pathlib import Path
           path = Path('docs/TODO(20260818-163801).md')
           text = path.read_text()
-          old = '''## V1R-006 — Eliminate development-tool advisories
-
-- [ ] Upgrade Vite/Vitest/esbuild dependency chain to clean supported versions.
-- [ ] Regenerate `package-lock.json` normally.
-- [ ] Run complete frontend validation after upgrade.
-- [ ] Restore full development `npm audit --audit-level=high` to blocking when clean.
-- [ ] Do not add advisory-ID ignores simply to turn CI green.
-
-### Gate P0
-
-- [ ] V1R-004 and V1R-006 complete.
-'''
-          new = '''## V1R-006 — Eliminate development-tool advisories
-
-- [x] Upgrade Vite/Vitest/esbuild dependency chain to clean supported versions.
-- [x] Regenerate `package-lock.json` normally.
-- [x] Run complete frontend validation after upgrade.
-- [x] Restore full development `npm audit --audit-level=high` to blocking when clean.
-- [x] Do not add advisory-ID ignores simply to turn CI green.
-
-Implementation evidence (2026-08-28): `2d61e7b5eade6ab27d2013b669a6ff2874da346c` (`build: eliminate development dependency advisories`) upgrades Vite to 8.2.2, Vitest to 4.1.11, and `@vitejs/plugin-react` to the Vite-8-compatible 6.1.x line, switches production minification from the legacy esbuild path to Oxc, regenerates `package-lock.json` normally from `package.json`, and restores the complete development-tree npm audit as a blocking CI gate. Lockfile-generation run `33195499108` used normal npm resolution without `--force`, `--legacy-peer-deps`, `npm audit fix`, or advisory ignores; `npm ci` reproduced the resolved tree and both production and development audits reported zero vulnerabilities. PR CI run `33195721746` passed frontend typecheck/lint/format/tests/build, both npm audits, Rust dependency audit, Rustfmt/Clippy/tests, backend failure/stress matrices, release metadata/license collection, and both macOS bundle architectures.
-
-### Gate P0
-
-- [x] V1R-004 and V1R-006 complete.
-'''
-          if old not in text:
-              raise SystemExit('expected V1R-006 block not found')
-          path.write_text(text.replace(old, new, 1))
+          rows = [
+              'Upgrade Vite/Vitest/esbuild dependency chain to clean supported versions.',
+              'Regenerate `package-lock.json` normally.',
+              'Run complete frontend validation after upgrade.',
+              'Restore full development `npm audit --audit-level=high` to blocking when clean.',
+              'Do not add advisory-ID ignores simply to turn CI green.',
+          ]
+          for row in rows:
+              old = f'- [ ] {row}'
+              new = f'- [x] {row}'
+              if old not in text:
+                  raise SystemExit(f'missing V1R-006 row: {row}')
+              text = text.replace(old, new, 1)
+          gate = '- [ ] V1R-004 and V1R-006 complete.'
+          if gate not in text:
+              raise SystemExit('missing Gate P0 row')
+          evidence = 'Implementation evidence (2026-08-28): `2d61e7b5eade6ab27d2013b669a6ff2874da346c` (`build: eliminate development dependency advisories`) upgrades Vite to 8.2.2, Vitest to 4.1.11, and `@vitejs/plugin-react` to the Vite-8-compatible 6.1.x line, switches production minification from the legacy esbuild path to Oxc, regenerates `package-lock.json` normally from `package.json`, and restores the complete development-tree npm audit as a blocking CI gate. Lockfile-generation run `33195499108` used normal npm resolution without `--force`, `--legacy-peer-deps`, `npm audit fix`, or advisory ignores; `npm ci` reproduced the resolved tree and both production and development audits reported zero vulnerabilities. PR CI run `33195721746` passed frontend typecheck/lint/format/tests/build, both npm audits, Rust dependency audit, Rustfmt/Clippy/tests, backend failure/stress matrices, release metadata/license collection, and both macOS bundle architectures.'
+          marker = '\n### Gate P0\n'
+          if marker not in text:
+              raise SystemExit('missing Gate P0 marker')
+          text = text.replace(marker, '\n' + evidence + '\n' + marker, 1)
+          text = text.replace(gate, '- [x] V1R-004 and V1R-006 complete.', 1)
+          path.write_text(text)
           PY
           git diff --check -- 'docs/TODO(20260818-163801).md'
       - name: Commit closure and remove one-shot workflow
