@@ -30,18 +30,20 @@ concurrency:
 
 jobs:
   miri:
-    name: Moonshine fake-ABI ownership under Miri
+    name: Moonshine wrapper + transcript boundary under Miri
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      MIRI_TOOLCHAIN: nightly-2026-08-22
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install nightly Miri
-        run: rustup toolchain install nightly --profile minimal --component miri
+      - name: Install pinned nightly Miri
+        run: rustup toolchain install "$MIRI_TOOLCHAIN" --profile minimal --component miri
 
       - name: Prepare Miri sysroot
-        run: cargo +nightly miri setup
+        run: cargo +"$MIRI_TOOLCHAIN" miri setup
 
       - name: Run production Moonshine wrapper tests under Miri
-        run: cargo +nightly miri test --manifest-path tools/asr-miri/Cargo.toml
+        run: cargo +"$MIRI_TOOLCHAIN" miri test --manifest-path tools/asr-miri/Cargo.toml
