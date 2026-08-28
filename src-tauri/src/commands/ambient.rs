@@ -1,40 +1,18 @@
-use crate::ai::types::{TextRequest, TtsRequest};
+use crate::ai::types::TextRequest;
 use crate::app::state::AppState;
 use crate::character::ambient::{AmbientEvent, AmbientEventCategory};
 use crate::character::behavior::AmbientPolicyContext;
 #[cfg(test)]
 use crate::character::behavior::BehaviorEngine;
 use crate::character::prompt::PromptBuilder;
-use crate::character::state::{transition_character_state, CharacterState};
+use crate::character::state::CharacterState;
 use crate::commands::conversation::model_prompt_memories;
+use crate::commands::presentation::{clear_speech_bubble, show_character, transition_and_emit};
+use crate::commands::speech::{invoke_standalone_speech, StandaloneSpeechPlayback};
 use std::time::Duration;
 use tauri::{Emitter, Runtime, State};
 
 const MAX_AMBIENT_OUTPUT_CHARS: usize = 320;
-const MAX_AMBIENT_PLAYBACK_WAIT: Duration = Duration::from_secs(10);
-
-fn transition_and_emit<R: Runtime>(
-    state: &AppState,
-    app: &tauri::AppHandle<R>,
-    target: CharacterState,
-) -> Result<(), String> {
-    transition_character_state(&state.character_state, target)?;
-    let _ = app.emit("moose://state", target);
-    Ok(())
-}
-
-/// Ambient appearance is presentation-state-only. It intentionally never shows,
-/// raises, or focuses the native window, so an unsolicited remark cannot steal focus.
-fn show_character<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) -> Result<(), String> {
-    let current = *state.character_state.read();
-    if matches!(current, CharacterState::Dismissed) {
-        transition_and_emit(state, app, CharacterState::Hidden)?;
-    }
-    if matches!(*state.character_state.read(), CharacterState::Hidden) {
-        transition_and_emit(state, app, CharacterState::Appearing)?;
-    }
-    transition_and_emit(state, app, CharacterState::Idle)
-}
 
 fn bound_ambient_output(text: &str) -> Option<String> {
     let trimmed = text.trim();
@@ -49,51 +27,6 @@ fn build_ambient_model_prompt(state: &AppState, event_summary: &str) -> String {
     let memories = model_prompt_memories(state, memory_enabled);
     let config = state.behavior_engine.lock().config.clone();
     PromptBuilder::build_ambient_prompt(&config, event_summary, &memories)
-}
-
-async fn speak_standalone(text: &str, state: &AppState) -> Result<Duration, String> {
-    let (voice, rate, pitch, output_device) = {
-        let settings = state.settings.read();
-        (
-            settings.tts_voice.clone(),
-            settings.speaking_rate,
-            settings.pitch,
-            settings.output_device.clone(),
-        )
-    };
-    let synthesizer = state.get_speech_synthesizer();
-    let cancellation = state.standalone_speech.begin(state.audio_playback.as_ref());
-    let report = crate::audio::speech::synthesize_and_queue_cancellable(
-        synthesizer.as_ref(),
-        state.audio_playback.as_ref(),
-        TtsRequest {
-            text: text.to_string(),
-            voice_name: Some(voice),
-            speaking_rate: Some(rate),
-            pitch: Some(pitch),
-        },
-        output_device,
-        &cancellation,
-    )
-    .await?;
-
-    if report.dropped_samples > 0 {
-        return Err(format!(
-            "audio playback queue overflowed and dropped {} samples",
-            report.dropped_samples
-        ));
-    }
-
-    if report.queued_samples == 0 {
-        return Err("synthesized ambient speech contained no playable audio".to_string());
-    }
-
-    let sample_rate = state
-        .audio_playback
-        .output_sample_rate_hz()
-        .unwrap_or(24_000);
-    let duration = Duration::from_secs_f64(report.queued_samples as f64 / f64::from(sample_rate));
-    Ok(duration.min(MAX_AMBIENT_PLAYBACK_WAIT))
 }
 
 fn ambient_privacy_allowed(state: &AppState, category: AmbientEventCategory) -> bool {
@@ -127,10 +60,6 @@ fn configured_ambient_hide_delay(state: &AppState) -> Duration {
     Duration::from_secs(u64::from(state.settings.read().hide_delay_seconds))
 }
 
-fn clear_ambient_bubble<R: Runtime>(app: &tauri::AppHandle<R>) {
-    let _ = app.emit("moose://speech-bubble", "");
-}
-
 fn restore_after_ambient_failure<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
@@ -140,11 +69,11 @@ fn restore_after_ambient_failure<R: Runtime>(
         *state.character_state.read(),
         CharacterState::Thinking | CharacterState::Talking
     ) {
-        transition_and_emit(state, app, CharacterState::Idle)?;
+        transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
     }
-    clear_ambient_bubble(app);
+    clear_speech_bubble(app);
     if appeared_for_ambient && *state.character_state.read() == CharacterState::Idle {
-        transition_and_emit(state, app, CharacterState::Hidden)?;
+        transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;
     }
     Ok(())
 }
@@ -152,19 +81,26 @@ fn restore_after_ambient_failure<R: Runtime>(
 async fn complete_ambient_appearance<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
-    playback_duration: Duration,
+    playback: &StandaloneSpeechPlayback,
     appeared_for_ambient: bool,
 ) -> Result<(), String> {
-    tokio::time::sleep(playback_duration).await;
-    if *state.character_state.read() == CharacterState::Talking {
-        transition_and_emit(state, app, CharacterState::Idle)?;
+    if !playback.completed_without_cancellation().await {
+        return Ok(());
     }
-    clear_ambient_bubble(app);
+    if *state.character_state.read() == CharacterState::Talking {
+        transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
+    }
+    clear_speech_bubble(app);
 
     if appeared_for_ambient && *state.character_state.read() == CharacterState::Idle {
-        tokio::time::sleep(configured_ambient_hide_delay(state)).await;
+        if !playback
+            .wait_without_cancellation(configured_ambient_hide_delay(state))
+            .await
+        {
+            return Ok(());
+        }
         if *state.character_state.read() == CharacterState::Idle {
-            transition_and_emit(state, app, CharacterState::Hidden)?;
+            transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;
         }
     }
     Ok(())
@@ -197,9 +133,9 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
         CharacterState::Hidden | CharacterState::Dismissed
     );
     if appeared_for_ambient {
-        show_character(state, app)?;
+        show_character(&state.character_state, app)?;
     }
-    transition_and_emit(state, app, CharacterState::Thinking)?;
+    transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;
 
     let prompt = build_ambient_model_prompt(state, &event.summary);
     let generated = match state
@@ -236,20 +172,18 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
         return Ok(None);
     }
 
-    let playback_duration = match speak_standalone(&text, state).await {
-        Ok(duration) => duration,
+    let playback = match invoke_standalone_speech(state, app, &text, None).await {
+        Ok(playback) => playback,
         Err(error_value) => {
             restore_after_ambient_failure(state, app, appeared_for_ambient)?;
             return Err(error_value);
         }
     };
 
-    // Do not surface a generated remark until TTS was successfully queued. Provider
-    // failure therefore never invents or displays a fallback ambient comment.
-    transition_and_emit(state, app, CharacterState::Talking)?;
-    let _ = app.emit("moose://speech-bubble", &text);
+    // The shared standalone-speech helper does not surface Talking/bubble state until
+    // synthesis produced playable audio and the bounded queue accepted the utterance.
     state.behavior_engine.lock().record_ambient_delivery(&event);
-    complete_ambient_appearance(state, app, playback_duration, appeared_for_ambient).await?;
+    complete_ambient_appearance(state, app, &playback, appeared_for_ambient).await?;
     Ok(Some(text))
 }
 
@@ -360,7 +294,7 @@ mod tests {
 
     #[test]
     fn ambient_lifecycle_playback_wait_is_hard_bounded() {
-        assert!(MAX_AMBIENT_PLAYBACK_WAIT <= Duration::from_secs(10));
+        assert!(crate::commands::speech::MAX_STANDALONE_PLAYBACK_WAIT <= Duration::from_secs(10));
     }
 
     #[test]

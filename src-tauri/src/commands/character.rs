@@ -1,76 +1,17 @@
-use crate::ai::types::TtsRequest;
 use crate::app::state::AppState;
 use crate::character::behavior::BehaviorEngine;
-use crate::character::state::{transition_character_state, CharacterState};
-use tauri::{Emitter, Runtime, State};
+use crate::character::state::CharacterState;
+use crate::commands::presentation::{clear_speech_bubble, show_character, transition_and_emit};
+use crate::commands::speech::{invoke_standalone_speech, schedule_standalone_completion};
+use tauri::{Runtime, State};
 
 pub(crate) const VOICE_AUDITION_SCRIPT: &str = "Hello, I'm Moose. Oh good, another button. Professionally disappointed. Short version: it works. Longer version: I explain things while looking bewildered.";
-
-fn transition_and_emit<R: Runtime>(
-    state: &AppState,
-    app: &tauri::AppHandle<R>,
-    target: CharacterState,
-) -> Result<(), String> {
-    transition_character_state(&state.character_state, target)?;
-    let _ = app.emit("moose://state", target);
-    Ok(())
-}
 
 fn cancel_standalone_audio<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) {
     state
         .standalone_speech
         .cancel(state.audio_playback.as_ref());
-    let _ = app.emit("moose://speech-bubble", "");
-}
-
-fn show_character<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) -> Result<(), String> {
-    let current = *state.character_state.read();
-    if matches!(current, CharacterState::Dismissed) {
-        transition_and_emit(state, app, CharacterState::Hidden)?;
-    }
-    if matches!(*state.character_state.read(), CharacterState::Hidden) {
-        transition_and_emit(state, app, CharacterState::Appearing)?;
-    }
-    transition_and_emit(state, app, CharacterState::Idle)
-}
-
-async fn speak_standalone(
-    text: &str,
-    voice_name: Option<String>,
-    state: &AppState,
-) -> Result<(), String> {
-    let (configured_voice, rate, pitch, output_device) = {
-        let settings = state.settings.read();
-        (
-            settings.tts_voice.clone(),
-            settings.speaking_rate,
-            settings.pitch,
-            settings.output_device.clone(),
-        )
-    };
-    let synthesizer = state.get_speech_synthesizer();
-    let cancellation = state.standalone_speech.begin(state.audio_playback.as_ref());
-    let report = crate::audio::speech::synthesize_and_queue_cancellable(
-        synthesizer.as_ref(),
-        state.audio_playback.as_ref(),
-        TtsRequest {
-            text: text.to_string(),
-            voice_name: Some(voice_name.unwrap_or(configured_voice)),
-            speaking_rate: Some(rate),
-            pitch: Some(pitch),
-        },
-        output_device,
-        &cancellation,
-    )
-    .await?;
-
-    if report.dropped_samples > 0 {
-        return Err(format!(
-            "audio playback queue overflowed and dropped {} samples",
-            report.dropped_samples
-        ));
-    }
-    Ok(())
+    clear_speech_bubble(app);
 }
 
 #[tauri::command]
@@ -84,7 +25,7 @@ pub fn set_character_state<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    transition_and_emit(state.inner(), &app, new_state)
+    transition_and_emit(&state.character_state, &app, new_state)
 }
 
 #[tauri::command]
@@ -92,7 +33,7 @@ pub fn show_moose<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    show_character(state.inner(), &app)
+    show_character(&state.character_state, &app)
 }
 
 #[tauri::command]
@@ -100,7 +41,7 @@ pub fn hide_moose<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    transition_and_emit(state.inner(), &app, CharacterState::Hidden)
+    transition_and_emit(&state.character_state, &app, CharacterState::Hidden)
 }
 
 #[tauri::command]
@@ -116,8 +57,8 @@ pub async fn dismiss_moose<R: Runtime>(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
-    transition_and_emit(state.inner(), &app, CharacterState::Dismissed)?;
-    transition_and_emit(state.inner(), &app, CharacterState::Hidden)
+    transition_and_emit(&state.character_state, &app, CharacterState::Dismissed)?;
+    transition_and_emit(&state.character_state, &app, CharacterState::Hidden)
 }
 
 #[tauri::command]
@@ -136,11 +77,11 @@ pub async fn set_mute<R: Runtime>(
             .conversation_mgr
             .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
             .await;
-        transition_and_emit(state.inner(), &app, CharacterState::Muted)
+        transition_and_emit(&state.character_state, &app, CharacterState::Muted)
     } else {
         *state.is_muted.write() = false;
         // Unmute is deliberately passive: it restores Idle but never starts capture.
-        transition_and_emit(state.inner(), &app, CharacterState::Idle)
+        transition_and_emit(&state.character_state, &app, CharacterState::Idle)
     }
 }
 
@@ -158,7 +99,7 @@ pub fn cancel_standalone_speech<R: Runtime>(
     if !state.conversation_mgr.is_active()
         && matches!(*state.character_state.read(), CharacterState::Talking)
     {
-        transition_and_emit(state.inner(), &app, CharacterState::Idle)?;
+        transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
     }
     Ok(())
 }
@@ -170,20 +111,10 @@ pub async fn audition_voice<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
     crate::ai::google::validate_tts_voice(&voice_name)?;
-    transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
-    let _ = app.emit("moose://speech-bubble", VOICE_AUDITION_SCRIPT);
-
-    if let Err(error_value) =
-        speak_standalone(VOICE_AUDITION_SCRIPT, Some(voice_name), state.inner()).await
-    {
-        let _ = app.emit("moose://speech-bubble", "");
-        if !state.conversation_mgr.is_active()
-            && matches!(*state.character_state.read(), CharacterState::Talking)
-        {
-            transition_and_emit(state.inner(), &app, CharacterState::Idle)?;
-        }
-        return Err(error_value);
-    }
+    let playback =
+        invoke_standalone_speech(state.inner(), &app, VOICE_AUDITION_SCRIPT, Some(voice_name))
+            .await?;
+    schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
     Ok(VOICE_AUDITION_SCRIPT.to_string())
 }
 
@@ -204,10 +135,8 @@ pub async fn trigger_canned_reaction<R: Runtime>(
         _ => BehaviorEngine::get_canned_error_phrase(),
     };
 
-    transition_and_emit(state.inner(), &app, CharacterState::Talking)?;
-    let _ = app.emit("moose://speech-bubble", text);
-
-    speak_standalone(text, None, state.inner()).await?;
+    let playback = invoke_standalone_speech(state.inner(), &app, text, None).await?;
+    schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
     Ok(text.to_string())
 }
 
