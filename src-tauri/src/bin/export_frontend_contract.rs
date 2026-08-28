@@ -51,10 +51,11 @@ struct FrontendIpcShapes {
 }
 
 fn representative_settings() -> AppSettings {
-    let mut settings = AppSettings::default();
-    settings.input_device = Some("Contract input device".to_string());
-    settings.output_device = Some("Contract output device".to_string());
-    settings
+    AppSettings {
+        input_device: Some("Contract input device".to_string()),
+        output_device: Some("Contract output device".to_string()),
+        ..Default::default()
+    }
 }
 
 fn representative_capture_diagnostics() -> AudioCaptureDiagnostics {
