@@ -28,7 +28,7 @@ async fn supervise_socket(
 
     'connection: loop {
         if let Ok(request) = close_receiver.try_recv() {
-            complete_protocol_close(&mut socket, &api_key, request).await;
+            complete_protocol_close(&mut socket, request).await;
             break;
         }
         if !is_active.load(Ordering::SeqCst) || cancellation.is_cancelled() {
@@ -39,7 +39,6 @@ async fn supervise_socket(
             match write_socket_message(
                 &mut socket,
                 envelope.message.clone(),
-                &api_key,
                 Some(&cancellation),
                 SOCKET_WRITE_TIMEOUT,
             )
@@ -61,7 +60,7 @@ async fn supervise_socket(
                 close = close_receiver.recv() => {
                     match close {
                         Some(request) => {
-                            complete_protocol_close(&mut socket, &api_key, request).await;
+                            complete_protocol_close(&mut socket, request).await;
                             break 'connection;
                         }
                         None => break 'connection,
@@ -74,7 +73,6 @@ async fn supervise_socket(
                             match write_socket_message(
                                 &mut socket,
                                 envelope.message.clone(),
-                                &api_key,
                                 Some(&cancellation),
                                 SOCKET_WRITE_TIMEOUT,
                             )
@@ -159,7 +157,7 @@ async fn supervise_socket(
             ServerAction::Reconnect => {
                 if !is_active.load(Ordering::SeqCst) || cancellation.is_cancelled() {
                     if let Ok(request) = close_receiver.try_recv() {
-                        complete_protocol_close(&mut socket, &api_key, request).await;
+                        complete_protocol_close(&mut socket, request).await;
                     }
                     break;
                 }
@@ -181,7 +179,7 @@ async fn supervise_socket(
                         if !is_active.load(Ordering::SeqCst) || cancellation.is_cancelled() =>
                     {
                         if let Ok(request) = close_receiver.try_recv() {
-                            complete_protocol_close(&mut socket, &api_key, request).await;
+                            complete_protocol_close(&mut socket, request).await;
                         }
                         break;
                     }

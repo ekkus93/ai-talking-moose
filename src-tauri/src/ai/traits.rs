@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 #[async_trait]
 pub trait TextModel: Send + Sync {
-    async fn generate(&self, request: TextRequest) -> Result<TextResponse, String>;
+    async fn generate(&self, request: TextRequest) -> Result<TextResponse, ProviderError>;
 }
 
 #[async_trait]

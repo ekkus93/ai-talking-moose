@@ -301,7 +301,7 @@ pub async fn send_text_message(
             if *state.character_state.read() == CharacterState::Thinking {
                 transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
             }
-            return Err(state.secrets.redact(&error_value));
+            return Err(crate::ai::types::ProviderError::from_kind(error_value.kind).to_string());
         }
     };
 
