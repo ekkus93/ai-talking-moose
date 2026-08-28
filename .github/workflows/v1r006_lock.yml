@@ -25,10 +25,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Resolve package lock normally from a clean tree
+      - name: Regenerate package lock normally from package.json
         shell: bash
         run: |
-          rm -rf node_modules
+          rm -rf node_modules package-lock.json
           npm install --package-lock-only --ignore-scripts
 
       - name: Verify resolved dependency tree
