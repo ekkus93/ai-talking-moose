@@ -27,6 +27,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           devices = Path('src-tauri/src/audio/devices.rs')
           text = devices.read_text()
@@ -43,21 +44,20 @@ jobs:
           text = text.replace('if let Ok(name) = device.name() {', 'if let Some(name) = device_display_name(&device) {')
           devices.write_text(text)
 
+          pattern = re.compile(
+              r'device\s*\.name\(\)\s*\.map\(\|candidate\| candidate == \*requested_name\)\s*\.unwrap_or\(false\)'
+          )
+          replacement = '''device_display_name(device)
+                              .map(|candidate| candidate == *requested_name)
+                              .unwrap_or(false)'''
+
           for path_string in ('src-tauri/src/audio/capture.rs', 'src-tauri/src/audio/playback.rs'):
               path = Path(path_string)
               text = path.read_text()
               import_line = 'use crate::audio::devices::device_display_name;\n'
               if import_line not in text:
                   text = import_line + text
-              text = text.replace(
-                  '''device
-                              .name()
-                              .map(|candidate| candidate == *requested_name)
-                              .unwrap_or(false)''',
-                  '''device_display_name(device)
-                              .map(|candidate| candidate == *requested_name)
-                              .unwrap_or(false)''',
-              )
+              text = pattern.sub(replacement, text)
               text = text.replace(
                   'let selected_device = device.name().ok().or(device_name);',
                   'let selected_device = device_display_name(&device).or(device_name);',
@@ -81,5 +81,5 @@ jobs:
           git config user.name 'Phillip Chin'
           git config user.email 'ekkus93@gmail.com'
           git add src-tauri/src/audio/capture.rs src-tauri/src/audio/playback.rs src-tauri/src/audio/devices.rs
-          git commit -m 'fix: use CPAL device descriptions'
+          git commit -m 'fix: finish CPAL device description migration'
           git push origin HEAD:ralph/v1r-004-cpal-lock-probe-20260828
