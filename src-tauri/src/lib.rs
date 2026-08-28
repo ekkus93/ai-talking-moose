@@ -19,6 +19,8 @@ use app::window_position::{
     schedule_window_position_persist, DisplayBounds, WindowPosition,
 };
 use commands::*;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -27,6 +29,19 @@ use tracing::{info, warn};
 
 pub fn moonshine_native_smoke_check() -> Result<i32, String> {
     asr::moonshine::native_runtime_smoke_check().map_err(|error| error.message)
+}
+
+fn persistent_database_path(app_data_dir: &Path) -> io::Result<PathBuf> {
+    std::fs::create_dir_all(app_data_dir).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!(
+                "failed to create application data directory {}: {error}",
+                app_data_dir.display()
+            ),
+        )
+    })?;
+    Ok(app_data_dir.join("talking_moose.db"))
 }
 
 pub fn run() {
@@ -63,15 +78,17 @@ pub fn run() {
             );
         })
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir().ok();
-            let db_path = if let Some(dir) = app_data_dir {
-                std::fs::create_dir_all(&dir).ok();
-                Some(dir.join("talking_moose.db").to_string_lossy().to_string())
-            } else {
-                None
-            };
+            let app_data_dir = app.path().app_data_dir().map_err(|error| {
+                io::Error::other(format!(
+                    "failed to resolve application data directory: {error}"
+                ))
+            })?;
+            let db_path = persistent_database_path(&app_data_dir)?;
+            let db_path = db_path.to_str().ok_or_else(|| {
+                io::Error::other("application database path is not valid UTF-8")
+            })?;
 
-            let app_state = AppState::new(db_path.as_deref()).map_err(std::io::Error::other)?;
+            let app_state = AppState::new(Some(db_path)).map_err(io::Error::other)?;
             let startup_settings = app_state.settings.read().clone();
             if let Err(error) = app::runtime_preferences::apply_startup_runtime_preferences(
                 app.handle(),
@@ -268,4 +285,33 @@ pub fn run() {
             });
         }
     });
+}
+
+#[cfg(test)]
+mod persistence_startup_tests {
+    use super::persistent_database_path;
+    use tempfile::{tempdir, NamedTempFile};
+
+    #[test]
+    fn persistent_database_path_creates_missing_application_data_directory() {
+        let root = tempdir().unwrap();
+        let app_data_dir = root.path().join("nested").join("Talking Moose AI");
+
+        let db_path = persistent_database_path(&app_data_dir).unwrap();
+
+        assert!(app_data_dir.is_dir());
+        assert_eq!(db_path, app_data_dir.join("talking_moose.db"));
+    }
+
+    #[test]
+    fn persistent_database_path_fails_closed_when_application_data_directory_cannot_be_created() {
+        let file = NamedTempFile::new().unwrap();
+
+        let error = persistent_database_path(file.path())
+            .expect_err("startup must fail instead of falling back to an in-memory database");
+
+        assert!(error
+            .to_string()
+            .contains("failed to create application data directory"));
+    }
 }
