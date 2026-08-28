@@ -108,8 +108,12 @@ export const MooseWindow: React.FC = () => {
     toggleTranscript,
   ]);
 
-  // State badge styling and label
+  // State badge styling and label. Mute is an independent control/privacy flag,
+  // so it overrides presentation state without duplicating a backend CharacterState.
   const getStateBadge = () => {
+    if (isMuted) {
+      return { label: "MUTED", color: "bg-gray-600 text-white" };
+    }
     switch (characterState) {
       case "listening":
         return {
@@ -125,12 +129,6 @@ export const MooseWindow: React.FC = () => {
         return { label: "TALKING", color: "bg-blue-600 text-white" };
       case "interrupted":
         return { label: "INTERRUPTED", color: "bg-purple-600 text-white" };
-      case "muted":
-        return { label: "MUTED", color: "bg-gray-600 text-white" };
-      case "annoyed":
-        return { label: "ANNOYED", color: "bg-orange-700 text-white" };
-      case "sleeping":
-        return { label: "SLEEPING", color: "bg-indigo-600 text-white" };
       case "error":
         return { label: "ERROR", color: "bg-red-600 text-white" };
       case "idle":

@@ -89,7 +89,7 @@ describe("MooseWindow focused keyboard shortcuts", () => {
     const expectedBadgeClasses = [
       ["listening", "LISTENING...", "bg-green-700"],
       ["thinking", "THINKING...", "bg-amber-700"],
-      ["annoyed", "ANNOYED", "bg-orange-700"],
+      ["error", "ERROR", "bg-red-600"],
     ] as const;
 
     for (const [characterState, label, expectedClass] of expectedBadgeClasses) {
@@ -104,6 +104,18 @@ describe("MooseWindow focused keyboard shortcuts", () => {
       name: "Stop conversation",
     });
     expect(stop).toHaveClass("bg-red-600", "text-white", "hover:bg-red-700");
+  });
+
+  it("derives the MUTED badge from the single mute authority", async () => {
+    useMooseStore.setState({ characterState: "talking", isMuted: true });
+    render(<MooseWindow />);
+
+    const mutedBadge = await screen.findByRole("status");
+    expect(mutedBadge).toHaveTextContent("MUTED");
+    expect(mutedBadge).toHaveClass("bg-gray-600", "text-white");
+
+    act(() => useMooseStore.setState({ isMuted: false }));
+    expect(await screen.findByRole("status")).toHaveTextContent("TALKING");
   });
 
   it("stops an active conversation with the focused-window shortcut", () => {

@@ -184,12 +184,7 @@ pub async fn stop_conversation(
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
 
-    let target = if *state.is_muted.read() {
-        CharacterState::Muted
-    } else {
-        CharacterState::Idle
-    };
-    transition_and_emit(&state.character_state, &app, target)
+    transition_and_emit(&state.character_state, &app, CharacterState::Idle)
 }
 
 #[tauri::command]

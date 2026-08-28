@@ -11,10 +11,7 @@ pub enum CharacterState {
     Thinking,
     Talking,
     Interrupted,
-    Annoyed,
-    Sleeping,
     Dismissed,
-    Muted,
     Error,
 }
 
@@ -34,9 +31,10 @@ impl CharacterState {
             // Self transitions are always permitted (e.g. refresh/reaffirm).
             (a, b) if a == b => true,
 
-            // Error, Hidden, Muted, and Dismissed are interrupt/terminal presentation
-            // states and may be reached from any current presentation state.
-            (_, CharacterState::Error | CharacterState::Hidden | CharacterState::Muted) => true,
+            // Error, Hidden, and Dismissed are interrupt/terminal presentation states and
+            // may be reached from any current presentation state. Mute is deliberately
+            // not represented here; AppState::is_muted is the single mute authority.
+            (_, CharacterState::Error | CharacterState::Hidden) => true,
             (_, CharacterState::Dismissed) => true,
 
             // From Hidden: can only appear or become idle.
@@ -47,32 +45,22 @@ impl CharacterState {
             (CharacterState::Appearing, CharacterState::Idle | CharacterState::Listening) => true,
             (CharacterState::Appearing, _) => false,
 
-            // From Idle: can listen, think, talk (ambient), sleep, or get annoyed.
+            // From Idle: can listen, think, or talk for an ambient/text utterance.
             (
                 CharacterState::Idle,
-                CharacterState::Listening
-                | CharacterState::Thinking
-                | CharacterState::Talking
-                | CharacterState::Sleeping
-                | CharacterState::Annoyed,
+                CharacterState::Listening | CharacterState::Thinking | CharacterState::Talking,
             ) => true,
 
-            // From Listening: can transition to Thinking, Talking, Idle, or Annoyed.
+            // From Listening: can transition to Thinking, Talking, or Idle.
             (
                 CharacterState::Listening,
-                CharacterState::Thinking
-                | CharacterState::Talking
-                | CharacterState::Idle
-                | CharacterState::Annoyed,
+                CharacterState::Thinking | CharacterState::Talking | CharacterState::Idle,
             ) => true,
 
-            // From Thinking: can transition to Talking, Listening, Idle, or Annoyed.
+            // From Thinking: can transition to Talking, Listening, or Idle.
             (
                 CharacterState::Thinking,
-                CharacterState::Talking
-                | CharacterState::Listening
-                | CharacterState::Idle
-                | CharacterState::Annoyed,
+                CharacterState::Talking | CharacterState::Listening | CharacterState::Idle,
             ) => true,
 
             // From Talking: can transition to Interrupted, Listening, or Idle.
@@ -81,19 +69,11 @@ impl CharacterState {
                 CharacterState::Interrupted | CharacterState::Listening | CharacterState::Idle,
             ) => true,
 
-            // From Interrupted: transitions directly to Listening or Annoyed then Idle.
-            (
-                CharacterState::Interrupted,
-                CharacterState::Listening | CharacterState::Annoyed | CharacterState::Idle,
-            ) => true,
+            // From Interrupted: transitions directly to Listening or Idle.
+            (CharacterState::Interrupted, CharacterState::Listening | CharacterState::Idle) => true,
 
-            // From Annoyed / Sleeping / Dismissed: can return to Idle as appropriate.
-            (CharacterState::Annoyed, CharacterState::Idle | CharacterState::Listening) => true,
-            (CharacterState::Sleeping, CharacterState::Idle | CharacterState::Listening) => true,
+            // From Dismissed: an explicit show can return to Idle.
             (CharacterState::Dismissed, CharacterState::Idle) => true,
-
-            // From Muted: explicit unmute can return to Idle, but never auto-listens.
-            (CharacterState::Muted, CharacterState::Idle) => true,
 
             // From Error: explicit recovery can return to Idle.
             (CharacterState::Error, CharacterState::Idle) => true,
@@ -144,7 +124,7 @@ mod tests {
     fn test_invalid_state_transitions() {
         assert!(!CharacterState::Hidden.can_transition_to(&CharacterState::Talking));
         assert!(!CharacterState::Hidden.can_transition_to(&CharacterState::Thinking));
-        assert!(!CharacterState::Appearing.can_transition_to(&CharacterState::Sleeping));
+        assert!(!CharacterState::Appearing.can_transition_to(&CharacterState::Thinking));
     }
 
     #[test]

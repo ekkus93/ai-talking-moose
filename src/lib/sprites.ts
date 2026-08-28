@@ -14,10 +14,9 @@ export const getMooseSprite = (
   isBlinking: boolean,
 ): string => {
   // Determine effective eye state
-  const eyesClosed = isBlinking || state === "sleeping";
+  const eyesClosed = isBlinking;
   const isListening = state === "listening";
   const isThinking = state === "thinking";
-  const isAnnoyed = state === "annoyed";
   const isError = state === "error";
 
   // Determine mouth shape
@@ -27,10 +26,8 @@ export const getMooseSprite = (
     eyesClosed,
     isListening,
     isThinking,
-    isAnnoyed,
     isError,
     mouth: effectiveMouth,
-    isSleeping: state === "sleeping",
   });
 };
 
@@ -38,10 +35,8 @@ interface RenderParams {
   eyesClosed: boolean;
   isListening: boolean;
   isThinking: boolean;
-  isAnnoyed: boolean;
   isError: boolean;
   mouth: MouthShape;
-  isSleeping: boolean;
 }
 
 const renderMooseSvg = (p: RenderParams): string => {
@@ -85,7 +80,7 @@ const renderMooseSvg = (p: RenderParams): string => {
       <!-- Right X Eye -->
       <path d="M 18,15 L 21,18 M 21,15 L 18,18" stroke="#111" stroke-width="1.5"/>
     `;
-  } else if (p.eyesClosed || p.isSleeping) {
+  } else if (p.eyesClosed) {
     // Closed line eyes
     eyesSvg = `
       <rect x="11" y="17" width="4" height="1" fill="#1a1a1a"/>
@@ -100,16 +95,6 @@ const renderMooseSvg = (p: RenderParams): string => {
       <rect x="19" y="14" width="2" height="2" fill="#1a1a1a"/>
       <!-- Raised Eyebrow -->
       <rect x="17" y="12" width="4" height="1" fill="#1a1a1a"/>
-    `;
-  } else if (p.isAnnoyed) {
-    // Narrow glare
-    eyesSvg = `
-      <rect x="11" y="16" width="4" height="2" fill="#ffffff"/>
-      <rect x="11" y="16" width="2" height="2" fill="#1a1a1a"/>
-      <rect x="17" y="16" width="4" height="2" fill="#ffffff"/>
-      <rect x="17" y="16" width="2" height="2" fill="#1a1a1a"/>
-      <!-- Furrowed Eyebrow -->
-      <path d="M 11,14 L 15,16 M 21,14 L 17,16" stroke="#1a1a1a" stroke-width="1"/>
     `;
   } else {
     // Normal / Alert Eyes
@@ -160,11 +145,6 @@ const renderMooseSvg = (p: RenderParams): string => {
       break;
   }
 
-  // Sleep Zzz
-  const sleepBubble = p.isSleeping
-    ? `<text x="24" y="10" font-family="monospace" font-size="6" font-weight="bold" fill="#2b4c7e">Zzz</text>`
-    : "";
-
   return `
     <svg viewBox="0 0 32 32" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
       <g>
@@ -176,7 +156,6 @@ const renderMooseSvg = (p: RenderParams): string => {
         ${eyesSvg}
         ${snout}
         ${mouthSvg}
-        ${sleepBubble}
       </g>
     </svg>
   `;

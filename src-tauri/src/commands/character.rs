@@ -77,11 +77,24 @@ pub async fn set_mute<R: Runtime>(
             .conversation_mgr
             .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
             .await;
-        transition_and_emit(&state.character_state, &app, CharacterState::Muted)
+        // Mute is a control/privacy flag, not a second character-state representation.
+        // Only active conversational/speech presentation needs to settle back to Idle;
+        // Hidden/Dismissed/Error remain presentation states in their own right.
+        if matches!(
+            *state.character_state.read(),
+            CharacterState::Appearing
+                | CharacterState::Listening
+                | CharacterState::Thinking
+                | CharacterState::Talking
+                | CharacterState::Interrupted
+        ) {
+            transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
+        }
+        Ok(())
     } else {
+        // Unmute is deliberately passive: it only re-enables behavior/capture eligibility.
         *state.is_muted.write() = false;
-        // Unmute is deliberately passive: it restores Idle but never starts capture.
-        transition_and_emit(&state.character_state, &app, CharacterState::Idle)
+        Ok(())
     }
 }
 
@@ -293,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn mute_ipc_tears_down_listening_and_talking_and_unmute_stays_passive() {
+    fn mute_ipc_uses_boolean_as_single_authority_and_unmute_stays_passive() {
         for initial_state in [CharacterState::Listening, CharacterState::Talking] {
             let fixture = interaction_test_app(initial_state);
             assert!(fixture.capture.lock().is_active());
@@ -307,7 +320,7 @@ mod tests {
             .expect("mute should succeed through IPC");
 
             assert!(*fixture.is_muted.read());
-            assert_eq!(*fixture.authoritative_state.read(), CharacterState::Muted);
+            assert_eq!(*fixture.authoritative_state.read(), CharacterState::Idle);
             assert!(!fixture.capture.lock().is_active());
             assert!(!fixture.playback.is_playing());
             assert_eq!(fixture.playback.queue_length(), 0);

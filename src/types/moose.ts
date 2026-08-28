@@ -6,10 +6,7 @@ export type CharacterState =
   | "thinking"
   | "talking"
   | "interrupted"
-  | "annoyed"
-  | "sleeping"
   | "dismissed"
-  | "muted"
   | "error";
 
 export type ConversationLifecycle =

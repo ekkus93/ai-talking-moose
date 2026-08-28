@@ -17,13 +17,6 @@ describe("MooseSprite Component", () => {
     expect(container.innerHTML).toContain("#d32f2f"); // Wide mouth color
   });
 
-  it("renders sleeping state with Zzz", () => {
-    const { container } = render(
-      <MooseSprite state="sleeping" mouth="closed" isBlinking={false} />,
-    );
-    expect(container.innerHTML).toContain("Zzz");
-  });
-
   it("uses a keyboard-operable control and crisp 32x32 render grid", () => {
     render(<MooseSprite state="idle" mouth="closed" isBlinking={false} />);
     const sprite = screen.getByRole("button", { name: "Talk to Moose" });
