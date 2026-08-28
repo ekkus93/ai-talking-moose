@@ -17,15 +17,6 @@ use tracing::{error, info, warn};
 
 const OVERLOAD_WARNING_INTERVAL: Duration = Duration::from_secs(5);
 
-pub struct SafeStream(pub cpal::Stream);
-
-// SAFETY: CPAL intentionally makes its cross-platform `Stream` wrapper !Send because
-// Android's AAudio stream API is not thread-safe. Talking Moose V1 supports macOS and
-// Linux desktop builds only; CPAL's CoreAudio/ALSA stream handles may be moved between
-// threads, and this wrapper is only accessed through exclusive ownership or a mutex.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-unsafe impl Send for SafeStream {}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioCaptureMode {
     Real,
@@ -256,7 +247,7 @@ pub struct AudioCapture {
     sample_rate_hz: Option<u32>,
     sample_format: Option<String>,
     channels: Option<u16>,
-    _stream: Option<SafeStream>,
+    _stream: Option<cpal::Stream>,
 }
 
 impl AudioCapture {
@@ -378,7 +369,7 @@ impl AudioCapture {
             .map_err(|error_value| configuration_error(error_value.to_string()))?;
         let sample_format = supported_config.sample_format();
         let stream_config: cpal::StreamConfig = supported_config.into();
-        let sample_rate = stream_config.sample_rate.0;
+        let sample_rate = stream_config.sample_rate;
         let channels = stream_config.channels;
         let processor_config = CaptureProcessorConfig {
             channels: usize::from(channels),
@@ -455,7 +446,7 @@ impl AudioCapture {
         self.sample_rate_hz = Some(sample_rate);
         self.sample_format = Some(format!("{sample_format:?}"));
         self.channels = Some(channels);
-        self._stream = Some(SafeStream(stream));
+        self._stream = Some(stream);
         info!(
             sample_rate,
             ?sample_format,
