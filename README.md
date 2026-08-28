@@ -132,6 +132,19 @@ For frontend-only development with Vite:
 npm run dev
 ```
 
+### Frontend-only Vite preview
+
+`npm run dev` is a **development-only UI preview**. When Tauri IPC is absent in a Vite development build, `src/lib/tauriBridge.ts` selects the explicitly named `browserPreviewBridge`. Its fabricated values are for UI development only and are not evidence that credentials, providers, persistence, model installation, audio, or conversation operations succeeded.
+
+Production selection is fail-closed: packaged/native code prefers Tauri IPC whenever it is present, and a non-development build with missing or malformed Tauri IPC throws instead of falling through to the preview adapter. Preview selection is controlled by Vite's compile-time `import.meta.env.DEV`; it cannot be enabled by a query parameter, `localStorage`, or another browser runtime flag.
+
+The preview surface is intentionally inventoried here so simulated effects do not become implicit production behavior:
+
+- **Read-only/presentation (18):** `resizeWindow`, `getSettings`, `getOnboardingStatus`, `getGoogleModels`, `getGoogleTtsVoices`, `getAsrModels`, `getAsrDiagnostics`, `onAsrModelProgress`, `listAudioDevices`, `getMicrophonePermission`, `getToolAudit`, `getAudioDiagnostics`, `getCharacterState`, `getConversationLifecycle`, `isMuted`, `getMemories`, `getTranscripts`, `listenEvent`, plus local presentation defaults associated with these reads.
+- **Simulated external state/effect (22):** `acknowledgeOnboarding`, `updateSettings`, `installAsrModel`, `deleteAsrModel`, `setGoogleApiKey`, `clearGoogleApiKey`, `hasGoogleApiKey`, `testAiConnection`, `requestMicrophoneAccess`, `testMicrophone`, `testAudioOutput`, `setCharacterState`, `triggerCannedReaction`, `auditionVoice`, `cancelStandaloneSpeech`, `startConversation`, `stopConversation`, `bargeIn`, `setMute`, `deleteMemory`, `forgetEverything`, and `sendTextMessage`.
+
+The second category may report simulated success **only** through the explicit development preview adapter. Production-like tests use Tauri IPC fixtures instead; dedicated preview tests are kept separate from production contract coverage.
+
 ---
 
 ## Build

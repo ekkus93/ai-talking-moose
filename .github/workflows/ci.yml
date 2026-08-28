@@ -46,6 +46,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Verify Tauri command registration contract
+        run: npm run check:tauri-command-contract
+
+      - name: Verify frontend IPC shape contract
+        run: npm run check:frontend-contract-shapes
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -57,6 +63,29 @@ jobs:
 
       - name: Run frontend tests
         run: npm test
+
+      - name: Smoke frontend-only Vite preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="$RUNNER_TEMP/vite-preview.log"
+          index_file="$RUNNER_TEMP/vite-preview-index.html"
+          npm run dev -- --host 127.0.0.1 --strictPort >"$log_file" 2>&1 &
+          vite_pid=$!
+          trap 'kill "$vite_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent --show-error http://127.0.0.1:1420/ -o "$index_file"; then
+              break
+            fi
+            if ! kill -0 "$vite_pid" 2>/dev/null; then
+              cat "$log_file"
+              exit 1
+            fi
+            sleep 0.25
+          done
+          test -s "$index_file"
+          grep -q 'id="root"' "$index_file"
+          curl --fail --silent --show-error http://127.0.0.1:1420/src/main.tsx >/dev/null
 
       - name: Build frontend
         run: npm run build
@@ -165,11 +194,26 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Verify generated backend contract is current
+        run: npm run check:generated-backend-contract
 
       - name: Generate release icon set
         run: python3 scripts/generate_app_icons.py

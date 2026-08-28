@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::capture_logs;
+use crate::test_support::{assert_log_capture_live, capture_logs};
 use base64::Engine as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex as StdMutex;
@@ -549,7 +549,7 @@ fn sensitive_asr_payloads_are_processed_without_entering_tracing() {
         });
     });
 
-    assert!(logs.contains("Local ASR inference worker started"));
+    assert_log_capture_live(&logs);
     assert!(!logs.contains(TRANSCRIPT));
     assert!(!logs.contains(std::str::from_utf8(RAW_PCM).unwrap()));
     assert!(!logs.contains(&pcm_base64));

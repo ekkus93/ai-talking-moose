@@ -1,6 +1,6 @@
 use super::*;
 use crate::audio::capture::AudioCapture;
-use crate::test_support::capture_logs;
+use crate::test_support::{assert_log_capture_live, capture_logs};
 use serde_json::json;
 use std::sync::Arc;
 use tauri::ipc::{CallbackFn, InvokeBody};
@@ -76,6 +76,7 @@ fn private_memory_consumed_by_conversation_prompt_never_enters_tracing() {
         prompt.contains(PRIVATE_MEMORY),
         "production memory path must consume the sentinel"
     );
+    assert_log_capture_live(&logs);
     assert!(!logs.contains(PRIVATE_MEMORY));
 }
 

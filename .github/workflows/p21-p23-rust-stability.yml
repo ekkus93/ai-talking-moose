@@ -1,0 +1,245 @@
+name: P21-P23 Rust Stability Acceptance
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p21-p23-rust-stability-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  rust-stability:
+    name: 20 consecutive canonical Rust gates
+    if: github.head_ref == 'ralph/v1r-211-218-integrity-20260828'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-p21-p23-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-p21-p23-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Run 20 consecutive canonical Rust gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          test "$head_sha" = "${{ github.event.pull_request.head.sha }}"
+          for run in $(seq 1 20); do
+            echo "::group::Canonical Rust gate ${run}/20"
+            npm run check:rust
+            echo "::endgroup::"
+          done
+          echo "20/20 consecutive npm run check:rust gates passed on ${head_sha}." >> "$GITHUB_STEP_SUMMARY"
+
+  canonical-gate:
+    name: Exact-head canonical check:all
+    if: github.head_ref == 'ralph/v1r-211-218-integrity-20260828'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-p21-p23-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-p21-p23-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Run canonical repository gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          test "$head_sha" = "${{ github.event.pull_request.head.sha }}"
+          npm run check:all
+          echo "npm run check:all passed on ${head_sha}." >> "$GITHUB_STEP_SUMMARY"
+
+  contract-mutations:
+    name: Rust contract negative/positive mutations
+    if: github.head_ref == 'ralph/v1r-211-218-integrity-20260828'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-p21-p23-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-p21-p23-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Prove Rust-side shared-field serialization drift fails shape gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("src-tauri/src/commands/settings.rs")
+          text = path.read_text()
+          old = "pub struct ConnectionTestResult {\n    pub success: bool,"
+          new = "pub struct ConnectionTestResult {\n    #[serde(rename = \"success_probe\")]\n    pub success: bool,"
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one ConnectionTestResult.success field")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          npm run generate:frontend-contract
+          set +e
+          npm run check:frontend-contract-shapes
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "shape gate unexpectedly accepted Rust-side serialized field drift" >&2
+            exit 1
+          fi
+          git checkout -- src-tauri/src/commands/settings.rs src/generated/backendContract.json
+          echo "Rust-side serialized field mutation was rejected as required." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prove stale Rust default fails until generated contract is refreshed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("src-tauri/src/app/state.rs")
+          text = path.read_text()
+          old = "            talkativeness: 0.5,"
+          new = "            talkativeness: 0.51,"
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one AppSettings default talkativeness field")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          set +e
+          npm run check:generated-backend-contract
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "generated-contract gate unexpectedly accepted a stale Rust default" >&2
+            exit 1
+          fi
+          if git diff --quiet -- src/generated/backendContract.json; then
+            echo "Rust default mutation did not regenerate a changed frontend contract" >&2
+            exit 1
+          fi
+          git add src/generated/backendContract.json
+          npm run check:generated-backend-contract
+          echo "Stale Rust default failed; regenerated contract passed on the same mutation." >> "$GITHUB_STEP_SUMMARY"

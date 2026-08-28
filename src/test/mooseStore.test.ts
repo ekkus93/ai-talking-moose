@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tauriBridge } from "../lib/tauriBridge";
-import { useMooseStore } from "../stores/mooseStore";
+import {
+  resetSettingsPersistenceForTests,
+  useMooseStore,
+} from "../stores/mooseStore";
 import { frontendDefaultSettings } from "../lib/backendContract";
 
 describe("mooseStore State Management", () => {
   beforeEach(() => {
+    resetSettingsPersistenceForTests();
     useMooseStore.setState({
       characterState: "idle",
       conversationLifecycle: "idle",
@@ -22,6 +26,7 @@ describe("mooseStore State Management", () => {
   });
 
   afterEach(() => {
+    resetSettingsPersistenceForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
     useMooseStore.getState().hideSpeechBubble();
@@ -97,6 +102,144 @@ describe("mooseStore State Management", () => {
       talkativeness: 0.7,
       unsolicited_comments: false,
     });
+  });
+
+  it("keeps a continuous edit made while a discrete write is in flight", async () => {
+    vi.useFakeTimers();
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({ settings: initial });
+
+    let resolveFirstWrite!: () => void;
+    const firstWrite = new Promise<void>((resolve) => {
+      resolveFirstWrite = resolve;
+    });
+    const persisted: (typeof initial)[] = [];
+    const persist = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockImplementation(async (settings) => {
+        persisted.push({ ...settings });
+        if (persisted.length === 1) await firstWrite;
+      });
+
+    const discrete = useMooseStore.getState().updateSettings({
+      ...initial,
+      unsolicited_comments: false,
+    });
+    await vi.waitFor(() => expect(persist).toHaveBeenCalledTimes(1));
+
+    useMooseStore.getState().updateSettingsContinuous({
+      ...useMooseStore.getState().settings!,
+      talkativeness: 0.8,
+    });
+    expect(useMooseStore.getState().settings).toMatchObject({
+      unsolicited_comments: false,
+      talkativeness: 0.8,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(persist).toHaveBeenCalledTimes(1);
+
+    resolveFirstWrite();
+    await discrete;
+    await vi.waitFor(() => expect(persist).toHaveBeenCalledTimes(2));
+
+    expect(persisted[1]).toMatchObject({
+      unsolicited_comments: false,
+      talkativeness: 0.8,
+    });
+    expect(useMooseStore.getState().settings).toEqual(persisted[1]);
+  });
+
+  it("folds a pending continuous edit into a later discrete write", async () => {
+    vi.useFakeTimers();
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({ settings: initial });
+    const persist = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockResolvedValue(undefined);
+
+    useMooseStore.getState().updateSettingsContinuous({
+      ...initial,
+      talkativeness: 0.73,
+    });
+    await useMooseStore.getState().updateSettings({
+      ...useMooseStore.getState().settings!,
+      unsolicited_comments: false,
+    });
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        talkativeness: 0.73,
+        unsolicited_comments: false,
+      }),
+    );
+    expect(useMooseStore.getState().settings).toEqual(persist.mock.calls[0][0]);
+  });
+
+  it("rebases later settings edits after a rejected write without logging backend detail", async () => {
+    vi.useFakeTimers();
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({ settings: initial });
+    const privateFailure =
+      "SECRET backend failure https://private.invalid/?key=AIzaSyDoNotLog";
+    const persist = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockRejectedValueOnce(new Error(privateFailure))
+      .mockResolvedValue(undefined);
+    const reload = vi
+      .spyOn(tauriBridge, "getSettings")
+      .mockResolvedValue(initial);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    useMooseStore.getState().updateSettingsContinuous({
+      ...initial,
+      talkativeness: 0.91,
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+
+    expect(useMooseStore.getState().settings?.talkativeness).toBe(
+      initial.talkativeness,
+    );
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleLog).not.toHaveBeenCalled();
+
+    await useMooseStore.getState().updateSettings({
+      ...useMooseStore.getState().settings!,
+      unsolicited_comments: false,
+    });
+
+    expect(persist).toHaveBeenCalledTimes(2);
+    expect(persist.mock.calls[1][0]).toMatchObject({
+      talkativeness: initial.talkativeness,
+      unsolicited_comments: false,
+    });
+    expect(JSON.stringify(persist.mock.calls[1][0])).not.toContain(
+      privateFailure,
+    );
+  });
+
+  it("reconciles a rejected discrete settings write to persisted state", async () => {
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({ settings: initial });
+    vi.spyOn(tauriBridge, "updateSettings").mockRejectedValueOnce(
+      new Error("private persistence detail"),
+    );
+    vi.spyOn(tauriBridge, "getSettings").mockResolvedValue(initial);
+
+    await useMooseStore.getState().updateSettings({
+      ...initial,
+      volume: 0.25,
+    });
+
+    expect(useMooseStore.getState().settings).toEqual(initial);
   });
 
   it("marks the API key present immediately after a successful secure save", async () => {
