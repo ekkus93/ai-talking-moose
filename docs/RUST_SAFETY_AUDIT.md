@@ -1,7 +1,7 @@
 # Rust Lint and Thread-Safety Audit
 
 **Scope:** `src-tauri/src/**` and `src-tauri/build.rs`  
-**Audit date:** 2026-08-22
+**Audit date:** 2026-08-28
 
 This audit records the V1R-004 lint-suppression and manual thread-safety review. It is intentionally narrower than the Moonshine FFI safety audit: V1R-004 is concerned with compiler/lint suppressions and manual `Send`/`Sync` assertions in ordinary application code.
 
@@ -13,27 +13,24 @@ The CI Rust gate remains authoritative for warning enforcement and runs Clippy w
 
 ## Manual thread-safety assertions
 
-Exactly two manual thread-safety assertions remain:
+No manual production `unsafe impl Send` or `unsafe impl Sync` assertion remains in the ordinary Rust application tree.
 
-- `src-tauri/src/audio/capture.rs` — `unsafe impl Send for SafeStream`
-- `src-tauri/src/audio/playback.rs` — `unsafe impl Send for SafeStream`
+V1R-004 previously identified two `SafeStream` wrappers around CPAL 0.15 `Stream`, one in capture and one in playback. They existed because CPAL 0.15 kept its cross-platform stream wrapper non-`Send`, requiring the application to assert desktop-only thread-safety manually.
 
-Both wrap CPAL 0.15 `Stream`. CPAL 0.15 keeps its cross-platform stream wrapper non-`Send` because some backends, notably Android AAudio, cannot safely move a stream between threads. Talking Moose V1 targets desktop macOS and Linux, and the wrappers are compiled only for those targets. The stream values are held behind application ownership/mutex boundaries rather than being concurrently accessed without synchronization.
-
-The assertions are therefore deliberate compatibility shims, not blanket assertions applied to arbitrary audio state.
+The project now uses CPAL 0.17.3. CPAL 0.17 makes `Stream` `Send + Sync` across its supported platform implementations, so capture and playback store `cpal::Stream` directly and both application-owned `unsafe impl Send` shims have been deleted.
 
 ## Ownership and shutdown coverage
 
-The retained stream wrappers are exercised through deterministic ownership/shutdown coverage:
+Removing the manual wrappers does not relax the application's ownership rules. Existing deterministic regressions continue to cover:
 
-- capture tests cover start/stop state and runtime stream-error state clearing;
-- playback tests cover `stop()` flushing queued samples and resetting negotiated output state;
-- conversation lifecycle tests cover idempotent shutdown, provider close/error cleanup, application shutdown, mute/dismiss teardown, and stale-generation protection while audio resources are owned by the lifecycle manager.
+- capture start/stop state and runtime stream-error state clearing;
+- playback `stop()` flushing queued samples and resetting negotiated output state;
+- conversation lifecycle idempotent shutdown, provider close/error cleanup, application shutdown, mute/dismiss teardown, and stale-generation protection while audio resources are owned by the lifecycle manager.
 
-These tests guard the ownership assumptions that make the current CPAL 0.15 wrappers acceptable on the supported desktop targets.
+Those tests now exercise CPAL's native stream thread-safety contract rather than an application-level unsafe assertion.
 
-## Removal plan
+## V1R-004 result
 
-The preferred end state is to remove both manual `unsafe impl Send` assertions rather than preserve them indefinitely. Newer CPAL releases provide stronger native `Send`/`Sync` behavior on desktop backends, so the removal path is a controlled CPAL upgrade followed by deletion of both `SafeStream` shims.
+The preferred removal plan from the 2026-08-22 audit is complete: CPAL was upgraded in a controlled migration with a resolver-generated lockfile, both `SafeStream` shims were removed, and the ordinary Rust/macOS CI matrix is the execution gate for the dependency/API change.
 
-That dependency upgrade must not be performed as a blind manifest edit. It requires a regenerated lockfile plus the full Rust format/Clippy/test/build matrix on macOS and Linux. Until that validated migration is performed, the two target-gated, documented shims remain explicit technical debt.
+V1R-004 therefore leaves no unexplained production lint suppression and no manual unsafe thread-safety assertion in the audited ordinary Rust application scope.
