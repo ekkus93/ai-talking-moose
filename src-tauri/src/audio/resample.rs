@@ -53,14 +53,16 @@ impl AudioResampler {
         output
     }
 
-    /// Convert f32 samples (-1.0 to 1.0) to 16-bit signed integer PCM samples
+    /// Convert one f32 sample (-1.0 to 1.0) to 16-bit signed integer PCM.
+    pub(crate) fn f32_to_i16_sample(sample: f32) -> i16 {
+        (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
+    }
+
+    /// Convert f32 samples (-1.0 to 1.0) to 16-bit signed integer PCM samples.
     pub fn f32_to_i16(samples: &[f32]) -> Vec<i16> {
         samples
             .iter()
-            .map(|&s| {
-                let clamped = s.clamp(-1.0, 1.0);
-                (clamped * 32767.0).round() as i16
-            })
+            .map(|&sample| Self::f32_to_i16_sample(sample))
             .collect()
     }
 
@@ -169,6 +171,23 @@ mod tests {
         assert!((converted[0] + 1.0).abs() < 0.0001);
         assert!(converted[1].abs() < 0.0001);
         assert!((converted[2] - 1.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn f32_to_i16_scalar_and_slice_conversion_share_pcm_boundaries() {
+        let input = [-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0];
+        let converted = AudioResampler::f32_to_i16(&input);
+        let scalar: Vec<i16> = input
+            .iter()
+            .map(|&sample| AudioResampler::f32_to_i16_sample(sample))
+            .collect();
+
+        assert_eq!(converted, scalar);
+        assert_eq!(converted[0], i16::MIN + 1);
+        assert_eq!(converted[1], i16::MIN + 1);
+        assert_eq!(converted[3], 0);
+        assert_eq!(converted[5], i16::MAX);
+        assert_eq!(converted[6], i16::MAX);
     }
 
     #[test]

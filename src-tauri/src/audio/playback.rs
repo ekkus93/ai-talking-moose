@@ -112,7 +112,7 @@ impl PlaybackCallbackState {
     fn render_i16(&self, data: &mut [i16]) {
         let mono = self.take_mono_frames(data.len() / self.channels);
         for (frame, sample) in data.chunks_mut(self.channels).zip(mono.iter().copied()) {
-            frame.fill(f32_to_i16_sample(sample));
+            frame.fill(AudioResampler::f32_to_i16_sample(sample));
         }
         self.publish_level_and_mouth(&mono);
     }
@@ -128,10 +128,6 @@ impl PlaybackCallbackState {
 
 fn require_default_output_device<T>(device: Option<T>) -> Result<T, AudioPlaybackError> {
     device.ok_or(AudioPlaybackError::NoOutputDevice)
-}
-
-fn f32_to_i16_sample(sample: f32) -> i16 {
-    (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
 }
 
 fn f32_to_u16_sample(sample: f32) -> u16 {
@@ -663,9 +659,9 @@ mod tests {
 
     #[test]
     fn sample_conversion_covers_practical_cpal_formats() {
-        assert_eq!(f32_to_i16_sample(-1.0), i16::MIN + 1);
-        assert_eq!(f32_to_i16_sample(0.0), 0);
-        assert_eq!(f32_to_i16_sample(1.0), i16::MAX);
+        assert_eq!(AudioResampler::f32_to_i16_sample(-1.0), i16::MIN + 1);
+        assert_eq!(AudioResampler::f32_to_i16_sample(0.0), 0);
+        assert_eq!(AudioResampler::f32_to_i16_sample(1.0), i16::MAX);
 
         assert_eq!(f32_to_u16_sample(-1.0), u16::MIN);
         assert!((i32::from(f32_to_u16_sample(0.0)) - 32_768).abs() <= 1);
