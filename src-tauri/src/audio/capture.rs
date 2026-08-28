@@ -354,8 +354,7 @@ impl AudioCapture {
                     AudioCaptureError::DeviceEnumeration(error_value.to_string())
                 })?
                 .find(|device| {
-                    device
-                        .name()
+                    device_display_name(device)
                         .map(|candidate| candidate == *requested_name)
                         .unwrap_or(false)
                 })
