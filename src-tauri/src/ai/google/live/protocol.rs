@@ -150,8 +150,9 @@ async fn open_and_setup(
                 return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
             }
             Err(error) => {
-                trace_live_transport_error(api_key, &error);
-                return Err(provider_error_for_connect(error));
+                let provider_error = provider_error_for_connect(error);
+                trace_live_provider_failure(&provider_error);
+                return Err(provider_error);
             }
         }
     }
