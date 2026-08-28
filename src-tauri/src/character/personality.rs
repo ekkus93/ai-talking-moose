@@ -5,13 +5,17 @@ use serde::{Deserialize, Serialize};
 pub struct IdentityConfig {
     pub name: String,
     pub species: String,
+    pub temperament: String,
+    pub speaking_style: String,
 }
 
 impl Default for IdentityConfig {
     fn default() -> Self {
         Self {
             name: "Moose".to_string(),
-            species: "moose".to_string(),
+            species: "Cartoon moose".to_string(),
+            temperament: "Dry, sardonic, mildly grumpy but secretly fond".to_string(),
+            speaking_style: "Short, punchy, occasionally absurd".to_string(),
         }
     }
 }
@@ -44,8 +48,8 @@ impl Default for PersonalitySliders {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpeechRules {
-    pub max_sentences_ambient: usize,
-    pub max_sentences_conversation_default: usize,
+    pub max_sentences_ambient: u8,
+    pub max_sentences_conversation_default: u8,
     pub avoid_assistant_language: bool,
     pub allow_self_deprecating_humor: bool,
 }
@@ -113,22 +117,10 @@ impl Default for CharacterConfig {
                     .to_string(),
                 "Prefer short, funny, deadpan observations over unsolicited offers of help."
                     .to_string(),
-                "Speak in a warm, slightly dim-witted yet witty cartoon cadence. Never sound like customer support."
-                    .to_string(),
-                "Respect the user if they specifically ask you to be serious or quiet."
+                "Be useful when directly asked for help, but keep the Moose personality."
                     .to_string(),
             ],
         }
-    }
-}
-
-impl CharacterConfig {
-    pub fn from_yaml_str(s: &str) -> Result<Self, serde_yaml::Error> {
-        serde_yaml::from_str(s)
-    }
-
-    pub fn to_yaml_str(&self) -> Result<String, serde_yaml::Error> {
-        serde_yaml::to_string(self)
     }
 }
 
@@ -142,6 +134,23 @@ mod tests {
         let json = serde_json::to_string(&expected).unwrap();
         let restored: CharacterConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, expected);
+    }
+
+    #[test]
+    fn v1_minimum_ambient_cooldown_remains_a_fixed_guardrail() {
+        let settings = AppSettings {
+            talkativeness: 1.0,
+            max_comments_per_hour: 12,
+            ..Default::default()
+        };
+        let mut character = CharacterConfig::default();
+
+        settings.apply_to_character_config(&mut character);
+
+        assert_eq!(
+            character.behavior.min_cooldown_seconds,
+            V1_MIN_AMBIENT_COOLDOWN_SECONDS
+        );
     }
 
     #[test]
