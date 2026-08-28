@@ -19,15 +19,21 @@ env:
 
 jobs:
   rust-stability:
-    name: 20 consecutive full Rust suites
+    name: 20 consecutive canonical Rust gates
     if: github.head_ref == 'ralph/v1r-211-218-integrity-20260828'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Check out exact PR head
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
 
       - name: Install Linux build dependencies
         run: |
@@ -43,6 +49,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -58,18 +66,78 @@ jobs:
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
 
-      - name: Run 20 consecutive full Rust suites
+      - name: Run 20 consecutive canonical Rust gates
         shell: bash
         run: |
           set -euo pipefail
           head_sha="$(git rev-parse HEAD)"
           test "$head_sha" = "${{ github.event.pull_request.head.sha }}"
           for run in $(seq 1 20); do
-            echo "::group::Full Rust suite ${run}/20"
-            cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
+            echo "::group::Canonical Rust gate ${run}/20"
+            npm run check:rust
             echo "::endgroup::"
           done
-          echo "20/20 consecutive full Rust suites passed on ${head_sha}." >> "$GITHUB_STEP_SUMMARY"
+          echo "20/20 consecutive npm run check:rust gates passed on ${head_sha}." >> "$GITHUB_STEP_SUMMARY"
+
+  canonical-gate:
+    name: Exact-head canonical check:all
+    if: github.head_ref == 'ralph/v1r-211-218-integrity-20260828'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-p21-p23-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-p21-p23-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Run canonical repository gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          test "$head_sha" = "${{ github.event.pull_request.head.sha }}"
+          npm run check:all
+          echo "npm run check:all passed on ${head_sha}." >> "$GITHUB_STEP_SUMMARY"
 
   contract-mutations:
     name: Rust contract negative/positive mutations
