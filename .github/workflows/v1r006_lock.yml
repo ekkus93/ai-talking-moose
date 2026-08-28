@@ -25,12 +25,15 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Resolve package lock normally
-        run: npm install --package-lock-only --ignore-scripts
+      - name: Resolve package lock normally from a clean tree
+        shell: bash
+        run: |
+          rm -rf node_modules
+          npm install --package-lock-only --ignore-scripts
 
       - name: Verify resolved dependency tree
         run: |
-          npm install --ignore-scripts
+          npm ci --ignore-scripts
           npm audit --omit=dev --audit-level=high
           npm audit --include=dev --audit-level=high
 
