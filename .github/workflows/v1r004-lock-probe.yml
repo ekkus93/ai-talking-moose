@@ -6,7 +6,7 @@ on:
       - master
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   resolve-lock:
@@ -21,6 +21,20 @@ jobs:
 
       - name: Resolve CPAL 0.17 lockfile
         run: cargo update --manifest-path src-tauri/Cargo.toml -p cpal --precise 0.17.3
+
+      - name: Commit resolved lockfile to probe branch
+        env:
+          PROBE_BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- src-tauri/Cargo.lock; then
+            echo "Cargo.lock is already resolved."
+            exit 0
+          fi
+          git config user.name "Phillip Chin"
+          git config user.email "ekkus93@gmail.com"
+          git add src-tauri/Cargo.lock
+          git commit -m "probe: resolve CPAL 0.17 lockfile"
+          git push origin "HEAD:${PROBE_BRANCH}"
 
       - name: Upload resolved lockfile
         uses: actions/upload-artifact@v4
