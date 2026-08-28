@@ -29,7 +29,7 @@ serde_json = "1.0"
 serde_yaml = "0.9"
 tokio = { version = "1.38", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
-cpal = "0.15"
+cpal = "0.17"
 rusqlite = { version = "0.31", features = ["bundled"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio-tungstenite = { version = "0.23", features = ["rustls-tls-native-roots", "connect"] }
