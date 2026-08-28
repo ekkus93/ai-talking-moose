@@ -185,6 +185,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
       - name: Prove Rust-side shared-field serialization drift fails shape gate
         shell: bash
         run: |
