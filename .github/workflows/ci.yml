@@ -171,6 +171,18 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
