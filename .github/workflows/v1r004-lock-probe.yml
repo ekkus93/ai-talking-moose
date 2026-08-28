@@ -20,9 +20,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Resolve CPAL 0.17 lockfile
-        run: |
-          cargo update --manifest-path src-tauri/Cargo.toml -p cpal --precise 0.17.3
-          echo 'V1R004_LOCK_BASE64_BEGIN'
-          base64 -w0 src-tauri/Cargo.lock
-          echo
-          echo 'V1R004_LOCK_BASE64_END'
+        run: cargo update --manifest-path src-tauri/Cargo.toml -p cpal --precise 0.17.3
+
+      - name: Upload resolved lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1r004-cargo-lock
+          path: src-tauri/Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
