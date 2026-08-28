@@ -1,3 +1,4 @@
+use crate::audio::devices::device_display_name;
 use crate::audio::levels::LevelMeter;
 #[cfg(target_os = "macos")]
 use crate::audio::permissions::microphone_permission_state;
@@ -363,7 +364,7 @@ impl AudioCapture {
             require_default_input_device(host.default_input_device())?
         };
 
-        let selected_device = device.name().ok().or(device_name);
+        let selected_device = device_display_name(&device).or(device_name);
         let supported_config = device
             .default_input_config()
             .map_err(|error_value| configuration_error(error_value.to_string()))?;

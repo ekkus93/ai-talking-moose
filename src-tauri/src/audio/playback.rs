@@ -1,3 +1,4 @@
+use crate::audio::devices::device_display_name;
 use crate::audio::levels::LevelMeter;
 use crate::audio::resample::AudioResampler;
 use crate::character::state::MouthShape;
@@ -277,7 +278,7 @@ impl AudioPlayback {
             require_default_output_device(host.default_output_device())?
         };
 
-        let selected_device = device.name().ok().or(device_name);
+        let selected_device = device_display_name(&device).or(device_name);
         let supported_config = device.default_output_config().map_err(|error_value| {
             AudioPlaybackError::OutputConfiguration(error_value.to_string())
         })?;

@@ -10,19 +10,26 @@ pub struct AudioDeviceInfo {
 
 pub struct AudioDeviceManager;
 
+pub(crate) fn device_display_name(device: &cpal::Device) -> Option<String> {
+    device
+        .description()
+        .ok()
+        .map(|description| description.name().to_owned())
+}
+
 impl AudioDeviceManager {
     pub fn list_input_devices() -> Result<Vec<AudioDeviceInfo>, String> {
         let host = cpal::default_host();
         let default_device_name = host
             .default_input_device()
-            .and_then(|device| device.name().ok());
+            .and_then(|device| device_display_name(&device));
         let devices = host.input_devices().map_err(|error_value| {
             format!("failed to enumerate audio input devices: {error_value}")
         })?;
 
         let mut list = Vec::new();
         for device in devices {
-            if let Ok(name) = device.name() {
+            if let Some(name) = device_display_name(&device) {
                 let is_default = default_device_name.as_deref() == Some(&name);
                 list.push(AudioDeviceInfo {
                     id: name.clone(),
@@ -38,14 +45,14 @@ impl AudioDeviceManager {
         let host = cpal::default_host();
         let default_device_name = host
             .default_output_device()
-            .and_then(|device| device.name().ok());
+            .and_then(|device| device_display_name(&device));
         let devices = host.output_devices().map_err(|error_value| {
             format!("failed to enumerate audio output devices: {error_value}")
         })?;
 
         let mut list = Vec::new();
         for device in devices {
-            if let Ok(name) = device.name() {
+            if let Some(name) = device_display_name(&device) {
                 let is_default = default_device_name.as_deref() == Some(&name);
                 list.push(AudioDeviceInfo {
                     id: name.clone(),
