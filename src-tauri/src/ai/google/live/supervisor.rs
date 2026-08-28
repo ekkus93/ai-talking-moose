@@ -1,14 +1,26 @@
-async fn supervise_socket(
-    mut socket: GeminiSocket,
+struct SupervisorContext {
     api_key: String,
     config: LiveSessionConfig,
-    mut receiver: mpsc::Receiver<OutboundEnvelope>,
-    mut close_receiver: mpsc::Receiver<CloseRequest>,
     sender: mpsc::Sender<LiveServerEvent>,
     is_active: Arc<AtomicBool>,
     cancellation: CancellationToken,
     diagnostics: Arc<LiveOutboundDiagnosticsStore>,
+}
+
+async fn supervise_socket(
+    mut socket: GeminiSocket,
+    mut receiver: mpsc::Receiver<OutboundEnvelope>,
+    mut close_receiver: mpsc::Receiver<CloseRequest>,
+    context: SupervisorContext,
 ) {
+    let SupervisorContext {
+        api_key,
+        config,
+        sender,
+        is_active,
+        cancellation,
+        diagnostics,
+    } = context;
     let mut input_transcript = String::new();
     let mut output_transcript = String::new();
     let mut resume_handle = None;

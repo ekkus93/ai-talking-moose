@@ -125,14 +125,16 @@ impl RealtimeConversationProvider for GoogleLiveProvider {
         tauri::async_runtime::spawn(async move {
             supervise_socket(
                 socket,
-                supervisor_key,
-                supervisor_config,
                 out_rx,
                 close_rx,
-                supervisor_sender,
-                supervisor_active,
-                supervisor_cancellation,
-                supervisor_diagnostics,
+                SupervisorContext {
+                    api_key: supervisor_key,
+                    config: supervisor_config,
+                    sender: supervisor_sender,
+                    is_active: supervisor_active,
+                    cancellation: supervisor_cancellation,
+                    diagnostics: supervisor_diagnostics,
+                },
             )
             .await;
         });
