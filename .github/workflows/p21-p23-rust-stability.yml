@@ -1,0 +1,68 @@
+name: P21-P23 Rust Stability Acceptance
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p21-p23-rust-stability-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  rust-stability:
+    name: 20 consecutive full Rust suites
+    if: github.head_ref == 'ralph/v1r-211-218-integrity-20260828'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-p21-p23-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-p21-p23-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Run 20 consecutive full Rust suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          for run in $(seq 1 20); do
+            echo "::group::Full Rust suite ${run}/20"
+            cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
+            echo "::endgroup::"
+          done
+          echo "20/20 consecutive full Rust suites passed on ${GITHUB_SHA}." >> "$GITHUB_STEP_SUMMARY"
