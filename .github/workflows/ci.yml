@@ -40,6 +40,9 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Reject tracked generated frontend trees
+        run: npm run check:generated-trees
+
       - name: Install frontend dependencies
         run: npm ci
 

@@ -31,16 +31,9 @@ src-tauri/icons/*.png
 src-tauri/icons/*.icns
 src-tauri/icons/*.ico
 
-# Vite/Vitest caches under the (otherwise tracked) node_modules tree.
-# These rewrite on every dev server start and test run, so tracking them
-# leaves the working tree permanently dirty and blocks `git pull --rebase`.
-node_modules/.vite/
-
-# Platform-specific optional native binaries resolved at install time.
-# The glibc variants are tracked; these musl duplicates are ~20MB of
-# native blobs that only appear on musl hosts and are not shipped.
-node_modules/@rollup/rollup-linux-x64-musl/
-node_modules/@tauri-apps/cli-linux-x64-musl/
+# Generated frontend dependency and build trees.
+node_modules/
+dist/
 
 run_opencode*.sh*
 run_claude*.sh*
