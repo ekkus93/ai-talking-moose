@@ -17,7 +17,7 @@ Original P12 local validation covered `git diff --check`, workflow YAML parsing,
 - [x] Playback queue is hard bounded by `MAX_QUEUED_PLAYBACK_SECONDS`; overflow drops the newest tail and records dropped-sample diagnostics (`playback_queue_has_hard_limit_and_drops_newest_tail`).
 - [x] Microphone capture uses bounded channels and drops newest chunks on overload.
 - [x] Moonshine ASR ingress is hard bounded (`LOCAL_ASR_QUEUE_CAPACITY_CHUNKS`; `ingress_is_hard_bounded_and_drops_newest`, `small_pipeline_uses_same_bounded_worker_and_reports_small_architecture`).
-- [x] Gemini Live reconnect policy has hard retry/backoff bounds and explicit-close cancellation (`reconnect_backoff_is_bounded`, `retry_policy_has_hard_bounds_and_explicit_close_cancels_reconnect`).
+- [x] Gemini Live reconnect policy has hard retry/backoff bounds and explicit-close cancellation (`reconnect_backoff_is_bounded`, `retry_policy_has_hard_bounds`, `explicit_close_cancels_in_flight_reconnect_attempt`).
 - [x] Tool input, output, timeout, and audit history have hard caps in `ToolRouter`.
 - [x] Transcript text/query/retention are bounded in SQLite. Desktop observations have no production persistence writer in V1, so persisted observation retention is effectively zero.
 - [x] Prompt sections and final system/ambient prompts already have hard character budgets. P12 additionally caps queued ambient summaries at 2,048 characters before scheduler admission and rejects direct text turns above 16,384 characters.
@@ -38,7 +38,7 @@ Original P12 local validation covered `git diff --check`, workflow YAML parsing,
 
 ## V1R-122 — Prompt/data boundary tests
 
-- [x] Memory Off yields no memory facts for model prompt context; re-enabling restores them (`ambient_prompt_memories_obey_memory_setting_and_restore_on_reenable`).
+- [x] Memory Off yields no memory facts for model prompt context; re-enabling restores them (`production_ambient_prompt_obeys_memory_privacy_gate`).
 - [x] Active-app observation Off fails closed before ambient model work (`observer_categories_fail_closed_when_privacy_settings_are_off`).
 - [x] Transcript retention Off writes no records (`transcript_retention_off_writes_no_records`).
 - [x] Moonshine modes never call the provider raw-audio upload API (`moonshine_mode_never_calls_provider_audio_upload_api`).

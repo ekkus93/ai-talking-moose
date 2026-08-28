@@ -11,7 +11,7 @@ The following legacy unchecked rows are now covered by implementation/tests intr
 - **V1R-025 representative format/channel regression:** resampler tests cover stereo downmix, signed 16-bit round-trip conversion, unsigned 16-bit endpoint/midpoint conversion, while production capture routes `f32`, `i16`, and `u16` through the same mono/resample processor.
 - **V1R-031 command-level invalid transition:** `set_character_state_ipc_rejects_invalid_transition_without_mutating_state` exercises the Tauri IPC command boundary and verifies authoritative state is unchanged.
 - **V1R-032 setup readiness:** P4 V1R-041 explicitly parses setup acknowledgement and prevents Listening readiness before it; structured provider error categories are implemented under P4.
-- **V1R-034 Listening/Talking mute integration:** `mute_ipc_tears_down_listening_and_talking_and_unmute_stays_passive` exercises both states through Tauri IPC and verifies mic/playback teardown plus passive unmute.
+- **V1R-034 Listening/Talking mute integration:** `mute_ipc_uses_boolean_as_single_authority_and_unmute_stays_passive` exercises both states through Tauri IPC and verifies mic/playback teardown plus passive unmute.
 - **V1R-035 final hide/cooldown + Listening/Talking integration:** P7 closes appearance/cooldown semantics and `dismiss_ipc_tears_down_listening_and_talking_hides_and_records_cooldown` exercises both states through Tauri IPC.
 - **V1R-038 ambient shutdown:** P7 application shutdown cancels/awaits the central ambient scheduler. Later window-position persistence work serializes the final shutdown write so an older debounce cannot overwrite it.
 
