@@ -36,6 +36,22 @@ impl StandaloneSpeechController {
         self.current.lock().cancel();
         playback.flush();
     }
+
+    /// Run a synchronous completion action only while `token` still owns the
+    /// authoritative standalone utterance slot. Holding the slot lock across the
+    /// action makes the ownership check atomic with respect to `begin`/`cancel`,
+    /// preventing stale completion work from clearing a newer utterance's UI state.
+    pub fn with_current<T>(
+        &self,
+        token: &CancellationToken,
+        action: impl FnOnce() -> T,
+    ) -> Option<T> {
+        let current = self.current.lock();
+        if current.is_cancelled() || &*current != token {
+            return None;
+        }
+        Some(action())
+    }
 }
 
 impl Default for StandaloneSpeechController {

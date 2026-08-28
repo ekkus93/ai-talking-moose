@@ -17,6 +17,7 @@ pub(crate) const NO_PLAYABLE_STANDALONE_AUDIO: &str =
 pub(crate) struct StandaloneSpeechPlayback {
     duration: Duration,
     cancellation: CancellationToken,
+    controller: StandaloneSpeechController,
 }
 
 impl StandaloneSpeechPlayback {
@@ -29,6 +30,10 @@ impl StandaloneSpeechPlayback {
 
     pub(crate) async fn completed_without_cancellation(&self) -> bool {
         self.wait_without_cancellation(self.duration).await
+    }
+
+    pub(crate) fn with_current<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
+        self.controller.with_current(&self.cancellation, action)
     }
 }
 
@@ -89,6 +94,7 @@ async fn synthesize_standalone(
     Ok(StandaloneSpeechPlayback {
         duration,
         cancellation,
+        controller: controller.clone(),
     })
 }
 
@@ -132,10 +138,12 @@ pub(crate) fn schedule_standalone_completion<R: Runtime>(
         if !playback.completed_without_cancellation().await {
             return;
         }
-        clear_speech_bubble(&app);
-        if *character_state.read() == CharacterState::Talking {
-            let _ = transition_and_emit(character_state.as_ref(), &app, CharacterState::Idle);
-        }
+        let _ = playback.with_current(|| {
+            clear_speech_bubble(&app);
+            if *character_state.read() == CharacterState::Talking {
+                let _ = transition_and_emit(character_state.as_ref(), &app, CharacterState::Idle);
+            }
+        });
     });
 }
 
@@ -173,7 +181,7 @@ mod tests {
                 pitch: Some(0.0),
             };
 
-            let error = synthesize_standalone(
+            let error = match synthesize_standalone(
                 &EmptySpeechSynthesizer,
                 &playback,
                 &controller,
@@ -181,7 +189,10 @@ mod tests {
                 None,
             )
             .await
-            .expect_err("every standalone speech path must reject zero playable audio");
+            {
+                Ok(_) => panic!("every standalone speech path must reject zero playable audio"),
+                Err(error) => error,
+            };
 
             assert_eq!(error, NO_PLAYABLE_STANDALONE_AUDIO, "{path}");
             assert_eq!(playback.queue_length(), 0, "{path}");
@@ -191,14 +202,19 @@ mod tests {
 
     #[tokio::test]
     async fn cancelled_completion_never_claims_the_newer_utterance_finished() {
-        let cancellation = CancellationToken::new();
+        let controller = StandaloneSpeechController::new();
+        let audio_playback = AudioPlayback::new_mock();
+        let current = controller.begin(&audio_playback);
         let playback = StandaloneSpeechPlayback {
             duration: Duration::from_millis(25),
-            cancellation: cancellation.clone(),
+            cancellation: current,
+            controller: controller.clone(),
         };
-        cancellation.cancel();
+
+        let _newer_utterance = controller.begin(&audio_playback);
 
         assert!(!playback.completed_without_cancellation().await);
+        assert!(playback.with_current(|| ()).is_none());
     }
 
     #[test]

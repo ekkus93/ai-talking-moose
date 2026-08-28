@@ -87,10 +87,16 @@ async fn complete_ambient_appearance<R: Runtime>(
     if !playback.completed_without_cancellation().await {
         return Ok(());
     }
-    if *state.character_state.read() == CharacterState::Talking {
-        transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
-    }
-    clear_speech_bubble(app);
+    let Some(result) = playback.with_current(|| {
+        if *state.character_state.read() == CharacterState::Talking {
+            transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
+        }
+        clear_speech_bubble(app);
+        Ok::<(), String>(())
+    }) else {
+        return Ok(());
+    };
+    result?;
 
     if appeared_for_ambient && *state.character_state.read() == CharacterState::Idle {
         if !playback
@@ -99,8 +105,13 @@ async fn complete_ambient_appearance<R: Runtime>(
         {
             return Ok(());
         }
-        if *state.character_state.read() == CharacterState::Idle {
-            transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;
+        if let Some(result) = playback.with_current(|| {
+            if *state.character_state.read() == CharacterState::Idle {
+                transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;
+            }
+            Ok::<(), String>(())
+        }) {
+            result?;
         }
     }
     Ok(())
