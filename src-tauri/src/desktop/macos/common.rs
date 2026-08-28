@@ -1,9 +1,11 @@
 use crate::desktop::observation::{
-    ActiveApplicationObservation, BatteryObservation, IdleObservation, ObserverErrorCode,
-    ObserverResult, PowerEvent,
+    ActiveApplicationObservation, BatteryObservation, IdleObservation, ObserverResult, PowerEvent,
 };
+#[cfg(any(target_os = "macos", test))]
+use crate::desktop::observation::ObserverErrorCode;
 use tokio::sync::mpsc::Sender;
 
+#[cfg(any(target_os = "macos", test))]
 fn normalize_idle_duration(seconds: f64) -> Result<IdleObservation, ObserverErrorCode> {
     if !seconds.is_finite() || seconds < 0.0 {
         return Err(ObserverErrorCode::InvalidValue);
@@ -13,6 +15,7 @@ fn normalize_idle_duration(seconds: f64) -> Result<IdleObservation, ObserverErro
     })
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn normalize_battery_state(
     current: i32,
     maximum: i32,
@@ -96,4 +99,3 @@ impl Drop for SystemPowerObserver {
         self.stop_inner();
     }
 }
-
