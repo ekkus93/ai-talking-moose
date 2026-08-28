@@ -10,7 +10,7 @@
   - `audio/`: `cpal` mic capture/playback, 16kHz mono resampling (`audio/resample.rs`), RMS level tracking (`audio/levels.rs`), and synthesized-audio queueing/cancellation (`audio/speech.rs`).
   - `conversation/`: Generation-aware conversation/session lifecycle coordinating provider sessions, microphone capture, local ASR, playback, barge-in, and shutdown.
   - `character/`: State machine (`character/state.rs`), personality sliders (`character/personality.rs`), prompt builder (`character/prompt.rs`), cooldown & annoyance budget (`character/cooldown.rs`).
-  - `desktop/`: Desktop observation/event runtime, including platform-specific macOS observers and the non-macOS stub contract.
+  - `desktop/`: Desktop observation/event runtime, including platform-specific macOS observers and the fail-closed non-macOS fallback branch in the same module.
   - `persistence/` & `memory/`: SQLite-backed settings, memories, transcripts, and related application metadata (`persistence/sqlite.rs`).
   - `tools/`: Built-in tools (`tools/builtin/`) dispatched through the bounded/privacy-gated `tools/router.rs` with metadata-only audit diagnostics.
 
