@@ -1,6 +1,6 @@
 # P13 macOS release reconciliation — 2026-08-23
 
-**Status:** source/workflow implementation staged; signed/notarized artifacts remain an execution gate, while supported-Mac physical acceptance is explicitly deferred until suitable Mac hardware is available.
+**Status:** deterministic source/workflow implementation accepted; signed/notarized release execution remains an execution gate, while supported-Mac physical acceptance is explicitly deferred until suitable Mac hardware is available.
 
 ## V1R-130 — macOS metadata
 
@@ -104,7 +104,7 @@ These rows are not failures, but they are also not converted to PASS by CI. They
 
 P13 has two independent states:
 
-1. **Source/release engineering:** pending acceptance of the current-master CI candidate produced by this audit. Once that CI is green, the deterministic P13 source/workflow portion is complete.
+1. **Source/release engineering:** accepted complete. The license-collector correction passed CI run `32754273420`, and later full repository runs, including `33199001645` and `33200290753`, continued to pass release metadata/license collection and both macOS bundle architectures on the descendant source tree.
 2. **Release execution / physical acceptance:** still open. A real semantic tag must successfully produce Developer ID-signed/notarized arm64 and x86_64 artifacts, the generated notice payload still requires final release review, and supported-Mac physical evidence remains deferred.
 
 The draft GitHub Release must remain unpublished until the project owner explicitly decides how to handle the deferred physical evidence and the signed/notarized tag execution has succeeded.

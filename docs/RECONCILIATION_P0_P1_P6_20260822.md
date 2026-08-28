@@ -22,15 +22,13 @@ Accepted complete:
 - Inventory every Rust `allow(...)` / lint suppression.
 - Remove suppressions that mask fixable warnings.
 - Document rationale for necessary suppressions.
-- Audit the CPAL `unsafe impl Send` wrappers.
-- Add ownership/shutdown regression tests for retained unsafe wrappers.
+- Audit the former CPAL `unsafe impl Send` wrappers.
+- CPAL 0.17.3 now supplies the stream thread-safety contract directly; the application-owned `SafeStream` wrappers and both manual `unsafe impl Send` assertions were removed.
+- Existing capture/playback lifecycle regressions cover ownership and shutdown after the wrapper removal.
+- V1R-006 development-tool advisory cleanup is complete.
+- Gate P0 is complete.
 
-Still open:
-
-- Prefer architecture that removes manual unsafe thread-safety assertions where practical.
-- Acceptance: no unexplained production lint suppression or unsafe thread-safety assertion remains.
-- V1R-006 development-tool advisory cleanup.
-- Gate P0.
+Current evidence: V1R-004 publication `16e68280faddb3ffe5b5a689379d7cf9f1cc08a4` / CI `33192344369`, plus V1R-006 publication `2d61e7b5eade6ab27d2013b669a6ff2874da346c` / CI `33195721746`.
 
 ## P1 — Security and privacy repair
 
@@ -110,12 +108,12 @@ Accepted complete:
 - Centralized TTS model/voice catalog and validation.
 - Typed provider errors.
 - Bounded request timeout.
+- Explicit cancellation is implemented and acceptance-covered: production `invoke_standalone_speech` routes through `synthesize_and_queue_cancellable`; `StandaloneSpeechController::cancel` cancels in-flight synthesis and flushes already-queued playback; Start, Barge-in, Mute, Dismiss, and the explicit cancel command use that same controller.
+- `explicit_cancellation_aborts_in_flight_synthesis_and_flushes_playback` suspends the production cancellable synthesis helper on a never-completing synthesizer, cancels it, and proves the stable cancellation error plus zero queued/playing audio. `ambient_barge_in_flushes_standalone_audio_and_returns_to_idle` separately exercises the IPC interruption boundary with non-empty playback.
 - Rate/pitch settings mapped into Gemini performance direction.
 - No subprocess/browser/synthetic production fallback on provider failure.
 
-Still open:
-
-- Explicit cancellation acceptance in addition to the implemented timeout.
+Source/test acceptance evidence: the cancellation tests are part of the Rust suite exercised by later full repository CI, including run `33200290753`, which passed after the final V1R-014 change. This closes the stale source/test cancellation gap in this overlay. It does **not** replace the separate supported-Mac human cancellation checks in `MACOS_P6_VOICE_ACCEPTANCE.md`; those physical checks remain deferred with the voice listening pass.
 
 ### V1R-066 — Optional voice post-processing decision
 
@@ -125,9 +123,11 @@ Accepted complete:
 - The no-DSP rationale and measured-condition reconsideration rule are documented.
 - The conditional `if yes` DSP implementation criterion is not applicable to the V1 decision.
 
-## Next implementation checkpoint
+## Current residual P6 status — 2026-08-28
 
-P7 ambient behavior is already accepted complete under `RECONCILIATION_P7_20260822.md`; the 2026-08-23 audit additionally repairs ambient-only barge-in cancellation after the P6 standalone-TTS changes. With P6 real listening/cancellation acceptance intentionally left open for later physical testing, proceed next with P8 real desktop observation.
+V1R-065 is source/test complete, including explicit cancellation behavior. P7 and the later source-level phases have already superseded the old "proceed next with P8" instruction. P6 still has a **supported-Mac physical acceptance tranche**: V1R-064 intentional human listening comparison across the supported Google voices plus the documented in-flight/playback cancellation listening checks. Those are human/device evidence, not remaining TTS implementation defects.
+
+The repository-wide residual backlog is classified in `RECONCILIATION_REMAINING_NON_MAC_20260828.md`.
 
 ## Current next P1 acceptance checkpoint — 2026-08-28
 
