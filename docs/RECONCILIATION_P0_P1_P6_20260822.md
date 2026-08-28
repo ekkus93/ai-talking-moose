@@ -4,6 +4,15 @@ This file records the accepted reconciliation against `docs/TODO(20260818-163801
 
 The timestamped TODO remains the comprehensive task inventory. This overlay is authoritative for the rows below until these status changes are mechanically folded back into that monolithic tracker. Manual/device criteria remain open unless explicitly listed as verified.
 
+## 2026-08-28 P1 evidence refresh
+
+The P1 accepted-complete claims below are now backed by the final remediation changes that closed the two source-level gaps discovered during the later P1 re-audit:
+
+- **V1R-013 provider-error sanitization:** PR #9 head `3cc5ad4d7450e373b1d5c7483a889946a5e17f5b` converted remaining Google Text/TTS/Live failures to structured, bounded provider categories, prevented raw transport/parser details from crossing normal logging and IPC boundaries, and added private-sentinel logging regressions. Full repository CI run `33199001645` passed frontend quality, dependency audits, Rustfmt, Clippy, the full Rust suite, backend failure/stress matrices, release metadata/license collection, and both macOS bundle architectures. PR #9 merged to `master` as `6a631f0d05dc42ada94569c7a09dd9fccb541fb2`.
+- **V1R-014 diagnostic microphone teardown:** PR #10 head `0d523a6bebaf504a58126f689ce5fde4e03e3239` added a production `DiagnosticCaptureLease` RAII guard so cancellation, abort, unwind, or future early exit cannot bypass `AudioCapture::stop()` after Settings diagnostic capture starts. Its async regression aborts the diagnostic owner while suspended and proves capture becomes inactive. Full repository CI run `33200290753` passed. PR #10 merged to `master` as `2194a5ee072f9fc835c3365388bc16bfa2e41437`.
+
+Accordingly, the P1 privacy-logging regression and fresh-profile/privacy acceptance sub-gates remain accepted complete. The only P1 gate still open is the **real macOS secure-store restart acceptance** and its associated real-process/real-database checks; automated CI is not treated as a substitute for that evidence.
+
 ## P0 — Repository quality baseline
 
 ### V1R-004 — Audit lint suppressions and unsafe assertions
@@ -119,3 +128,7 @@ Accepted complete:
 ## Next implementation checkpoint
 
 P7 ambient behavior is already accepted complete under `RECONCILIATION_P7_20260822.md`; the 2026-08-23 audit additionally repairs ambient-only barge-in cancellation after the P6 standalone-TTS changes. With P6 real listening/cancellation acceptance intentionally left open for later physical testing, proceed next with P8 real desktop observation.
+
+## Current next P1 acceptance checkpoint — 2026-08-28
+
+P1 source-level remediation is complete. The next P1 task is **V1R-010 real macOS secure-store restart acceptance**: store/replace a Google API key through the production UI/backend, terminate the app process, relaunch it, prove the credential is still available for authentication without being returned to the frontend, and inspect the real SQLite/settings state to prove the plaintext key is absent. This must be recorded from a real supported Mac/process restart; ordinary CI is intentionally insufficient.
