@@ -10,14 +10,16 @@ use crate::app::settings_policy::{
     validate_app_settings, validate_selected_device,
 };
 use crate::app::state::{AppSettings, AppState, OnboardingStatus};
-use crate::audio::capture::AudioCaptureDiagnostics;
+use crate::audio::capture::{AudioCapture, AudioCaptureDiagnostics};
 use crate::audio::devices::{AudioDeviceInfo, AudioDeviceManager};
 use crate::audio::permissions::{
     microphone_permission_state, request_microphone_permission, MicrophonePermissionState,
 };
 use crate::audio::playback::AudioPlaybackDiagnostics;
 use crate::character::state::{transition_character_state, CharacterState};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Runtime, State};
 use tokio::sync::mpsc;
@@ -42,6 +44,32 @@ pub struct AudioDiagnostics {
 pub struct MicrophoneTestResult {
     pub peak_level: f32,
     pub diagnostics: AudioDiagnostics,
+}
+
+struct DiagnosticCaptureLease {
+    capture: Arc<Mutex<AudioCapture>>,
+}
+
+impl DiagnosticCaptureLease {
+    fn start(
+        capture: Arc<Mutex<AudioCapture>>,
+        device_name: Option<String>,
+        target_sample_rate: u32,
+        pcm_sender: mpsc::Sender<Vec<u8>>,
+        level_sender: Option<mpsc::Sender<f32>>,
+    ) -> Result<Self, String> {
+        capture
+            .lock()
+            .start(device_name, target_sample_rate, pcm_sender, level_sender)
+            .map_err(|error| error.to_string())?;
+        Ok(Self { capture })
+    }
+}
+
+impl Drop for DiagnosticCaptureLease {
+    fn drop(&mut self) {
+        self.capture.lock().stop();
+    }
 }
 
 fn active_conversation_connection_test_result(is_active: bool) -> Option<ConnectionTestResult> {
@@ -286,12 +314,13 @@ pub async fn test_microphone(state: State<'_, AppState>) -> Result<MicrophoneTes
     let input_device = state.settings.read().input_device.clone();
     let (pcm_tx, _pcm_rx) = mpsc::channel(16);
     let (level_tx, mut level_rx) = mpsc::channel(16);
-    {
-        let mut capture = state.audio_capture.lock();
-        capture
-            .start(input_device, 16_000, pcm_tx, Some(level_tx))
-            .map_err(|error| error.to_string())?;
-    }
+    let capture_lease = DiagnosticCaptureLease::start(
+        state.audio_capture.clone(),
+        input_device,
+        16_000,
+        pcm_tx,
+        Some(level_tx),
+    )?;
 
     let deadline = Instant::now() + Duration::from_millis(750);
     let mut peak_level = 0.0_f32;
@@ -303,7 +332,7 @@ pub async fn test_microphone(state: State<'_, AppState>) -> Result<MicrophoneTes
         }
     }
 
-    state.audio_capture.lock().stop();
+    drop(capture_lease);
     Ok(MicrophoneTestResult {
         peak_level,
         diagnostics: collect_audio_diagnostics(&state),
@@ -378,6 +407,36 @@ mod tests {
         assert!(!blocked.success);
         assert!(blocked.message.contains("Stop the active conversation"));
         assert!(active_conversation_connection_test_result(false).is_none());
+    }
+
+    #[tokio::test]
+    async fn cancelling_microphone_diagnostic_stops_capture() {
+        let capture = Arc::new(Mutex::new(AudioCapture::new_mock()));
+        let task_capture = capture.clone();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+
+        let diagnostic = tokio::spawn(async move {
+            let (pcm_tx, _pcm_rx) = mpsc::channel(1);
+            let lease =
+                DiagnosticCaptureLease::start(task_capture, None, 16_000, pcm_tx, None).unwrap();
+            started_tx
+                .send(())
+                .expect("diagnostic owner should report capture startup");
+            std::future::pending::<()>().await;
+            drop(lease);
+        });
+
+        started_rx
+            .await
+            .expect("diagnostic owner should reach its cancellable wait");
+        assert!(capture.lock().is_active());
+
+        diagnostic.abort();
+        let join_error = diagnostic
+            .await
+            .expect_err("aborted diagnostic task should be cancelled");
+        assert!(join_error.is_cancelled());
+        assert!(!capture.lock().is_active());
     }
 
     #[test]
