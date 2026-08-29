@@ -2,329 +2,344 @@
 
 **Date:** 2026-08-28
 **Active plan:** `docs/TODO(20260828-125605).md`
-**Planning baseline:** `b9aa3ccaf660bc266aaa4fbe03357991740e266c`
-**Status:** **Implementation substantially complete; final verification gate intentionally OPEN**
+**Source baseline merged by PR #13:** `c0dbeca02b9392ee6ed76395b95c27fcf254a185`
+**Generated-contract formatting repair:** `e361452830a5cd4485ac4cdc6ce90c21c491d223`
+**Status:** **All identified P21–P23 implementation/records work is complete; Gate P21–P23 remains OPEN for one post-repair canonical clean-install run.**
 
-This audit records the Ralph-loop work for P21–P23 and, critically, attributes each piece of evidence to the environment that produced it. It does not convert missing Rust/current-toolchain evidence into a pass, and it does not substitute CI for physical-macOS/release acceptance owned by earlier phases.
-
-## Environment attribution
-
-### Local sandbox — source/diagnostic environment
-
-The implementation work was performed in the ChatGPT Linux sandbox from the uploaded `master` snapshot corresponding to planning baseline `b9aa3cca`.
-
-Available/reliable here:
-
-- Git/index/source inspection and source-only checks.
-- Node 22.x.
-- A recovered **stale diagnostic frontend installation** from the previously committed dependency tree: Vitest 2.1.9 / Vite 5.4.21. It was used only to expose frontend test/harness defects and to exercise deterministic store tests. It is **not** acceptance evidence for the reconciled lockfile, which pins Vitest 4.1.11 / Vite 8.2.2.
-- Dependency-independent/index checks and contract source checks.
-
-Unavailable/unreliable here:
-
-- A complete current `npm ci`: outbound npm access is unavailable and the local cache is missing at least `zustand@4.5.7`.
-- A Rust toolchain for current Rustfmt/Clippy/test/exporter execution.
-- Physical macOS/audio/TCC/release acceptance.
-
-After the diagnostic frontend runs were completed, the temporary recovered `node_modules` symlink became unusable; a later repeat failed before Vitest startup because `.bin/vitest` resolved into a removed `/tmp` target. That environment failure does not replace or invalidate the earlier completed diagnostic runs, and generated dependencies were not repaired or committed.
-
-### GitHub CI — authoritative clean-install environment
-
-PR CI is the intended source of current-lockfile clean-checkout evidence because it performs `npm ci` before the frontend/Rust quality gate. The user monitors GitHub Actions; this reconciliation does not poll or presume CI outcomes.
+This document reconciles the source, trackers, and already-completed acceptance evidence for V1R-210 through V1R-218. It distinguishes source inspection, local diagnostic checks, and GitHub CI evidence. It does **not** convert physical-macOS, device, signing, notarization, or release acceptance from earlier phases into automated evidence.
 
 ---
 
+## Evidence environments
+
+### Fresh uploaded `master` snapshot / local sandbox
+
+The reconciliation was repeated against the user-provided `master` archive at `c0dbeca02b9392ee6ed76395b95c27fcf254a185`.
+
+Available locally:
+
+- Git/source/index inspection.
+- Node 22.x for dependency-independent checks.
+- `bash -n` and `git diff --check`.
+- `scripts/check_generated_trees_untracked.mjs`.
+- `scripts/check_tauri_command_contract.mjs`.
+
+Unavailable locally for authoritative acceptance:
+
+- Rust/Cargo is not installed in this sandbox.
+- The clean archive has no `node_modules/`; an attempted `npm ci` did not complete within the sandbox execution limit, so no local current-toolchain frontend result is claimed.
+- Physical macOS/audio/TCC/signing/notarization acceptance remains outside this phase.
+
+After repair `e3614528`, the dependency-independent local checks reported:
+
+```text
+Generated frontend trees are absent from the Git index.
+Tauri command contract: 37/37 frontend command names are registered.
+```
+
+`bash -n scripts/generate_frontend_contract.sh` and `git diff --check` also pass. The TypeScript-backed shape checker is intentionally not claimed locally because the clean snapshot has no completed dependency installation.
+
+### GitHub CI — completed evidence only
+
+No result below is inferred from a pending run.
+
+**PR #13 exact head:** `4eac4fb2e5d1ad0a78246ec38b874ba72a84b285`
+
+P21–P23 acceptance run `33220650275`:
+
+- job `99013788943`, **20 consecutive canonical Rust gates** — **success**;
+- job `99013788800`, **Rust contract negative/positive mutations** — **success**;
+- job `99013788864`, **Exact-head canonical check:all** — **failure**, later traced to generated-contract formatting ownership rather than product behavior.
+
+**Merged `master`:** `c0dbeca02b9392ee6ed76395b95c27fcf254a185`
+
+CI run `33220660594`:
+
+- Frontend quality — **success**;
+- Rust quality — **success**;
+- Dependency audit — **success**;
+- macOS Tauri bundle (arm64) — **success**;
+- macOS Tauri bundle (x86_64) — **success**;
+- Release metadata static gate — **failure** only at `Verify generated backend contract is current`.
+
+ASR-015 Native Acceptance run `33220660589` on the same merged `master` commit — **success**.
+
+The one failing CI step regenerated `src/generated/backendContract.json` into a different whitespace/layout form and then failed `git diff --exit-code`; the data itself was not shown to be semantically different. That defect is repaired by `e3614528` and is the only reason the final canonical clean-install gate remains open in this reconciliation.
+
+---
+
+# P21 — Trustworthy verification baseline
+
 ## V1R-210 — Untrack generated dependency and build trees
 
-**Implementation:** complete.
-**Local implementation commit:** `52d70bd0` (`build: untrack generated frontend trees`).
-**Published PR:** #12, head `827b204ad7ad7dae0d45b7eaf609224e47f8b9e8` (`ralph/v1r-210-generated-trees-20260828`).
+**Status:** accepted.
 
-### Evidence
+### Implementation evidence
 
-**Local sandbox:**
+- Removed the previously tracked `node_modules/` tree (12,845 files) and `dist/` tree (6 files).
+- `.gitignore` owns both generated trees.
+- The repository guard checks the Git index directly and fails if either generated tree is force-added.
+- `AGENTS.md` documents the guard.
+- Tauri still owns bundle generation through the normal frontend build; neither macOS bundle architecture depends on a committed `dist/` tree.
 
-- Removed 12,845 tracked `node_modules/` files and 6 tracked `dist/` files.
-- `.gitignore` now owns both generated trees.
-- `git ls-files node_modules dist` returned no tracked entries after the change.
-- Added `check:generated-trees`, which inspects the Git index and therefore runs before dependency installation.
-- Force-added probes under both generated trees caused the guard to fail; probes were reverted and the guard returned to success.
-- `src-tauri/tauri.conf.json` already runs `npm run build` through `beforeBuildCommand` and packages `../dist`, so removing committed `dist` does not change bundle ownership.
+### Acceptance evidence
 
-**Accepted CI evidence:**
+- PR #12 head `827b204ad7ad7dae0d45b7eaf609224e47f8b9e8` passed GitHub CI run `33214810988` after clean dependency installation.
+- PR #12 merged as `efce9ead4e29b8d4768f10b58055715ed94c4c13`.
+- Current merged-master frontend quality in run `33220660594` again installed from the lockfile and passed typecheck, lint, formatting, frontend tests, preview smoke, and frontend build using the reconciled toolchain.
+- The passing current-toolchain frontend suite used **Vitest 4.1.11**.
+- Both current-master macOS bundle architecture jobs passed, confirming that untracking `dist/` did not break bundle construction.
+- Local force-add negative probes were demonstrated during V1R-210 implementation and reverted.
 
-- GitHub CI run `33214810988` passed on PR #12 head `827b204ad7ad7dae0d45b7eaf609224e47f8b9e8`.
-- PR #12 merged to `master` as `efce9ead4e29b8d4768f10b58055715ed94c4c13`.
+### Consequent V1R-006 record correction
+
+`docs/TODO(20260818-163801).md` now states explicitly that npm audit jobs run **after `npm ci`**. The obsolete committed Linux-specific `node_modules/` tree — including esbuild 0.21.5, which was absent from the lockfile — therefore was never the tree CI audited. The authoritative dependency state is `package-lock.json` reproduced by `npm ci`, with generated dependency/build trees prohibited from the index.
+
+The V1R-210-local criteria are closed. The separate phase-wide exact `npm run check:all` criterion remains open only because P22 later added the generated-contract gate that exposed the formatting defect fixed by `e3614528`.
 
 ---
 
 ## V1R-211 — Deterministic, non-vacuous Rust privacy log capture
 
-**Implementation:** complete; measured acceptance open.
-**Local commit:** `2e2e6324` (`test: make privacy log capture deterministic`).
+**Status:** accepted.
 
-### Evidence
+### Implementation evidence
 
-**Source review/local sandbox:**
+- The repair starts from prior commit `886de2b4f`, which documented the process-global tracing callsite-interest/thread-local formatter interaction that made formatted-log positive assertions flaky in parallel tests.
+- Privacy log-capture tests use the shared serialized capture harness.
+- Negative privacy assertions have explicit capture-liveness proof rather than being allowed to pass against an empty capture.
+- The previously removed fragile tool-router formatted-log assertions were not reintroduced.
+- No privacy assertion was weakened, deleted, or hidden behind retries.
 
-- Starts from the already-established `886de2b4f` finding: tracing callsite interest is process-global while the formatter subscriber used by tests is thread-local.
-- Consolidates the six privacy log-capture proofs on one serialized shared capture harness.
-- Adds an explicit capture-liveness marker so negative privacy assertions cannot be accepted against an empty capture.
-- Removes duplicate ad-hoc harness behavior.
-- Uses structured/path evidence where available rather than reintroducing the formatted-log positive assertions previously removed as flaky.
-- Adds a direct regression that rejects empty capture.
-- No privacy assertion was weakened, removed, or wrapped in a retry loop.
+### Acceptance evidence
 
-**Still required — mandatory by the TODO:**
+Dedicated PR #13 run `33220650275`, job `99013788943` executed the canonical command:
 
-- Rustfmt/Clippy/current Rust suite in a real Rust environment.
-- **At least 20 consecutive full Rust-suite runs on one commit with zero failures**, with the count recorded.
-- `npm run check:rust` success across that measured run set.
+```text
+npm run check:rust
+```
 
-This row remains open until that measurement exists.
+**20 consecutive times on the same exact PR head**, with **20/20 successful**. This satisfies the mandatory measured-run criterion.
+
+Current merged-master CI run `33220660594` independently passed Rust formatting, Clippy with warnings denied, Rust tests, the backend failure matrix, and the backend stress matrix.
 
 ---
+
+# P22 — Test fidelity and contract integrity
 
 ## V1R-212 — Frontend tests exercise the native IPC branch
 
-**Implementation:** complete; current-toolchain suite acceptance open.
-**Local commit:** `1005a2e9` (`test: exercise frontend Tauri IPC branch`).
+**Status:** accepted.
 
-### Evidence
+### Implementation evidence
 
-**Local sandbox / diagnostic frontend toolchain:**
+- Production-like frontend tests install Tauri internals and enter the native IPC branch rather than forty browser fallbacks.
+- `invoke` remains mocked at the module boundary, so tests stay offline/hardware-free.
+- One authoritative dispatcher covers all **37** frontend-invoked command names and fails on an unhandled command rather than returning `null`.
+- A regression asserts that the bridge actually invokes the expected Tauri command.
+- Reverting native-path selection was demonstrated to fail the guard during implementation and was restored.
+- Hidden Settings harness/routing failures exposed by enabling the path were repaired in the fixtures rather than by restoring fallbacks.
 
-- `src/test/setup.ts` installs Tauri internals so production-like tests enter the native IPC branch.
-- The authoritative dispatcher covers all **37/37** frontend-invoked command names and throws for unhandled commands rather than returning `null`.
-- Mocked module `invoke` and the fake Tauri internals delegate to the same dispatcher, closing a dynamic-import path that initially produced `undefined` fixtures in `SettingsModal.test.tsx`.
-- A regression asserts that `getSettings()` actually invokes `"get_settings"`.
-- Reverting production-path selection was demonstrated to fail the guard, then restored.
-- The Settings failures exposed by the change were test-harness routing/isolation defects, not frontend/backend product-contract mismatches.
+### Acceptance evidence
 
-**Still required:**
+Current-master CI run `33220660594` passed the complete Frontend quality job after clean `npm ci`, including:
 
-- Full frontend suite under the reconciled Vitest 4.1.11/Vite 8.2.2 installation from a clean `npm ci`.
+- Tauri command registration contract;
+- frontend IPC shape contract;
+- typecheck;
+- lint;
+- formatting;
+- the full Vitest 4.1.11 suite;
+- frontend-only preview smoke;
+- production frontend build.
 
 ---
 
-## V1R-213 — Rust↔frontend IPC registration and shared-shape gates
+## V1R-213 — Rust↔frontend IPC registration and shared-shape integrity
 
-**Implementation:** complete; Rust-side mutation acceptance partly open.
-**Local commit:** `74aec2aa` (`test: gate Rust frontend IPC contract`).
+**Status:** accepted within the explicitly documented lightweight-gate scope.
 
-### Evidence
+### Registration integrity
 
-**Local sandbox:**
+- The source check verifies that all **37/37** frontend-invoked Tauri command names are registered in Rust.
+- Five registered-but-not-frontend-invoked commands are informational, not failures: `dismiss_moose`, `get_live_outbound_diagnostics`, `hide_moose`, `show_moose`, and `trigger_ambient_remark`.
+- Qualified registrations are handled rather than missed by a naive single-line extractor.
+- A deliberate registration/name mismatch was demonstrated to fail and then reverted during implementation.
 
-- `scripts/check_tauri_command_contract.mjs` currently reports **37/37** frontend-invoked commands registered.
-- Five registered backend-only commands are informational: `dismiss_moose`, `get_live_outbound_diagnostics`, `hide_moose`, `show_moose`, `trigger_ambient_remark`.
-- The registration check handles qualified Rust registration paths rather than relying on a naive one-line extractor.
-- A deliberate command registration/name mismatch made the check fail and was reverted.
-- Rust exporter source now emits representative IPC shared-object instances into the generated frontend contract.
-- `scripts/check_frontend_contract_shapes.mjs` reports **18/18** Rust-derived representative interfaces matching TypeScript key sets/top-level JSON categories, including the 33-key `AppSettings` surface.
-- A deliberate TypeScript `AppSettings.volume` category mismatch made the shape check fail and was reverted.
-- No schema/binding framework was added.
-- The `as AppSettings` JSON-import cast is explicitly justified by the independent shape gate rather than treated as proof itself.
+### Shared-shape integrity
+
+- The Rust exporter emits representative instances of IPC-crossing shared object types.
+- The TypeScript checker compares representative Rust-derived JSON object keys/categories against the hand-written interfaces.
+- The current gate covers **18/18** representative interfaces, including **33/33** `AppSettings` keys.
+- The cast in `backendContract.ts` is no longer treated as proof by itself; the independent shape gate is the protection.
+
+Dedicated PR #13 mutation run `33220650275`, job `99013788800` changed a Rust-side serialized IPC field without updating TypeScript. The shape gate rejected the mutation as required and the mutation was reverted.
 
 ### Published residual limitations
 
-The lightweight gates intentionally do **not** prove:
+The lightweight gate intentionally does **not** claim to prove:
 
 - numeric narrowing such as `u32` versus `i32` versus `f64`;
 - complete enum variant sets unless represented;
-- optionality semantics;
-- primitive command arguments;
-- the association between a particular command name and its parameter names/types/return type.
+- optionality semantics in every form;
+- primitive command argument shapes;
+- a complete generated command-signature binding layer.
 
-The shape gate verifies shared object shapes independently; it is not a generated full command-signature binding layer.
-
-**Still required:**
-
-- With a Rust toolchain, demonstrate that adding/removing/retyping a Rust-side IPC field without updating TypeScript fails the regeneration/shape gate, then revert.
+Those limitations are documented rather than implied closed.
 
 ---
 
-## V1R-214 — Generated backend contract drift gate
+## V1R-214 — Generated backend-contract drift gate
 
-**Implementation:** complete; Rust/CI mutation acceptance open.
-**Local commit:** included in `74aec2aa`.
+**Status:** implementation and mutation proof complete; post-repair canonical clean-install confirmation pending.
 
-### Evidence
+### Implemented protection
 
-**Source/local sandbox:**
-
-- Canonical verification and CI regenerate `src/generated/backendContract.json` from Rust and fail on a dirty diff.
+- Canonical verification/CI regenerates `src/generated/backendContract.json` from Rust and fails on a dirty diff.
 - Regeneration is documented in `AGENTS.md`.
-- The same generated artifact contains the V1R-213 representative shape data, so drift checking protects defaults/catalogs and shape representatives together.
-- No Google credential, live provider, network request at test runtime, microphone, or audio device is required by the contract logic itself.
-- The generated JSON is excluded from Prettier because its canonical byte formatting is owned by the Rust exporter and the regeneration/drift gate.
+- The generated artifact carries defaults/catalogs plus V1R-213 representative shape data.
+- The exporter requires no Google credential, live provider request, microphone, or audio hardware for the contract data.
 
-**Still required:**
+### Negative/positive mutation proof
 
-- Rust-toolchain demonstration: change a Rust default with stale generated JSON → gate fails → regenerate → gate passes.
-- Current CI execution of that path.
+Dedicated PR #13 run `33220650275`, job `99013788800`:
+
+1. deliberately changed a Rust `AppSettings` default;
+2. verified the stale committed generated contract caused the gate to fail;
+3. regenerated/staged the contract;
+4. verified the gate passed on that same deliberate mutation.
+
+That proves the intended stale-contract behavior.
+
+### Post-merge formatting defect and repair
+
+Merged-master CI run `33220660594`, job `99013818024` exposed a separate deterministic formatting-ownership bug:
+
+- `export_frontend_contract` already serializes with `serde_json::to_string_pretty`;
+- `.prettierignore` states that canonical formatting is owned by the Rust exporter/drift gate;
+- `scripts/generate_frontend_contract.sh` nevertheless piped the exporter output through Prettier;
+- the committed contract used the exporter-owned representation, so regeneration changed only layout/whitespace and `git diff --exit-code` failed.
+
+Repair commit `e361452830a5cd4485ac4cdc6ce90c21c491d223` removes the redundant Prettier pipe and writes the Rust exporter output directly to the generated artifact. This aligns the script with the already-declared formatting owner and the committed artifact.
+
+A **fresh post-repair exact-head `npm run check:all`** is still required before Gate P21–P23 may be marked closed.
 
 ---
 
 ## V1R-215 — Browser preview isolated from production contract coverage
 
-**Implementation:** complete; clean-toolchain preview smoke open.
-**Local commit:** `3347c6ac` (`test: isolate browser preview from Tauri IPC`).
+**Status:** accepted.
 
-### Evidence
+### Implementation evidence
 
-**Local sandbox / diagnostic frontend toolchain:**
+- The forty implicit production bridge fallbacks were replaced by an explicit development-only `browserPreviewBridge` adapter.
+- The inventory distinguishes read-only/presentation behavior from operations that simulate external state/effects.
+- Valid native Tauri capability always wins.
+- Missing or malformed native capability in production-like selection fails closed.
+- Query parameters, `localStorage`, and arbitrary runtime browser globals cannot select preview behavior.
+- Production-like IPC tests and preview tests are distinct.
+- `README.md` labels frontend-only preview as development-only and non-representative of backend/provider success.
+- The withdrawn claim that `hasGoogleApiKey()` controlled onboarding was not reintroduced; onboarding is controlled by versioned acknowledgement state.
 
-- Removed the 40 implicit per-function browser fallbacks from the production/native bridge.
-- Added explicit `browserPreviewBridge` development-only adapter.
-- Inventory records **18 read-only/presentation** operations and **22 simulated external-state/effect** operations.
-- Native Tauri IPC wins whenever valid Tauri capability exists.
-- Missing/malformed native capability in production-like selection fails closed.
-- Query parameters, `localStorage`, and arbitrary runtime browser globals cannot select preview.
-- Dedicated preview tests are distinct from production IPC-path tests.
-- `README.md` identifies preview as development-only and non-representative of backend/provider success.
-- After Settings IPC-path reconciliation, the diagnostic full frontend suite passed **74/74** tests before P23 tests were added.
+### Acceptance evidence
 
-**Still required:**
+Current-master Frontend quality in run `33220660594` passed both:
 
-- Current clean-toolchain `npm run dev` frontend-only smoke proving the documented preview still renders without Tauri.
-- Current clean-toolchain full frontend suite through CI evidence.
+- the full production-like frontend test suite; and
+- `Smoke frontend-only Vite preview`.
+
+Thus the documented `npm run dev`/frontend-only workflow remains viable while production-like tests cannot gain manufactured success from the preview adapter.
 
 ---
 
+# P23 — Runtime and record correctness
+
 ## V1R-216 — Ordered settings persistence
 
-**Implementation and deterministic source-level acceptance:** complete.
-**Local commit:** `2f4c50aa` (`fix: serialize and reconcile settings persistence`).
+**Status:** accepted.
 
-### Design
+Settings persistence uses one serialized patch coordinator:
 
-Settings persistence now uses a serialized patch coordinator rather than independent full-snapshot writes:
-
-- continuous controls remain immediately optimistic;
-- debounced continuous edits coalesce changed fields only;
-- discrete and continuous writes enter one ordered persistence queue;
-- an older completion never writes old state back into the frontend store;
-- a discrete action absorbs a still-pending continuous patch;
+- continuous controls stay immediately optimistic;
+- debounced continuous edits coalesce changed fields;
+- discrete and continuous writes share one ordered persistence queue;
+- older completions do not overwrite newer frontend state;
+- pending continuous changes can be folded into a discrete persistence candidate;
 - successful candidates are based on the last successfully persisted snapshot.
 
-### Evidence
+Deterministic deferred-promise tests cover both interleavings:
 
-**Local sandbox / diagnostic Vitest 2.1.9:**
+1. discrete write in flight → continuous edit; and
+2. pending continuous edit → discrete action.
 
-- Deterministic deferred-promise test holds the first discrete backend write unresolved, performs a continuous edit while it is truly in flight, lets the debounce fire, then resolves the first write. The second persisted candidate includes both changes and the final store equals the persisted snapshot.
-- Reverse-order test starts with a pending continuous edit and then performs a discrete edit; one folded persistence candidate contains both changes.
-- Focused `mooseStore.test.ts`: **16/16 passed** after V1R-216/217 implementation.
-- Full diagnostic frontend suite after P23 additions: **78/78 passed** before the recovered temporary toolchain symlink later became unusable.
-
-No claim is made that stale Vitest 2.1.9 is final current-toolchain acceptance.
+They assert the final store matches the last successfully persisted snapshot. These tests are part of the current-toolchain frontend suite that passed in CI run `33220660594`.
 
 ---
 
 ## V1R-217 — Reconcile rejected settings writes
 
-**Implementation and deterministic source-level acceptance:** complete.
-**Local commit:** included in `2f4c50aa`.
+**Status:** accepted.
 
-### Design
-
-On a rejected write:
+On a rejected settings write:
 
 1. the failed patch is removed from the queue;
-2. the store re-reads authoritative persisted settings;
-3. if the re-read itself fails, the last known successfully persisted snapshot is the safe fallback;
-4. later queued/pending patches are rebuilt on that reconciled baseline;
-5. raw backend/provider error detail is not logged to the frontend console.
+2. authoritative persisted settings are re-read;
+3. if the re-read fails, the last known successfully persisted snapshot is used as the safe fallback;
+4. later pending/queued patches are rebased on the reconciled baseline;
+5. raw backend/provider error details are not logged to the frontend console.
 
-The same worker handles both discrete and continuous settings writes.
-
-### Evidence
-
-**Local sandbox / diagnostic Vitest 2.1.9:**
-
-- Rejected continuous-write test proves the unpersisted value is removed from the store.
-- Rejected discrete-write test proves the same behavior for the discrete path.
-- A private sentinel (`SECRET backend failure https://private.invalid/?key=AIzaSyDoNotLog`) is injected into the backend rejection; `console.error`, `console.warn`, and `console.log` receive none of it.
-- A subsequent write proves its candidate is rebased on the authoritative reconciled snapshot rather than the failed optimistic state.
-- Included in the **16/16** focused store pass and **78/78** diagnostic full frontend pass described above.
+Tests cover continuous and discrete rejection, prove the optimistic unpersisted value does not remain, inject a private sentinel to prove backend error detail is not logged, and verify the next write uses the reconciled base. These tests are included in the current-master frontend suite that passed in run `33220660594`.
 
 ---
 
-## V1R-218 — Legacy feature-TODO records correction
+## V1R-218 — Correct stale/misclassified feature-TODO records
 
-**Records work:** complete. This is explicitly **not** product implementation.
+**Status:** complete records correction; not product implementation.
+
+Only the designated stale/misclassified rows in `docs/TODO(20260818-163801).md` were corrected.
 
 ### Corrected stale annotations
 
-`docs/TODO(20260818-163801).md` now records current evidence for the designated rows only:
-
-- V1R-060 user-adjustable settings runtime consumers and generated defaults.
-- V1R-104 reachable tool-audit diagnostics including duration.
-- V1R-111 live microphone-permission refresh behavior.
-- V1R-116 semantic accessibility labels.
-- V1R-116 reduced-motion behavior.
-- V1R-122 production Memory-Off prompt path.
+- **V1R-060:** `volume`, `hide_delay_seconds`, and `tts_model` have production runtime consumers; generated frontend defaults replace the divergent hand-written blob.
+- **V1R-104:** the bounded tool audit is reachable through `get_tool_audit`, including `duration_ms`.
+- **V1R-111:** microphone-permission status refreshes on focus/visibility changes and avoids a false unavailable first paint.
+- **V1R-116:** ASR progress/transcript semantic accessibility roles are present.
+- **V1R-116:** reduced-motion preference is observed by `MooseController` and tested.
+- **V1R-122:** Memory-Off prompt filtering uses production `model_prompt_memories`, consumed by conversation and ambient prompt construction.
 
 ### Corrected misclassifications
 
-- V1R-110 conservative privacy choices are satisfied by defaults-Off plus accurate onboarding disclosure; no new onboarding toggles were invented.
-- V1R-103 confirmation is N/A for the V1 tool set because no consequential V1 action tool ships; any future consequential `CharacterAction` reopens the requirement.
-- V1R-071 is narrowed to the intended V1 **event-fingerprint** deduplication contract; semantic generated-text similarity suppression is not V1 scope.
+- **V1R-110:** conservative privacy choices are satisfied by default-Off active-app observation, memory, and transcript retention plus accurate onboarding disclosure. No onboarding-time privacy toggles are invented.
+- **V1R-103:** per-invocation confirmation is **N/A for the shipped V1 tool set** because no consequential confirmation-requiring action tool ships. Any future consequential `CharacterAction` reopens it.
+- **V1R-071:** V1 requires event-fingerprint deduplication; semantic generated-text similarity suppression is not V1 scope under the recorded owner decision.
 
 ### `min_cooldown_seconds` disposition
 
-The existing production rationale is retained rather than converted into a new setting:
+`V1_MIN_AMBIENT_COOLDOWN_SECONDS = 300` remains a deliberate fixed V1 anti-annoyance safety floor. `character/personality.rs` now documents that rationale; the value is consumed by behavior/cooldown policy, while talkativeness and hourly budget remain adjustable. No UI represents the safety floor as a user setting.
 
-- `V1_MIN_AMBIENT_COOLDOWN_SECONDS = 300` is documented in `character/personality.rs` as a fixed V1 anti-annoyance safety floor.
-- `character/behavior.rs` and `character/cooldown.rs` consume it.
-- No UI represents the floor as adjustable.
+### V1R-006 consequence
 
-Therefore no settings/UI mapping is added.
+The dependency-advisory row now explains why the old committed dependency tree was not CI audit evidence: npm audit runs after clean `npm ci`, and V1R-210 removed generated dependency/build trees from version control.
 
-All unrelated legacy unchecked rows, especially physical-device/macOS/signing/notarization/clean-machine acceptance, remain unchanged.
+Unrelated unchecked legacy rows — including physical-device/macOS/signing/notarization/clean-machine/manual acceptance and other independent product work — remain unchanged.
 
 ---
 
-## Current source-check snapshot
+# Gate P21–P23 status
 
-Latest dependency-independent checks in the local sandbox after the P23/records work:
+## Satisfied
 
-```text
-Tauri command contract: 37/37 frontend command names are registered.
-IPC shape contract: 18 Rust representatives match TypeScript interface keys and JSON categories.
-```
+- [x] V1R-210 and V1R-211 complete.
+- [x] V1R-212, V1R-213, V1R-214, and V1R-215 implementation/targeted acceptance complete.
+- [x] V1R-216, V1R-217, and V1R-218 complete.
+- [x] Rust gate completed **20/20 consecutive** exact-head runs successfully.
+- [x] Registration and Rust-side shape/default mutation proofs passed.
+- [x] Current-master frontend quality passed on clean `npm ci` / Vitest 4.1.11.
+- [x] Current-master Rust quality, dependency audit, both macOS bundle architectures, frontend-only preview smoke, and ASR-015 Native Acceptance passed.
+- [x] This reconciliation records the environment/run attribution for each closure.
 
-`git diff --check` is clean.
+## Still open
 
-Earlier, while the recovered diagnostic frontend installation was intact:
+- [ ] **One post-repair canonical clean-install run:** `npm ci` followed by `npm run check:all` must exit 0 on a commit containing `e361452830a5cd4485ac4cdc6ce90c21c491d223` (or its descendant).
 
-- ESLint passed.
-- Prettier passed.
-- focused P23 store tests passed 16/16.
-- full frontend diagnostic suite passed 78/78.
-
-A later attempt to repeat `npm test` could not start Vitest because the temporary recovered `node_modules/.bin/vitest` symlink pointed to a removed `/tmp` target. This is recorded as an environment limitation, not substituted for current-toolchain evidence.
-
----
-
-# Final gate status
-
-## Accepted
-
-- V1R-210 — clean-install CI passed and PR #12 is merged.
-
-## Complete at source/records level
-
-- V1R-216
-- V1R-217
-- V1R-218
-
-## Implemented, but final acceptance remains open pending authoritative environment evidence
-
-- V1R-211 — Rust quality gate plus **20+ consecutive full Rust-suite runs** on one commit.
-- V1R-212 — reconciled-toolchain full frontend suite.
-- V1R-213 — Rust-side shared-type mutation proof through regeneration/shape gate.
-- V1R-214 — Rust-default stale-contract negative/positive regeneration proof and CI execution.
-- V1R-215 — clean-toolchain Vite frontend-only preview smoke plus reconciled frontend suite.
-
-Therefore **Gate P21–P23 remains OPEN**. The remaining work is verification evidence, not an identified source implementation defect. This document must be amended with the final PR #13 CI/run identifiers, measured 20-run Rust evidence, and any remaining mutation/smoke evidence before the gate is closed.
+The last open item is deliberately not pre-closed. PR #13 proved that targeted green jobs are not a substitute for the canonical repository gate. Once the user reports the post-repair exact-head canonical run green, Gate P21–P23 can be closed without further known source implementation work.
