@@ -157,7 +157,9 @@ const previewLocalLlmModels = (): LocalModelDescriptor[] => {
 };
 
 const previewLocalLlmModel = (modelId: string): LocalModelDescriptor => {
-  const model = previewLocalLlmModels().find((candidate) => candidate.id === modelId);
+  const model = previewLocalLlmModels().find(
+    (candidate) => candidate.id === modelId,
+  );
   if (!model) throw new Error("Unknown local LLM model");
   return model;
 };
