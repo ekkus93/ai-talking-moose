@@ -2406,9 +2406,9 @@ dependencies = [
 
 [[package]]
 name = "llama-cpp-sys-2"
-version = "0.1.155"
+version = "0.1.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59ed2a770245cf16526a8643c79872701fc6115556e5d8e675d9248752a1394"
+checksum = "13a9ea2ce0cdc20bcb1870534022e340b391663f8fe09133951e2fe37fbc29cf"
 dependencies = [
  "bindgen",
  "cc",
@@ -4231,6 +4231,7 @@ dependencies = [
  "futures-util",
  "libc",
  "llama-cpp-2",
+ "llama-cpp-sys-2",
  "parking_lot",
  "rand",
  "reqwest 0.12.28",
