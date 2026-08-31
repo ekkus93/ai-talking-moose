@@ -1,8 +1,19 @@
-use super::{LocalRuntimeError, RuntimeEngine, RuntimeModelSpec};
+use super::{
+    LocalRuntimeError, LocalRuntimeGenerateRequest, LocalRuntimeGeneration, RuntimeEngine,
+    RuntimeModelSpec,
+};
+use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
+use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::LlamaModel;
+use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_2::sampling::LlamaSampler;
+use std::num::NonZeroU32;
 use std::sync::Arc;
+use std::time::Instant;
+use tokio_util::sync::CancellationToken;
+
+const PROMPT_BATCH_TOKENS: usize = 512;
 
 pub(super) struct LlamaEngine {
     backend: LlamaBackend,
@@ -20,6 +31,143 @@ impl LlamaEngine {
             model: None,
         })
     }
+
+    fn generate(
+        &self,
+        spec: &RuntimeModelSpec,
+        request: &LocalRuntimeGenerateRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<LocalRuntimeGeneration, LocalRuntimeError> {
+        let model = self
+            .model
+            .as_ref()
+            .ok_or_else(LocalRuntimeError::model_not_loaded)?;
+        let context_size =
+            NonZeroU32::new(spec.context_size).ok_or_else(LocalRuntimeError::invalid_request)?;
+        let thread_count =
+            i32::try_from(spec.thread_count).map_err(|_| LocalRuntimeError::invalid_request())?;
+        let context_params = LlamaContextParams::default()
+            .with_n_ctx(Some(context_size))
+            .with_n_threads(thread_count)
+            .with_n_threads_batch(thread_count)
+            .with_offload_kqv(false)
+            .with_op_offload(false);
+
+        let started = Instant::now();
+        let mut context = model
+            .new_context(&self.backend, context_params)
+            .map_err(|_| LocalRuntimeError::context_creation())?;
+        if cancellation.is_cancelled() {
+            return Err(LocalRuntimeError::cancelled());
+        }
+
+        let prompt_tokens = model
+            .str_to_token(&request.prompt, AddBos::Always)
+            .map_err(|_| LocalRuntimeError::tokenization())?;
+        if prompt_tokens.is_empty() {
+            return Err(LocalRuntimeError::tokenization());
+        }
+        let prompt_token_count =
+            u32::try_from(prompt_tokens.len()).map_err(|_| LocalRuntimeError::prompt_too_long())?;
+        if prompt_token_count
+            .checked_add(request.max_output_tokens)
+            .is_none_or(|required| required > spec.context_size)
+        {
+            return Err(LocalRuntimeError::prompt_too_long());
+        }
+
+        let batch_capacity = PROMPT_BATCH_TOKENS.min(prompt_tokens.len()).max(1);
+        let mut batch = LlamaBatch::new(batch_capacity, 1);
+        for (chunk_index, chunk) in prompt_tokens.chunks(PROMPT_BATCH_TOKENS).enumerate() {
+            if cancellation.is_cancelled() {
+                return Err(LocalRuntimeError::cancelled());
+            }
+            batch.clear();
+            let chunk_start = chunk_index
+                .checked_mul(PROMPT_BATCH_TOKENS)
+                .ok_or_else(LocalRuntimeError::prompt_too_long)?;
+            for (offset, token) in chunk.iter().enumerate() {
+                let absolute = chunk_start
+                    .checked_add(offset)
+                    .ok_or_else(LocalRuntimeError::prompt_too_long)?;
+                let position =
+                    i32::try_from(absolute).map_err(|_| LocalRuntimeError::prompt_too_long())?;
+                let logits = absolute + 1 == prompt_tokens.len();
+                batch
+                    .add(*token, position, &[0], logits)
+                    .map_err(|_| LocalRuntimeError::decode())?;
+            }
+            context
+                .decode(&mut batch)
+                .map_err(|_| LocalRuntimeError::decode())?;
+        }
+
+        let mut sampler = if request.temperature <= 0.0 {
+            LlamaSampler::greedy()
+        } else {
+            LlamaSampler::chain_simple([
+                LlamaSampler::temp(request.temperature),
+                LlamaSampler::top_p(0.95, 1),
+                LlamaSampler::dist(request.seed),
+            ])
+        };
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+        let mut output = String::new();
+        let mut output_tokens = 0_u32;
+
+        while output_tokens < request.max_output_tokens {
+            if cancellation.is_cancelled() {
+                return Err(LocalRuntimeError::cancelled());
+            }
+            let logits_index = batch
+                .n_tokens()
+                .checked_sub(1)
+                .ok_or_else(LocalRuntimeError::decode)?;
+            let token = sampler.sample(&context, logits_index);
+            sampler.accept(token);
+            if model.is_eog_token(token) {
+                break;
+            }
+
+            let piece = model
+                .token_to_piece(token, &mut decoder, true, None)
+                .map_err(|_| LocalRuntimeError::output_decode())?;
+            output.push_str(&piece);
+            output_tokens += 1;
+            if output_tokens >= request.max_output_tokens {
+                break;
+            }
+
+            batch.clear();
+            let position = prompt_token_count
+                .checked_add(output_tokens)
+                .and_then(|position| position.checked_sub(1))
+                .and_then(|position| i32::try_from(position).ok())
+                .ok_or_else(LocalRuntimeError::decode)?;
+            batch
+                .add(token, position, &[0], true)
+                .map_err(|_| LocalRuntimeError::decode())?;
+            context
+                .decode(&mut batch)
+                .map_err(|_| LocalRuntimeError::decode())?;
+        }
+
+        let _ = decoder.decode_to_string(b"", &mut output, true);
+        let duration = started.elapsed();
+        let duration_ms = u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
+        let tokens_per_second = if output_tokens == 0 || duration.is_zero() {
+            None
+        } else {
+            Some(output_tokens as f32 / duration.as_secs_f32())
+        };
+        Ok(LocalRuntimeGeneration {
+            text: output,
+            prompt_tokens: prompt_token_count,
+            output_tokens,
+            duration_ms,
+            tokens_per_second,
+        })
+    }
 }
 
 impl RuntimeEngine for LlamaEngine {
@@ -34,6 +182,15 @@ impl RuntimeEngine for LlamaEngine {
 
     fn unload_model(&mut self) {
         self.model = None;
+    }
+
+    fn generate(
+        &mut self,
+        spec: &RuntimeModelSpec,
+        request: &LocalRuntimeGenerateRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<LocalRuntimeGeneration, LocalRuntimeError> {
+        LlamaEngine::generate(self, spec, request, cancellation)
     }
 }
 
