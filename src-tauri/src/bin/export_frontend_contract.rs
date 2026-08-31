@@ -2,6 +2,10 @@ use serde::Serialize;
 use talking_moose_lib::ai::google::{
     GoogleModelDescriptor, GoogleTtsVoiceDescriptor, GOOGLE_MODELS, GOOGLE_TTS_VOICES,
 };
+use talking_moose_lib::ai::local::{
+    LocalModelDescriptor, LocalModelDiagnostics, LocalModelInstallError, LocalModelInstallErrorKind,
+    LocalModelInstallProgress, LocalModelInstallState,
+};
 use talking_moose_lib::ai::types::{ProviderError, ProviderErrorKind};
 use talking_moose_lib::app::state::{AppSettings, OnboardingStatus};
 use talking_moose_lib::asr::{
@@ -35,6 +39,10 @@ struct FrontendIpcShapes {
     asr_model_descriptor: AsrModelDescriptor,
     asr_diagnostics: AsrDiagnostics,
     asr_model_progress_event: AsrModelProgressEvent,
+    local_model_install_error: LocalModelInstallError,
+    local_model_descriptor: LocalModelDescriptor,
+    local_model_diagnostics: LocalModelDiagnostics,
+    local_model_install_progress: LocalModelInstallProgress,
     audio_device_info: AudioDeviceInfo,
     audio_capture_diagnostics: AudioCaptureDiagnostics,
     audio_playback_diagnostics: AudioPlaybackDiagnostics,
@@ -96,12 +104,21 @@ fn representative_audio_diagnostics() -> AudioDiagnostics {
     }
 }
 
+fn representative_local_install_error() -> LocalModelInstallError {
+    LocalModelInstallError {
+        kind: LocalModelInstallErrorKind::Network,
+        message: "contract local model error".to_string(),
+        retryable: true,
+    }
+}
+
 fn representative_ipc_shapes() -> FrontendIpcShapes {
     let asr_error = AsrError {
         kind: AsrErrorKind::Inference,
         message: "contract ASR error".to_string(),
         retryable: true,
     };
+    let local_model_error = representative_local_install_error();
     let audio_diagnostics = representative_audio_diagnostics();
 
     FrontendIpcShapes {
@@ -155,6 +172,34 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
             downloaded_bytes: 128,
             total_bytes: 256,
             current_file: Some("contract-model.bin".to_string()),
+        },
+        local_model_install_error: local_model_error.clone(),
+        local_model_descriptor: LocalModelDescriptor {
+            id: "contract-local-model".to_string(),
+            display_name: "Contract local model".to_string(),
+            family: "ContractFamily".to_string(),
+            parameter_scale: "360M".to_string(),
+            quantization: "Q4_K_M".to_string(),
+            revision: "0123456789012345678901234567890123456789".to_string(),
+            expected_bytes: 256,
+            installed_bytes: Some(256),
+            license: "Apache-2.0".to_string(),
+            context_limit: 8_192,
+            recommended_max_output: 192,
+            install_state: LocalModelInstallState::Installed,
+            active: true,
+            error: Some(local_model_error.clone()),
+        },
+        local_model_diagnostics: LocalModelDiagnostics {
+            model_root_ready: true,
+            installs_in_progress: 1,
+            last_error: Some(local_model_error),
+        },
+        local_model_install_progress: LocalModelInstallProgress {
+            model_id: "contract-local-model".to_string(),
+            install_state: LocalModelInstallState::Verifying,
+            downloaded_bytes: 256,
+            total_bytes: 256,
         },
         audio_device_info: AudioDeviceInfo {
             id: "contract-device".to_string(),
