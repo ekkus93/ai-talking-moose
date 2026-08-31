@@ -168,7 +168,7 @@ pub(super) struct LocalRuntimePolicy {
 impl LocalRuntimePolicy {
     pub(super) fn for_available_parallelism(available_parallelism: usize) -> Self {
         let available_parallelism = available_parallelism.max(1);
-        let thread_count = (available_parallelism / 2).max(1).min(MAX_DEFAULT_THREADS);
+        let thread_count = (available_parallelism / 2).clamp(1, MAX_DEFAULT_THREADS);
         Self {
             context_size: DEFAULT_CONTEXT_SIZE,
             thread_count,
