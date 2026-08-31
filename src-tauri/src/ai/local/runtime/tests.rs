@@ -228,7 +228,9 @@ fn diagnostics_shape_never_contains_prompt_or_generated_text() {
     assert!(!object.contains_key("text"));
     assert!(!object.contains_key("output"));
     assert_eq!(
-        object.get("selected_model_id").and_then(|value| value.as_str()),
+        object
+            .get("selected_model_id")
+            .and_then(|value| value.as_str()),
         Some(DEFAULT_LOCAL_TEXT_MODEL_ID)
     );
 }
