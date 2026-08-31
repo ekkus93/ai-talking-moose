@@ -162,10 +162,7 @@ export interface LocalModelDiagnostics {
 
 export interface LocalModelInstallProgress {
   model_id: string;
-  install_state: Extract<
-    LocalModelInstallState,
-    "downloading" | "verifying"
-  >;
+  install_state: Extract<LocalModelInstallState, "downloading" | "verifying">;
   downloaded_bytes: number;
   total_bytes: number;
 }
