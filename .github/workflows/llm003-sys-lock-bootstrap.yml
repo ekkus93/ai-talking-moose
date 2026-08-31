@@ -1,0 +1,43 @@
+name: LLM-003 sys lock bootstrap
+
+on:
+  push:
+    branches:
+      - ralph/local-llm-llm003-20260831
+
+permissions:
+  contents: write
+
+jobs:
+  lockfiles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out LLM-003 branch
+        uses: actions/checkout@v7
+        with:
+          ref: ralph/local-llm-llm003-20260831
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Pin application sys crate lock
+        run: cargo update --manifest-path src-tauri/Cargo.toml -p llama-cpp-sys-2 --precise 0.1.154
+
+      - name: Pin isolated proof sys crate lock
+        run: cargo update --manifest-path src-tauri/llama-compile-proof/Cargo.toml -p llama-cpp-sys-2 --precise 0.1.154
+
+      - name: Commit generated lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/Cargo.lock src-tauri/llama-compile-proof/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Lockfiles are already current."
+            exit 0
+          fi
+          git diff --cached --check
+          git commit -m "build: align llama.cpp sys lockfiles"
+          git push origin HEAD:ralph/local-llm-llm003-20260831
