@@ -23,9 +23,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
+
+const LOCAL_LLM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn moonshine_native_smoke_check() -> Result<i32, String> {
     asr::moonshine::native_runtime_smoke_check().map_err(|error| error.message)
@@ -291,8 +294,22 @@ pub fn run() {
                 if let Some((local_llm_runtime, conversation_mgr, audio_capture, audio_playback)) =
                     resources
                 {
-                    if let Err(error) = local_llm_runtime.shutdown().await {
-                        warn!(error = %error, "Failed to unload local LLM runtime during shutdown");
+                    match tokio::time::timeout(
+                        LOCAL_LLM_SHUTDOWN_TIMEOUT,
+                        local_llm_runtime.shutdown(),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => {
+                            warn!(kind = ?error.kind, "Failed to unload local LLM runtime during shutdown");
+                        }
+                        Err(_) => {
+                            warn!(
+                                timeout_seconds = LOCAL_LLM_SHUTDOWN_TIMEOUT.as_secs(),
+                                "Timed out waiting for local LLM runtime shutdown; continuing application exit"
+                            );
+                        }
                     }
                     conversation_mgr
                         .shutdown_application(audio_capture, audio_playback)
