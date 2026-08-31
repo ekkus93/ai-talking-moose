@@ -1,6 +1,6 @@
-use super::{
-    LocalRuntimeError, LocalRuntimeGenerateRequest, LocalRuntimeGeneration, RuntimeEngine,
-    RuntimeModelSpec,
+use super::manager::RuntimeEngine;
+use super::types::{
+    LocalRuntimeError, LocalRuntimeGenerateRequest, LocalRuntimeGeneration, RuntimeModelSpec,
 };
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
@@ -8,6 +8,8 @@ use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
+use llama_cpp_2::token::LlamaToken;
+use llama_cpp_2::TokenToStringError;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Instant;
@@ -30,6 +32,25 @@ impl LlamaEngine {
             backend,
             model: None,
         })
+    }
+
+    fn token_piece_bytes(
+        model: &LlamaModel,
+        token: LlamaToken,
+    ) -> Result<Vec<u8>, LocalRuntimeError> {
+        match model.token_to_piece_bytes(token, 16, true, None) {
+            Ok(bytes) => Ok(bytes),
+            Err(TokenToStringError::InsufficientBufferSpace(required)) if required < 0 => {
+                let required = required
+                    .checked_neg()
+                    .and_then(|value| usize::try_from(value).ok())
+                    .ok_or_else(LocalRuntimeError::output_decode)?;
+                model
+                    .token_to_piece_bytes(token, required, true, None)
+                    .map_err(|_| LocalRuntimeError::output_decode())
+            }
+            Err(_) => Err(LocalRuntimeError::output_decode()),
+        }
     }
 
     fn generate(
@@ -111,8 +132,7 @@ impl LlamaEngine {
                 LlamaSampler::dist(request.seed),
             ])
         };
-        let mut decoder = encoding_rs::UTF_8.new_decoder();
-        let mut output = String::new();
+        let mut output_bytes = Vec::new();
         let mut output_tokens = 0_u32;
 
         while output_tokens < request.max_output_tokens {
@@ -129,10 +149,7 @@ impl LlamaEngine {
                 break;
             }
 
-            let piece = model
-                .token_to_piece(token, &mut decoder, true, None)
-                .map_err(|_| LocalRuntimeError::output_decode())?;
-            output.push_str(&piece);
+            output_bytes.extend_from_slice(&Self::token_piece_bytes(model, token)?);
             output_tokens += 1;
             if output_tokens >= request.max_output_tokens {
                 break;
@@ -152,7 +169,8 @@ impl LlamaEngine {
                 .map_err(|_| LocalRuntimeError::decode())?;
         }
 
-        let _ = decoder.decode_to_string(b"", &mut output, true);
+        let output = String::from_utf8(output_bytes)
+            .map_err(|_| LocalRuntimeError::output_decode())?;
         let duration = started.elapsed();
         let duration_ms = u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
         let tokens_per_second = if output_tokens == 0 || duration.is_zero() {

@@ -164,7 +164,9 @@ impl LocalRuntimeManager {
         }
     }
 
-    fn validate_request(request: &LocalRuntimeGenerateRequest) -> Result<(), LocalRuntimeError> {
+    pub(super) fn validate_request(
+        request: &LocalRuntimeGenerateRequest,
+    ) -> Result<(), LocalRuntimeError> {
         if request.prompt.is_empty()
             || request.prompt.len() > MAX_PROMPT_BYTES
             || request.max_output_tokens == 0
@@ -176,6 +178,8 @@ impl LocalRuntimeManager {
         Ok(())
     }
 
+    // P5 establishes the native generation entry point before P6 wires it into TextModel.
+    #[allow(dead_code)]
     pub(crate) async fn generate(
         &self,
         installer: Arc<LocalModelInstaller>,
@@ -207,7 +211,7 @@ impl LocalRuntimeManager {
         .map_err(|_| LocalRuntimeError::initialization())
         .and_then(|result| result);
 
-        self.finish_operation(&result);
+        self.finish_generation(&result);
         result
     }
 
@@ -254,16 +258,12 @@ impl LocalRuntimeManager {
         .map_err(|_| LocalRuntimeError::initialization())
         .and_then(|result| result);
 
-        self.finish_operation(&result.as_ref().map(|_| LocalRuntimeGeneration {
-            text: String::new(),
-            prompt_tokens: 0,
-            output_tokens: 0,
-            duration_ms: 0,
-            tokens_per_second: None,
-        }));
+        self.finish_non_generation(&result);
         result
     }
 
+    // P5 exposes sanitized runtime telemetry here; the frontend IPC shape is wired separately.
+    #[allow(dead_code)]
     pub(crate) fn diagnostics(&self, selected_model_id: String) -> LocalRuntimeDiagnostics {
         let phase = self.inner.lifecycle.read().phase;
         let telemetry = self.inner.telemetry.read();
@@ -301,28 +301,33 @@ impl LocalRuntimeManager {
         let result = tokio::task::spawn_blocking(move || state.lock().shutdown())
             .await
             .map_err(|_| LocalRuntimeError::initialization());
-        self.inner.telemetry.write().loaded = None;
+        self.finish_non_generation(&result);
         result
     }
 
-    fn finish_operation(&self, result: &Result<LocalRuntimeGeneration, LocalRuntimeError>) {
+    fn finish_generation(&self, result: &Result<LocalRuntimeGeneration, LocalRuntimeError>) {
+        let loaded = self.inner.state.lock().loaded.clone();
         let mut telemetry = self.inner.telemetry.write();
         telemetry.generation_in_progress = false;
-        let loaded = self.inner.state.lock().loaded.clone();
         telemetry.loaded = loaded;
         match result {
             Ok(generation) => {
                 telemetry.last_error_category = None;
-                if generation.duration_ms > 0
-                    || generation.prompt_tokens > 0
-                    || generation.output_tokens > 0
-                {
-                    telemetry.last_generation_duration_ms = Some(generation.duration_ms);
-                    telemetry.last_prompt_tokens = Some(generation.prompt_tokens);
-                    telemetry.last_output_tokens = Some(generation.output_tokens);
-                    telemetry.last_tokens_per_second = generation.tokens_per_second;
-                }
+                telemetry.last_generation_duration_ms = Some(generation.duration_ms);
+                telemetry.last_prompt_tokens = Some(generation.prompt_tokens);
+                telemetry.last_output_tokens = Some(generation.output_tokens);
+                telemetry.last_tokens_per_second = generation.tokens_per_second;
             }
+            Err(error) => telemetry.last_error_category = Some(error.kind),
+        }
+    }
+
+    fn finish_non_generation(&self, result: &Result<(), LocalRuntimeError>) {
+        let loaded = self.inner.state.lock().loaded.clone();
+        let mut telemetry = self.inner.telemetry.write();
+        telemetry.loaded = loaded;
+        match result {
+            Ok(()) => telemetry.last_error_category = None,
             Err(error) => telemetry.last_error_category = Some(error.kind),
         }
     }
