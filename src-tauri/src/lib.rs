@@ -302,7 +302,10 @@ pub fn run() {
                     {
                         Ok(Ok(())) => {}
                         Ok(Err(error)) => {
-                            warn!(kind = ?error.kind, "Failed to unload local LLM runtime during shutdown");
+                            warn!(
+                                kind = ?error.kind,
+                                "Failed to unload local LLM runtime during shutdown"
+                            );
                         }
                         Err(_) => {
                             warn!(
