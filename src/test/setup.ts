@@ -206,7 +206,11 @@ const dispatchTauriCommand = async (
     return mockLocalModels.map((model) => ({ ...model }));
   }
   if (cmd === "get_local_llm_diagnostics") {
-    return { model_root_ready: true, installs_in_progress: 0, last_error: null };
+    return {
+      model_root_ready: true,
+      installs_in_progress: 0,
+      last_error: null,
+    };
   }
   if (cmd === "install_local_llm_model") {
     const model = localModelForId(args?.modelId);
