@@ -112,11 +112,7 @@ export interface AsrModelProgressEvent {
 }
 
 export type LocalModelInstallState =
-  | "not_installed"
-  | "downloading"
-  | "verifying"
-  | "installed"
-  | "failed";
+  "not_installed" | "downloading" | "verifying" | "installed" | "failed";
 
 export type LocalModelInstallErrorKind =
   | "invalid_catalog"
