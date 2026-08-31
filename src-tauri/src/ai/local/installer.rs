@@ -319,7 +319,8 @@ pub struct LocalModelInstaller {
 impl LocalModelInstaller {
     pub fn new(root: PathBuf) -> Result<Self, LocalModelInstallError> {
         validate_local_model_catalog().map_err(|_| LocalModelInstallError::invalid_catalog())?;
-        fs::create_dir_all(&root).map_err(|_| LocalModelInstallError::io("create the model root"))?;
+        fs::create_dir_all(&root)
+            .map_err(|_| LocalModelInstallError::io("create the model root"))?;
         let staging = root.join(STAGING_DIR);
         fs::create_dir_all(&staging)
             .map_err(|_| LocalModelInstallError::io("create the model staging directory"))?;
@@ -353,7 +354,8 @@ impl LocalModelInstaller {
     }
 
     pub fn model_path(&self, model_id: &str) -> Result<PathBuf, LocalModelInstallError> {
-        let entry = local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
+        let entry =
+            local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         Ok(self
             .root
             .join(entry.id)
@@ -392,7 +394,8 @@ impl LocalModelInstaller {
         model_id: &str,
         progress: Option<LocalModelInstallProgressCallback>,
     ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
-        let entry = local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
+        let entry =
+            local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         if self.install_is_valid(entry) {
             return Ok(LocalModelInstallOutcome {
                 model_id: entry.id.to_string(),
@@ -429,7 +432,8 @@ impl LocalModelInstaller {
     }
 
     pub fn delete(&self, model_id: &str) -> Result<(), LocalModelInstallError> {
-        let entry = local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
+        let entry =
+            local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         if self.in_flight.lock().contains_key(model_id) {
             return Err(LocalModelInstallError::busy());
         }
@@ -444,7 +448,11 @@ impl LocalModelInstaller {
                     .map_err(|_| LocalModelInstallError::io("delete the local model"))?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(LocalModelInstallError::io("inspect the local model directory")),
+            Err(_) => {
+                return Err(LocalModelInstallError::io(
+                    "inspect the local model directory",
+                ))
+            }
         }
         self.last_errors.lock().remove(model_id);
         Ok(())
@@ -456,10 +464,10 @@ impl LocalModelInstaller {
         cancellation: &CancellationToken,
         progress: Option<&LocalModelInstallProgressCallback>,
     ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
-        let staging_path = self
-            .root
-            .join(STAGING_DIR)
-            .join(format!("{}-{}.partial", entry.id, Uuid::new_v4()));
+        let staging_path =
+            self.root
+                .join(STAGING_DIR)
+                .join(format!("{}-{}.partial", entry.id, Uuid::new_v4()));
         let result = async {
             self.transport
                 .download(entry, &staging_path, cancellation, progress)
@@ -581,16 +589,13 @@ pub fn initialize_global_local_model_installer(
 }
 
 pub fn global_local_model_installer() -> Result<Arc<LocalModelInstaller>, LocalModelInstallError> {
-    GLOBAL_LOCAL_MODEL_INSTALLER
-        .get()
-        .cloned()
-        .ok_or_else(|| {
-            LocalModelInstallError::new(
-                LocalModelInstallErrorKind::Io,
-                "The local model installer is not initialized.",
-                false,
-            )
-        })
+    GLOBAL_LOCAL_MODEL_INSTALLER.get().cloned().ok_or_else(|| {
+        LocalModelInstallError::new(
+            LocalModelInstallErrorKind::Io,
+            "The local model installer is not initialized.",
+            false,
+        )
+    })
 }
 
 fn verify_artifact(
