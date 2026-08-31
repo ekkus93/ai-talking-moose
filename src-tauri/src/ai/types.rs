@@ -208,8 +208,14 @@ mod provider_error_tests {
 
     #[test]
     fn text_provider_serializes_as_stable_snake_case_values() {
-        assert_eq!(serde_json::to_string(&TextProvider::Google).unwrap(), "\"google\"");
-        assert_eq!(serde_json::to_string(&TextProvider::Local).unwrap(), "\"local\"");
+        assert_eq!(
+            serde_json::to_string(&TextProvider::Google).unwrap(),
+            "\"google\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TextProvider::Local).unwrap(),
+            "\"local\""
+        );
         assert_eq!(TextProvider::default(), TextProvider::Google);
     }
 }
