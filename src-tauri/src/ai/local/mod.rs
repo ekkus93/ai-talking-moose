@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod installer;
 
 use crate::ai::traits::TextModel;
 use crate::ai::types::{ProviderError, ProviderErrorKind, TextRequest, TextResponse};
@@ -7,6 +8,11 @@ use async_trait::async_trait;
 pub use catalog::{
     local_model_entry, validate_local_model_catalog, LocalModelCatalogEntry, LocalModelTemplateHint,
     DEFAULT_LOCAL_TEXT_MODEL_ID, LOCAL_MODEL_CATALOG,
+};
+pub use installer::{
+    LocalModelDescriptor, LocalModelDiagnostics, LocalModelInstallError, LocalModelInstallErrorKind,
+    LocalModelInstallOutcome, LocalModelInstallProgress, LocalModelInstallProgressCallback,
+    LocalModelInstaller, LocalModelInstallState,
 };
 
 /// Fail-closed Local text provider used while the native runtime/model installer is not yet wired.
