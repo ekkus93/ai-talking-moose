@@ -94,22 +94,25 @@ The staged refactor removes persisted Fake selection from the production schema.
 3. **Maintained `llama-cpp-2` Rust bindings** — **selected**
    - Current evaluated release: `0.1.154` (published 2026-08-05).
    - Provides safe wrappers around the current llama.cpp API while staying close enough to upstream to track its fast-moving ABI/API.
-   - CPU operation requires no CUDA/Vulkan feature.
-   - The underlying llama.cpp project supports CPU builds and both Apple arm64 and x86_64; this repository already has CI runners for both macOS architectures.
+   - Downstream `default-features = false` avoids the crate's default OpenMP/common feature set and does not enable CUDA, Vulkan, ROCm, OpenCL, or MKL.
+   - **Apple Silicon caveat:** the crate itself has a target-specific dependency that enables its Metal sys feature on macOS arm64 even when downstream default features are disabled. V1 therefore guarantees **zero GPU offload at runtime** (`n_gpu_layers = 0` / equivalent model params), not that Metal support is absent from the Apple Silicon binary.
+   - The underlying llama.cpp project supports CPU inference and both Apple arm64 and x86_64; this repository already has CI runners for both macOS architectures.
    - Keeps inference in-process, so the application does not require a separately installed `llama-cli`/`llama-server` executable.
 
 References used for the decision:
 
 - https://docs.rs/llama-cpp-2/0.1.154/llama_cpp_2/
-- https://docs.rs/crate/llama-cpp-2/0.1.154
+- https://docs.rs/crate/llama-cpp-2/0.1.154/source/Cargo.toml.orig
+- https://docs.rs/crate/llama-cpp-sys-2/0.1.154/source/Cargo.toml.orig
 - https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md
 
 ### Build/package implications
 
 The native binding pulls a C/C++ llama.cpp build into the Rust dependency graph. CI/package work must therefore verify:
 
-- Linux Rust-quality runners have the needed C/C++/CMake toolchain;
+- Linux Rust-quality runners have the needed C/C++/CMake/libclang toolchain;
 - macOS arm64 and x86_64 bundle jobs compile the binding without relying on a developer-installed llama.cpp;
+- Apple Silicon may contain compiled Metal support from the binding's target policy, but Local LLM V1 acceptance must prove model parameters request zero GPU layers/offload;
 - no GGUF model weight is embedded in ordinary application bundles;
 - llama.cpp/binding license evidence is included in the shipped dependency inventory;
 - model licenses are tracked separately because model weights are user-installed artifacts, not ordinary compiled dependencies.
@@ -118,7 +121,7 @@ The native binding pulls a C/C++ llama.cpp build into the Rust dependency graph.
 
 Until the selected binding is proven safe for concurrent contexts in this application, Local LLM V1 will use a single runtime manager with serialized generation. Model load/unload/delete/switch operations share the same ownership boundary so an artifact cannot be removed while inference is using it.
 
-Inference is CPU-only in V1. GPU offload is explicitly disabled/not enabled by feature configuration. Request output/context sizes are bounded independently of model metadata. Runtime calls that cannot be cooperatively interrupted will be isolated from async executor threads, and application shutdown must have a bounded/non-hanging policy before real-model acceptance closes.
+Inference is CPU-only in V1: model/context configuration must request zero GPU layers and no GPU offload. CUDA, Vulkan, ROCm, OpenCL, and MKL features are not enabled by this project. On Apple Silicon, Metal code may still be compiled by the binding's target-specific dependency, but it is not selected for model offload in V1. Request output/context sizes are bounded independently of model metadata. Runtime calls that cannot be cooperatively interrupted will be isolated from async executor threads, and application shutdown must have a bounded/non-hanging policy before real-model acceptance closes.
 
 ## Staged implementation rule
 
