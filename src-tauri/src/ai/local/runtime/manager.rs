@@ -245,14 +245,16 @@ impl LocalRuntimeManager {
             }
 
             state.lock().unload_model_if(&model_id);
-            installer.delete(&model_id).map_err(|error| match error.kind {
-                LocalModelInstallErrorKind::UnknownModel => LocalRuntimeError::unknown_model(),
-                LocalModelInstallErrorKind::Busy => LocalRuntimeError::new(
-                    LocalRuntimeErrorKind::ModelDelete,
-                    "The local model cannot be deleted while installation is in progress.",
-                ),
-                _ => LocalRuntimeError::model_delete(),
-            })
+            installer
+                .delete(&model_id)
+                .map_err(|error| match error.kind {
+                    LocalModelInstallErrorKind::UnknownModel => LocalRuntimeError::unknown_model(),
+                    LocalModelInstallErrorKind::Busy => LocalRuntimeError::new(
+                        LocalRuntimeErrorKind::ModelDelete,
+                        "The local model cannot be deleted while installation is in progress.",
+                    ),
+                    _ => LocalRuntimeError::model_delete(),
+                })
         })
         .await
         .map_err(|_| LocalRuntimeError::initialization())
@@ -361,8 +363,8 @@ impl RuntimeModelSpec {
         let model_path = installer
             .model_path(entry.id)
             .map_err(|_| LocalRuntimeError::unknown_model())?;
-        let canonical_root = fs::canonicalize(installer.root())
-            .map_err(|_| LocalRuntimeError::unsafe_artifact())?;
+        let canonical_root =
+            fs::canonicalize(installer.root()).map_err(|_| LocalRuntimeError::unsafe_artifact())?;
         let canonical_path =
             fs::canonicalize(model_path).map_err(|_| LocalRuntimeError::model_not_installed())?;
         if !canonical_path.starts_with(&canonical_root) {
