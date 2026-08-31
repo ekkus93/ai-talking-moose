@@ -173,8 +173,12 @@ impl LocalRuntimeManager {
     pub(super) fn validate_request(
         request: &LocalRuntimeGenerateRequest,
     ) -> Result<(), LocalRuntimeError> {
+        let prompt_bytes = request.prompt.len();
+        let system_bytes = request.system_instruction.as_ref().map_or(0, String::len);
         if request.prompt.is_empty()
-            || request.prompt.len() > MAX_PROMPT_BYTES
+            || prompt_bytes
+                .checked_add(system_bytes)
+                .is_none_or(|total| total > MAX_PROMPT_BYTES)
             || request.max_output_tokens == 0
             || !request.temperature.is_finite()
             || !(0.0..=MAX_TEMPERATURE).contains(&request.temperature)
@@ -184,8 +188,6 @@ impl LocalRuntimeManager {
         Ok(())
     }
 
-    // P5 establishes the native generation entry point before P6 wires it into TextModel.
-    #[allow(dead_code)]
     pub(crate) async fn generate(
         &self,
         installer: Arc<LocalModelInstaller>,

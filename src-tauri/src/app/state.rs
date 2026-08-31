@@ -4,7 +4,7 @@ use crate::ai::google::{
     DEFAULT_TEXT_MODEL, DEFAULT_TTS_MODEL,
 };
 use crate::ai::local::{
-    LocalRuntimeManager, UnavailableLocalTextModel, DEFAULT_LOCAL_TEXT_MODEL_ID,
+    global_local_model_installer, LocalRuntimeManager, LocalTextModel, DEFAULT_LOCAL_TEXT_MODEL_ID,
 };
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::ai::types::TextProvider;
@@ -426,7 +426,9 @@ impl AppState {
                     settings.google_text_model.clone(),
                 ))
             }
-            TextProvider::Local => Box::new(UnavailableLocalTextModel::new(
+            TextProvider::Local => Box::new(LocalTextModel::new(
+                self.local_llm_runtime.clone(),
+                global_local_model_installer(),
                 settings.local_text_model.clone(),
             )),
         }
@@ -692,7 +694,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_local_text_without_runtime_fails_model_without_cloud_fallback() {
+    async fn configured_local_text_with_unknown_model_fails_without_cloud_fallback() {
         let state = AppState::new_for_tests().unwrap();
         state.settings.write().text_provider = TextProvider::Local;
         state.settings.write().local_text_model = "missing-local-model".to_string();

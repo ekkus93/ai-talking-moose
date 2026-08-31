@@ -78,6 +78,7 @@ fn fake_state(events: Arc<Mutex<Vec<String>>>) -> RuntimeState {
 fn request(prompt: impl Into<String>) -> LocalRuntimeGenerateRequest {
     LocalRuntimeGenerateRequest {
         model_id: DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+        system_instruction: None,
         prompt: prompt.into(),
         temperature: 0.7,
         max_output_tokens: 32,
@@ -129,6 +130,10 @@ fn request_bounds_fail_closed_before_native_inference() {
     );
 
     invalid = request("x".repeat(MAX_PROMPT_BYTES + 1));
+    assert!(LocalRuntimeManager::validate_request(&invalid).is_err());
+
+    invalid = request("user");
+    invalid.system_instruction = Some("x".repeat(MAX_PROMPT_BYTES));
     assert!(LocalRuntimeManager::validate_request(&invalid).is_err());
 
     invalid = request("prompt");
