@@ -249,6 +249,9 @@ pub fn run() {
             // AppHandle::exit below triggers a second ExitRequested event, which is allowed
             // through because shutdown_started is already true.
             api.prevent_exit();
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                state.local_llm_runtime.begin_shutdown();
+            }
             let handle = app_handle.clone();
             let exit_code = code.unwrap_or(0);
             tauri::async_runtime::spawn(async move {

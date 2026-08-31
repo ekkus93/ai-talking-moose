@@ -3,7 +3,9 @@ use crate::ai::google::{
     GoogleLiveProvider, GoogleSpeechSynthesizer, GoogleTextModel, DEFAULT_LIVE_MODEL,
     DEFAULT_TEXT_MODEL, DEFAULT_TTS_MODEL,
 };
-use crate::ai::local::{UnavailableLocalTextModel, DEFAULT_LOCAL_TEXT_MODEL_ID};
+use crate::ai::local::{
+    LocalRuntimeManager, UnavailableLocalTextModel, DEFAULT_LOCAL_TEXT_MODEL_ID,
+};
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::ai::types::TextProvider;
 use crate::asr::moonshine::MoonshineModelInstaller;
@@ -246,6 +248,7 @@ pub struct AppState {
     pub standalone_speech: StandaloneSpeechController,
     pub conversation_mgr: Arc<ConversationManager>,
     pub moonshine_installer: Arc<MoonshineModelInstaller>,
+    pub(crate) local_llm_runtime: Arc<LocalRuntimeManager>,
     pub tool_router: Arc<ToolRouter>,
     pub settings: Arc<RwLock<AppSettings>>,
     pub is_muted: Arc<RwLock<bool>>,
@@ -385,6 +388,7 @@ impl AppState {
             MoonshineModelInstaller::new(moonshine_model_root(db_path))
                 .map_err(|error| error.to_string())?,
         );
+        let local_llm_runtime = Arc::new(LocalRuntimeManager::new());
 
         let builtin_tools = Arc::new(BuiltinTools {
             memory_manager: memory.clone(),
@@ -405,6 +409,7 @@ impl AppState {
             standalone_speech,
             conversation_mgr,
             moonshine_installer,
+            local_llm_runtime,
             tool_router,
             settings,
             is_muted: Arc::new(RwLock::new(false)),
