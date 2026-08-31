@@ -142,14 +142,6 @@ impl LocalModelInstallError {
             true,
         )
     }
-
-    fn corrupt_install() -> Self {
-        Self::new(
-            LocalModelInstallErrorKind::CorruptInstall,
-            "The installed local model is incomplete or does not match its catalog identity.",
-            true,
-        )
-    }
 }
 
 impl fmt::Display for LocalModelInstallError {
