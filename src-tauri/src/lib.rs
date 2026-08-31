@@ -83,6 +83,10 @@ pub fn run() {
                     "failed to resolve application data directory: {error}"
                 ))
             })?;
+            ai::local::initialize_global_local_model_installer(
+                app_data_dir.join("models").join("llm"),
+            )
+            .map_err(|error| io::Error::other(error.to_string()))?;
             let db_path = persistent_database_path(&app_data_dir)?;
             let db_path = db_path.to_str().ok_or_else(|| {
                 io::Error::other("application database path is not valid UTF-8")
@@ -193,6 +197,11 @@ pub fn run() {
             get_asr_diagnostics,
             install_asr_model,
             delete_asr_model,
+            get_local_llm_models,
+            get_local_llm_diagnostics,
+            install_local_llm_model,
+            cancel_local_llm_install,
+            delete_local_llm_model,
             set_google_api_key,
             clear_google_api_key,
             has_google_api_key,
