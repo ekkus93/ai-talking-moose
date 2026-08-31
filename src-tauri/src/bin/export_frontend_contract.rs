@@ -3,8 +3,8 @@ use talking_moose_lib::ai::google::{
     GoogleModelDescriptor, GoogleTtsVoiceDescriptor, GOOGLE_MODELS, GOOGLE_TTS_VOICES,
 };
 use talking_moose_lib::ai::local::{
-    LocalModelDescriptor, LocalModelDiagnostics, LocalModelInstallError, LocalModelInstallErrorKind,
-    LocalModelInstallProgress, LocalModelInstallState,
+    LocalModelDescriptor, LocalModelDiagnostics, LocalModelInstallError,
+    LocalModelInstallErrorKind, LocalModelInstallProgress, LocalModelInstallState,
 };
 use talking_moose_lib::ai::types::{ProviderError, ProviderErrorKind};
 use talking_moose_lib::app::state::{AppSettings, OnboardingStatus};
