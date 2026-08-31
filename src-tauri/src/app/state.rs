@@ -1,10 +1,11 @@
-use crate::ai::fake::{FakeConversationProvider, FakeSpeechSynthesizer, FakeTextModel};
 use crate::ai::google::{
     normalize_live_model, normalize_text_model, normalize_tts_model, GoogleAuth,
     GoogleLiveProvider, GoogleSpeechSynthesizer, GoogleTextModel, DEFAULT_LIVE_MODEL,
     DEFAULT_TEXT_MODEL, DEFAULT_TTS_MODEL,
 };
+use crate::ai::local::{UnavailableLocalTextModel, DEFAULT_LOCAL_TEXT_MODEL_ID};
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
+use crate::ai::types::TextProvider;
 use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
@@ -58,9 +59,10 @@ pub struct AppSettings {
     pub pitch: f32,
 
     // AI Configuration
-    pub provider: String, // "google" or "fake"
+    pub text_provider: TextProvider,
     pub live_model: String,
-    pub text_model: String,
+    pub google_text_model: String,
+    pub local_text_model: String,
     pub tts_model: String,
 
     // Privacy
@@ -78,7 +80,7 @@ pub struct AppSettings {
     pub verbosity: f32,
 }
 
-pub const CURRENT_SETTINGS_VERSION: u32 = 2;
+pub const CURRENT_SETTINGS_VERSION: u32 = 3;
 
 pub const CURRENT_ONBOARDING_VERSION: u32 = 1;
 const ONBOARDING_ACKNOWLEDGED_VERSION_SETTING: &str = "onboarding_acknowledged_version";
@@ -116,9 +118,12 @@ impl Default for AppSettings {
             speaking_rate: 0.95,
             pitch: -1.5,
 
-            provider: "google".to_string(),
+            // Keep Google as the staged default until the local installer/runtime/UX is usable.
+            // LLM-013 revisits the new-profile default after real CPU model acceptance.
+            text_provider: TextProvider::Google,
             live_model: DEFAULT_LIVE_MODEL.to_string(),
-            text_model: DEFAULT_TEXT_MODEL.to_string(),
+            google_text_model: DEFAULT_TEXT_MODEL.to_string(),
+            local_text_model: DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
             tts_model: DEFAULT_TTS_MODEL.to_string(),
 
             active_app_observation: false,
@@ -138,9 +143,9 @@ impl Default for AppSettings {
 
 impl AppSettings {
     /// Deserialize persisted settings while preserving the behavior of installations
-    /// created before an ASR selector existed. New profiles default to local
-    /// Moonshine Tiny Streaming, while legacy profiles migrate to Gemini Live audio
-    /// because that was the only microphone-recognition path they previously used.
+    /// created before an ASR selector or explicit text-provider selector existed.
+    /// New profiles default to local Moonshine ASR while legacy profiles without an
+    /// ASR selector migrate to Gemini Live audio because that was their only microphone path.
     pub fn from_persisted_json(json: &str) -> Result<(Self, bool), serde_json::Error> {
         let value: serde_json::Value = serde_json::from_str(json)?;
         let had_asr_mode = value.get("asr_mode").is_some();
@@ -153,20 +158,42 @@ impl AppSettings {
             .get("window_title_observation")
             .and_then(serde_json::Value::as_bool)
             == Some(true);
+        let had_text_provider = value.get("text_provider").is_some();
+        let had_google_text_model = value.get("google_text_model").is_some();
+        let had_local_text_model = value.get("local_text_model").is_some();
+        let had_legacy_provider = value.get("provider").is_some();
+        let legacy_text_model = value
+            .get("text_model")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned);
+        let had_legacy_text_model = legacy_text_model.is_some();
 
         let mut settings: Self = serde_json::from_value(value)?;
         if !had_asr_mode {
             settings.asr_mode = AsrMode::GeminiLiveAudio;
         }
+        if !had_text_provider {
+            // Existing installations were Google text users. Never reinterpret an old
+            // profile as Local merely because the new selector did not exist yet.
+            settings.text_provider = TextProvider::Google;
+        }
+        if !had_google_text_model {
+            if let Some(legacy_text_model) = legacy_text_model {
+                settings.google_text_model = legacy_text_model;
+            }
+        }
+
         let normalized_live_model = normalize_live_model(&settings.live_model).to_string();
-        let normalized_text_model = normalize_text_model(&settings.text_model).to_string();
+        let normalized_google_text_model =
+            normalize_text_model(&settings.google_text_model).to_string();
         let normalized_tts_model = normalize_tts_model(&settings.tts_model).to_string();
         let models_migrated = normalized_live_model != settings.live_model
-            || normalized_text_model != settings.text_model
+            || normalized_google_text_model != settings.google_text_model
             || normalized_tts_model != settings.tts_model;
         settings.live_model = normalized_live_model;
-        settings.text_model = normalized_text_model;
+        settings.google_text_model = normalized_google_text_model;
         settings.tts_model = normalized_tts_model;
+
         // Window-title observation is an unsupported V1 compatibility field, not an
         // authoritative preference. Persist it fail-closed even for legacy profiles.
         settings.window_title_observation = false;
@@ -177,6 +204,11 @@ impl AppSettings {
             !had_asr_mode
                 || had_legacy_microphone_permission
                 || !had_current_version
+                || !had_text_provider
+                || !had_google_text_model
+                || !had_local_text_model
+                || had_legacy_provider
+                || had_legacy_text_model
                 || models_migrated
                 || had_enabled_window_title_observation,
         ))
@@ -381,45 +413,40 @@ impl AppState {
 
     pub fn get_text_model(&self) -> Box<dyn TextModel> {
         let settings = self.settings.read();
-        if settings.provider == "fake" || !self.secrets.has_google_api_key() {
-            Box::new(FakeTextModel::default())
-        } else {
-            let key = self.secrets.get_google_api_key().unwrap_or_default();
-            Box::new(GoogleTextModel::new(
-                GoogleAuth::new(key),
-                settings.text_model.clone(),
-            ))
+        match settings.text_provider {
+            TextProvider::Google => {
+                let key = self.secrets.get_google_api_key().unwrap_or_default();
+                Box::new(GoogleTextModel::new(
+                    GoogleAuth::new(key),
+                    settings.google_text_model.clone(),
+                ))
+            }
+            TextProvider::Local => Box::new(UnavailableLocalTextModel::new(
+                settings.local_text_model.clone(),
+            )),
         }
     }
 
     pub fn get_speech_synthesizer(&self) -> Box<dyn SpeechSynthesizer> {
         let settings = self.settings.read();
-        if settings.provider == "fake" || !self.secrets.has_google_api_key() {
-            Box::new(FakeSpeechSynthesizer)
-        } else {
-            let key = self.secrets.get_google_api_key().unwrap_or_default();
-            Box::new(GoogleSpeechSynthesizer::new(
-                GoogleAuth::new(key),
-                settings.tts_model.clone(),
-                settings.tts_voice.clone(),
-            ))
-        }
+        let key = self.secrets.get_google_api_key().unwrap_or_default();
+        Box::new(GoogleSpeechSynthesizer::new(
+            GoogleAuth::new(key),
+            settings.tts_model.clone(),
+            settings.tts_voice.clone(),
+        ))
     }
 
     pub fn get_live_provider(&self) -> Arc<dyn RealtimeConversationProvider> {
-        let settings = self.settings.read();
-        if settings.provider == "fake" {
-            Arc::new(FakeConversationProvider)
-        } else {
-            let key = self.secrets.get_google_api_key().unwrap_or_default();
-            Arc::new(GoogleLiveProvider::new(GoogleAuth::new(key)))
-        }
+        let key = self.secrets.get_google_api_key().unwrap_or_default();
+        Arc::new(GoogleLiveProvider::new(GoogleAuth::new(key)))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::types::{ProviderErrorKind, TextRequest, TtsRequest};
     use crate::secrets::{MemorySecretBackend, SecretBackend};
     use std::sync::Arc;
     use tempfile::{tempdir, NamedTempFile};
@@ -442,10 +469,13 @@ mod tests {
     }
 
     #[test]
-    fn new_settings_default_to_moonshine_tiny() {
+    fn new_settings_default_to_moonshine_tiny_and_staged_google_text() {
         let settings = AppSettings::default();
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+        assert_eq!(settings.text_provider, TextProvider::Google);
+        assert_eq!(settings.google_text_model, DEFAULT_TEXT_MODEL);
+        assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
         assert!(!settings.active_app_observation);
         assert!(!settings.memory_enabled);
         assert!(!settings.save_transcripts);
@@ -487,6 +517,51 @@ mod tests {
         assert!(migrated);
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::GeminiLiveAudio);
+    }
+
+    #[test]
+    fn version_two_text_settings_migrate_to_google_without_persisting_fake_provider() {
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.insert("settings_version".to_string(), serde_json::json!(2));
+        object.remove("text_provider");
+        object.remove("google_text_model");
+        object.remove("local_text_model");
+        object.insert("provider".to_string(), serde_json::json!("fake"));
+        object.insert(
+            "text_model".to_string(),
+            serde_json::json!("gemini-3.6-flash"),
+        );
+
+        let (settings, migrated) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
+        assert!(migrated);
+        assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
+        assert_eq!(settings.text_provider, TextProvider::Google);
+        assert_eq!(settings.google_text_model, "gemini-3.6-flash");
+        assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
+
+        let normalized = serde_json::to_value(settings).unwrap();
+        assert!(normalized.get("provider").is_none());
+        assert!(normalized.get("text_model").is_none());
+        assert_eq!(normalized["text_provider"], "google");
+    }
+
+    #[test]
+    fn migrated_text_provider_settings_are_idempotent() {
+        let original = AppSettings {
+            text_provider: TextProvider::Local,
+            google_text_model: "gemini-3.6-flash".to_string(),
+            local_text_model: "local-catalog-id".to_string(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&original).unwrap();
+
+        let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
+        assert!(!migrated);
+        assert_eq!(settings.text_provider, TextProvider::Local);
+        assert_eq!(settings.google_text_model, "gemini-3.6-flash");
+        assert_eq!(settings.local_text_model, "local-catalog-id");
     }
 
     #[test]
@@ -596,6 +671,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn configured_google_text_without_secret_fails_auth_instead_of_using_fake_provider() {
+        let state = AppState::new_for_tests().unwrap();
+        let error = state
+            .get_text_model()
+            .generate(TextRequest {
+                prompt: "must fail auth".to_string(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(8),
+            })
+            .await
+            .expect_err("configured Google text without a key must fail closed");
+        assert_eq!(error.kind, ProviderErrorKind::Auth);
+    }
+
+    #[tokio::test]
+    async fn configured_local_text_without_runtime_fails_model_without_cloud_fallback() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().text_provider = TextProvider::Local;
+        state.settings.write().local_text_model = "missing-local-model".to_string();
+
+        let error = state
+            .get_text_model()
+            .generate(TextRequest {
+                prompt: "must stay local".to_string(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(8),
+            })
+            .await
+            .expect_err("unavailable Local text must fail rather than call Google or Fake");
+        assert_eq!(error.kind, ProviderErrorKind::Model);
+    }
+
+    #[tokio::test]
+    async fn configured_google_tts_without_secret_fails_auth_instead_of_using_fake_speech() {
+        let state = AppState::new_for_tests().unwrap();
+        let error = state
+            .get_speech_synthesizer()
+            .synthesize(TtsRequest {
+                text: "must fail auth".to_string(),
+                voice_name: None,
+                speaking_rate: None,
+                pitch: None,
+            })
+            .await
+            .expect_err("configured Google TTS without a key must fail closed");
+        assert_eq!(error.kind, ProviderErrorKind::Auth);
+    }
+
+    #[tokio::test]
     async fn configured_google_live_without_secret_fails_auth_instead_of_using_fake_provider() {
         let state = AppState::new_for_tests().unwrap();
         let provider = state.get_live_provider();
@@ -616,7 +742,7 @@ mod tests {
             .err()
             .expect("configured Google provider without a key must fail closed");
 
-        assert_eq!(error.kind, crate::ai::types::ProviderErrorKind::Auth);
+        assert_eq!(error.kind, ProviderErrorKind::Auth);
     }
 
     #[test]

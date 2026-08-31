@@ -152,13 +152,15 @@ describe("SettingsModal Component", () => {
     fireEvent.click(screen.getByText("Gemini AI"));
 
     const liveSelect = screen.getByLabelText("Realtime Live Voice Model");
-    const textSelect = screen.getByLabelText("Text & Ambient Remark Model");
+    const textSelect = screen.getByLabelText(
+      "Gemini Text & Ambient Remark Model",
+    );
     const settings = frontendDefaultSettings();
 
     expect(liveSelect).toBeDisabled();
     expect(textSelect).toBeDisabled();
     expect(liveSelect).toHaveValue(settings.live_model);
-    expect(textSelect).toHaveValue(settings.text_model);
+    expect(textSelect).toHaveValue(settings.google_text_model);
     expect(
       screen.getByRole("option", {
         name: new RegExp(
@@ -201,11 +203,13 @@ describe("SettingsModal Component", () => {
     fireEvent.click(screen.getByText("Gemini AI"));
 
     const liveSelect = screen.getByLabelText("Realtime Live Voice Model");
-    const textSelect = screen.getByLabelText("Text & Ambient Remark Model");
+    const textSelect = screen.getByLabelText(
+      "Gemini Text & Ambient Remark Model",
+    );
     await waitFor(() => expect(liveSelect).not.toBeDisabled());
 
     expect(liveSelect).toHaveValue(settings.live_model);
-    expect(textSelect).toHaveValue(settings.text_model);
+    expect(textSelect).toHaveValue(settings.google_text_model);
     expect(
       screen.getByRole("option", {
         name: `Unavailable: ${settings.live_model}`,
@@ -213,7 +217,7 @@ describe("SettingsModal Component", () => {
     ).toBeDisabled();
     expect(
       screen.getByRole("option", {
-        name: `Unavailable: ${settings.text_model}`,
+        name: `Unavailable: ${settings.google_text_model}`,
       }),
     ).toBeDisabled();
     expect(updateSpy).not.toHaveBeenCalled();

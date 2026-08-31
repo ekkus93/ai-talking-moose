@@ -1,5 +1,6 @@
 pub mod fake;
 pub mod google;
+pub mod local;
 pub mod traits;
 pub mod types;
 
