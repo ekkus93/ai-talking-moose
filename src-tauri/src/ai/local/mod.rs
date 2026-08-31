@@ -2,6 +2,7 @@ pub mod catalog;
 #[cfg(test)]
 mod compile_proof;
 pub mod installer;
+pub(crate) mod runtime;
 
 use crate::ai::traits::TextModel;
 use crate::ai::types::{ProviderError, ProviderErrorKind, TextRequest, TextResponse};
@@ -17,6 +18,7 @@ pub use installer::{
     LocalModelInstallOutcome, LocalModelInstallProgress, LocalModelInstallProgressCallback,
     LocalModelInstallState, LocalModelInstaller,
 };
+pub(crate) use runtime::LocalRuntimeManager;
 
 /// Fail-closed Local text provider used while the native runtime/model installer is not yet wired.
 ///
