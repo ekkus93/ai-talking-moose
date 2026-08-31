@@ -1,6 +1,7 @@
 use crate::ai::google::{
     validate_live_model, validate_text_model, validate_tts_model, validate_tts_voice,
 };
+use crate::ai::local::local_model_entry;
 use crate::app::state::AppSettings;
 use crate::audio::devices::AudioDeviceInfo;
 use crate::character::behavior::BehaviorEngine;
@@ -49,6 +50,9 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
     validate_live_model(&settings.live_model)?;
     validate_text_model(&settings.google_text_model)?;
     bounded_identifier("local text model ID", &settings.local_text_model, 128)?;
+    if local_model_entry(&settings.local_text_model).is_none() {
+        return Err("unsupported local text model".to_string());
+    }
     validate_tts_voice(&settings.tts_voice)?;
     validate_tts_model(&settings.tts_model)?;
     optional_device_id("input device ID", settings.input_device.as_deref())?;
@@ -166,6 +170,18 @@ mod tests {
 
         let settings = AppSettings {
             local_text_model: "   ".to_string(),
+            ..Default::default()
+        };
+        assert!(validate_app_settings(&settings).is_err());
+
+        let settings = AppSettings {
+            local_text_model: "../arbitrary.gguf".to_string(),
+            ..Default::default()
+        };
+        assert!(validate_app_settings(&settings).is_err());
+
+        let settings = AppSettings {
+            local_text_model: "unknown-model".to_string(),
             ..Default::default()
         };
         assert!(validate_app_settings(&settings).is_err());
