@@ -46,8 +46,14 @@ impl RuntimeState {
             return Ok(());
         }
 
-        if let Some(engine) = self.engine.as_mut() {
-            engine.unload_model();
+        // The backend may already be initialized while no model is loaded (for example after a
+        // failed load). Only emit an unload transition when RuntimeState actually owns a loaded
+        // model; otherwise a first load spuriously looks like a model replacement.
+        if self.loaded.is_some() {
+            self.engine
+                .as_mut()
+                .ok_or_else(LocalRuntimeError::initialization)?
+                .unload_model();
         }
         self.loaded = None;
 
