@@ -28,6 +28,8 @@ export interface ProviderError {
   retryable: boolean;
 }
 
+export type TextProvider = "google" | "local";
+
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
 export type AsrMode =
@@ -212,9 +214,10 @@ export interface AppSettings {
   speaking_rate: number;
   pitch: number;
 
-  provider: "google" | "fake";
+  text_provider: TextProvider;
   live_model: string;
-  text_model: string;
+  google_text_model: string;
+  local_text_model: string;
   tts_model: string;
 
   active_app_observation: boolean;
