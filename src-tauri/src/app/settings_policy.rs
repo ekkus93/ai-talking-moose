@@ -46,11 +46,9 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
         Ok(())
     }
 
-    if !matches!(settings.provider.as_str(), "google" | "fake") {
-        return Err("unsupported AI provider".to_string());
-    }
     validate_live_model(&settings.live_model)?;
-    validate_text_model(&settings.text_model)?;
+    validate_text_model(&settings.google_text_model)?;
+    bounded_identifier("local text model ID", &settings.local_text_model, 128)?;
     validate_tts_voice(&settings.tts_voice)?;
     validate_tts_model(&settings.tts_model)?;
     optional_device_id("input device ID", settings.input_device.as_deref())?;
@@ -86,7 +84,6 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
 
 pub(crate) fn conversation_restart_required(previous: &AppSettings, next: &AppSettings) -> bool {
     previous.asr_mode != next.asr_mode
-        || previous.provider != next.provider
         || previous.live_model != next.live_model
         || previous.input_device != next.input_device
         || previous.output_device != next.output_device
@@ -160,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn validation_rejects_invalid_ranges_provider_and_identifiers() {
+    fn validation_rejects_invalid_ranges_and_identifiers() {
         let settings = AppSettings {
             talkativeness: f32::NAN,
             ..Default::default()
@@ -168,7 +165,7 @@ mod tests {
         assert!(validate_app_settings(&settings).is_err());
 
         let settings = AppSettings {
-            provider: "unexpected".to_string(),
+            local_text_model: "   ".to_string(),
             ..Default::default()
         };
         assert!(validate_app_settings(&settings).is_err());
@@ -241,6 +238,10 @@ mod tests {
         assert!(conversation_restart_required(&previous, &next));
 
         let mut next = previous.clone();
+        next.text_provider = crate::ai::types::TextProvider::Local;
+        assert!(!conversation_restart_required(&previous, &next));
+
+        let mut next = previous.clone();
         next.talkativeness = 0.75;
         assert!(!conversation_restart_required(&previous, &next));
     }
@@ -279,9 +280,10 @@ mod tests {
             ("tts_voice", "Live and standalone speech selection"),
             ("speaking_rate", "standalone TTS request"),
             ("pitch", "standalone TTS request"),
-            ("provider", "provider selection"),
+            ("text_provider", "text model provider selection"),
             ("live_model", "Gemini Live session configuration"),
-            ("text_model", "Google text model construction"),
+            ("google_text_model", "Google text model construction"),
+            ("local_text_model", "Local model catalog selection"),
             ("tts_model", "Google speech synthesizer construction"),
             ("active_app_observation", "desktop observation privacy gate"),
             ("memory_enabled", "prompt memory privacy gate"),
@@ -321,6 +323,8 @@ mod tests {
         assert!(metadata
             .iter()
             .all(|(_, classification)| !classification.is_empty()));
+        assert!(serialized.get("provider").is_none());
+        assert!(serialized.get("text_model").is_none());
         assert!(serialized.get("microphone_permission_granted").is_none());
     }
 
