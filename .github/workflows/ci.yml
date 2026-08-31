@@ -103,8 +103,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
+            clang \
+            cmake \
             libasound2-dev \
             libayatana-appindicator3-dev \
+            libclang-dev \
             librsvg2-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \
@@ -145,6 +148,53 @@ jobs:
 
       - name: Run backend stress matrix
         run: bash scripts/run_backend_stress_matrix.sh
+
+  local-llm-compile-proof:
+    name: Local LLM compile proof (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-latest
+            os: linux
+          - label: macos-arm64
+            runner: macos-15
+            os: macos
+          - label: macos-x86_64
+            runner: macos-15-intel
+            os: macos
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Linux llama.cpp build dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            cmake \
+            libclang-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.label }}-llm-proof-${{ hashFiles('src-tauri/llama-compile-proof/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-llm-proof-
+
+      - name: Compile and run llama.cpp CPU-policy proof
+        run: cargo test --manifest-path src-tauri/llama-compile-proof/Cargo.toml --locked
 
   dependency-audit:
     name: Dependency audit
@@ -199,8 +249,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
+            clang \
+            cmake \
             libasound2-dev \
             libayatana-appindicator3-dev \
+            libclang-dev \
             librsvg2-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \

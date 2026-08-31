@@ -1,4 +1,6 @@
 pub mod catalog;
+#[cfg(test)]
+mod compile_proof;
 pub mod installer;
 
 use crate::ai::traits::TextModel;
