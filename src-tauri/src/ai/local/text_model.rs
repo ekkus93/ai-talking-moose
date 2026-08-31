@@ -67,9 +67,9 @@ impl LocalTextModel {
     ) -> Self {
         let installer = match installer {
             Ok(installer) => InstallerState::Ready(installer),
-            Err(_) => InstallerState::Unavailable(ProviderError::from_kind(
-                ProviderErrorKind::Setup,
-            )),
+            Err(_) => {
+                InstallerState::Unavailable(ProviderError::from_kind(ProviderErrorKind::Setup))
+            }
         };
         Self {
             runtime,
@@ -244,10 +244,7 @@ mod tests {
 
         let requests = runtime.requests.lock();
         assert_eq!(requests[0].temperature, DEFAULT_LOCAL_TEMPERATURE);
-        assert_eq!(
-            requests[0].max_output_tokens,
-            entry.recommended_max_output
-        );
+        assert_eq!(requests[0].max_output_tokens, entry.recommended_max_output);
     }
 
     #[tokio::test]
@@ -278,9 +275,18 @@ mod tests {
     #[test]
     fn runtime_errors_map_to_stable_safe_provider_categories() {
         let cases = [
-            (LocalRuntimeErrorKind::ModelNotInstalled, ProviderErrorKind::Model),
-            (LocalRuntimeErrorKind::ChatTemplate, ProviderErrorKind::Model),
-            (LocalRuntimeErrorKind::PromptTooLong, ProviderErrorKind::Setup),
+            (
+                LocalRuntimeErrorKind::ModelNotInstalled,
+                ProviderErrorKind::Model,
+            ),
+            (
+                LocalRuntimeErrorKind::ChatTemplate,
+                ProviderErrorKind::Model,
+            ),
+            (
+                LocalRuntimeErrorKind::PromptTooLong,
+                ProviderErrorKind::Setup,
+            ),
             (LocalRuntimeErrorKind::Decode, ProviderErrorKind::Internal),
             (LocalRuntimeErrorKind::Cancelled, ProviderErrorKind::Closed),
         ];
