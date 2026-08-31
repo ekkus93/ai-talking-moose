@@ -46,6 +46,7 @@ parking_lot = "0.12"
 uuid = { version = "1.8", features = ["v4", "serde"] }
 rand = "0.8"
 base64 = "0.22"
+llama-cpp-2 = { version = "=0.1.154", default-features = false }
 
 [dev-dependencies]
 tauri = { version = "2.1", features = ["test"] }
