@@ -1,7 +1,7 @@
 pub mod catalog;
-pub mod installer;
 #[cfg(test)]
 mod compile_proof;
+pub mod installer;
 
 use crate::ai::traits::TextModel;
 use crate::ai::types::{ProviderError, ProviderErrorKind, TextRequest, TextResponse};
