@@ -6,7 +6,7 @@ use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::TokenToStringError;
@@ -16,6 +16,7 @@ use std::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 const PROMPT_BATCH_TOKENS: usize = 512;
+const ADD_BOS_METADATA_KEY: &str = "tokenizer.ggml.add_bos_token";
 
 pub(super) struct LlamaEngine {
     backend: LlamaBackend,
@@ -53,6 +54,42 @@ impl LlamaEngine {
         }
     }
 
+    fn render_chat_prompt(
+        model: &LlamaModel,
+        request: &LocalRuntimeGenerateRequest,
+    ) -> Result<String, LocalRuntimeError> {
+        let template = model
+            .chat_template(None)
+            .map_err(|_| LocalRuntimeError::chat_template())?;
+        let mut messages = Vec::with_capacity(2);
+        if let Some(system_instruction) = &request.system_instruction {
+            messages.push(
+                LlamaChatMessage::new("system".to_string(), system_instruction.clone())
+                    .map_err(|_| LocalRuntimeError::chat_template())?,
+            );
+        }
+        messages.push(
+            LlamaChatMessage::new("user".to_string(), request.prompt.clone())
+                .map_err(|_| LocalRuntimeError::chat_template())?,
+        );
+        model
+            .apply_chat_template(&template, &messages, true)
+            .map_err(|_| LocalRuntimeError::chat_template())
+    }
+
+    fn add_bos_from_metadata(value: Option<&str>) -> AddBos {
+        if value.is_some_and(|value| value == "0" || value.eq_ignore_ascii_case("false")) {
+            AddBos::Never
+        } else {
+            AddBos::Always
+        }
+    }
+
+    fn chat_prompt_add_bos(model: &LlamaModel) -> AddBos {
+        let metadata = model.meta_val_str(ADD_BOS_METADATA_KEY).ok();
+        Self::add_bos_from_metadata(metadata.as_deref())
+    }
+
     fn generate(
         &self,
         spec: &RuntimeModelSpec,
@@ -75,15 +112,12 @@ impl LlamaEngine {
             .with_op_offload(false);
 
         let started = Instant::now();
-        let mut context = model
-            .new_context(&self.backend, context_params)
-            .map_err(|_| LocalRuntimeError::context_creation())?;
         if cancellation.is_cancelled() {
             return Err(LocalRuntimeError::cancelled());
         }
-
+        let prompt = Self::render_chat_prompt(model, request)?;
         let prompt_tokens = model
-            .str_to_token(&request.prompt, AddBos::Always)
+            .str_to_token(&prompt, Self::chat_prompt_add_bos(model))
             .map_err(|_| LocalRuntimeError::tokenization())?;
         if prompt_tokens.is_empty() {
             return Err(LocalRuntimeError::tokenization());
@@ -97,6 +131,9 @@ impl LlamaEngine {
             return Err(LocalRuntimeError::prompt_too_long());
         }
 
+        let mut context = model
+            .new_context(&self.backend, context_params)
+            .map_err(|_| LocalRuntimeError::context_creation())?;
         let batch_capacity = PROMPT_BATCH_TOKENS.min(prompt_tokens.len()).max(1);
         let mut batch = LlamaBatch::new(batch_capacity, 1);
         for (chunk_index, chunk) in prompt_tokens.chunks(PROMPT_BATCH_TOKENS).enumerate() {
@@ -224,5 +261,25 @@ mod tests {
         assert_sync::<LlamaBackend>();
         assert_send::<LlamaModel>();
         assert_sync::<LlamaModel>();
+    }
+
+    #[test]
+    fn chat_prompt_bos_policy_respects_model_metadata() {
+        assert!(matches!(
+            LlamaEngine::add_bos_from_metadata(Some("false")),
+            AddBos::Never
+        ));
+        assert!(matches!(
+            LlamaEngine::add_bos_from_metadata(Some("0")),
+            AddBos::Never
+        ));
+        assert!(matches!(
+            LlamaEngine::add_bos_from_metadata(Some("true")),
+            AddBos::Always
+        ));
+        assert!(matches!(
+            LlamaEngine::add_bos_from_metadata(None),
+            AddBos::Always
+        ));
     }
 }
