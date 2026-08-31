@@ -116,7 +116,9 @@ const modelForMode = (mode: unknown): AsrModelDescriptor => {
 const localModelForId = (modelId: unknown): LocalModelDescriptor => {
   const model = mockLocalModels.find((candidate) => candidate.id === modelId);
   if (!model) {
-    throw new Error(`Unknown local LLM model in test fixture: ${String(modelId)}`);
+    throw new Error(
+      `Unknown local LLM model in test fixture: ${String(modelId)}`,
+    );
   }
   return { ...model };
 };
