@@ -47,6 +47,9 @@ uuid = { version = "1.8", features = ["v4", "serde"] }
 rand = "0.8"
 base64 = "0.22"
 llama-cpp-2 = { version = "=0.1.154", default-features = false }
+# llama-cpp-2 0.1.154 declares ^0.1.154 for its sys crate; pin the exact
+# matching release because 0.1.155 changed sampler FFI signatures.
+llama-cpp-sys-2 = { version = "=0.1.154", default-features = false }
 
 [dev-dependencies]
 tauri = { version = "2.1", features = ["test"] }
