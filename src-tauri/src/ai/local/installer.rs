@@ -690,6 +690,9 @@ fn cleanup_stale_staging(staging: &Path) -> Result<(), LocalModelInstallError> {
 }
 
 #[cfg(test)]
+mod adversarial_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
