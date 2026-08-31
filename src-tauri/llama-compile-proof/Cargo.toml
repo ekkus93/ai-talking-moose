@@ -6,3 +6,5 @@ publish = false
 
 [dependencies]
 llama-cpp-2 = { version = "=0.1.154", default-features = false }
+# Keep the wrapper and generated FFI bindings on the same llama.cpp snapshot.
+llama-cpp-sys-2 = { version = "=0.1.154", default-features = false }
