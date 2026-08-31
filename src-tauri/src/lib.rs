@@ -281,13 +281,19 @@ pub fn run() {
 
                 let resources = handle.try_state::<AppState>().map(|state| {
                     (
+                        state.local_llm_runtime.clone(),
                         state.conversation_mgr.clone(),
                         state.audio_capture.clone(),
                         state.audio_playback.clone(),
                     )
                 });
 
-                if let Some((conversation_mgr, audio_capture, audio_playback)) = resources {
+                if let Some((local_llm_runtime, conversation_mgr, audio_capture, audio_playback)) =
+                    resources
+                {
+                    if let Err(error) = local_llm_runtime.shutdown().await {
+                        warn!(error = %error, "Failed to unload local LLM runtime during shutdown");
+                    }
                     conversation_mgr
                         .shutdown_application(audio_capture, audio_playback)
                         .await;
