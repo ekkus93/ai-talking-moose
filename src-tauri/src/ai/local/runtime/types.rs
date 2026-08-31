@@ -28,6 +28,7 @@ pub(crate) enum LocalRuntimeErrorKind {
     PromptTooLong,
     ContextCreation,
     Tokenization,
+    ChatTemplate,
     Decode,
     OutputDecode,
     Cancelled,
@@ -122,6 +123,13 @@ impl LocalRuntimeError {
         )
     }
 
+    pub(super) fn chat_template() -> Self {
+        Self::new(
+            LocalRuntimeErrorKind::ChatTemplate,
+            "The selected local model chat template is unavailable or unsupported.",
+        )
+    }
+
     pub(super) fn decode() -> Self {
         Self::new(
             LocalRuntimeErrorKind::Decode,
@@ -212,6 +220,7 @@ pub(super) struct RuntimeModelSpec {
 #[derive(Debug, Clone)]
 pub(crate) struct LocalRuntimeGenerateRequest {
     pub(crate) model_id: String,
+    pub(crate) system_instruction: Option<String>,
     pub(crate) prompt: String,
     pub(crate) temperature: f32,
     pub(crate) max_output_tokens: u32,
