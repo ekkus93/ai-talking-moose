@@ -174,10 +174,7 @@ impl LocalRuntimeManager {
         request: &LocalRuntimeGenerateRequest,
     ) -> Result<(), LocalRuntimeError> {
         let prompt_bytes = request.prompt.len();
-        let system_bytes = request
-            .system_instruction
-            .as_ref()
-            .map_or(0, String::len);
+        let system_bytes = request.system_instruction.as_ref().map_or(0, String::len);
         if request.prompt.is_empty()
             || prompt_bytes
                 .checked_add(system_bytes)
