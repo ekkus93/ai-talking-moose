@@ -9,7 +9,7 @@ use std::fmt;
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -18,6 +18,8 @@ const STAGING_DIR: &str = ".staging";
 const INSTALL_MARKER: &str = ".talking-moose-local-llm.json";
 const INSTALL_MARKER_VERSION: u32 = 1;
 const VERIFY_BUFFER_BYTES: usize = 1024 * 1024;
+
+static GLOBAL_LOCAL_MODEL_INSTALLER: OnceLock<Arc<LocalModelInstaller>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -555,6 +557,42 @@ impl LocalModelInstaller {
     }
 }
 
+pub fn initialize_global_local_model_installer(
+    root: PathBuf,
+) -> Result<Arc<LocalModelInstaller>, LocalModelInstallError> {
+    if let Some(existing) = GLOBAL_LOCAL_MODEL_INSTALLER.get() {
+        if existing.root() == root {
+            return Ok(existing.clone());
+        }
+        return Err(LocalModelInstallError::new(
+            LocalModelInstallErrorKind::Io,
+            "The local model root was already initialized to a different application directory.",
+            false,
+        ));
+    }
+    let installer = Arc::new(LocalModelInstaller::new(root)?);
+    match GLOBAL_LOCAL_MODEL_INSTALLER.set(installer.clone()) {
+        Ok(()) => Ok(installer),
+        Err(_) => GLOBAL_LOCAL_MODEL_INSTALLER
+            .get()
+            .cloned()
+            .ok_or_else(|| LocalModelInstallError::io("initialize the local model installer")),
+    }
+}
+
+pub fn global_local_model_installer() -> Result<Arc<LocalModelInstaller>, LocalModelInstallError> {
+    GLOBAL_LOCAL_MODEL_INSTALLER
+        .get()
+        .cloned()
+        .ok_or_else(|| {
+            LocalModelInstallError::new(
+                LocalModelInstallErrorKind::Io,
+                "The local model installer is not initialized.",
+                false,
+            )
+        })
+}
+
 fn verify_artifact(
     path: &Path,
     expected_bytes: u64,
@@ -707,9 +745,15 @@ mod tests {
     fn model_paths_are_catalog_owned_and_revision_scoped() {
         let dir = tempdir().unwrap();
         let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
-        let path = installer.model_path(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID).unwrap();
+        let path = installer
+            .model_path(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID)
+            .unwrap();
         let entry = local_model_entry(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID).unwrap();
-        assert!(path.ends_with(Path::new(entry.id).join(entry.revision).join(entry.artifact_filename)));
+        assert!(path.ends_with(
+            Path::new(entry.id)
+                .join(entry.revision)
+                .join(entry.artifact_filename)
+        ));
         assert_eq!(
             installer.model_path("../escape").unwrap_err().kind,
             LocalModelInstallErrorKind::UnknownModel
@@ -726,7 +770,8 @@ mod tests {
             let sentinel = outside.path().join("keep.txt");
             fs::write(&sentinel, b"keep").unwrap();
             let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
-            let entry = local_model_entry(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID).unwrap();
+            let entry =
+                local_model_entry(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID).unwrap();
             symlink(outside.path(), dir.path().join(entry.id)).unwrap();
             installer.delete(entry.id).unwrap();
             assert!(sentinel.exists());
@@ -741,7 +786,8 @@ mod tests {
             bytes: vec![],
             calls: AtomicUsize::new(0),
         });
-        let installer = LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
+        let installer =
+            LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
         let model_id = super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID;
         installer
             .in_flight
@@ -752,17 +798,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pre_cancelled_install_fails_closed_and_leaves_no_partial_artifact() {
+    async fn cancellation_handle_targets_only_the_requested_model() {
         let dir = tempdir().unwrap();
         let transport = Arc::new(BytesTransport {
             bytes: vec![1, 2, 3],
             calls: AtomicUsize::new(0),
         });
-        let installer = LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
+        let installer =
+            LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
         let model_id = super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID;
         let token = CancellationToken::new();
-        token.cancel();
-        installer.in_flight.lock().insert(model_id.to_string(), token);
+        installer
+            .in_flight
+            .lock()
+            .insert(model_id.to_string(), token.clone());
         assert!(installer.cancel(model_id));
+        assert!(token.is_cancelled());
+        assert!(!installer.cancel("qwen3-0-6b-instruct-q4-k-m"));
     }
 }
