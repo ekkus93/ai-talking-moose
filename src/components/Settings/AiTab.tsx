@@ -54,7 +54,7 @@ export const AiTab: React.FC<AiTabProps> = ({
     (model) => model.id === settings.live_model,
   );
   const textModelAvailable = textModels.some(
-    (model) => model.id === settings.text_model,
+    (model) => model.id === settings.google_text_model,
   );
   const modelSelectorsDisabled = googleModelsStatus !== "ready";
 
@@ -186,36 +186,36 @@ export const AiTab: React.FC<AiTabProps> = ({
               htmlFor="settings-text-model"
               className="block mb-1 font-bold"
             >
-              Text & Ambient Remark Model
+              Gemini Text & Ambient Remark Model
             </label>
             <select
               id="settings-text-model"
-              value={settings.text_model}
+              value={settings.google_text_model}
               disabled={modelSelectorsDisabled}
               aria-busy={googleModelsStatus === "loading"}
               onChange={(e) => {
                 if (!modelSelectorsDisabled) {
                   void updateSettings({
                     ...settings,
-                    text_model: e.target.value,
+                    google_text_model: e.target.value,
                   });
                 }
               }}
               className="w-full p-1.5 border border-black rounded bg-white font-bold disabled:opacity-60"
             >
               {googleModelsStatus === "loading" ? (
-                <option value={settings.text_model}>
-                  Current: {settings.text_model} (loading catalog…)
+                <option value={settings.google_text_model}>
+                  Current: {settings.google_text_model} (loading catalog…)
                 </option>
               ) : googleModelsStatus === "error" ? (
-                <option value={settings.text_model}>
-                  Current: {settings.text_model} (catalog unavailable)
+                <option value={settings.google_text_model}>
+                  Current: {settings.google_text_model} (catalog unavailable)
                 </option>
               ) : (
                 <>
                   {!textModelAvailable && (
-                    <option value={settings.text_model} disabled>
-                      Unavailable: {settings.text_model}
+                    <option value={settings.google_text_model} disabled>
+                      Unavailable: {settings.google_text_model}
                     </option>
                   )}
                   {textModels.map((model) => (
