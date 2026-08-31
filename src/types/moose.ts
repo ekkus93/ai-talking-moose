@@ -164,7 +164,7 @@ export interface LocalModelInstallProgress {
   model_id: string;
   install_state: Extract<
     LocalModelInstallState,
-    "downloading" | "verifying"
+    "downloading" | "verifying",
   >;
   downloaded_bytes: number;
   total_bytes: number;
