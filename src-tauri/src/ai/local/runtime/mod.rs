@@ -164,8 +164,8 @@ impl RuntimeModelSpec {
         let model_path = installer
             .model_path(entry.id)
             .map_err(|_| LocalRuntimeError::unknown_model())?;
-        let canonical_root = fs::canonicalize(installer.root())
-            .map_err(|_| LocalRuntimeError::unsafe_artifact())?;
+        let canonical_root =
+            fs::canonicalize(installer.root()).map_err(|_| LocalRuntimeError::unsafe_artifact())?;
         let canonical_path =
             fs::canonicalize(model_path).map_err(|_| LocalRuntimeError::model_not_installed())?;
         if !canonical_path.starts_with(&canonical_root) {
@@ -306,7 +306,8 @@ impl LocalRuntimeManager {
         let state = self.inner.state.clone();
         let policy = self.inner.policy;
         tokio::task::spawn_blocking(move || {
-            let entry = local_model_entry(&model_id).ok_or_else(LocalRuntimeError::unknown_model)?;
+            let entry =
+                local_model_entry(&model_id).ok_or_else(LocalRuntimeError::unknown_model)?;
             let spec = RuntimeModelSpec::for_installed_entry(&installer, entry, policy)?;
             state.lock().load_model(&spec)
         })
@@ -430,22 +431,21 @@ mod tests {
 
         assert_eq!(error.kind, LocalRuntimeErrorKind::ModelLoad);
         assert_eq!(state.loaded, None);
-        assert_eq!(
-            *events.lock(),
-            vec!["load:first", "unload", "load:fail"]
-        );
+        assert_eq!(*events.lock(), vec!["load:first", "unload", "load:fail"]);
     }
 
     #[tokio::test]
     async fn missing_install_fails_before_native_backend_initialization() {
         let dir = tempdir().unwrap();
         let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
-        let manager = LocalRuntimeManager::with_policy(
-            LocalRuntimePolicy::for_available_parallelism(4),
-        );
+        let manager =
+            LocalRuntimeManager::with_policy(LocalRuntimePolicy::for_available_parallelism(4));
 
         let error = manager
-            .load_installed_model(installer, super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string())
+            .load_installed_model(
+                installer,
+                super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+            )
             .await
             .unwrap_err();
         assert_eq!(error.kind, LocalRuntimeErrorKind::ModelNotInstalled);
@@ -454,9 +454,8 @@ mod tests {
 
     #[tokio::test]
     async fn shutdown_is_idempotent_and_rejects_future_loads() {
-        let manager = LocalRuntimeManager::with_policy(
-            LocalRuntimePolicy::for_available_parallelism(8),
-        );
+        let manager =
+            LocalRuntimeManager::with_policy(LocalRuntimePolicy::for_available_parallelism(8));
         manager.shutdown().await.unwrap();
         manager.shutdown().await.unwrap();
         assert_eq!(manager.phase(), LocalRuntimePhase::ShuttingDown);
@@ -464,7 +463,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
         let error = manager
-            .load_installed_model(installer, super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string())
+            .load_installed_model(
+                installer,
+                super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+            )
             .await
             .unwrap_err();
         assert_eq!(error.kind, LocalRuntimeErrorKind::ShuttingDown);
