@@ -144,7 +144,6 @@ impl LlamaEngine {
                 .checked_sub(1)
                 .ok_or_else(LocalRuntimeError::decode)?;
             let token = sampler.sample(&context, logits_index);
-            sampler.accept(token);
             if model.is_eog_token(token) {
                 break;
             }
