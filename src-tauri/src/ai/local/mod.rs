@@ -1,16 +1,24 @@
+pub mod catalog;
+pub mod installer;
+
 use crate::ai::traits::TextModel;
 use crate::ai::types::{ProviderError, ProviderErrorKind, TextRequest, TextResponse};
 use async_trait::async_trait;
 
-/// Stable app-owned catalog identity for the first supported local model.
-///
-/// P3 replaces this bootstrap constant with the authoritative local-model catalog. Persisted
-/// settings use this ID rather than a filename so artifact filenames/revisions can evolve safely.
-pub const DEFAULT_LOCAL_TEXT_MODEL_ID: &str = "smollm2-360m-instruct-q4-k-m";
+pub use catalog::{
+    local_model_entry, validate_local_model_catalog, LocalModelCatalogEntry,
+    LocalModelTemplateHint, DEFAULT_LOCAL_TEXT_MODEL_ID, LOCAL_MODEL_CATALOG,
+};
+pub use installer::{
+    global_local_model_installer, initialize_global_local_model_installer, LocalModelDescriptor,
+    LocalModelDiagnostics, LocalModelInstallError, LocalModelInstallErrorKind,
+    LocalModelInstallOutcome, LocalModelInstallProgress, LocalModelInstallProgressCallback,
+    LocalModelInstallState, LocalModelInstaller,
+};
 
 /// Fail-closed Local text provider used while the native runtime/model installer is not yet wired.
 ///
-/// This is intentionally not a fake response generator. Selecting Local before P3-P6 are complete
+/// This is intentionally not a fake response generator. Selecting Local before P5-P6 are complete
 /// returns a stable model error and never substitutes Google or Fake output.
 pub struct UnavailableLocalTextModel {
     model_id: String,

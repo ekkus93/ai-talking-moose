@@ -11,6 +11,9 @@ import type {
   ConversationLifecycle,
   GoogleModelDescriptor,
   GoogleTtsVoiceDescriptor,
+  LocalModelDescriptor,
+  LocalModelDiagnostics,
+  LocalModelInstallProgress,
   MemoryRecord,
   MicrophonePermissionState,
   MicrophoneTestResult,
@@ -115,6 +118,52 @@ const previewModel = (
   return model;
 };
 
+const previewLocalLlmModels = (): LocalModelDescriptor[] => {
+  const selected = frontendDefaultSettings().local_text_model;
+  return [
+    {
+      id: "smollm2-360m-instruct-q4-k-m",
+      display_name: "SmolLM2 360M Instruct (Q4_K_M)",
+      family: "SmolLM2",
+      parameter_scale: "360M",
+      quantization: "Q4_K_M",
+      revision: "ab928a97ee49f3a015f35194879f68211291d6ca",
+      expected_bytes: 270_590_880,
+      installed_bytes: null,
+      license: "Apache-2.0",
+      context_limit: 8_192,
+      recommended_max_output: 192,
+      install_state: "not_installed",
+      active: selected === "smollm2-360m-instruct-q4-k-m",
+      error: null,
+    },
+    {
+      id: "qwen3-0-6b-instruct-q4-k-m",
+      display_name: "Qwen3 0.6B (Q4_K_M, non-thinking)",
+      family: "Qwen3",
+      parameter_scale: "0.6B",
+      quantization: "Q4_K_M",
+      revision: "7bcae0bc7b0606f1e948f8cdb31b98a2c10635db",
+      expected_bytes: 484_220_320,
+      installed_bytes: null,
+      license: "Apache-2.0",
+      context_limit: 32_768,
+      recommended_max_output: 192,
+      install_state: "not_installed",
+      active: selected === "qwen3-0-6b-instruct-q4-k-m",
+      error: null,
+    },
+  ];
+};
+
+const previewLocalLlmModel = (modelId: string): LocalModelDescriptor => {
+  const model = previewLocalLlmModels().find(
+    (candidate) => candidate.id === modelId,
+  );
+  if (!model) throw new Error("Unknown local LLM model");
+  return model;
+};
+
 /**
  * Development-only frontend preview adapter.
  *
@@ -182,6 +231,41 @@ export const browserPreviewBridge = {
 
   async onAsrModelProgress(
     _callback: (progress: AsrModelProgressEvent) => void,
+  ): Promise<() => void> {
+    return () => undefined;
+  },
+
+  async getLocalLlmModels(): Promise<LocalModelDescriptor[]> {
+    return previewLocalLlmModels();
+  },
+
+  async getLocalLlmDiagnostics(): Promise<LocalModelDiagnostics> {
+    return {
+      model_root_ready: true,
+      installs_in_progress: 0,
+      last_error: null,
+    };
+  },
+
+  async installLocalLlmModel(modelId: string): Promise<LocalModelDescriptor> {
+    const model = previewLocalLlmModel(modelId);
+    return {
+      ...model,
+      install_state: "installed",
+      installed_bytes: model.expected_bytes,
+    };
+  },
+
+  async cancelLocalLlmInstall(_modelId: string): Promise<boolean> {
+    return false;
+  },
+
+  async deleteLocalLlmModel(modelId: string): Promise<LocalModelDescriptor> {
+    return previewLocalLlmModel(modelId);
+  },
+
+  async onLocalLlmModelProgress(
+    _callback: (progress: LocalModelInstallProgress) => void,
   ): Promise<() => void> {
     return () => undefined;
   },

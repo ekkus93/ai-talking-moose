@@ -6,7 +6,11 @@ import {
   frontendGoogleModels,
   frontendGoogleTtsVoices,
 } from "../lib/backendContract";
-import type { AsrModelDescriptor, AudioDiagnostics } from "../types/moose";
+import type {
+  AsrModelDescriptor,
+  AudioDiagnostics,
+  LocalModelDescriptor,
+} from "../types/moose";
 
 // Production-like frontend tests must select the same Tauri/IPC branch as the
 // packaged application. The API modules themselves remain mocked, so tests stay
@@ -66,10 +70,55 @@ const mockAsrModels: AsrModelDescriptor[] = [
   },
 ];
 
+const mockLocalModels: LocalModelDescriptor[] = [
+  {
+    id: "smollm2-360m-instruct-q4-k-m",
+    display_name: "SmolLM2 360M Instruct (Q4_K_M)",
+    family: "SmolLM2",
+    parameter_scale: "360M",
+    quantization: "Q4_K_M",
+    revision: "ab928a97ee49f3a015f35194879f68211291d6ca",
+    expected_bytes: 270_590_880,
+    installed_bytes: null,
+    license: "Apache-2.0",
+    context_limit: 8_192,
+    recommended_max_output: 192,
+    install_state: "not_installed",
+    active: true,
+    error: null,
+  },
+  {
+    id: "qwen3-0-6b-instruct-q4-k-m",
+    display_name: "Qwen3 0.6B (Q4_K_M, non-thinking)",
+    family: "Qwen3",
+    parameter_scale: "0.6B",
+    quantization: "Q4_K_M",
+    revision: "7bcae0bc7b0606f1e948f8cdb31b98a2c10635db",
+    expected_bytes: 484_220_320,
+    installed_bytes: null,
+    license: "Apache-2.0",
+    context_limit: 32_768,
+    recommended_max_output: 192,
+    install_state: "not_installed",
+    active: false,
+    error: null,
+  },
+];
+
 const modelForMode = (mode: unknown): AsrModelDescriptor => {
   const model = mockAsrModels.find((candidate) => candidate.mode === mode);
   if (!model) {
     throw new Error(`Unknown ASR mode in test fixture: ${String(mode)}`);
+  }
+  return { ...model };
+};
+
+const localModelForId = (modelId: unknown): LocalModelDescriptor => {
+  const model = mockLocalModels.find((candidate) => candidate.id === modelId);
+  if (!model) {
+    throw new Error(
+      `Unknown local LLM model in test fixture: ${String(modelId)}`,
+    );
   }
   return { ...model };
 };
@@ -153,6 +202,28 @@ const dispatchTauriCommand = async (
       peak_resident_memory_bytes: null,
     };
   }
+
+  // Local LLM lifecycle: src-tauri/src/commands/local_llm_models.rs.
+  if (cmd === "get_local_llm_models") {
+    return mockLocalModels.map((model) => ({ ...model }));
+  }
+  if (cmd === "get_local_llm_diagnostics") {
+    return {
+      model_root_ready: true,
+      installs_in_progress: 0,
+      last_error: null,
+    };
+  }
+  if (cmd === "install_local_llm_model") {
+    const model = localModelForId(args?.modelId);
+    return {
+      ...model,
+      install_state: "installed",
+      installed_bytes: model.expected_bytes,
+    };
+  }
+  if (cmd === "cancel_local_llm_install") return true;
+  if (cmd === "delete_local_llm_model") return localModelForId(args?.modelId);
 
   // Character/speech: src-tauri/src/commands/character.rs.
   if (cmd === "get_character_state") return "idle";

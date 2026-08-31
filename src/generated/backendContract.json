@@ -240,6 +240,46 @@
       "total_bytes": 256,
       "current_file": "contract-model.bin"
     },
+    "LocalModelInstallError": {
+      "kind": "network",
+      "message": "contract local model error",
+      "retryable": true
+    },
+    "LocalModelDescriptor": {
+      "id": "contract-local-model",
+      "display_name": "Contract local model",
+      "family": "ContractFamily",
+      "parameter_scale": "360M",
+      "quantization": "Q4_K_M",
+      "revision": "0123456789012345678901234567890123456789",
+      "expected_bytes": 256,
+      "installed_bytes": 256,
+      "license": "Apache-2.0",
+      "context_limit": 8192,
+      "recommended_max_output": 192,
+      "install_state": "installed",
+      "active": true,
+      "error": {
+        "kind": "network",
+        "message": "contract local model error",
+        "retryable": true
+      }
+    },
+    "LocalModelDiagnostics": {
+      "model_root_ready": true,
+      "installs_in_progress": 1,
+      "last_error": {
+        "kind": "network",
+        "message": "contract local model error",
+        "retryable": true
+      }
+    },
+    "LocalModelInstallProgress": {
+      "model_id": "contract-local-model",
+      "install_state": "verifying",
+      "downloaded_bytes": 256,
+      "total_bytes": 256
+    },
     "AudioDeviceInfo": {
       "id": "contract-device",
       "name": "Contract device",
