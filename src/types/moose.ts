@@ -111,6 +111,62 @@ export interface AsrModelProgressEvent {
   current_file: string | null;
 }
 
+export type LocalModelInstallState =
+  | "not_installed"
+  | "downloading"
+  | "verifying"
+  | "installed"
+  | "failed";
+
+export type LocalModelInstallErrorKind =
+  | "invalid_catalog"
+  | "unknown_model"
+  | "busy"
+  | "network"
+  | "http"
+  | "io"
+  | "size_mismatch"
+  | "sha256_mismatch"
+  | "cancelled"
+  | "promotion"
+  | "corrupt_install";
+
+export interface LocalModelInstallError {
+  kind: LocalModelInstallErrorKind;
+  message: string;
+  retryable: boolean;
+}
+
+export interface LocalModelDescriptor {
+  id: string;
+  display_name: string;
+  family: string;
+  parameter_scale: string;
+  quantization: string;
+  revision: string;
+  expected_bytes: number;
+  installed_bytes: number | null;
+  license: string;
+  context_limit: number;
+  recommended_max_output: number;
+  install_state: LocalModelInstallState;
+  active: boolean;
+  error: LocalModelInstallError | null;
+}
+
+export interface LocalModelDiagnostics {
+  model_root_ready: boolean;
+  installs_in_progress: number;
+  last_error: LocalModelInstallError | null;
+}
+
+export interface LocalModelInstallProgress {
+  model_id: string;
+  install_state: Extract<LocalModelInstallState, "downloading" | "verifying">;
+  downloaded_bytes: number;
+  total_bytes: number;
+}
+
 export type MicrophonePermissionState =
   "not_requested" | "granted" | "denied" | "unavailable";
 
