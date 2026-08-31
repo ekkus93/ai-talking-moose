@@ -65,7 +65,9 @@ pub const LOCAL_MODEL_CATALOG: &[LocalModelCatalogEntry] = &[
 ];
 
 pub fn local_model_entry(model_id: &str) -> Option<&'static LocalModelCatalogEntry> {
-    LOCAL_MODEL_CATALOG.iter().find(|entry| entry.id == model_id)
+    LOCAL_MODEL_CATALOG
+        .iter()
+        .find(|entry| entry.id == model_id)
 }
 
 fn safe_single_component(value: &str) -> bool {
@@ -105,10 +107,16 @@ pub fn validate_local_model_catalog() -> Result<(), String> {
             return Err(format!("local model source must use HTTPS: {}", entry.id));
         }
         if !entry.source_url.contains(entry.revision) || !pinned_revision(entry.revision) {
-            return Err(format!("local model revision is not immutably pinned: {}", entry.id));
+            return Err(format!(
+                "local model revision is not immutably pinned: {}",
+                entry.id
+            ));
         }
         if entry.expected_bytes == 0 {
-            return Err(format!("local model expected byte count is zero: {}", entry.id));
+            return Err(format!(
+                "local model expected byte count is zero: {}",
+                entry.id
+            ));
         }
         if !valid_sha256(entry.sha256) {
             return Err(format!("invalid local model SHA-256: {}", entry.id));
@@ -117,7 +125,10 @@ pub fn validate_local_model_catalog() -> Result<(), String> {
             return Err(format!("local model metadata is incomplete: {}", entry.id));
         }
         if entry.context_limit == 0 || entry.recommended_max_output == 0 {
-            return Err(format!("local model runtime bounds are invalid: {}", entry.id));
+            return Err(format!(
+                "local model runtime bounds are invalid: {}",
+                entry.id
+            ));
         }
     }
 
@@ -141,7 +152,14 @@ mod tests {
 
     #[test]
     fn path_component_validation_rejects_traversal_and_absolute_paths() {
-        for unsafe_value in ["", ".", "..", "../model.gguf", "dir/model.gguf", "/tmp/model.gguf"] {
+        for unsafe_value in [
+            "",
+            ".",
+            "..",
+            "../model.gguf",
+            "dir/model.gguf",
+            "/tmp/model.gguf",
+        ] {
             assert!(!safe_single_component(unsafe_value), "{unsafe_value}");
         }
         assert!(safe_single_component("model.gguf"));
