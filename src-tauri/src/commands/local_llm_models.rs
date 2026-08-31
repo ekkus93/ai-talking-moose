@@ -74,7 +74,11 @@ pub async fn delete_local_llm_model(
     state: State<'_, AppState>,
 ) -> Result<LocalModelDescriptor, String> {
     let installer = global_local_model_installer().map_err(safe_installer_error)?;
-    installer.delete(&model_id).map_err(safe_installer_error)?;
+    state
+        .local_llm_runtime
+        .delete_model(installer, model_id.clone())
+        .await
+        .map_err(safe_installer_error)?;
     // Selection is deliberately preserved. A selected-but-deleted model remains selected and
     // becomes NotInstalled; no other local model or cloud provider is substituted implicitly.
     descriptor_for_selected(state.inner(), &model_id)
