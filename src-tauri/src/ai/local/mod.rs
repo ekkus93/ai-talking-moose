@@ -6,13 +6,14 @@ use crate::ai::types::{ProviderError, ProviderErrorKind, TextRequest, TextRespon
 use async_trait::async_trait;
 
 pub use catalog::{
-    local_model_entry, validate_local_model_catalog, LocalModelCatalogEntry, LocalModelTemplateHint,
-    DEFAULT_LOCAL_TEXT_MODEL_ID, LOCAL_MODEL_CATALOG,
+    local_model_entry, validate_local_model_catalog, LocalModelCatalogEntry,
+    LocalModelTemplateHint, DEFAULT_LOCAL_TEXT_MODEL_ID, LOCAL_MODEL_CATALOG,
 };
 pub use installer::{
-    LocalModelDescriptor, LocalModelDiagnostics, LocalModelInstallError, LocalModelInstallErrorKind,
+    global_local_model_installer, initialize_global_local_model_installer, LocalModelDescriptor,
+    LocalModelDiagnostics, LocalModelInstallError, LocalModelInstallErrorKind,
     LocalModelInstallOutcome, LocalModelInstallProgress, LocalModelInstallProgressCallback,
-    LocalModelInstaller, LocalModelInstallState,
+    LocalModelInstallState, LocalModelInstaller,
 };
 
 /// Fail-closed Local text provider used while the native runtime/model installer is not yet wired.
