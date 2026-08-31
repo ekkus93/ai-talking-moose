@@ -11,6 +11,9 @@ import {
   GoogleModelDescriptor,
   GoogleTtsVoiceDescriptor,
   ConversationLifecycle,
+  LocalModelDescriptor,
+  LocalModelDiagnostics,
+  LocalModelInstallProgress,
   MemoryRecord,
   MicrophonePermissionState,
   MicrophoneTestResult,
@@ -105,6 +108,43 @@ export const nativeTauriBridge = {
     const { listen } = await import("@tauri-apps/api/event");
     return listen<AsrModelProgressEvent>(
       "moose://asr/model-progress",
+      (event) => callback(event.payload),
+    );
+  },
+
+  async getLocalLlmModels(): Promise<LocalModelDescriptor[]> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalModelDescriptor[]>("get_local_llm_models");
+  },
+
+  async getLocalLlmDiagnostics(): Promise<LocalModelDiagnostics> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalModelDiagnostics>("get_local_llm_diagnostics");
+  },
+
+  async installLocalLlmModel(modelId: string): Promise<LocalModelDescriptor> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalModelDescriptor>("install_local_llm_model", {
+      modelId,
+    });
+  },
+
+  async cancelLocalLlmInstall(modelId: string): Promise<boolean> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("cancel_local_llm_install", { modelId });
+  },
+
+  async deleteLocalLlmModel(modelId: string): Promise<LocalModelDescriptor> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalModelDescriptor>("delete_local_llm_model", { modelId });
+  },
+
+  async onLocalLlmModelProgress(
+    callback: (progress: LocalModelInstallProgress) => void,
+  ): Promise<() => void> {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<LocalModelInstallProgress>(
+      "moose://local-llm/model-progress",
       (event) => callback(event.payload),
     );
   },
