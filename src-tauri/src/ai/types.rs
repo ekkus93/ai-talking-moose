@@ -15,6 +15,14 @@ pub struct TextResponse {
     pub finish_reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextProvider {
+    #[default]
+    Google,
+    Local,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TtsRequest {
     pub text: String,
@@ -196,5 +204,12 @@ mod provider_error_tests {
         assert_eq!(json["kind"], "quota");
         assert_eq!(json["retryable"].as_bool(), Some(true));
         assert!(json["message"].as_str().unwrap().contains("quota"));
+    }
+
+    #[test]
+    fn text_provider_serializes_as_stable_snake_case_values() {
+        assert_eq!(serde_json::to_string(&TextProvider::Google).unwrap(), "\"google\"");
+        assert_eq!(serde_json::to_string(&TextProvider::Local).unwrap(), "\"local\"");
+        assert_eq!(TextProvider::default(), TextProvider::Google);
     }
 }
