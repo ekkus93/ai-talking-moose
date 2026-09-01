@@ -111,9 +111,7 @@ impl LocalTextModel {
     ) -> Result<LocalRuntimeGenerateRequest, ProviderError> {
         let entry = local_model_entry(&self.model_id)
             .ok_or_else(|| ProviderError::from_kind(ProviderErrorKind::Model))?;
-        let requested_max_output = request
-            .max_tokens
-            .unwrap_or(LOCAL_TEXT_MAX_OUTPUT_TOKENS);
+        let requested_max_output = request.max_tokens.unwrap_or(LOCAL_TEXT_MAX_OUTPUT_TOKENS);
         let max_output_tokens = requested_max_output
             .min(LOCAL_TEXT_MAX_OUTPUT_TOKENS)
             .min(entry.recommended_max_output);
