@@ -157,6 +157,7 @@ impl TextModel for LocalTextModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{assert_log_capture_live, capture_logs, deny_network_for_scope};
     use parking_lot::Mutex;
     use tempfile::tempdir;
 
@@ -357,31 +358,165 @@ mod tests {
         assert!(runtime.requests.lock().is_empty());
     }
 
+    #[tokio::test]
+    async fn local_generation_succeeds_with_repository_network_boundary_denied() {
+        let dir = tempdir().unwrap();
+        let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
+        let runtime = runtime_with_result(Ok(generation("offline local reply")));
+        let model = LocalTextModel::from_runtime(
+            runtime.clone(),
+            Ok(installer),
+            super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+        );
+        let _network_guard = deny_network_for_scope();
+
+        let response = model
+            .generate(TextRequest {
+                prompt: "offline-only request".to_string(),
+                system_instruction: Some("stay entirely local".to_string()),
+                temperature: Some(0.2),
+                max_tokens: Some(16),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(response.text, "offline local reply");
+        let requests = runtime.requests.lock();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].prompt, "offline-only request");
+    }
+
+    #[test]
+    fn local_prompt_memory_ambient_and_output_sentinels_never_enter_normal_logs() {
+        const TYPED_SENTINEL: &str = "PRIVATE_LOCAL_TYPED_PROMPT_41e7";
+        const SYSTEM_SENTINEL: &str = "PRIVATE_LOCAL_SYSTEM_PROMPT_221a";
+        const MEMORY_SENTINEL: &str = "PRIVATE_LOCAL_MEMORY_73ac";
+        const AMBIENT_SENTINEL: &str = "PRIVATE_LOCAL_AMBIENT_SUMMARY_98f0";
+        const OUTPUT_SENTINEL: &str = "PRIVATE_LOCAL_MODEL_OUTPUT_b6d3";
+
+        let ((response, requests), logs) = capture_logs(|| {
+            let executor = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            executor.block_on(async {
+                let dir = tempdir().unwrap();
+                let installer =
+                    Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
+                let runtime = runtime_with_result(Ok(generation(OUTPUT_SENTINEL)));
+                let model = LocalTextModel::from_runtime(
+                    runtime.clone(),
+                    Ok(installer),
+                    super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+                );
+                let response = model
+                    .generate(TextRequest {
+                        prompt: format!("{TYPED_SENTINEL} {MEMORY_SENTINEL} {AMBIENT_SENTINEL}"),
+                        system_instruction: Some(SYSTEM_SENTINEL.to_string()),
+                        temperature: Some(0.2),
+                        max_tokens: Some(16),
+                    })
+                    .await
+                    .unwrap();
+                let requests = runtime.requests.lock().clone();
+                (response, requests)
+            })
+        });
+
+        assert_log_capture_live(&logs);
+        assert_eq!(response.text, OUTPUT_SENTINEL);
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].prompt.contains(TYPED_SENTINEL));
+        assert!(requests[0].prompt.contains(MEMORY_SENTINEL));
+        assert!(requests[0].prompt.contains(AMBIENT_SENTINEL));
+        assert_eq!(
+            requests[0].system_instruction.as_deref(),
+            Some(SYSTEM_SENTINEL)
+        );
+        for sentinel in [
+            TYPED_SENTINEL,
+            SYSTEM_SENTINEL,
+            MEMORY_SENTINEL,
+            AMBIENT_SENTINEL,
+            OUTPUT_SENTINEL,
+        ] {
+            assert!(
+                !logs.contains(sentinel),
+                "private local LLM sentinel leaked into normal logs: {sentinel}"
+            );
+        }
+    }
+
     #[test]
     fn runtime_errors_map_to_stable_safe_provider_categories() {
         let cases = [
+            (
+                LocalRuntimeErrorKind::ShuttingDown,
+                ProviderErrorKind::Closed,
+            ),
+            (
+                LocalRuntimeErrorKind::UnknownModel,
+                ProviderErrorKind::Model,
+            ),
             (
                 LocalRuntimeErrorKind::ModelNotInstalled,
                 ProviderErrorKind::Model,
             ),
             (
-                LocalRuntimeErrorKind::ChatTemplate,
+                LocalRuntimeErrorKind::UnsafeArtifact,
                 ProviderErrorKind::Model,
+            ),
+            (
+                LocalRuntimeErrorKind::Initialization,
+                ProviderErrorKind::Internal,
+            ),
+            (LocalRuntimeErrorKind::ModelLoad, ProviderErrorKind::Model),
+            (
+                LocalRuntimeErrorKind::ModelNotLoaded,
+                ProviderErrorKind::Model,
+            ),
+            (
+                LocalRuntimeErrorKind::InvalidRequest,
+                ProviderErrorKind::Setup,
             ),
             (
                 LocalRuntimeErrorKind::PromptTooLong,
                 ProviderErrorKind::Setup,
             ),
+            (
+                LocalRuntimeErrorKind::ContextCreation,
+                ProviderErrorKind::Internal,
+            ),
+            (
+                LocalRuntimeErrorKind::Tokenization,
+                ProviderErrorKind::Internal,
+            ),
+            (
+                LocalRuntimeErrorKind::ChatTemplate,
+                ProviderErrorKind::Model,
+            ),
             (LocalRuntimeErrorKind::Decode, ProviderErrorKind::Internal),
+            (
+                LocalRuntimeErrorKind::OutputDecode,
+                ProviderErrorKind::Internal,
+            ),
             (LocalRuntimeErrorKind::Cancelled, ProviderErrorKind::Closed),
+            (
+                LocalRuntimeErrorKind::ModelDelete,
+                ProviderErrorKind::Internal,
+            ),
         ];
+        const PRIVATE_DETAIL: &str =
+            "PRIVATE_RUNTIME_DETAIL /Users/private/models/secret.gguf PRIVATE_PROMPT_SENTINEL";
         for (runtime_kind, provider_kind) in cases {
             let mapped = LocalTextModel::map_runtime_error(LocalRuntimeError {
                 kind: runtime_kind,
-                message: "sensitive runtime detail must not escape",
+                message: PRIVATE_DETAIL,
             });
             assert_eq!(mapped.kind, provider_kind);
-            assert!(!mapped.message.contains("sensitive runtime detail"));
+            assert!(!mapped.message.contains("PRIVATE_RUNTIME_DETAIL"));
+            assert!(!mapped.message.contains("/Users/private"));
+            assert!(!mapped.message.contains("PRIVATE_PROMPT_SENTINEL"));
         }
     }
 }

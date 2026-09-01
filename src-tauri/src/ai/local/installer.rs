@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tokio::io::AsyncWriteExt;
@@ -140,6 +140,14 @@ impl LocalModelInstallError {
             LocalModelInstallErrorKind::Promotion,
             "The verified local model could not be promoted into the model directory.",
             true,
+        )
+    }
+
+    fn corrupt_install() -> Self {
+        Self::new(
+            LocalModelInstallErrorKind::CorruptInstall,
+            "The local model storage contains an unsafe or corrupt path.",
+            false,
         )
     }
 }
@@ -311,11 +319,9 @@ pub struct LocalModelInstaller {
 impl LocalModelInstaller {
     pub fn new(root: PathBuf) -> Result<Self, LocalModelInstallError> {
         validate_local_model_catalog().map_err(|_| LocalModelInstallError::invalid_catalog())?;
-        fs::create_dir_all(&root)
-            .map_err(|_| LocalModelInstallError::io("create the model root"))?;
+        prepare_model_root(&root)?;
         let staging = root.join(STAGING_DIR);
-        fs::create_dir_all(&staging)
-            .map_err(|_| LocalModelInstallError::io("create the model staging directory"))?;
+        ensure_plain_directory(&staging, "create the model staging directory")?;
         cleanup_stale_staging(&staging)?;
         Ok(Self {
             root,
@@ -331,8 +337,11 @@ impl LocalModelInstaller {
         transport: Arc<dyn LocalModelDownloadTransport>,
     ) -> Result<Self, LocalModelInstallError> {
         validate_local_model_catalog().map_err(|_| LocalModelInstallError::invalid_catalog())?;
-        fs::create_dir_all(root.join(STAGING_DIR))
-            .map_err(|_| LocalModelInstallError::io("create the model staging directory"))?;
+        prepare_model_root(&root)?;
+        ensure_plain_directory(
+            &root.join(STAGING_DIR),
+            "create the model staging directory",
+        )?;
         Ok(Self {
             root,
             transport,
@@ -346,6 +355,7 @@ impl LocalModelInstaller {
     }
 
     pub fn model_path(&self, model_id: &str) -> Result<PathBuf, LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let entry =
             local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         Ok(self
@@ -365,7 +375,7 @@ impl LocalModelInstaller {
     pub fn diagnostics(&self) -> LocalModelDiagnostics {
         let last_error = self.last_errors.lock().values().last().cloned();
         LocalModelDiagnostics {
-            model_root_ready: self.root.is_dir(),
+            model_root_ready: validate_storage_layout(&self.root).is_ok(),
             installs_in_progress: self.in_flight.lock().len(),
             last_error,
         }
@@ -386,6 +396,7 @@ impl LocalModelInstaller {
         model_id: &str,
         progress: Option<LocalModelInstallProgressCallback>,
     ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let entry =
             local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         if self.install_is_valid(entry) {
@@ -424,6 +435,7 @@ impl LocalModelInstaller {
     }
 
     pub fn delete(&self, model_id: &str) -> Result<(), LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let entry =
             local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         if self.in_flight.lock().contains_key(model_id) {
@@ -435,10 +447,11 @@ impl LocalModelInstaller {
                 fs::remove_file(&model_dir)
                     .map_err(|_| LocalModelInstallError::io("remove the local model link"))?;
             }
-            Ok(_) => {
+            Ok(metadata) if metadata.is_dir() => {
                 fs::remove_dir_all(&model_dir)
                     .map_err(|_| LocalModelInstallError::io("delete the local model"))?;
             }
+            Ok(_) => return Err(LocalModelInstallError::corrupt_install()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => {
                 return Err(LocalModelInstallError::io(
@@ -456,6 +469,7 @@ impl LocalModelInstaller {
         cancellation: &CancellationToken,
         progress: Option<&LocalModelInstallProgressCallback>,
     ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let staging_path =
             self.root
                 .join(STAGING_DIR)
@@ -476,6 +490,7 @@ impl LocalModelInstaller {
                 });
             }
             verify_artifact(&staging_path, entry.expected_bytes, entry.sha256)?;
+            validate_storage_layout(&self.root)?;
             promote_artifact(&self.root, entry, &staging_path)?;
             Ok(LocalModelInstallOutcome {
                 model_id: entry.id.to_string(),
@@ -527,22 +542,40 @@ impl LocalModelInstaller {
     }
 
     fn install_is_valid(&self, entry: &'static LocalModelCatalogEntry) -> bool {
-        let artifact = self
-            .root
-            .join(entry.id)
-            .join(entry.revision)
-            .join(entry.artifact_filename);
-        let marker = artifact.parent().map(|parent| parent.join(INSTALL_MARKER));
-        let Some(marker) = marker else {
-            return false;
-        };
-        let Ok(metadata) = fs::metadata(&artifact) else {
-            return false;
-        };
-        if metadata.len() != entry.expected_bytes {
+        if validate_storage_layout(&self.root).is_err() {
             return false;
         }
-        let Ok(marker_bytes) = fs::read(marker) else {
+        let model_dir = self.root.join(entry.id);
+        let revision_dir = model_dir.join(entry.revision);
+        let artifact = revision_dir.join(entry.artifact_filename);
+        let marker_path = revision_dir.join(INSTALL_MARKER);
+
+        for directory in [&model_dir, &revision_dir] {
+            let Ok(metadata) = fs::symlink_metadata(directory) else {
+                return false;
+            };
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return false;
+            }
+        }
+
+        let Ok(artifact_metadata) = fs::symlink_metadata(&artifact) else {
+            return false;
+        };
+        if artifact_metadata.file_type().is_symlink()
+            || !artifact_metadata.is_file()
+            || artifact_metadata.len() != entry.expected_bytes
+        {
+            return false;
+        }
+
+        let Ok(marker_metadata) = fs::symlink_metadata(&marker_path) else {
+            return false;
+        };
+        if marker_metadata.file_type().is_symlink() || !marker_metadata.is_file() {
+            return false;
+        }
+        let Ok(marker_bytes) = fs::read(marker_path) else {
             return false;
         };
         let Ok(marker): Result<InstallMarker, _> = serde_json::from_slice(&marker_bytes) else {
@@ -590,11 +623,67 @@ pub fn global_local_model_installer() -> Result<Arc<LocalModelInstaller>, LocalM
     })
 }
 
+fn prepare_model_root(root: &Path) -> Result<(), LocalModelInstallError> {
+    let parent = root
+        .parent()
+        .ok_or_else(LocalModelInstallError::corrupt_install)?;
+    let anchor = parent
+        .parent()
+        .ok_or_else(LocalModelInstallError::corrupt_install)?;
+    fs::create_dir_all(anchor)
+        .map_err(|_| LocalModelInstallError::io("create the local model parent directory"))?;
+    ensure_plain_directory(parent, "create the local model parent directory")?;
+    ensure_plain_directory(root, "create the model root")
+}
+
+fn validate_storage_layout(root: &Path) -> Result<(), LocalModelInstallError> {
+    let parent = root
+        .parent()
+        .ok_or_else(LocalModelInstallError::corrupt_install)?;
+    let staging = root.join(STAGING_DIR);
+    for directory in [parent, root, staging.as_path()] {
+        let metadata = fs::symlink_metadata(directory)
+            .map_err(|_| LocalModelInstallError::corrupt_install())?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+    }
+    Ok(())
+}
+
+fn ensure_plain_directory(
+    path: &Path,
+    create_operation: &'static str,
+) -> Result<(), LocalModelInstallError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(LocalModelInstallError::corrupt_install());
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir(path).map_err(|_| LocalModelInstallError::io(create_operation))?;
+            let metadata = fs::symlink_metadata(path)
+                .map_err(|_| LocalModelInstallError::io(create_operation))?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(LocalModelInstallError::corrupt_install());
+            }
+        }
+        Err(_) => return Err(LocalModelInstallError::io(create_operation)),
+    }
+    Ok(())
+}
+
 fn verify_artifact(
     path: &Path,
     expected_bytes: u64,
     expected_sha256: &str,
 ) -> Result<(), LocalModelInstallError> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| LocalModelInstallError::io("inspect the downloaded local model"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(LocalModelInstallError::corrupt_install());
+    }
     let file = fs::File::open(path)
         .map_err(|_| LocalModelInstallError::io("open the downloaded local model"))?;
     if file
@@ -629,21 +718,47 @@ fn verify_artifact(
     Ok(())
 }
 
-fn promote_artifact(
-    root: &Path,
-    entry: &'static LocalModelCatalogEntry,
-    staging_path: &Path,
+fn write_install_marker_file(
+    marker_tmp: &Path,
+    marker_path: &Path,
+    marker_bytes: &[u8],
 ) -> Result<(), LocalModelInstallError> {
-    let revision_dir = root.join(entry.id).join(entry.revision);
-    fs::create_dir_all(&revision_dir)
-        .map_err(|_| LocalModelInstallError::io("create the local model directory"))?;
-    let final_path = revision_dir.join(entry.artifact_filename);
-    if final_path.exists() {
-        fs::remove_file(&final_path)
-            .map_err(|_| LocalModelInstallError::io("replace the previous local model artifact"))?;
-    }
-    fs::rename(staging_path, &final_path).map_err(|_| LocalModelInstallError::promotion())?;
+    let mut marker_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(marker_tmp)
+        .map_err(|_| LocalModelInstallError::io("create the local model install marker"))?;
+    marker_file
+        .write_all(marker_bytes)
+        .map_err(|_| LocalModelInstallError::io("write the local model install marker"))?;
+    marker_file
+        .sync_all()
+        .map_err(|_| LocalModelInstallError::io("sync the local model install marker"))?;
+    drop(marker_file);
 
+    match fs::symlink_metadata(marker_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+        Ok(_) => {
+            fs::remove_file(marker_path).map_err(|_| {
+                LocalModelInstallError::io("replace the local model install marker")
+            })?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => {
+            return Err(LocalModelInstallError::io(
+                "inspect the local model install marker",
+            ))
+        }
+    }
+    fs::rename(marker_tmp, marker_path).map_err(|_| LocalModelInstallError::promotion())
+}
+
+fn write_install_marker(
+    revision_dir: &Path,
+    entry: &'static LocalModelCatalogEntry,
+) -> Result<(), LocalModelInstallError> {
     let marker = InstallMarker {
         schema_version: INSTALL_MARKER_VERSION,
         model_id: entry.id.to_string(),
@@ -654,15 +769,57 @@ fn promote_artifact(
     };
     let marker_bytes = serde_json::to_vec_pretty(&marker)
         .map_err(|_| LocalModelInstallError::io("serialize the local model install marker"))?;
-    let marker_tmp = revision_dir.join(format!("{INSTALL_MARKER}.tmp"));
-    fs::write(&marker_tmp, marker_bytes)
-        .map_err(|_| LocalModelInstallError::io("write the local model install marker"))?;
-    fs::rename(marker_tmp, revision_dir.join(INSTALL_MARKER))
-        .map_err(|_| LocalModelInstallError::promotion())?;
+    let marker_tmp = revision_dir.join(format!("{INSTALL_MARKER}.{}.tmp", Uuid::new_v4()));
+    let marker_path = revision_dir.join(INSTALL_MARKER);
+    let result = write_install_marker_file(&marker_tmp, &marker_path, &marker_bytes);
+    if result.is_err() {
+        let _ = fs::remove_file(&marker_tmp);
+    }
+    result
+}
+
+fn promote_artifact(
+    root: &Path,
+    entry: &'static LocalModelCatalogEntry,
+    staging_path: &Path,
+) -> Result<(), LocalModelInstallError> {
+    let model_dir = root.join(entry.id);
+    ensure_plain_directory(&model_dir, "create the local model directory")?;
+    let revision_dir = model_dir.join(entry.revision);
+    ensure_plain_directory(&revision_dir, "create the local model revision directory")?;
+
+    let final_path = revision_dir.join(entry.artifact_filename);
+    match fs::symlink_metadata(&final_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+        Ok(_) => {
+            fs::remove_file(&final_path).map_err(|_| {
+                LocalModelInstallError::io("replace the previous local model artifact")
+            })?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => {
+            return Err(LocalModelInstallError::io(
+                "inspect the previous local model artifact",
+            ))
+        }
+    }
+    fs::rename(staging_path, &final_path).map_err(|_| LocalModelInstallError::promotion())?;
+
+    if let Err(error) = write_install_marker(&revision_dir, entry) {
+        let _ = fs::remove_file(&final_path);
+        return Err(error);
+    }
     Ok(())
 }
 
 fn cleanup_stale_staging(staging: &Path) -> Result<(), LocalModelInstallError> {
+    let metadata = fs::symlink_metadata(staging)
+        .map_err(|_| LocalModelInstallError::io("inspect the model staging directory"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(LocalModelInstallError::corrupt_install());
+    }
     for entry in fs::read_dir(staging)
         .map_err(|_| LocalModelInstallError::io("inspect the model staging directory"))?
     {
