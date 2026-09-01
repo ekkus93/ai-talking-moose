@@ -137,7 +137,10 @@ pub async fn test_local_llm_model(
     match model.generate(local_model_test_request()).await {
         Ok(_) => Ok(ConnectionTestResult {
             success: true,
-            message: format!("{} generated a local response successfully.", descriptor.display_name),
+            message: format!(
+                "{} generated a local response successfully.",
+                descriptor.display_name
+            ),
         }),
         Err(error) => Ok(ConnectionTestResult {
             success: false,
