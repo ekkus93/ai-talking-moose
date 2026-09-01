@@ -411,9 +411,7 @@ mod tests {
                 );
                 let response = model
                     .generate(TextRequest {
-                        prompt: format!(
-                            "{TYPED_SENTINEL} {MEMORY_SENTINEL} {AMBIENT_SENTINEL}"
-                        ),
+                        prompt: format!("{TYPED_SENTINEL} {MEMORY_SENTINEL} {AMBIENT_SENTINEL}"),
                         system_instruction: Some(SYSTEM_SENTINEL.to_string()),
                         temperature: Some(0.2),
                         max_tokens: Some(16),
@@ -452,13 +450,22 @@ mod tests {
     #[test]
     fn runtime_errors_map_to_stable_safe_provider_categories() {
         let cases = [
-            (LocalRuntimeErrorKind::ShuttingDown, ProviderErrorKind::Closed),
-            (LocalRuntimeErrorKind::UnknownModel, ProviderErrorKind::Model),
+            (
+                LocalRuntimeErrorKind::ShuttingDown,
+                ProviderErrorKind::Closed,
+            ),
+            (
+                LocalRuntimeErrorKind::UnknownModel,
+                ProviderErrorKind::Model,
+            ),
             (
                 LocalRuntimeErrorKind::ModelNotInstalled,
                 ProviderErrorKind::Model,
             ),
-            (LocalRuntimeErrorKind::UnsafeArtifact, ProviderErrorKind::Model),
+            (
+                LocalRuntimeErrorKind::UnsafeArtifact,
+                ProviderErrorKind::Model,
+            ),
             (
                 LocalRuntimeErrorKind::Initialization,
                 ProviderErrorKind::Internal,
