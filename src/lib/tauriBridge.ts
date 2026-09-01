@@ -139,6 +139,11 @@ export const nativeTauriBridge = {
     return invoke<LocalModelDescriptor>("delete_local_llm_model", { modelId });
   },
 
+  async testLocalLlmModel(): Promise<ConnectionTestResult> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<ConnectionTestResult>("test_local_llm_model");
+  },
+
   async onLocalLlmModelProgress(
     callback: (progress: LocalModelInstallProgress) => void,
   ): Promise<() => void> {
