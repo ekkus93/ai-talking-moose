@@ -6,6 +6,7 @@
 mod chat_template;
 mod llama;
 mod manager;
+mod reasoning;
 #[cfg(test)]
 mod tests;
 pub(crate) mod types;
