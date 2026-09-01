@@ -319,8 +319,7 @@ pub struct LocalModelInstaller {
 impl LocalModelInstaller {
     pub fn new(root: PathBuf) -> Result<Self, LocalModelInstallError> {
         validate_local_model_catalog().map_err(|_| LocalModelInstallError::invalid_catalog())?;
-        fs::create_dir_all(&root)
-            .map_err(|_| LocalModelInstallError::io("create the model root"))?;
+        prepare_model_root(&root)?;
         let staging = root.join(STAGING_DIR);
         ensure_plain_directory(&staging, "create the model staging directory")?;
         cleanup_stale_staging(&staging)?;
@@ -338,8 +337,7 @@ impl LocalModelInstaller {
         transport: Arc<dyn LocalModelDownloadTransport>,
     ) -> Result<Self, LocalModelInstallError> {
         validate_local_model_catalog().map_err(|_| LocalModelInstallError::invalid_catalog())?;
-        fs::create_dir_all(&root)
-            .map_err(|_| LocalModelInstallError::io("create the model root"))?;
+        prepare_model_root(&root)?;
         ensure_plain_directory(
             &root.join(STAGING_DIR),
             "create the model staging directory",
@@ -617,6 +615,13 @@ pub fn global_local_model_installer() -> Result<Arc<LocalModelInstaller>, LocalM
     })
 }
 
+fn prepare_model_root(root: &Path) -> Result<(), LocalModelInstallError> {
+    let parent = root.parent().ok_or_else(LocalModelInstallError::corrupt_install)?;
+    fs::create_dir_all(parent)
+        .map_err(|_| LocalModelInstallError::io("create the local model parent directory"))?;
+    ensure_plain_directory(root, "create the model root")
+}
+
 fn ensure_plain_directory(
     path: &Path,
     create_operation: &'static str,
@@ -713,51 +718,62 @@ fn promote_artifact(
     }
     fs::rename(staging_path, &final_path).map_err(|_| LocalModelInstallError::promotion())?;
 
-    let marker = InstallMarker {
-        schema_version: INSTALL_MARKER_VERSION,
-        model_id: entry.id.to_string(),
-        revision: entry.revision.to_string(),
-        artifact_filename: entry.artifact_filename.to_string(),
-        expected_bytes: entry.expected_bytes,
-        sha256: entry.sha256.to_string(),
-    };
-    let marker_bytes = serde_json::to_vec_pretty(&marker)
-        .map_err(|_| LocalModelInstallError::io("serialize the local model install marker"))?;
-    let marker_tmp = revision_dir.join(format!("{INSTALL_MARKER}.{}.tmp", Uuid::new_v4()));
-    let mut marker_file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&marker_tmp)
-        .map_err(|_| LocalModelInstallError::io("create the local model install marker"))?;
-    marker_file
-        .write_all(&marker_bytes)
-        .map_err(|_| LocalModelInstallError::io("write the local model install marker"))?;
-    marker_file
-        .sync_all()
-        .map_err(|_| LocalModelInstallError::io("sync the local model install marker"))?;
-    drop(marker_file);
+    let marker_result = (|| -> Result<(), LocalModelInstallError> {
+        let marker = InstallMarker {
+            schema_version: INSTALL_MARKER_VERSION,
+            model_id: entry.id.to_string(),
+            revision: entry.revision.to_string(),
+            artifact_filename: entry.artifact_filename.to_string(),
+            expected_bytes: entry.expected_bytes,
+            sha256: entry.sha256.to_string(),
+        };
+        let marker_bytes = serde_json::to_vec_pretty(&marker)
+            .map_err(|_| LocalModelInstallError::io("serialize the local model install marker"))?;
+        let marker_tmp = revision_dir.join(format!("{INSTALL_MARKER}.{}.tmp", Uuid::new_v4()));
+        let result = (|| -> Result<(), LocalModelInstallError> {
+            let mut marker_file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&marker_tmp)
+                .map_err(|_| LocalModelInstallError::io("create the local model install marker"))?;
+            marker_file
+                .write_all(&marker_bytes)
+                .map_err(|_| LocalModelInstallError::io("write the local model install marker"))?;
+            marker_file
+                .sync_all()
+                .map_err(|_| LocalModelInstallError::io("sync the local model install marker"))?;
+            drop(marker_file);
 
-    let marker_path = revision_dir.join(INSTALL_MARKER);
-    match fs::symlink_metadata(&marker_path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            let marker_path = revision_dir.join(INSTALL_MARKER);
+            match fs::symlink_metadata(&marker_path) {
+                Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                    return Err(LocalModelInstallError::corrupt_install());
+                }
+                Ok(_) => {
+                    fs::remove_file(&marker_path).map_err(|_| {
+                        LocalModelInstallError::io("replace the local model install marker")
+                    })?;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => {
+                    return Err(LocalModelInstallError::io(
+                        "inspect the local model install marker",
+                    ));
+                }
+            }
+            fs::rename(&marker_tmp, &marker_path)
+                .map_err(|_| LocalModelInstallError::promotion())?;
+            Ok(())
+        })();
+        if result.is_err() {
             let _ = fs::remove_file(&marker_tmp);
-            return Err(LocalModelInstallError::corrupt_install());
         }
-        Ok(_) => {
-            fs::remove_file(&marker_path)
-                .map_err(|_| LocalModelInstallError::io("replace the local model install marker"))?;
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => {
-            let _ = fs::remove_file(&marker_tmp);
-            return Err(LocalModelInstallError::io(
-                "inspect the local model install marker",
-            ));
-        }
-    }
-    if let Err(_) = fs::rename(&marker_tmp, &marker_path) {
-        let _ = fs::remove_file(&marker_tmp);
-        return Err(LocalModelInstallError::promotion());
+        result
+    })();
+
+    if let Err(error) = marker_result {
+        let _ = fs::remove_file(&final_path);
+        return Err(error);
     }
     Ok(())
 }
