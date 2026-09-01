@@ -209,7 +209,8 @@ impl LlamaEngine {
 impl RuntimeEngine for LlamaEngine {
     fn load_model(&mut self, spec: &RuntimeModelSpec) -> Result<(), LocalRuntimeError> {
         debug_assert!(self.model.is_none());
-        let entry = local_model_entry(&spec.identity.id).ok_or_else(LocalRuntimeError::unknown_model)?;
+        let entry = local_model_entry(&spec.identity.id)
+            .ok_or_else(LocalRuntimeError::unknown_model)?;
         let params = LlamaModelParams::default().with_n_gpu_layers(0);
         let model = LlamaModel::load_from_file(&self.backend, &spec.path, &params)
             .map_err(|_| LocalRuntimeError::model_load())?;
