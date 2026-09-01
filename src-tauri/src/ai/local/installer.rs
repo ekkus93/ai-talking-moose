@@ -714,6 +714,66 @@ fn verify_artifact(
     Ok(())
 }
 
+fn write_install_marker_file(
+    marker_tmp: &Path,
+    marker_path: &Path,
+    marker_bytes: &[u8],
+) -> Result<(), LocalModelInstallError> {
+    let mut marker_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(marker_tmp)
+        .map_err(|_| LocalModelInstallError::io("create the local model install marker"))?;
+    marker_file
+        .write_all(marker_bytes)
+        .map_err(|_| LocalModelInstallError::io("write the local model install marker"))?;
+    marker_file
+        .sync_all()
+        .map_err(|_| LocalModelInstallError::io("sync the local model install marker"))?;
+    drop(marker_file);
+
+    match fs::symlink_metadata(marker_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+        Ok(_) => {
+            fs::remove_file(marker_path).map_err(|_| {
+                LocalModelInstallError::io("replace the local model install marker")
+            })?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => {
+            return Err(LocalModelInstallError::io(
+                "inspect the local model install marker",
+            ))
+        }
+    }
+    fs::rename(marker_tmp, marker_path).map_err(|_| LocalModelInstallError::promotion())
+}
+
+fn write_install_marker(
+    revision_dir: &Path,
+    entry: &'static LocalModelCatalogEntry,
+) -> Result<(), LocalModelInstallError> {
+    let marker = InstallMarker {
+        schema_version: INSTALL_MARKER_VERSION,
+        model_id: entry.id.to_string(),
+        revision: entry.revision.to_string(),
+        artifact_filename: entry.artifact_filename.to_string(),
+        expected_bytes: entry.expected_bytes,
+        sha256: entry.sha256.to_string(),
+    };
+    let marker_bytes = serde_json::to_vec_pretty(&marker)
+        .map_err(|_| LocalModelInstallError::io("serialize the local model install marker"))?;
+    let marker_tmp = revision_dir.join(format!("{INSTALL_MARKER}.{}.tmp", Uuid::new_v4()));
+    let marker_path = revision_dir.join(INSTALL_MARKER);
+    let result = write_install_marker_file(&marker_tmp, &marker_path, &marker_bytes);
+    if result.is_err() {
+        let _ = fs::remove_file(&marker_tmp);
+    }
+    result
+}
+
 fn promote_artifact(
     root: &Path,
     entry: &'static LocalModelCatalogEntry,
@@ -743,60 +803,7 @@ fn promote_artifact(
     }
     fs::rename(staging_path, &final_path).map_err(|_| LocalModelInstallError::promotion())?;
 
-    let marker_result = (|| -> Result<(), LocalModelInstallError> {
-        let marker = InstallMarker {
-            schema_version: INSTALL_MARKER_VERSION,
-            model_id: entry.id.to_string(),
-            revision: entry.revision.to_string(),
-            artifact_filename: entry.artifact_filename.to_string(),
-            expected_bytes: entry.expected_bytes,
-            sha256: entry.sha256.to_string(),
-        };
-        let marker_bytes = serde_json::to_vec_pretty(&marker)
-            .map_err(|_| LocalModelInstallError::io("serialize the local model install marker"))?;
-        let marker_tmp = revision_dir.join(format!("{INSTALL_MARKER}.{}.tmp", Uuid::new_v4()));
-        let result = (|| -> Result<(), LocalModelInstallError> {
-            let mut marker_file = fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&marker_tmp)
-                .map_err(|_| LocalModelInstallError::io("create the local model install marker"))?;
-            marker_file
-                .write_all(&marker_bytes)
-                .map_err(|_| LocalModelInstallError::io("write the local model install marker"))?;
-            marker_file
-                .sync_all()
-                .map_err(|_| LocalModelInstallError::io("sync the local model install marker"))?;
-            drop(marker_file);
-
-            let marker_path = revision_dir.join(INSTALL_MARKER);
-            match fs::symlink_metadata(&marker_path) {
-                Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-                    return Err(LocalModelInstallError::corrupt_install());
-                }
-                Ok(_) => {
-                    fs::remove_file(&marker_path).map_err(|_| {
-                        LocalModelInstallError::io("replace the local model install marker")
-                    })?;
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => {
-                    return Err(LocalModelInstallError::io(
-                        "inspect the local model install marker",
-                    ));
-                }
-            }
-            fs::rename(&marker_tmp, &marker_path)
-                .map_err(|_| LocalModelInstallError::promotion())?;
-            Ok(())
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(&marker_tmp);
-        }
-        result
-    })();
-
-    if let Err(error) = marker_result {
+    if let Err(error) = write_install_marker(&revision_dir, entry) {
         let _ = fs::remove_file(&final_path);
         return Err(error);
     }
