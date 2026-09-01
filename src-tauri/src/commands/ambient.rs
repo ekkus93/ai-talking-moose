@@ -29,6 +29,26 @@ fn build_ambient_model_prompt(state: &AppState, event_summary: &str) -> String {
     PromptBuilder::build_ambient_prompt(&config, event_summary, &memories)
 }
 
+fn ambient_text_request(prompt: String) -> TextRequest {
+    TextRequest {
+        prompt,
+        system_instruction: None,
+        temperature: Some(0.85),
+        max_tokens: Some(60),
+    }
+}
+
+async fn generate_ambient_text(
+    state: &AppState,
+    prompt: String,
+) -> Result<String, crate::ai::types::ProviderError> {
+    state
+        .get_text_model()
+        .generate(ambient_text_request(prompt))
+        .await
+        .map(|response| response.text)
+}
+
 fn ambient_privacy_allowed(state: &AppState, category: AmbientEventCategory) -> bool {
     let settings = state.settings.read();
     match category {
@@ -149,17 +169,8 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
     transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;
 
     let prompt = build_ambient_model_prompt(state, &event.summary);
-    let generated = match state
-        .get_text_model()
-        .generate(TextRequest {
-            prompt,
-            system_instruction: None,
-            temperature: Some(0.85),
-            max_tokens: Some(60),
-        })
-        .await
-    {
-        Ok(response) => response.text,
+    let generated = match generate_ambient_text(state, prompt).await {
+        Ok(text) => text,
         Err(error_value) => {
             restore_after_ambient_failure(state, app, appeared_for_ambient)?;
             return Err(crate::ai::types::ProviderError::from_kind(error_value.kind).to_string());
@@ -213,6 +224,7 @@ pub async fn trigger_ambient_remark(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::types::{ProviderErrorKind, TextProvider};
 
     #[test]
     fn observer_categories_fail_closed_when_privacy_settings_are_off() {
@@ -247,6 +259,41 @@ mod tests {
             &state,
             AmbientEventCategory::WindowTitle
         ));
+    }
+
+    #[test]
+    fn ambient_request_preserves_short_generation_policy() {
+        let request = ambient_text_request("ambient prompt".to_string());
+        assert_eq!(request.prompt, "ambient prompt");
+        assert_eq!(request.system_instruction, None);
+        assert_eq!(request.temperature, Some(0.85));
+        assert_eq!(request.max_tokens, Some(60));
+    }
+
+    #[tokio::test]
+    async fn ambient_generation_routes_through_selected_local_text_provider() {
+        let state = AppState::new_for_tests().unwrap();
+        {
+            let mut settings = state.settings.write();
+            settings.text_provider = TextProvider::Local;
+            settings.local_text_model = "missing-local-model".to_string();
+        }
+
+        let error = generate_ambient_text(&state, "ambient local prompt".to_string())
+            .await
+            .expect_err("selected Local provider must fail locally rather than call Google");
+        assert_eq!(error.kind, ProviderErrorKind::Model);
+    }
+
+    #[tokio::test]
+    async fn ambient_generation_routes_through_selected_google_text_provider() {
+        let state = AppState::new_for_tests().unwrap();
+        assert_eq!(state.settings.read().text_provider, TextProvider::Google);
+
+        let error = generate_ambient_text(&state, "ambient google prompt".to_string())
+            .await
+            .expect_err("selected Google provider without a key must fail authentication");
+        assert_eq!(error.kind, ProviderErrorKind::Auth);
     }
 
     #[test]
