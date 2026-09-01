@@ -117,7 +117,8 @@ export const AiTab: React.FC<AiTabProps> = ({
             Text Generation
           </h4>
           <p className="text-[10px] text-gray-700">
-            This provider is used for typed replies and unsolicited ambient remarks.
+            This provider is used for typed replies and unsolicited ambient
+            remarks.
           </p>
         </div>
 
@@ -134,7 +135,8 @@ export const AiTab: React.FC<AiTabProps> = ({
             <span>
               <span className="font-bold">Local — on this computer</span>
               <span className="block text-[10px] text-gray-700">
-                Runs after you explicitly download a supported GGUF model. Generation itself does not require a Google API key.
+                Runs after you explicitly download a supported GGUF model.
+                Generation itself does not require a Google API key.
               </span>
             </span>
           </label>
@@ -149,7 +151,8 @@ export const AiTab: React.FC<AiTabProps> = ({
             <span>
               <span className="font-bold">Google Gemini — cloud</span>
               <span className="block text-[10px] text-gray-700">
-                Sends text-generation requests to Google using your saved API key.
+                Sends text-generation requests to Google using your saved API
+                key.
               </span>
             </span>
           </label>
@@ -158,8 +161,11 @@ export const AiTab: React.FC<AiTabProps> = ({
         {settings.text_provider === "local" ? (
           <LocalLlmSettingsPanel
             selectedModelId={settings.local_text_model}
-            onSelectModel={(modelId) => {
-              void updateSettings({ ...settings, local_text_model: modelId });
+            onSelectModel={async (modelId) => {
+              await updateSettings({
+                ...settings,
+                local_text_model: modelId,
+              });
             }}
           />
         ) : (
@@ -212,13 +218,17 @@ export const AiTab: React.FC<AiTabProps> = ({
         )}
       </section>
 
-      <section className="pt-3 border-t border-gray-300 space-y-2" aria-labelledby="voice-conversation-heading">
+      <section
+        className="pt-3 border-t border-gray-300 space-y-2"
+        aria-labelledby="voice-conversation-heading"
+      >
         <div>
           <h4 id="voice-conversation-heading" className="font-bold">
             Voice Conversation — Google Gemini Live
           </h4>
           <p className="text-[10px] text-gray-700">
-            Voice sessions remain cloud-based in this phase. Choosing Local text above does not change the Gemini Live voice provider.
+            Voice sessions remain cloud-based in this phase. Choosing Local text
+            above does not change the Gemini Live voice provider.
           </p>
         </div>
         <label htmlFor="settings-live-model" className="block mb-1 font-bold">
@@ -264,7 +274,10 @@ export const AiTab: React.FC<AiTabProps> = ({
         </select>
       </section>
 
-      <section className="pt-3 border-t border-gray-300 space-y-2" aria-labelledby="google-credential-heading">
+      <section
+        className="pt-3 border-t border-gray-300 space-y-2"
+        aria-labelledby="google-credential-heading"
+      >
         <div>
           <h4 id="google-credential-heading" className="font-bold">
             Google Cloud Credential
@@ -298,7 +311,8 @@ export const AiTab: React.FC<AiTabProps> = ({
           </button>
         </div>
         <p className="text-[10px] text-gray-700">
-          Your key is stored in the operating system secure credential store and is never returned to this settings screen.
+          Your key is stored in the operating system secure credential store and
+          is never returned to this settings screen.
         </p>
         {hasApiKey ? (
           <button
@@ -309,7 +323,9 @@ export const AiTab: React.FC<AiTabProps> = ({
             Remove Saved Key
           </button>
         ) : (
-          <p className="text-[10px] text-gray-600">No Google API key is currently saved.</p>
+          <p className="text-[10px] text-gray-600">
+            No Google API key is currently saved.
+          </p>
         )}
 
         <button
@@ -339,13 +355,19 @@ export const AiTab: React.FC<AiTabProps> = ({
         )}
       </section>
 
-      <section className="p-3 border-2 border-black rounded bg-[#f5f1e9] space-y-1" aria-label="AI privacy boundary">
+      <section
+        className="p-3 border-2 border-black rounded bg-[#f5f1e9] space-y-1"
+        aria-label="AI privacy boundary"
+      >
         <div className="font-bold">Local / cloud privacy boundary</div>
         <p className="text-[10px] text-gray-800">
-          Local text runs on this computer after the model has been downloaded and verified. Model installation itself uses the network.
+          Local text runs on this computer after the model has been downloaded
+          and verified. Model installation itself uses the network.
         </p>
         <p className="text-[10px] text-gray-800">
-          Gemini Live voice remains cloud-based. Google TTS also receives the final reply text for speech, including replies generated by a Local text model.
+          Gemini Live voice remains cloud-based. Google TTS also receives the
+          final reply text for speech, including replies generated by a Local
+          text model.
         </p>
       </section>
     </div>
