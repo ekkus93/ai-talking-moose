@@ -83,8 +83,9 @@ Before P9, final runtime loading canonicalized the installed artifact and reject
 
 P9 closes that installer-boundary gap:
 
-- the configured LLM root must itself be a plain directory, not a symlink or other file type;
+- the immediate app-managed model parent and configured LLM root must be plain directories, not symlinks or other file types;
 - `.staging` must be a plain directory;
+- the parent/root/staging layout is revalidated at model-path lookup, install, verification/promotion, delete, diagnostics, and installed-state checks, so replacing one of those paths after startup fails closed;
 - model-ID and revision directories must be plain directories;
 - staging artifacts must be regular non-symlink files before verification;
 - an existing final artifact may be replaced only when it is a regular file;
@@ -95,7 +96,7 @@ P9 closes that installer-boundary gap:
 - recursive deletion of an ordinary model directory is regression-tested not to follow a revision symlink;
 - if marker promotion fails after the verified GGUF was renamed into place, the promoted GGUF is removed so the failed install cannot leave a half-promoted payload that appears usable.
 
-Unix adversarial tests cover a symlinked model root, symlinked staging directory, symlinked model directory, symlinked revision directory, symlinked installed artifact, symlinked marker target, and deletion of a tree containing a revision symlink. Outside-root sentinel files must survive unchanged.
+Unix adversarial tests cover a symlinked model root, symlinked staging directory, root/staging replacement after initialization, symlinked model directory, symlinked revision directory, symlinked installed artifact, symlinked marker target, and deletion of a tree containing a revision symlink. Outside-root sentinel files must survive unchanged.
 
 These protections are in addition to the runtime manager's canonical-root check before a GGUF is opened.
 
@@ -170,7 +171,7 @@ Subject to the canonical CI gate for the exact implementation head, P9 establish
 1. Local generation is independent of the repository network boundary after installation.
 2. Local prompts, memory/ambient-derived text, and generated output are not emitted to normal tracing logs.
 3. Native/runtime failures are reduced to stable safe frontend categories/messages.
-4. Catalog and installer paths cannot escape through user-controlled path components or pre-existing model-storage symlinks covered by the adversarial suite.
+4. Catalog and installer paths cannot escape through user-controlled path components or model-storage symlinks covered by the adversarial suite, including root/staging replacement after initialization.
 5. Model and runtime licensing has explicit provenance, and shipped Rust dependency evidence remains enforced by the existing fail-closed release-license collector.
 
 P12 still owns real-model, CPU-only, network-denied generation evidence. This P9 pass deliberately does not treat injected-runtime testing as a substitute for that later real-GGUF acceptance gate.
