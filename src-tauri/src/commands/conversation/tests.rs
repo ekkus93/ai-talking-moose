@@ -81,6 +81,79 @@ fn private_memory_consumed_by_conversation_prompt_never_enters_tracing() {
 }
 
 #[test]
+fn typed_text_routes_selected_local_provider_and_restores_idle_on_failure() {
+    let app_state = AppState::new_for_tests().unwrap();
+    {
+        let mut settings = app_state.settings.write();
+        settings.text_provider = crate::ai::types::TextProvider::Local;
+        settings.local_text_model = "missing-local-model".to_string();
+        settings.save_transcripts = false;
+    }
+    let character_state = app_state.character_state.clone();
+    let playback = app_state.audio_playback.clone();
+    let db = app_state.db.clone();
+
+    let app = mock_builder()
+        .manage(app_state)
+        .invoke_handler(tauri::generate_handler![send_text_message])
+        .build(mock_context(noop_assets()))
+        .unwrap();
+    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+
+    let error = get_ipc_response(
+        &webview,
+        ipc_request(
+            "send_text_message",
+            json!({ "message": "route this through Local" }),
+        ),
+    )
+    .expect_err("selected Local provider must fail locally for an unknown model");
+
+    assert!(error
+        .as_str()
+        .unwrap()
+        .contains("selected conversation model is unavailable"));
+    assert_eq!(*character_state.read(), CharacterState::Idle);
+    assert_eq!(playback.queue_length(), 0);
+    assert!(db.get_transcripts(10).unwrap().is_empty());
+}
+
+#[test]
+fn typed_text_routes_selected_google_provider_without_fake_fallback() {
+    let app_state = AppState::new_for_tests().unwrap();
+    assert_eq!(
+        app_state.settings.read().text_provider,
+        crate::ai::types::TextProvider::Google
+    );
+    let character_state = app_state.character_state.clone();
+    let playback = app_state.audio_playback.clone();
+
+    let app = mock_builder()
+        .manage(app_state)
+        .invoke_handler(tauri::generate_handler![send_text_message])
+        .build(mock_context(noop_assets()))
+        .unwrap();
+    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+
+    let error = get_ipc_response(
+        &webview,
+        ipc_request(
+            "send_text_message",
+            json!({ "message": "route this through Google" }),
+        ),
+    )
+    .expect_err("selected Google provider without a key must fail authentication");
+
+    assert!(error.as_str().unwrap().contains("authentication failed"));
+    assert_eq!(*character_state.read(), CharacterState::Idle);
+    assert_eq!(playback.queue_length(), 0);
+}
+
+#[test]
 fn transcript_retention_off_writes_no_records() {
     let db = Database::new_in_memory().unwrap();
 
