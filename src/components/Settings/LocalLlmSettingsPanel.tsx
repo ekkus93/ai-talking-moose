@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle, Download, Play, Trash2, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Download,
+  Play,
+  Trash2,
+  X,
+} from "lucide-react";
 import { tauriBridge } from "../../lib/tauriBridge";
 import type {
   ConnectionTestResult,
@@ -9,13 +16,15 @@ import type {
 
 interface LocalLlmSettingsPanelProps {
   selectedModelId: string;
-  onSelectModel: (modelId: string) => void;
+  onSelectModel: (modelId: string) => Promise<void>;
 }
 
 const formatModelSize = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MiB`;
 
-const installStateLabel = (state: LocalModelDescriptor["install_state"]): string => {
+const installStateLabel = (
+  state: LocalModelDescriptor["install_state"],
+): string => {
   switch (state) {
     case "not_installed":
       return "Not installed";
@@ -41,8 +50,13 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
   onSelectModel,
 }) => {
   const [models, setModels] = useState<LocalModelDescriptor[]>([]);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [progress, setProgress] = useState<LocalModelInstallProgress | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const [progress, setProgress] = useState<LocalModelInstallProgress | null>(
+    null,
+  );
+  const [selectionPending, setSelectionPending] = useState(false);
   const [installPending, setInstallPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [testPending, setTestPending] = useState(false);
@@ -122,9 +136,28 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
     installPending ||
     selectedModel?.install_state === "downloading" ||
     selectedModel?.install_state === "verifying";
+  const modelSelectionDisabled =
+    status !== "ready" ||
+    selectionPending ||
+    isInstallActive ||
+    deletePending ||
+    testPending;
+
+  const handleSelectModel = async (modelId: string) => {
+    if (modelId === selectedModelId || modelSelectionDisabled) return;
+    setSelectionPending(true);
+    setResult(null);
+    try {
+      await onSelectModel(modelId);
+    } catch (error) {
+      setResult({ success: false, message: String(error) });
+    } finally {
+      setSelectionPending(false);
+    }
+  };
 
   const handleInstall = async () => {
-    if (!selectedModel) return;
+    if (!selectedModel || selectionPending) return;
     setInstallPending(true);
     setResult(null);
     setModels((current) =>
@@ -171,7 +204,7 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!selectedModel) return;
+    if (!selectedModel || selectionPending) return;
     const confirmed = window.confirm(
       `Delete the installed local model “${selectedModel.display_name}”? The model will remain selected and must be downloaded again before Local text can use it.`,
     );
@@ -196,6 +229,7 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
   };
 
   const handleTest = async () => {
+    if (selectionPending) return;
     setTestPending(true);
     setResult(null);
     try {
@@ -210,15 +244,18 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
   return (
     <div className="space-y-3">
       <div>
-        <label htmlFor="settings-local-text-model" className="block mb-1 font-bold">
+        <label
+          htmlFor="settings-local-text-model"
+          className="block mb-1 font-bold"
+        >
           Local Text Model
         </label>
         <select
           id="settings-local-text-model"
           value={selectedModelId}
-          disabled={status !== "ready"}
-          aria-busy={status === "loading"}
-          onChange={(event) => onSelectModel(event.target.value)}
+          disabled={modelSelectionDisabled}
+          aria-busy={status === "loading" || selectionPending}
+          onChange={(event) => void handleSelectModel(event.target.value)}
           className="w-full p-1.5 border border-black rounded bg-white font-bold disabled:opacity-60"
         >
           {status === "loading" ? (
@@ -245,7 +282,8 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
           )}
         </select>
         <p className="mt-1 text-[10px] text-gray-700">
-          Selecting a model never downloads it. Installation requires the explicit Download action below.
+          Selecting a model never downloads it. Installation requires the
+          explicit Download action below.
         </p>
       </div>
 
@@ -255,7 +293,9 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
             <div>
               <div className="font-bold">{selectedModel.display_name}</div>
               <div className="text-[10px] text-gray-700">
-                {selectedModel.family} • {selectedModel.parameter_scale} • {selectedModel.quantization} • {formatModelSize(selectedModel.expected_bytes)}
+                {selectedModel.family} • {selectedModel.parameter_scale} •{" "}
+                {selectedModel.quantization} •{" "}
+                {formatModelSize(selectedModel.expected_bytes)}
               </div>
             </div>
             <span className="text-[10px] font-bold border border-black rounded px-2 py-0.5 bg-white">
@@ -270,7 +310,10 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
           </p>
 
           {selectedProgress && selectedProgress.total_bytes > 0 && (
-            <div className="space-y-1" aria-label="Local model download progress">
+            <div
+              className="space-y-1"
+              aria-label="Local model download progress"
+            >
               <div className="h-2 border border-black bg-white">
                 <div
                   className="h-full bg-black"
@@ -306,7 +349,7 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => void handleTest()}
-                  disabled={testPending || deletePending}
+                  disabled={testPending || deletePending || selectionPending}
                   className="px-3 py-1.5 bg-black text-white rounded font-bold disabled:opacity-60 flex items-center gap-1"
                 >
                   <Play className="w-3.5 h-3.5" />
@@ -315,7 +358,7 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => void handleDelete()}
-                  disabled={deletePending || testPending}
+                  disabled={deletePending || testPending || selectionPending}
                   className="px-3 py-1.5 bg-white border border-black rounded font-bold disabled:opacity-60 flex items-center gap-1"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -335,7 +378,7 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
               <button
                 type="button"
                 onClick={() => void handleInstall()}
-                disabled={status !== "ready"}
+                disabled={status !== "ready" || selectionPending}
                 className="px-3 py-1.5 bg-black text-white rounded font-bold disabled:opacity-60 flex items-center gap-1"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -347,8 +390,12 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
       )}
 
       {status === "ready" && !selectedModel && (
-        <div className="p-2 border border-red-600 bg-red-50 text-red-800 rounded" role="alert">
-          The selected local model is not in the supported backend catalog. No replacement was selected automatically.
+        <div
+          className="p-2 border border-red-600 bg-red-50 text-red-800 rounded"
+          role="alert"
+        >
+          The selected local model is not in the supported backend catalog. No
+          replacement was selected automatically.
         </div>
       )}
 
