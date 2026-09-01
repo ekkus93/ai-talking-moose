@@ -182,4 +182,12 @@ mod tests {
         );
         assert_eq!(qwen.template_hint, LocalModelTemplateHint::Qwen3NonThinking);
     }
+
+    #[test]
+    fn bundled_model_licenses_match_verified_source_policy() {
+        let smol = local_model_entry(DEFAULT_LOCAL_TEXT_MODEL_ID).unwrap();
+        let qwen = local_model_entry("qwen3-0-6b-instruct-q4-k-m").unwrap();
+        assert_eq!(smol.license, "Apache-2.0");
+        assert_eq!(qwen.license, "Apache-2.0");
+    }
 }
