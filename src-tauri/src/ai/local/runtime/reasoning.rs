@@ -60,10 +60,7 @@ fn sanitize_qwen3_output(output: String) -> Result<String, LocalRuntimeError> {
     let answer_start = reasoning_end + THINK_END.len();
     let answer = &output[answer_start..];
 
-    if answer.contains(THINK_START)
-        || answer.contains(THINK_END)
-        || answer.trim().is_empty()
-    {
+    if answer.contains(THINK_START) || answer.contains(THINK_END) || answer.trim().is_empty() {
         return Err(LocalRuntimeError::output_decode());
     }
 
@@ -145,11 +142,7 @@ mod tests {
     fn smollm_output_is_not_subject_to_qwen_reasoning_parser() {
         let text = "Literal <think> markup is ordinary SmolLM text.";
         assert_eq!(
-            sanitize_generated_output(
-                LocalModelTemplateHint::SmolLm2,
-                text.to_string(),
-            )
-            .unwrap(),
+            sanitize_generated_output(LocalModelTemplateHint::SmolLm2, text.to_string(),).unwrap(),
             text
         );
     }
