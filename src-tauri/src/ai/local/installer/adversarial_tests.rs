@@ -50,6 +50,22 @@ fn staging_is_empty(root: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn write_test_marker(revision_dir: &Path) {
+    let marker = InstallMarker {
+        schema_version: INSTALL_MARKER_VERSION,
+        model_id: TEST_ENTRY.id.to_string(),
+        revision: TEST_ENTRY.revision.to_string(),
+        artifact_filename: TEST_ENTRY.artifact_filename.to_string(),
+        expected_bytes: TEST_ENTRY.expected_bytes,
+        sha256: TEST_ENTRY.sha256.to_string(),
+    };
+    fs::write(
+        revision_dir.join(INSTALL_MARKER),
+        serde_json::to_vec(&marker).unwrap(),
+    )
+    .unwrap();
+}
+
 #[tokio::test]
 async fn truncated_artifact_is_rejected_and_staging_is_cleaned() {
     let dir = tempdir().unwrap();
@@ -131,4 +147,112 @@ fn failed_atomic_promotion_never_creates_install_marker() {
     let revision_dir = dir.path().join(TEST_ENTRY.id).join(TEST_ENTRY.revision);
     assert!(!revision_dir.join(TEST_ENTRY.artifact_filename).exists());
     assert!(!revision_dir.join(INSTALL_MARKER).exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn staging_directory_symlink_is_rejected_without_touching_target() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let sentinel = outside.path().join("keep.txt");
+    fs::write(&sentinel, b"keep").unwrap();
+    symlink(outside.path(), dir.path().join(STAGING_DIR)).unwrap();
+
+    let error = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap_err();
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
+    assert_eq!(fs::read(&sentinel).unwrap(), b"keep");
+}
+
+#[cfg(unix)]
+#[test]
+fn promotion_rejects_model_directory_symlink_without_root_escape() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let staging = dir.path().join(STAGING_DIR);
+    fs::create_dir(&staging).unwrap();
+    let staging_file = staging.join("verified.partial");
+    fs::write(&staging_file, b"abc").unwrap();
+    symlink(outside.path(), dir.path().join(TEST_ENTRY.id)).unwrap();
+
+    let error = promote_artifact(dir.path(), &TEST_ENTRY, &staging_file).unwrap_err();
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
+    assert!(!outside.path().join(TEST_ENTRY.revision).exists());
+    assert_eq!(fs::read(&staging_file).unwrap(), b"abc");
+}
+
+#[cfg(unix)]
+#[test]
+fn promotion_rejects_revision_directory_symlink_without_root_escape() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let staging = dir.path().join(STAGING_DIR);
+    fs::create_dir(&staging).unwrap();
+    let staging_file = staging.join("verified.partial");
+    fs::write(&staging_file, b"abc").unwrap();
+    let model_dir = dir.path().join(TEST_ENTRY.id);
+    fs::create_dir(&model_dir).unwrap();
+    symlink(outside.path(), model_dir.join(TEST_ENTRY.revision)).unwrap();
+
+    let error = promote_artifact(dir.path(), &TEST_ENTRY, &staging_file).unwrap_err();
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
+    assert!(!outside.path().join(TEST_ENTRY.artifact_filename).exists());
+    assert_eq!(fs::read(&staging_file).unwrap(), b"abc");
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_artifact_never_counts_as_installed() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempdir().unwrap();
+    let installer = LocalModelInstaller::with_transport(
+        dir.path().to_path_buf(),
+        Arc::new(StaticBytesTransport {
+            bytes: b"abc",
+            wait_for_cancel_after_write: false,
+        }),
+    )
+    .unwrap();
+    let revision_dir = dir.path().join(TEST_ENTRY.id).join(TEST_ENTRY.revision);
+    fs::create_dir_all(&revision_dir).unwrap();
+    let real_artifact = dir.path().join("real.gguf");
+    fs::write(&real_artifact, b"abc").unwrap();
+    symlink(
+        &real_artifact,
+        revision_dir.join(TEST_ENTRY.artifact_filename),
+    )
+    .unwrap();
+    write_test_marker(&revision_dir);
+
+    assert!(!installer.install_is_valid(&TEST_ENTRY));
+}
+
+#[cfg(unix)]
+#[test]
+fn deleting_model_tree_does_not_follow_revision_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let sentinel = outside.path().join("keep.txt");
+    fs::write(&sentinel, b"keep").unwrap();
+    let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
+    let entry = local_model_entry(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID).unwrap();
+    let model_dir = dir.path().join(entry.id);
+    fs::create_dir(&model_dir).unwrap();
+    symlink(outside.path(), model_dir.join(entry.revision)).unwrap();
+
+    installer.delete(entry.id).unwrap();
+
+    assert_eq!(fs::read(&sentinel).unwrap(), b"keep");
+    assert!(!model_dir.exists());
 }
