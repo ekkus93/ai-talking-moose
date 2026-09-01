@@ -145,7 +145,11 @@ mod tests {
     fn smollm_output_is_not_subject_to_qwen_reasoning_parser() {
         let text = "Literal <think> markup is ordinary SmolLM text.";
         assert_eq!(
-            sanitize_generated_output(LocalModelTemplateHint::SmolLm2, text.to_string()).unwrap(),
+            sanitize_generated_output(
+                LocalModelTemplateHint::SmolLm2,
+                text.to_string(),
+            )
+            .unwrap(),
             text
         );
     }
