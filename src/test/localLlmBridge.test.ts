@@ -40,4 +40,14 @@ describe("local LLM lifecycle bridge", () => {
       modelId,
     });
   });
+
+  it("uses the dedicated bounded local model self-test command", async () => {
+    const result = await tauriBridge.testLocalLlmModel();
+
+    expect(result).toEqual({
+      success: true,
+      message: "Local model test succeeded",
+    });
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith("test_local_llm_model");
+  });
 });
