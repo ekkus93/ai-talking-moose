@@ -116,8 +116,8 @@ pub(super) fn render_chat_prompt(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::LocalRuntimeErrorKind;
+    use super::*;
 
     #[test]
     fn smollm2_family_fixtures_match_pinned_template_behavior() {
