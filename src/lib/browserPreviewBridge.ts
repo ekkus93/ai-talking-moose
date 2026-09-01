@@ -267,7 +267,8 @@ export const browserPreviewBridge = {
   async testLocalLlmModel(): Promise<ConnectionTestResult> {
     return {
       success: false,
-      message: "Install the selected local model before testing it in browser preview.",
+      message:
+        "Install the selected local model before testing it in browser preview.",
     };
   },
 
