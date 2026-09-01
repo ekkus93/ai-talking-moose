@@ -1,12 +1,14 @@
+use super::chat_template::{render_chat_prompt, validate_model_chat_template};
 use super::manager::RuntimeEngine;
 use super::types::{
     LocalRuntimeError, LocalRuntimeGenerateRequest, LocalRuntimeGeneration, RuntimeModelSpec,
 };
+use crate::ai::local::catalog::local_model_entry;
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
+use llama_cpp_2::model::{AddBos, LlamaModel};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::TokenToStringError;
@@ -54,29 +56,6 @@ impl LlamaEngine {
         }
     }
 
-    fn render_chat_prompt(
-        model: &LlamaModel,
-        request: &LocalRuntimeGenerateRequest,
-    ) -> Result<String, LocalRuntimeError> {
-        let template = model
-            .chat_template(None)
-            .map_err(|_| LocalRuntimeError::chat_template())?;
-        let mut messages = Vec::with_capacity(2);
-        if let Some(system_instruction) = &request.system_instruction {
-            messages.push(
-                LlamaChatMessage::new("system".to_string(), system_instruction.clone())
-                    .map_err(|_| LocalRuntimeError::chat_template())?,
-            );
-        }
-        messages.push(
-            LlamaChatMessage::new("user".to_string(), request.prompt.clone())
-                .map_err(|_| LocalRuntimeError::chat_template())?,
-        );
-        model
-            .apply_chat_template(&template, &messages, true)
-            .map_err(|_| LocalRuntimeError::chat_template())
-    }
-
     fn add_bos_from_metadata(value: Option<&str>) -> AddBos {
         if value.is_some_and(|value| value == "0" || value.eq_ignore_ascii_case("false")) {
             AddBos::Never
@@ -115,7 +94,10 @@ impl LlamaEngine {
         if cancellation.is_cancelled() {
             return Err(LocalRuntimeError::cancelled());
         }
-        let prompt = Self::render_chat_prompt(model, request)?;
+        let template_hint = local_model_entry(&spec.identity.id)
+            .ok_or_else(LocalRuntimeError::unknown_model)?
+            .template_hint;
+        let prompt = render_chat_prompt(model, template_hint, request)?;
         let prompt_tokens = model
             .str_to_token(&prompt, Self::chat_prompt_add_bos(model))
             .map_err(|_| LocalRuntimeError::tokenization())?;
@@ -227,9 +209,12 @@ impl LlamaEngine {
 impl RuntimeEngine for LlamaEngine {
     fn load_model(&mut self, spec: &RuntimeModelSpec) -> Result<(), LocalRuntimeError> {
         debug_assert!(self.model.is_none());
+        let entry =
+            local_model_entry(&spec.identity.id).ok_or_else(LocalRuntimeError::unknown_model)?;
         let params = LlamaModelParams::default().with_n_gpu_layers(0);
         let model = LlamaModel::load_from_file(&self.backend, &spec.path, &params)
             .map_err(|_| LocalRuntimeError::model_load())?;
+        validate_model_chat_template(&model, entry.template_hint)?;
         self.model = Some(Arc::new(model));
         Ok(())
     }
