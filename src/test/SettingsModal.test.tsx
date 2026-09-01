@@ -268,18 +268,16 @@ describe("SettingsModal Component", () => {
     );
     expect(installSpy).not.toHaveBeenCalled();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Download & Verify/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Download & Verify/i }));
     expect(
       await screen.findByRole("button", { name: /Test Local Model/i }),
     ).toBeInTheDocument();
     expect(installSpy).toHaveBeenCalledWith("qwen3-0-6b-instruct-q4-k-m");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Test Local Model/i }),
-    );
-    expect(await screen.findByText("Local model test succeeded")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Test Local Model/i }));
+    expect(
+      await screen.findByText("Local model test succeeded"),
+    ).toBeInTheDocument();
     expect(testSpy).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: /Delete Model/i }));
@@ -308,7 +306,9 @@ describe("SettingsModal Component", () => {
       screen.getByText(/Voice Conversation — Google Gemini Live/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Choosing Local text above does not change the Gemini Live voice provider/i),
+      screen.getByText(
+        /Choosing Local text above does not change the Gemini Live voice provider/i,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Google TTS also receives the final reply text/i),
