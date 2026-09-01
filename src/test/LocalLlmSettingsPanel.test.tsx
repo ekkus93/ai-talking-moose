@@ -14,22 +14,26 @@ const descriptor = (
   id: string,
   installState: LocalModelDescriptor["install_state"] = "not_installed",
   error: LocalModelDescriptor["error"] = null,
-): LocalModelDescriptor => ({
-  id,
-  display_name: id === MODEL_ID ? "SmolLM2 360M" : "Qwen3 0.6B",
-  family: id === MODEL_ID ? "SmolLM2" : "Qwen3",
-  parameter_scale: id === MODEL_ID ? "360M" : "0.6B",
-  quantization: "Q4_K_M",
-  revision: "0123456789012345678901234567890123456789",
-  expected_bytes: id === MODEL_ID ? 100 * 1024 * 1024 : 200 * 1024 * 1024,
-  installed_bytes: installState === "installed" ? 100 * 1024 * 1024 : null,
-  license: "Apache-2.0",
-  context_limit: 8192,
-  recommended_max_output: 192,
-  install_state: installState,
-  active: id === MODEL_ID,
-  error,
-});
+): LocalModelDescriptor => {
+  const expectedBytes =
+    id === MODEL_ID ? 100 * 1024 * 1024 : 200 * 1024 * 1024;
+  return {
+    id,
+    display_name: id === MODEL_ID ? "SmolLM2 360M" : "Qwen3 0.6B",
+    family: id === MODEL_ID ? "SmolLM2" : "Qwen3",
+    parameter_scale: id === MODEL_ID ? "360M" : "0.6B",
+    quantization: "Q4_K_M",
+    revision: "0123456789012345678901234567890123456789",
+    expected_bytes: expectedBytes,
+    installed_bytes: installState === "installed" ? expectedBytes : null,
+    license: "Apache-2.0",
+    context_limit: 8192,
+    recommended_max_output: 192,
+    install_state: installState,
+    active: id === MODEL_ID,
+    error,
+  };
+};
 
 const originalBridgeMethods = {
   getLocalLlmModels: tauriBridge.getLocalLlmModels,
@@ -121,7 +125,7 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
         onSelectModel={vi.fn().mockResolvedValue(undefined)}
       />,
     );
-    await screen.findByText("SmolLM2 360M");
+    await screen.findByLabelText("Local Text Model");
 
     await act(async () => {
       progressListener?.({
@@ -172,7 +176,7 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
 
   it("reports backend selection rejection without selecting a replacement", async () => {
     const onSelectModel = vi
-      .fn<(modelId: string) => Promise<void>>()
+      .fn(async (_modelId: string): Promise<void> => undefined)
       .mockRejectedValue(new Error("selection persistence rejected"));
 
     render(
