@@ -334,7 +334,9 @@ export const AiTab: React.FC<AiTabProps> = ({
           disabled={isTesting}
           className="px-3 py-1.5 bg-white border-2 border-black rounded font-bold hover:bg-gray-100 flex items-center gap-1.5 disabled:opacity-60"
         >
-          {isTesting ? "Testing Gemini Connection..." : "Test Gemini Connection"}
+          {isTesting
+            ? "Testing Gemini Connection..."
+            : "Test Gemini Connection"}
         </button>
 
         {testResult && (
