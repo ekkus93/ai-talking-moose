@@ -13,6 +13,12 @@ const originalBridgeMethods = {
   updateSettings: tauriBridge.updateSettings,
   setGoogleApiKey: tauriBridge.setGoogleApiKey,
   clearGoogleApiKey: tauriBridge.clearGoogleApiKey,
+  getLocalLlmModels: tauriBridge.getLocalLlmModels,
+  installLocalLlmModel: tauriBridge.installLocalLlmModel,
+  cancelLocalLlmInstall: tauriBridge.cancelLocalLlmInstall,
+  deleteLocalLlmModel: tauriBridge.deleteLocalLlmModel,
+  testLocalLlmModel: tauriBridge.testLocalLlmModel,
+  onLocalLlmModelProgress: tauriBridge.onLocalLlmModelProgress,
 };
 
 describe("SettingsModal Component", () => {
@@ -30,6 +36,7 @@ describe("SettingsModal Component", () => {
 
   afterEach(() => {
     Object.assign(tauriBridge, originalBridgeMethods);
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -134,7 +141,7 @@ describe("SettingsModal Component", () => {
     ).toBeInTheDocument();
   });
 
-  it("preserves model selections and blocks writes while the catalog is loading", async () => {
+  it("preserves model selections and blocks writes while the Google catalog is loading", async () => {
     let resolveModels: (
       models: ReturnType<typeof frontendGoogleModels>,
     ) => void = () => undefined;
@@ -149,7 +156,7 @@ describe("SettingsModal Component", () => {
       .mockResolvedValue(undefined);
 
     render(<SettingsModal />);
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
 
     const liveSelect = screen.getByLabelText("Realtime Live Voice Model");
     const textSelect = screen.getByLabelText(
@@ -181,7 +188,7 @@ describe("SettingsModal Component", () => {
     expect(updateSpy).not.toHaveBeenCalled();
   });
 
-  it("shows a persisted model as unavailable after catalog resolution without rewriting it", async () => {
+  it("shows a persisted Google model as unavailable after catalog resolution without rewriting it", async () => {
     const settings = frontendDefaultSettings();
     vi.spyOn(tauriBridge, "getGoogleModels").mockResolvedValue([
       {
@@ -200,7 +207,7 @@ describe("SettingsModal Component", () => {
       .mockResolvedValue(undefined);
 
     render(<SettingsModal />);
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
 
     const liveSelect = screen.getByLabelText("Realtime Live Voice Model");
     const textSelect = screen.getByLabelText(
@@ -223,6 +230,92 @@ describe("SettingsModal Component", () => {
     expect(updateSpy).not.toHaveBeenCalled();
   });
 
+  it("selects Local text without auto-downloading and manages the selected model explicitly", async () => {
+    const installSpy = vi.spyOn(tauriBridge, "installLocalLlmModel");
+    const testSpy = vi.spyOn(tauriBridge, "testLocalLlmModel");
+    const deleteSpy = vi.spyOn(tauriBridge, "deleteLocalLlmModel");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("AI & Models"));
+
+    expect(
+      screen.getByRole("radio", { name: /Google Gemini — cloud/i }),
+    ).toBeChecked();
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Local — on this computer/i }),
+    );
+
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.text_provider).toBe("local"),
+    );
+    expect(installSpy).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Selecting a model never downloads it/i),
+    ).toBeInTheDocument();
+
+    const localSelect = await screen.findByLabelText("Local Text Model");
+    expect(localSelect).toHaveValue("smollm2-360m-instruct-q4-k-m");
+    expect(screen.getByText(/Smallest supported model/i)).toBeInTheDocument();
+
+    fireEvent.change(localSelect, {
+      target: { value: "qwen3-0-6b-instruct-q4-k-m" },
+    });
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.local_text_model).toBe(
+        "qwen3-0-6b-instruct-q4-k-m",
+      ),
+    );
+    expect(installSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Download & Verify/i }),
+    );
+    expect(
+      await screen.findByRole("button", { name: /Test Local Model/i }),
+    ).toBeInTheDocument();
+    expect(installSpy).toHaveBeenCalledWith("qwen3-0-6b-instruct-q4-k-m");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Test Local Model/i }),
+    );
+    expect(await screen.findByText("Local model test succeeded")).toBeInTheDocument();
+    expect(testSpy).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete Model/i }));
+    await waitFor(() =>
+      expect(deleteSpy).toHaveBeenCalledWith("qwen3-0-6b-instruct-q4-k-m"),
+    );
+    expect(useMooseStore.getState().settings?.local_text_model).toBe(
+      "qwen3-0-6b-instruct-q4-k-m",
+    );
+    expect(
+      await screen.findByRole("button", { name: /Download & Verify/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("makes the local/cloud text, voice, TTS and credential boundaries explicit", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("AI & Models"));
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Local — on this computer/i }),
+    );
+
+    expect(
+      await screen.findByText(/Not required for Local text generation/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Voice Conversation — Google Gemini Live/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Choosing Local text above does not change the Gemini Live voice provider/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Google TTS also receives the final reply text/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Google Gemini API Key/i)).toBeInTheDocument();
+  });
+
   it("uses the backend-derived voice catalog in the primary voice selector", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Voice & Audio"));
@@ -241,7 +334,7 @@ describe("SettingsModal Component", () => {
 
   it("shows only current capability-filtered Gemini model options", async () => {
     render(<SettingsModal />);
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
 
     expect(
       await screen.findByRole("option", {
@@ -269,6 +362,7 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Test Output")).toBeInTheDocument();
     expect(await screen.findByText("Granted")).toBeInTheDocument();
   });
+
   it("exposes local-time quiet hours with explicit overnight UX", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Behavior"));
@@ -332,17 +426,17 @@ describe("SettingsModal Component", () => {
     ).toBeInTheDocument();
   });
 
-  // Tabs unmount when the user switches away, so transient tab state has to be
+  // Tabs unmount when the user switches away, so transient Google credential state has to be
   // owned by the modal shell. Held inside a tab it would be silently discarded.
   it("preserves a half-typed API key across a tab switch", () => {
     render(<SettingsModal />);
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
 
     const keyField = screen.getByLabelText(/Google Gemini API Key/i);
     fireEvent.change(keyField, { target: { value: "AIzaSyPartialDraft" } });
 
     fireEvent.click(screen.getByText("Privacy"));
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
 
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toHaveValue(
       "AIzaSyPartialDraft",
@@ -353,7 +447,7 @@ describe("SettingsModal Component", () => {
     vi.spyOn(tauriBridge, "setGoogleApiKey").mockResolvedValue(undefined);
 
     render(<SettingsModal />);
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
     fireEvent.change(screen.getByLabelText(/Google Gemini API Key/i), {
       target: { value: "AIzaSySettingsKey" },
     });
@@ -367,15 +461,15 @@ describe("SettingsModal Component", () => {
     useMooseStore.setState({ hasApiKey: true });
 
     render(<SettingsModal />);
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
     fireEvent.click(screen.getByRole("button", { name: /Remove Saved Key/i }));
 
     await waitFor(() => expect(useMooseStore.getState().hasApiKey).toBe(false));
   });
 
-  it("keeps a connection-test result visible across a tab switch", async () => {
+  it("keeps a Google connection-test result visible across a tab switch", async () => {
     render(<SettingsModal />);
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
     fireEvent.click(
       screen.getByRole("button", { name: /Test Gemini Connection/i }),
     );
@@ -383,7 +477,7 @@ describe("SettingsModal Component", () => {
     const banner = await screen.findByText(/Test connection succeeded/i);
 
     fireEvent.click(screen.getByText("Privacy"));
-    fireEvent.click(screen.getByText("Gemini AI"));
+    fireEvent.click(screen.getByText("AI & Models"));
 
     expect(screen.getByText(banner.textContent as string)).toBeInTheDocument();
   });
