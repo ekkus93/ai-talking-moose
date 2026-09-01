@@ -224,6 +224,9 @@ const dispatchTauriCommand = async (
   }
   if (cmd === "cancel_local_llm_install") return true;
   if (cmd === "delete_local_llm_model") return localModelForId(args?.modelId);
+  if (cmd === "test_local_llm_model") {
+    return { success: true, message: "Local model test succeeded" };
+  }
 
   // Character/speech: src-tauri/src/commands/character.rs.
   if (cmd === "get_character_state") return "idle";
