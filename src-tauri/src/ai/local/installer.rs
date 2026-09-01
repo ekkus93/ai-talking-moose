@@ -624,7 +624,9 @@ pub fn global_local_model_installer() -> Result<Arc<LocalModelInstaller>, LocalM
 }
 
 fn prepare_model_root(root: &Path) -> Result<(), LocalModelInstallError> {
-    let parent = root.parent().ok_or_else(LocalModelInstallError::corrupt_install)?;
+    let parent = root
+        .parent()
+        .ok_or_else(LocalModelInstallError::corrupt_install)?;
     let anchor = parent
         .parent()
         .ok_or_else(LocalModelInstallError::corrupt_install)?;
@@ -635,7 +637,9 @@ fn prepare_model_root(root: &Path) -> Result<(), LocalModelInstallError> {
 }
 
 fn validate_storage_layout(root: &Path) -> Result<(), LocalModelInstallError> {
-    let parent = root.parent().ok_or_else(LocalModelInstallError::corrupt_install)?;
+    let parent = root
+        .parent()
+        .ok_or_else(LocalModelInstallError::corrupt_install)?;
     let staging = root.join(STAGING_DIR);
     for directory in [parent, root, staging.as_path()] {
         let metadata = fs::symlink_metadata(directory)
