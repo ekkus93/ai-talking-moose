@@ -65,7 +65,7 @@ fn sanitize_qwen3_output(output: String) -> Result<String, LocalRuntimeError> {
     }
 
     Ok(answer
-        .trim_start_matches(|character| character == '\r' || character == '\n')
+        .trim_start_matches(['\r', '\n'])
         .to_string())
 }
 
