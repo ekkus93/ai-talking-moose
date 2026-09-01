@@ -151,6 +151,26 @@ fn failed_atomic_promotion_never_creates_install_marker() {
 
 #[cfg(unix)]
 #[test]
+fn model_root_symlink_is_rejected_without_touching_target() {
+    use std::os::unix::fs::symlink;
+
+    let parent = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let sentinel = outside.path().join("keep.txt");
+    fs::write(&sentinel, b"keep").unwrap();
+    let root = parent.path().join("llm-root");
+    symlink(outside.path(), &root).unwrap();
+
+    let error = LocalModelInstaller::new(root)
+        .err()
+        .expect("model-root symlink must fail closed");
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
+    assert_eq!(fs::read(&sentinel).unwrap(), b"keep");
+}
+
+#[cfg(unix)]
+#[test]
 fn staging_directory_symlink_is_rejected_without_touching_target() {
     use std::os::unix::fs::symlink;
 
@@ -208,6 +228,30 @@ fn promotion_rejects_revision_directory_symlink_without_root_escape() {
     assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
     assert!(!outside.path().join(TEST_ENTRY.artifact_filename).exists());
     assert_eq!(fs::read(&staging_file).unwrap(), b"abc");
+}
+
+#[cfg(unix)]
+#[test]
+fn marker_symlink_failure_removes_promoted_artifact_and_preserves_target() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let outside_marker = outside.path().join("marker.txt");
+    fs::write(&outside_marker, b"keep").unwrap();
+    let staging = dir.path().join(STAGING_DIR);
+    fs::create_dir(&staging).unwrap();
+    let staging_file = staging.join("verified.partial");
+    fs::write(&staging_file, b"abc").unwrap();
+    let revision_dir = dir.path().join(TEST_ENTRY.id).join(TEST_ENTRY.revision);
+    fs::create_dir_all(&revision_dir).unwrap();
+    symlink(&outside_marker, revision_dir.join(INSTALL_MARKER)).unwrap();
+
+    let error = promote_artifact(dir.path(), &TEST_ENTRY, &staging_file).unwrap_err();
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
+    assert!(!revision_dir.join(TEST_ENTRY.artifact_filename).exists());
+    assert_eq!(fs::read(&outside_marker).unwrap(), b"keep");
 }
 
 #[cfg(unix)]
