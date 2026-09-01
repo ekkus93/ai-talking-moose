@@ -262,10 +262,10 @@ pub fn get_transcripts(
 }
 
 #[tauri::command]
-pub async fn send_text_message(
+pub async fn send_text_message<R: Runtime>(
     message: String,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
     let Some(msg_trimmed) = normalize_text_message(message)? else {
         return Ok(String::new());
