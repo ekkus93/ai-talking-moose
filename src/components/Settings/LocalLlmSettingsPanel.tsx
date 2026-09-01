@@ -168,7 +168,9 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
       ),
     );
     try {
-      const installed = await tauriBridge.installLocalLlmModel(selectedModel.id);
+      const installed = await tauriBridge.installLocalLlmModel(
+        selectedModel.id,
+      );
       setModels((current) => replaceDescriptor(current, installed));
       setProgress(null);
       setResult({
@@ -186,7 +188,9 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
   const handleCancel = async () => {
     if (!selectedModel) return;
     try {
-      const accepted = await tauriBridge.cancelLocalLlmInstall(selectedModel.id);
+      const accepted = await tauriBridge.cancelLocalLlmInstall(
+        selectedModel.id,
+      );
       setResult(
         accepted
           ? {
