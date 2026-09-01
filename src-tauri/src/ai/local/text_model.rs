@@ -11,6 +11,9 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 const DEFAULT_LOCAL_TEMPERATURE: f32 = 0.8;
+/// Provider-owned latency/verbosity ceiling for Local Text V1. Callers may request less (ambient
+/// currently requests 60); cloud providers keep their own independent output policy.
+const LOCAL_TEXT_MAX_OUTPUT_TOKENS: u32 = 192;
 const RANDOM_GENERATION_SEED: u32 = u32::MAX;
 
 #[async_trait]
@@ -108,9 +111,9 @@ impl LocalTextModel {
     ) -> Result<LocalRuntimeGenerateRequest, ProviderError> {
         let entry = local_model_entry(&self.model_id)
             .ok_or_else(|| ProviderError::from_kind(ProviderErrorKind::Model))?;
-        let max_output_tokens = request
-            .max_tokens
-            .unwrap_or(entry.recommended_max_output)
+        let requested_max_output = request.max_tokens.unwrap_or(LOCAL_TEXT_MAX_OUTPUT_TOKENS);
+        let max_output_tokens = requested_max_output
+            .min(LOCAL_TEXT_MAX_OUTPUT_TOKENS)
             .min(entry.recommended_max_output);
         Ok(LocalRuntimeGenerateRequest {
             model_id: self.model_id.clone(),
@@ -119,6 +122,17 @@ impl LocalTextModel {
             temperature: request.temperature.unwrap_or(DEFAULT_LOCAL_TEMPERATURE),
             max_output_tokens,
             seed: RANDOM_GENERATION_SEED,
+        })
+    }
+
+    fn text_response(generation: LocalRuntimeGeneration) -> Result<TextResponse, ProviderError> {
+        let text = generation.text.trim();
+        if text.is_empty() {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
+        }
+        Ok(TextResponse {
+            text: text.to_string(),
+            finish_reason: None,
         })
     }
 }
@@ -136,10 +150,7 @@ impl TextModel for LocalTextModel {
             .generate(installer, runtime_request, CancellationToken::new())
             .await
             .map_err(Self::map_runtime_error)?;
-        Ok(TextResponse {
-            text: generation.text,
-            finish_reason: None,
-        })
+        Self::text_response(generation)
     }
 }
 
@@ -190,7 +201,7 @@ mod tests {
     async fn maps_provider_neutral_request_into_bounded_local_runtime_request() {
         let dir = tempdir().unwrap();
         let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
-        let runtime = runtime_with_result(Ok(generation("moose reply")));
+        let runtime = runtime_with_result(Ok(generation(" \nmoose reply\t")));
         let model = LocalTextModel::from_runtime(
             runtime.clone(),
             Ok(installer),
@@ -221,7 +232,57 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn defaults_temperature_and_caps_output_to_catalog_bound() {
+    async fn typed_cloud_sized_request_is_capped_to_local_output_policy() {
+        let dir = tempdir().unwrap();
+        let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
+        let runtime = runtime_with_result(Ok(generation("bounded")));
+        let model = LocalTextModel::from_runtime(
+            runtime.clone(),
+            Ok(installer),
+            super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+        );
+
+        model
+            .generate(TextRequest {
+                prompt: "typed request".to_string(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(1024),
+            })
+            .await
+            .unwrap();
+
+        let requests = runtime.requests.lock();
+        assert_eq!(requests[0].temperature, DEFAULT_LOCAL_TEMPERATURE);
+        assert_eq!(requests[0].max_output_tokens, LOCAL_TEXT_MAX_OUTPUT_TOKENS);
+    }
+
+    #[tokio::test]
+    async fn stricter_ambient_token_request_is_preserved() {
+        let dir = tempdir().unwrap();
+        let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
+        let runtime = runtime_with_result(Ok(generation("short ambient reply")));
+        let model = LocalTextModel::from_runtime(
+            runtime.clone(),
+            Ok(installer),
+            super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+        );
+
+        model
+            .generate(TextRequest {
+                prompt: "ambient request".to_string(),
+                system_instruction: None,
+                temperature: Some(0.85),
+                max_tokens: Some(60),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(runtime.requests.lock()[0].max_output_tokens, 60);
+    }
+
+    #[tokio::test]
+    async fn catalog_bound_remains_an_additional_local_ceiling() {
         let dir = tempdir().unwrap();
         let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
         let runtime = runtime_with_result(Ok(generation("bounded")));
@@ -242,9 +303,33 @@ mod tests {
             .await
             .unwrap();
 
-        let requests = runtime.requests.lock();
-        assert_eq!(requests[0].temperature, DEFAULT_LOCAL_TEMPERATURE);
-        assert_eq!(requests[0].max_output_tokens, entry.recommended_max_output);
+        let expected = LOCAL_TEXT_MAX_OUTPUT_TOKENS.min(entry.recommended_max_output);
+        assert_eq!(runtime.requests.lock()[0].max_output_tokens, expected);
+    }
+
+    #[tokio::test]
+    async fn whitespace_only_local_output_fails_closed_as_protocol_error() {
+        let dir = tempdir().unwrap();
+        let installer = Arc::new(LocalModelInstaller::new(dir.path().to_path_buf()).unwrap());
+        let runtime = runtime_with_result(Ok(generation(" \n\t  ")));
+        let model = LocalTextModel::from_runtime(
+            runtime.clone(),
+            Ok(installer),
+            super::super::DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+        );
+
+        let error = model
+            .generate(TextRequest {
+                prompt: "do not manufacture success".to_string(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(32),
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(error, ProviderError::from_kind(ProviderErrorKind::Protocol));
+        assert_eq!(runtime.requests.lock().len(), 1);
     }
 
     #[tokio::test]
