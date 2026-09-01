@@ -1,5 +1,6 @@
 use super::chat_template::{render_chat_prompt, validate_model_chat_template};
 use super::manager::RuntimeEngine;
+use super::reasoning::sanitize_generated_output;
 use super::types::{
     LocalRuntimeError, LocalRuntimeGenerateRequest, LocalRuntimeGeneration, RuntimeModelSpec,
 };
@@ -189,6 +190,7 @@ impl LlamaEngine {
 
         let output =
             String::from_utf8(output_bytes).map_err(|_| LocalRuntimeError::output_decode())?;
+        let output = sanitize_generated_output(template_hint, output)?;
         let duration = started.elapsed();
         let duration_ms = u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
         let tokens_per_second = if output_tokens == 0 || duration.is_zero() {

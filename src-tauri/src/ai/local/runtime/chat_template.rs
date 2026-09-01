@@ -1,3 +1,4 @@
+use super::reasoning::apply_generation_prompt_policy;
 use super::types::{LocalRuntimeError, LocalRuntimeGenerateRequest};
 use crate::ai::local::catalog::LocalModelTemplateHint;
 use llama_cpp_2::model::{LlamaChatMessage, LlamaModel};
@@ -111,7 +112,7 @@ pub(super) fn render_chat_prompt(
         &request.prompt,
         &rendered,
     )?;
-    Ok(rendered)
+    Ok(apply_generation_prompt_policy(template_hint, rendered))
 }
 
 #[cfg(test)]
@@ -141,8 +142,8 @@ mod tests {
 
     #[test]
     fn qwen3_family_fixtures_match_pinned_template_behavior() {
-        // LLM-061 validates the base chat framing only. Qwen non-thinking generation behavior is
-        // applied and tested separately by LLM-062.
+        // The embedded template supplies the base chat framing. The runtime reasoning policy adds
+        // Qwen's explicit non-thinking generation prefill only after this base shape is validated.
         assert_eq!(
             expected_rendered_chat_prompt(
                 LocalModelTemplateHint::Qwen3NonThinking,
