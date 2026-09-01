@@ -205,6 +205,7 @@ pub fn run() {
             install_local_llm_model,
             cancel_local_llm_install,
             delete_local_llm_model,
+            test_local_llm_model,
             set_google_api_key,
             clear_google_api_key,
             has_google_api_key,
