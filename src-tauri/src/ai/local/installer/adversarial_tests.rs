@@ -160,7 +160,9 @@ fn staging_directory_symlink_is_rejected_without_touching_target() {
     fs::write(&sentinel, b"keep").unwrap();
     symlink(outside.path(), dir.path().join(STAGING_DIR)).unwrap();
 
-    let error = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap_err();
+    let error = LocalModelInstaller::new(dir.path().to_path_buf())
+        .err()
+        .expect("staging symlink must fail closed");
 
     assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
     assert_eq!(fs::read(&sentinel).unwrap(), b"keep");
