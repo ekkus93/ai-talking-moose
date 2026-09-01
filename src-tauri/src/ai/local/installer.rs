@@ -636,7 +636,8 @@ fn prepare_model_root(root: &Path) -> Result<(), LocalModelInstallError> {
 
 fn validate_storage_layout(root: &Path) -> Result<(), LocalModelInstallError> {
     let parent = root.parent().ok_or_else(LocalModelInstallError::corrupt_install)?;
-    for directory in [parent, root, root.join(STAGING_DIR).as_path()] {
+    let staging = root.join(STAGING_DIR);
+    for directory in [parent, root, staging.as_path()] {
         let metadata = fs::symlink_metadata(directory)
             .map_err(|_| LocalModelInstallError::corrupt_install())?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
