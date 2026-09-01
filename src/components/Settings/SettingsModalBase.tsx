@@ -135,7 +135,7 @@ export const SettingsModal: React.FC = () => {
             { id: "voice", label: "Voice & Audio", icon: Volume2 },
             { id: "speech", label: "Speech Recognition", icon: Mic },
             { id: "personality", label: "Personality", icon: Brain },
-            { id: "ai", label: "Gemini AI", icon: Key },
+            { id: "ai", label: "AI & Models", icon: Key },
             { id: "privacy", label: "Privacy", icon: Shield },
             { id: "data", label: "Memory & Data", icon: Database },
             { id: "diagnostics", label: "Diagnostics", icon: Activity },
