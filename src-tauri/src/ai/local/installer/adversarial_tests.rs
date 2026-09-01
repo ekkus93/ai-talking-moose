@@ -190,6 +190,44 @@ fn staging_directory_symlink_is_rejected_without_touching_target() {
 
 #[cfg(unix)]
 #[test]
+fn model_path_rejects_root_replaced_by_symlink_after_initialization() {
+    use std::os::unix::fs::symlink;
+
+    let parent = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let root = parent.path().join("llm-root");
+    let installer = LocalModelInstaller::new(root.clone()).unwrap();
+    fs::remove_dir_all(&root).unwrap();
+    symlink(outside.path(), &root).unwrap();
+
+    let error = installer
+        .model_path(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID)
+        .unwrap_err();
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
+}
+
+#[cfg(unix)]
+#[test]
+fn model_path_rejects_staging_replaced_by_symlink_after_initialization() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempdir().unwrap();
+    let outside = tempdir().unwrap();
+    let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
+    let staging = dir.path().join(STAGING_DIR);
+    fs::remove_dir(&staging).unwrap();
+    symlink(outside.path(), &staging).unwrap();
+
+    let error = installer
+        .model_path(super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID)
+        .unwrap_err();
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
+}
+
+#[cfg(unix)]
+#[test]
 fn promotion_rejects_model_directory_symlink_without_root_escape() {
     use std::os::unix::fs::symlink;
 
