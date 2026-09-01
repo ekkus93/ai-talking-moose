@@ -355,6 +355,7 @@ impl LocalModelInstaller {
     }
 
     pub fn model_path(&self, model_id: &str) -> Result<PathBuf, LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let entry =
             local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         Ok(self
@@ -374,7 +375,7 @@ impl LocalModelInstaller {
     pub fn diagnostics(&self) -> LocalModelDiagnostics {
         let last_error = self.last_errors.lock().values().last().cloned();
         LocalModelDiagnostics {
-            model_root_ready: self.root.is_dir(),
+            model_root_ready: validate_storage_layout(&self.root).is_ok(),
             installs_in_progress: self.in_flight.lock().len(),
             last_error,
         }
@@ -395,6 +396,7 @@ impl LocalModelInstaller {
         model_id: &str,
         progress: Option<LocalModelInstallProgressCallback>,
     ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let entry =
             local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         if self.install_is_valid(entry) {
@@ -433,6 +435,7 @@ impl LocalModelInstaller {
     }
 
     pub fn delete(&self, model_id: &str) -> Result<(), LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let entry =
             local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
         if self.in_flight.lock().contains_key(model_id) {
@@ -466,6 +469,7 @@ impl LocalModelInstaller {
         cancellation: &CancellationToken,
         progress: Option<&LocalModelInstallProgressCallback>,
     ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         let staging_path =
             self.root
                 .join(STAGING_DIR)
@@ -486,6 +490,7 @@ impl LocalModelInstaller {
                 });
             }
             verify_artifact(&staging_path, entry.expected_bytes, entry.sha256)?;
+            validate_storage_layout(&self.root)?;
             promote_artifact(&self.root, entry, &staging_path)?;
             Ok(LocalModelInstallOutcome {
                 model_id: entry.id.to_string(),
@@ -537,6 +542,9 @@ impl LocalModelInstaller {
     }
 
     fn install_is_valid(&self, entry: &'static LocalModelCatalogEntry) -> bool {
+        if validate_storage_layout(&self.root).is_err() {
+            return false;
+        }
         let model_dir = self.root.join(entry.id);
         let revision_dir = model_dir.join(entry.revision);
         let artifact = revision_dir.join(entry.artifact_filename);
@@ -617,9 +625,25 @@ pub fn global_local_model_installer() -> Result<Arc<LocalModelInstaller>, LocalM
 
 fn prepare_model_root(root: &Path) -> Result<(), LocalModelInstallError> {
     let parent = root.parent().ok_or_else(LocalModelInstallError::corrupt_install)?;
-    fs::create_dir_all(parent)
+    let anchor = parent
+        .parent()
+        .ok_or_else(LocalModelInstallError::corrupt_install)?;
+    fs::create_dir_all(anchor)
         .map_err(|_| LocalModelInstallError::io("create the local model parent directory"))?;
+    ensure_plain_directory(parent, "create the local model parent directory")?;
     ensure_plain_directory(root, "create the model root")
+}
+
+fn validate_storage_layout(root: &Path) -> Result<(), LocalModelInstallError> {
+    let parent = root.parent().ok_or_else(LocalModelInstallError::corrupt_install)?;
+    for directory in [parent, root, root.join(STAGING_DIR).as_path()] {
+        let metadata = fs::symlink_metadata(directory)
+            .map_err(|_| LocalModelInstallError::corrupt_install())?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+    }
+    Ok(())
 }
 
 fn ensure_plain_directory(
