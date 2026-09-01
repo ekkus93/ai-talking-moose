@@ -3,6 +3,7 @@
 //! Binding-specific model/context/sampler types are confined below this module boundary.
 //! Application state and commands interact only with the neutral runtime manager/types.
 
+mod chat_template;
 mod llama;
 mod manager;
 #[cfg(test)]
