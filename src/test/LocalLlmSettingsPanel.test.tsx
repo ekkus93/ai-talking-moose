@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalLlmSettingsPanel } from "../components/Settings/LocalLlmSettingsPanel";
 import { tauriBridge } from "../lib/tauriBridge";
@@ -45,8 +51,7 @@ const originalBridgeMethods = {
 
 describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
   let progressListener:
-    | ((progress: LocalModelInstallProgress) => void)
-    | undefined;
+    ((progress: LocalModelInstallProgress) => void) | undefined;
 
   beforeEach(() => {
     vi.spyOn(tauriBridge, "getLocalLlmModels").mockResolvedValue([
@@ -148,7 +153,10 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
       retryable: true,
     });
     vi.mocked(tauriBridge.getLocalLlmModels)
-      .mockResolvedValueOnce([descriptor(MODEL_ID), descriptor(SECOND_MODEL_ID)])
+      .mockResolvedValueOnce([
+        descriptor(MODEL_ID),
+        descriptor(SECOND_MODEL_ID),
+      ])
       .mockResolvedValueOnce([failed, descriptor(SECOND_MODEL_ID)]);
     vi.spyOn(tauriBridge, "installLocalLlmModel").mockRejectedValue(
       new Error("install rejected"),
