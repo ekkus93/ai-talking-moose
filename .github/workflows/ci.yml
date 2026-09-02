@@ -279,7 +279,9 @@ jobs:
           python3 -m py_compile \
             scripts/generate_app_icons.py \
             scripts/validate_release_metadata.py \
-            scripts/collect_release_licenses.py
+            scripts/collect_release_licenses.py \
+            scripts/check_local_llm_packaging_policy.py \
+            scripts/measure_local_llm_bundle_impact.py
           bash -n scripts/prepare_moonshine_macos.sh
           bash -n scripts/verify_macos_bundle.sh
           bash -n scripts/verify_app_build_provenance.sh
@@ -288,6 +290,9 @@ jobs:
           bash -n scripts/run_p13_macos_release_acceptance.sh
           bash -n scripts/run_backend_failure_matrix.sh
           bash -n scripts/run_backend_stress_matrix.sh
+
+      - name: Validate Local LLM packaging policy
+        run: python3 scripts/check_local_llm_packaging_policy.py
 
       - name: Validate dependency license collection
         run: python3 scripts/collect_release_licenses.py
@@ -346,6 +351,9 @@ jobs:
 
       - name: Build pinned Moonshine native runtime
         run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+
+      - name: Collect dependency license texts
+        run: python3 scripts/collect_release_licenses.py
 
       - name: Build unsigned macOS application smoke bundle
         run: npm run tauri build -- --bundles app

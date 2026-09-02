@@ -80,13 +80,18 @@ jobs:
           python3 -m py_compile \
             scripts/generate_app_icons.py \
             scripts/validate_release_metadata.py \
-            scripts/collect_release_licenses.py
+            scripts/collect_release_licenses.py \
+            scripts/check_local_llm_packaging_policy.py \
+            scripts/measure_local_llm_bundle_impact.py
           bash -n scripts/prepare_moonshine_macos.sh
           bash -n scripts/verify_macos_bundle.sh
           bash -n scripts/verify_app_build_provenance.sh
           bash -n scripts/verify_macos_release.sh
           bash -n scripts/run_p2_p3_macos_physical_acceptance.sh
           bash -n scripts/run_p13_macos_release_acceptance.sh
+
+      - name: Validate Local LLM packaging policy
+        run: python3 scripts/check_local_llm_packaging_policy.py
 
       - name: Run frontend release gate
         run: npm run check:frontend
