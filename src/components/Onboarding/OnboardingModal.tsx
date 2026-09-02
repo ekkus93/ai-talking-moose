@@ -271,10 +271,10 @@ export const OnboardingModal: React.FC = () => {
               <span>Gemini AI Studio Key</span>
             </div>
             <p className="text-gray-900 leading-snug text-[11px]">
-              New profiles use Local text generation by default for typed replies
-              and ambient remarks. The selected Local text model is not downloaded
-              automatically; install it explicitly from AI &amp; Models Settings
-              before Local generation can run.
+              New profiles use Local text generation by default for typed
+              replies and ambient remarks. The selected Local text model is not
+              downloaded automatically; install it explicitly from AI &amp;
+              Models Settings before Local generation can run.
             </p>
             <p className="text-gray-900 leading-snug text-[11px]">
               A Google AI Studio API key is optional for Local text generation,
