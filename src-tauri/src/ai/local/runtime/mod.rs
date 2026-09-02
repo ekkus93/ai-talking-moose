@@ -8,6 +8,8 @@ mod llama;
 mod manager;
 mod reasoning;
 #[cfg(test)]
+mod residual_tests;
+#[cfg(test)]
 mod tests;
 pub(crate) mod types;
 
