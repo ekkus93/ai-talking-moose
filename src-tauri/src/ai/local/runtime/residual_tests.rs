@@ -37,7 +37,8 @@ impl RuntimeEngine for CountingEngine {
         _cancellation: &CancellationToken,
     ) -> Result<LocalRuntimeGeneration, LocalRuntimeError> {
         let active = self.active_generations.fetch_add(1, Ordering::SeqCst) + 1;
-        self.max_active_generations.fetch_max(active, Ordering::SeqCst);
+        self.max_active_generations
+            .fetch_max(active, Ordering::SeqCst);
         self.events
             .lock()
             .push(format!("generate:{}", spec.identity.id));

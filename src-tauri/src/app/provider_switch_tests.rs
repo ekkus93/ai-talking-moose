@@ -51,8 +51,5 @@ fn provider_switch_preserves_both_provider_specific_model_choices() {
     state.settings.write().text_provider = TextProvider::Google;
     let settings = state.settings.read();
     assert_eq!(settings.google_text_model, "gemini-3.6-flash");
-    assert_eq!(
-        settings.local_text_model,
-        "qwen3-0-6b-instruct-q4-k-m"
-    );
+    assert_eq!(settings.local_text_model, "qwen3-0-6b-instruct-q4-k-m");
 }

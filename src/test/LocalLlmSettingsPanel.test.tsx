@@ -190,7 +190,9 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
 
     fireEvent.change(selector, { target: { value: SECOND_MODEL_ID } });
 
-    await waitFor(() => expect(onSelectModel).toHaveBeenCalledWith(SECOND_MODEL_ID));
+    await waitFor(() =>
+      expect(onSelectModel).toHaveBeenCalledWith(SECOND_MODEL_ID),
+    );
     expect(
       await screen.findByText(/selection persistence rejected/i),
     ).toBeInTheDocument();
