@@ -1,7 +1,5 @@
 use std::path::PathBuf;
-use talking_moose_lib::ai::local::acceptance::{
-    generate_for_acceptance, install_for_acceptance,
-};
+use talking_moose_lib::ai::local::acceptance::{generate_for_acceptance, install_for_acceptance};
 
 fn usage() -> &'static str {
     "usage: local_llm_acceptance <install|generate> <model-id> <model-root> <report-json> [--require-network-denied]"
@@ -42,16 +40,13 @@ async fn main() {
                     })
             }
         }
-        "generate" => generate_for_acceptance(
-            model_id,
-            &model_root,
-            &report_path,
-            require_network_denied,
-        )
-        .await
-        .and_then(|report| {
-            serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
-        }),
+        "generate" => {
+            generate_for_acceptance(model_id, &model_root, &report_path, require_network_denied)
+                .await
+                .and_then(|report| {
+                    serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
+                })
+        }
         _ => Err(usage().to_string()),
     };
 
