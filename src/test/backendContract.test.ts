@@ -22,7 +22,7 @@ describe("generated backend contract", () => {
     expect(expected).not.toHaveProperty("microphone_permission_granted");
     expect(expected).not.toHaveProperty("provider");
     expect(expected).not.toHaveProperty("text_model");
-    expect(expected.text_provider).toBe("google");
+    expect(expected.text_provider).toBe("local");
   });
 
   it("keeps default Google model ids inside the generated Rust catalog", () => {

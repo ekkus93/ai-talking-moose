@@ -120,9 +120,9 @@ impl Default for AppSettings {
             speaking_rate: 0.95,
             pitch: -1.5,
 
-            // Keep Google as the staged default until the local installer/runtime/UX is usable.
-            // LLM-013 revisits the new-profile default after real CPU model acceptance.
-            text_provider: TextProvider::Google,
+            // P12 real-CPU acceptance selected Local text as the new-profile default.
+            // Existing pre-selector profiles still migrate explicitly to Google below.
+            text_provider: TextProvider::Local,
             live_model: DEFAULT_LIVE_MODEL.to_string(),
             google_text_model: DEFAULT_TEXT_MODEL.to_string(),
             local_text_model: DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
@@ -476,11 +476,11 @@ mod tests {
     }
 
     #[test]
-    fn new_settings_default_to_moonshine_tiny_and_staged_google_text() {
+    fn new_settings_default_to_moonshine_tiny_and_local_text() {
         let settings = AppSettings::default();
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
-        assert_eq!(settings.text_provider, TextProvider::Google);
+        assert_eq!(settings.text_provider, TextProvider::Local);
         assert_eq!(settings.google_text_model, DEFAULT_TEXT_MODEL);
         assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
         assert!(!settings.active_app_observation);
@@ -680,6 +680,7 @@ mod tests {
     #[tokio::test]
     async fn configured_google_text_without_secret_fails_auth_instead_of_using_fake_provider() {
         let state = AppState::new_for_tests().unwrap();
+        state.settings.write().text_provider = TextProvider::Google;
         let error = state
             .get_text_model()
             .generate(TextRequest {

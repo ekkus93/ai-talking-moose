@@ -18,8 +18,8 @@ pub struct TextResponse {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextProvider {
-    #[default]
     Google,
+    #[default]
     Local,
 }
 
@@ -216,6 +216,6 @@ mod provider_error_tests {
             serde_json::to_string(&TextProvider::Local).unwrap(),
             "\"local\""
         );
-        assert_eq!(TextProvider::default(), TextProvider::Google);
+        assert_eq!(TextProvider::default(), TextProvider::Local);
     }
 }

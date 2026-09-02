@@ -94,6 +94,17 @@ describe("OnboardingModal P11 onboarding controls", () => {
     fireEvent.click(screen.getByText("Continue to Gemini Key"));
 
     expect(
+      screen.getByText(/New profiles use Local text generation by default/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /selected Local text model is not downloaded automatically/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/optional for Local text generation/i),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText(/never stored in the app settings database/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/stored in Keychain/i)).toBeInTheDocument();

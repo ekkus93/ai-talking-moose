@@ -288,6 +288,7 @@ mod tests {
     #[tokio::test]
     async fn ambient_generation_routes_through_selected_google_text_provider() {
         let state = AppState::new_for_tests().unwrap();
+        state.settings.write().text_provider = TextProvider::Google;
         assert_eq!(state.settings.read().text_provider, TextProvider::Google);
 
         let error = generate_ambient_text(&state, "ambient google prompt".to_string())
