@@ -162,8 +162,10 @@ fn runtime_failure_message(manager: &LocalRuntimeManager, model_id: &str) -> Str
         Some(category) => {
             format!("Local acceptance generation failed (runtime category: {category:?}).")
         }
-        None => "Local acceptance generation failed before runtime diagnostics identified a category."
-            .to_string(),
+        None => {
+            "Local acceptance generation failed before runtime diagnostics identified a category."
+                .to_string()
+        }
     }
 }
 
