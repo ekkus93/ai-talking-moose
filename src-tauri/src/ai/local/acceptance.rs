@@ -176,8 +176,8 @@ pub async fn install_for_acceptance(
 ) -> Result<LocalLlmInstallAcceptanceReport, String> {
     let entry = local_model_entry(model_id)
         .ok_or_else(|| "selected acceptance model is not in the bundled catalog".to_string())?;
-    let installer = LocalModelInstaller::new(model_root.to_path_buf())
-        .map_err(|error| error.to_string())?;
+    let installer =
+        LocalModelInstaller::new(model_root.to_path_buf()).map_err(|error| error.to_string())?;
     let outcome = installer
         .install(model_id, None)
         .await
