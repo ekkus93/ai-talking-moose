@@ -15,7 +15,7 @@ const descriptor = (
   installState: LocalModelDescriptor["install_state"] = "not_installed",
   error: LocalModelDescriptor["error"] = null,
 ): LocalModelDescriptor => {
-  const expectedBytes = id === MODEL_ID ? 100 * 1024 * 1024 : 200 * 1024 * 1024;
+  const expectedBytes = (id === MODEL_ID ? 100 : 200) * 1024 * 1024;
   return {
     id,
     display_name: id === MODEL_ID ? "SmolLM2 360M" : "Qwen3 0.6B",
@@ -175,7 +175,7 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
 
   it("reports backend selection rejection without selecting a replacement", async () => {
     const onSelectModel = vi
-      .fn(async (_modelId: string): Promise<void> => undefined)
+      .fn<(modelId: string) => Promise<void>>()
       .mockRejectedValue(new Error("selection persistence rejected"));
 
     render(
@@ -189,9 +189,7 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
 
     fireEvent.change(selector, { target: { value: SECOND_MODEL_ID } });
 
-    await waitFor(() =>
-      expect(onSelectModel).toHaveBeenCalledWith(SECOND_MODEL_ID),
-    );
+    await waitFor(() => expect(onSelectModel).toHaveBeenCalledWith(SECOND_MODEL_ID));
     expect(
       await screen.findByText(/selection persistence rejected/i),
     ).toBeInTheDocument();
