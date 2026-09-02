@@ -5,8 +5,6 @@ use llama_cpp_2::model::LlamaModel;
 
 const SMOLLM2_DEFAULT_SYSTEM_INSTRUCTION: &str =
     "You are a helpful AI assistant named SmolLM, trained by Hugging Face";
-const TEMPLATE_FIXTURE_SYSTEM: &str = "system fixture sentinel";
-const TEMPLATE_FIXTURE_USER: &str = "user fixture sentinel";
 
 fn append_chatml_message(rendered: &mut String, role: &str, content: &str) {
     rendered.push_str("<|im_start|>");
@@ -111,6 +109,8 @@ mod tests {
     use super::super::types::LocalRuntimeErrorKind;
     use super::*;
 
+    const TEMPLATE_FIXTURE_SYSTEM: &str = "system fixture sentinel";
+    const TEMPLATE_FIXTURE_USER: &str = "user fixture sentinel";
     const SMOLLM2_CANONICAL_TEMPLATE: &str =
         "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}";
     const QWEN3_CANONICAL_TEMPLATE_FRAGMENT: &str =
