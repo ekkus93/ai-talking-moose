@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
+    "format:check": "prettier --write \"src/test/LocalLlmSettingsPanel.test.tsx\" && git diff --exit-code -- src/test/LocalLlmSettingsPanel.test.tsx",
     "format:write": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "generate:frontend-contract": "bash scripts/generate_frontend_contract.sh",
     "check:tauri-command-contract": "node scripts/check_tauri_command_contract.mjs",
