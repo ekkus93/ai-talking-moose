@@ -154,18 +154,33 @@ fn request(prompt: &str, max_tokens: u32) -> TextRequest {
     }
 }
 
+fn runtime_failure_message(manager: &LocalRuntimeManager, model_id: &str) -> String {
+    match manager
+        .diagnostics(model_id.to_string())
+        .last_error_category
+    {
+        Some(category) => {
+            format!("Local acceptance generation failed (runtime category: {category:?}).")
+        }
+        None => {
+            "Local acceptance generation failed before runtime diagnostics identified a category."
+                .to_string()
+        }
+    }
+}
+
 async fn generate_once(
     manager: Arc<LocalRuntimeManager>,
     installer: Arc<LocalModelInstaller>,
     model_id: &str,
     request: TextRequest,
 ) -> Result<(String, u64), String> {
-    let model = LocalTextModel::new(manager, Ok(installer), model_id.to_string());
+    let model = LocalTextModel::new(manager.clone(), Ok(installer), model_id.to_string());
     let started = Instant::now();
-    let response = model
-        .generate(request)
-        .await
-        .map_err(|error| error.to_string())?;
+    let response = match model.generate(request).await {
+        Ok(response) => response,
+        Err(_) => return Err(runtime_failure_message(&manager, model_id)),
+    };
     Ok((response.text, elapsed_ms(started)))
 }
 
