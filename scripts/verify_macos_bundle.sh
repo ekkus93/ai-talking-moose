@@ -93,6 +93,26 @@ notice_root="$app_path/Contents/Resources/native/macos/notices"
 license_count="$(find "$notice_root/MoonshineRuntime" -type f 2>/dev/null | wc -l | tr -d ' ')"
 (( license_count >= 5 )) || fail "bundled native notice set is incomplete"
 
+local_llm_notice="$notice_root/LocalLlmRuntime/LLAMA_CPP_LICENSE"
+local_llm_binding_notice="$notice_root/LocalLlmRuntime/LLAMA_CPP_RS_LICENSE_MIT"
+local_llm_readme="$notice_root/LocalLlmRuntime/README.md"
+dependency_inventory="$notice_root/Dependencies/DEPENDENCY_LICENSES.md"
+[[ -f "$local_llm_notice" ]] || fail "llama.cpp native runtime license is missing from bundle"
+[[ -f "$local_llm_binding_notice" ]] || fail "llama-cpp-rs binding license is missing from bundle"
+[[ -f "$local_llm_readme" ]] || fail "Local LLM native runtime notice metadata is missing from bundle"
+[[ -f "$dependency_inventory" ]] || fail "dependency license inventory is missing from bundle"
+grep -F '| cargo | `llama-cpp-2` | `0.1.154` |' "$dependency_inventory" >/dev/null \
+  || fail "llama-cpp-2 is missing from bundled dependency license inventory"
+grep -F '| cargo | `llama-cpp-sys-2` | `0.1.154` |' "$dependency_inventory" >/dev/null \
+  || fail "llama-cpp-sys-2 is missing from bundled dependency license inventory"
+if grep -q '\*\*MISSING\*\*' "$dependency_inventory"; then
+  fail "dependency license inventory contains missing notice evidence"
+fi
+
+if find "$app_path" -type f -iname '*.gguf' -print -quit | grep -q .; then
+  fail "bundle contains GGUF model weights; Local LLM weights must remain external"
+fi
+
 smoke_output="$(
   env -i \
     HOME="${HOME:-/tmp}" \

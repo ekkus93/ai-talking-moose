@@ -4,7 +4,9 @@
 Production npm packages and Rust crates reachable for either shipped macOS target
 must have either packaged license/notice text or an explicit declared license
 expression. Native Moonshine/ONNX notices are staged separately by
-prepare_moonshine_macos.sh.
+prepare_moonshine_macos.sh. The statically linked llama.cpp runtime also has a
+checked-in native notice, while its Rust binding crates must remain present in
+this generated dependency inventory.
 """
 from __future__ import annotations
 
@@ -19,6 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "src-tauri/native/macos/notices/Dependencies"
 NOTICE_PREFIXES = ("license", "copying", "notice", "copyright")
 MACOS_TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin")
+REQUIRED_LOCAL_LLM_CARGO = {
+    "llama-cpp-2": "0.1.154",
+    "llama-cpp-sys-2": "0.1.154",
+}
 
 
 def safe(value: str) -> str:
@@ -281,6 +287,31 @@ def cargo_rows() -> list[tuple[str, str, str, list[str], str]]:
     return rows
 
 
+def validate_required_local_llm_rows(
+    rows: list[tuple[str, str, str, list[str], str]],
+) -> None:
+    by_name = {
+        name: (version, evidence, method)
+        for name, version, _license, evidence, method in rows
+    }
+    for name, expected_version in REQUIRED_LOCAL_LLM_CARGO.items():
+        found = by_name.get(name)
+        if found is None:
+            raise SystemExit(
+                f"collect_release_licenses: shipped Local LLM dependency missing from inventory: {name}"
+            )
+        version, evidence, method = found
+        if version != expected_version:
+            raise SystemExit(
+                "collect_release_licenses: shipped Local LLM dependency version drift: "
+                f"{name} expected {expected_version}, found {version}"
+            )
+        if not evidence or method == "unresolved":
+            raise SystemExit(
+                f"collect_release_licenses: shipped Local LLM dependency has no license evidence: {name}"
+            )
+
+
 def main() -> None:
     if OUTPUT.exists():
         shutil.rmtree(OUTPUT)
@@ -288,6 +319,7 @@ def main() -> None:
 
     npm = npm_rows()
     cargo = cargo_rows()
+    validate_required_local_llm_rows(cargo)
     inventory = OUTPUT / "DEPENDENCY_LICENSES.md"
     lines = [
         "# Bundled dependency license inventory",
@@ -295,7 +327,8 @@ def main() -> None:
         "Generated at release build time from installed production npm packages and "
         "the non-dev Cargo dependency graphs filtered for both shipped macOS targets.",
         "",
-        "Native Moonshine/ONNX notices live beside this directory. Entries marked "
+        "Native Moonshine/ONNX and Local LLM native-runtime notices live beside "
+        "this directory. Entries marked "
         "`declared license metadata` require final release review because the "
         "published package did not include standalone license/notice text.",
         "",

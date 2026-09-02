@@ -32,6 +32,17 @@ These identities refer to the subtrees included by the pinned Moonshine runtime.
 | utf8proc | tree `06bd0edcb1ec6e74aa175ffdabbb56138f6a9cbb` | MIT; `LICENSE.md` blob `f18b1f3abdcb55e82ecdd84f476e7f366b00183b` |
 | ONNX Runtime subtree | tree `d31a828135464f018d708432bf0bd1b224f7ce8e` | MIT; preserve upstream ONNX Runtime notices shipped with the native runtime |
 
+
+## Local LLM native runtime
+
+| Component | Pin / identity | License | Notes |
+| --- | --- | --- | --- |
+| `llama-cpp-2` Rust binding | `utilityai/llama-cpp-rs` `0.1.154`, commit `bed81ad4ab1a6c904b11d425608e50f976d8ea62` | MIT OR Apache-2.0; redistributed under MIT | High-level Rust API linked into the application; upstream MIT text is bundled. |
+| `llama-cpp-sys-2` Rust/sys binding | `utilityai/llama-cpp-rs` `0.1.154`, same release commit | MIT OR Apache-2.0; redistributed under MIT | Builds the vendored native llama.cpp sources; no system llama.cpp dependency is required. |
+| llama.cpp / ggml native source | submodule commit `5f55650a78f92aff4d48d671423e888fac0469ff` in `llama-cpp-sys-2` 0.1.154 | MIT | Statically linked CPU inference runtime. The pinned MIT text is bundled as `LocalLlmRuntime/LLAMA_CPP_LICENSE`. |
+
+GGUF catalog models are downloaded only after an explicit user install action and are not redistributed in the application bundle. Their source/revision/license metadata is maintained separately in `docs/LOCAL_LLM_MODEL_LICENSES.md`.
+
 ## macOS secure credential dependencies
 
 | Component | V1 version | License |
@@ -46,8 +57,8 @@ These crates are thin Rust bindings around Apple's Security framework and are us
 Before producing a signed/notarized V1 distribution:
 
 - run `scripts/prepare_moonshine_macos.sh` so the package notice directory is regenerated from the pinned Moonshine source tree and includes the Talking Moose project license;
-- run `scripts/collect_release_licenses.py` after `npm ci` and Cargo dependency resolution to collect production npm and resolved Rust license/notice texts plus a generated dependency inventory;
-- include the generated inventories and license/notice texts under the application bundle's `Resources/native/macos/notices` path;
+- run `scripts/collect_release_licenses.py` after `npm ci` and Cargo dependency resolution to collect production npm and resolved Rust license/notice texts plus a generated dependency inventory, including `llama-cpp-2` and `llama-cpp-sys-2`;
+- include the generated inventories and license/notice texts under the application bundle's `Resources/native/macos/notices` path, including the checked-in `LocalLlmRuntime/LLAMA_CPP_LICENSE` native notice and `LocalLlmRuntime/LLAMA_CPP_RS_LICENSE_MIT` binding notice;
 - verify that no non-commercial Moonshine model has entered the release payload;
 - verify that model downloads remain limited to the explicitly approved English Tiny/Small manifests;
-- verify that the application bundle does not accidentally contain developer model caches or credentials.
+- verify that the application bundle does not accidentally contain developer model caches, GGUF weights, or credentials.

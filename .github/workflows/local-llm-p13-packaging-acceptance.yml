@@ -1,0 +1,182 @@
+name: Local LLM P13 Packaging Acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-llm-p13-packaging-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+  # 3253e52f is the exact parent of the commit that first added llama-cpp-2 /
+  # llama-cpp-sys-2 to the application. It is the pre-native-Local-LLM bundle baseline.
+  LOCAL_LLM_BUNDLE_BASELINE_SHA: 3253e52f7331ed7b03f0a3a4443eeef6d8e45aac
+  LOCAL_LLM_FIRST_NATIVE_SHA: 448df93af1f5c924dd3b8bc9160a55bdef9ac1cf
+
+jobs:
+  compare-macos-bundles:
+    name: Bundle impact (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            deployment_target: "13.4"
+          - arch: x86_64
+            runner: macos-15-intel
+            deployment_target: "13.4"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+    steps:
+      - name: Check out requested source with history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify requested source and baseline ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git cat-file -e "${LOCAL_LLM_BUNDLE_BASELINE_SHA}^{commit}"
+          git merge-base --is-ancestor "$LOCAL_LLM_BUNDLE_BASELINE_SHA" "$GITHUB_SHA"
+          test "$(git rev-parse "${LOCAL_LLM_FIRST_NATIVE_SHA}^")" = "$LOCAL_LLM_BUNDLE_BASELINE_SHA"
+          git merge-base --is-ancestor "$LOCAL_LLM_FIRST_NATIVE_SHA" "$GITHUB_SHA"
+          git show "$LOCAL_LLM_FIRST_NATIVE_SHA:src-tauri/Cargo.toml" | grep -F 'llama-cpp-2 = { version = "=0.1.154", default-features = false }' >/dev/null
+          if git show "$LOCAL_LLM_BUNDLE_BASELINE_SHA:src-tauri/Cargo.toml" | grep -F 'llama-cpp-2' >/dev/null; then
+            echo "P13 baseline unexpectedly already contains llama-cpp-2" >&2
+            exit 1
+          fi
+          echo "P13 current source: $GITHUB_SHA"
+          echo "P13 pre-llama baseline: $LOCAL_LLM_BUNDLE_BASELINE_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.arch }}-p13-bundle-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Create isolated baseline and current worktrees
+        id: worktrees
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/talking-moose-p13-baseline"
+          current="$RUNNER_TEMP/talking-moose-p13-current"
+          reports="$RUNNER_TEMP/talking-moose-p13-reports"
+          rm -rf "$baseline" "$current" "$reports"
+          git worktree add --detach "$baseline" "$LOCAL_LLM_BUNDLE_BASELINE_SHA"
+          git worktree add --detach "$current" "$GITHUB_SHA"
+          mkdir -p "$reports"
+          echo "baseline=$baseline" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "reports=$reports" >> "$GITHUB_OUTPUT"
+
+      - name: Build pre-llama baseline bundle
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${{ steps.worktrees.outputs.baseline }}"
+          cd "$repo"
+          npm ci
+          python3 scripts/generate_app_icons.py
+          python3 scripts/validate_release_metadata.py
+          python3 scripts/validate_moonshine_runtime_manifest.py
+          bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+          python3 scripts/collect_release_licenses.py
+          npm run tauri build -- --bundles app
+          app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path" && test -d "$app_path"
+          echo "app_path=$repo/$app_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build current Local LLM bundle
+        id: current
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${{ steps.worktrees.outputs.current }}"
+          cd "$repo"
+          npm ci
+          python3 scripts/generate_app_icons.py
+          python3 scripts/validate_release_metadata.py
+          python3 scripts/check_local_llm_packaging_policy.py
+          python3 scripts/validate_moonshine_runtime_manifest.py
+          bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+          python3 scripts/collect_release_licenses.py
+          npm run tauri build -- --bundles app
+          app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path" && test -d "$app_path"
+          bash scripts/verify_macos_bundle.sh "$app_path" "${{ matrix.arch }}"
+          echo "app_path=$repo/$app_path" >> "$GITHUB_OUTPUT"
+
+      - name: Compare logical bundle sizes and reject embedded weights
+        id: measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="${{ steps.worktrees.outputs.reports }}/local-llm-p13-${{ matrix.arch }}.json"
+          python3 "${{ steps.worktrees.outputs.current }}/scripts/measure_local_llm_bundle_impact.py" \
+            --baseline-app "${{ steps.baseline.outputs.app_path }}" \
+            --current-app "${{ steps.current.outputs.app_path }}" \
+            --baseline-sha "$LOCAL_LLM_BUNDLE_BASELINE_SHA" \
+            --current-sha "$GITHUB_SHA" \
+            --arch "${{ matrix.arch }}" \
+            --output "$report"
+          echo "report=$report" >> "$GITHUB_OUTPUT"
+
+      - name: Publish P13 size evidence summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "${{ steps.measure.outputs.report }}" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          report = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          summary = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
+          delta_percent = report["delta_percent"]
+          percent_text = "n/a" if delta_percent is None else f"{delta_percent:.2f}%"
+          with summary.open("a", encoding="utf-8") as out:
+              out.write(f"## Local LLM P13 bundle impact — {report['architecture']}\n\n")
+              out.write(f"- Baseline: `{report['baseline_sha']}`\n")
+              out.write(f"- Current: `{report['current_sha']}`\n")
+              out.write(f"- Baseline logical bytes: {report['baseline']['logical_file_bytes']}\n")
+              out.write(f"- Current logical bytes: {report['current']['logical_file_bytes']}\n")
+              out.write(f"- Delta bytes: {report['delta_bytes']} ({percent_text})\n")
+              out.write(f"- Current executable bytes: {report['current']['executable_bytes']}\n")
+              out.write("- Embedded GGUF weights: no\n")
+          PY
+
+      - name: Upload P13 packaging evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-p13-packaging-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ steps.worktrees.outputs.reports }}/*.json
+          if-no-files-found: warn
+          retention-days: 30

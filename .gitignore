@@ -42,3 +42,7 @@ run_claude*.sh*
 __pycache__/
 *.py[cod]
 
+
+# Local LLM model weights are installed into user data at runtime, never Git.
+*.gguf
+*.GGUF
