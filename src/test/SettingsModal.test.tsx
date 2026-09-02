@@ -21,6 +21,14 @@ const originalBridgeMethods = {
   onLocalLlmModelProgress: tauriBridge.onLocalLlmModelProgress,
 };
 
+const setTextProviderForTest = (provider: "google" | "local") => {
+  useMooseStore.setState((state) => ({
+    settings: state.settings
+      ? { ...state.settings, text_provider: provider }
+      : null,
+  }));
+};
+
 describe("SettingsModal Component", () => {
   beforeEach(() => {
     useMooseStore.setState({
@@ -142,6 +150,7 @@ describe("SettingsModal Component", () => {
   });
 
   it("preserves model selections and blocks writes while the Google catalog is loading", async () => {
+    setTextProviderForTest("google");
     let resolveModels: (
       models: ReturnType<typeof frontendGoogleModels>,
     ) => void = () => undefined;
@@ -189,6 +198,7 @@ describe("SettingsModal Component", () => {
   });
 
   it("shows a persisted Google model as unavailable after catalog resolution without rewriting it", async () => {
+    setTextProviderForTest("google");
     const settings = frontendDefaultSettings();
     vi.spyOn(tauriBridge, "getGoogleModels").mockResolvedValue([
       {
@@ -230,7 +240,7 @@ describe("SettingsModal Component", () => {
     expect(updateSpy).not.toHaveBeenCalled();
   });
 
-  it("selects Local text without auto-downloading and manages the selected model explicitly", async () => {
+  it("defaults to Local text without auto-downloading and manages the selected model explicitly", async () => {
     const installSpy = vi.spyOn(tauriBridge, "installLocalLlmModel");
     const testSpy = vi.spyOn(tauriBridge, "testLocalLlmModel");
     const deleteSpy = vi.spyOn(tauriBridge, "deleteLocalLlmModel");
@@ -240,15 +250,12 @@ describe("SettingsModal Component", () => {
     fireEvent.click(screen.getByText("AI & Models"));
 
     expect(
-      screen.getByRole("radio", { name: /Google Gemini — cloud/i }),
-    ).toBeChecked();
-    fireEvent.click(
       screen.getByRole("radio", { name: /Local — on this computer/i }),
-    );
-
-    await waitFor(() =>
-      expect(useMooseStore.getState().settings?.text_provider).toBe("local"),
-    );
+    ).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: /Google Gemini — cloud/i }),
+    ).not.toBeChecked();
+    expect(useMooseStore.getState().settings?.text_provider).toBe("local");
     expect(installSpy).not.toHaveBeenCalled();
     expect(
       screen.getByText(/Selecting a model never downloads it/i),
@@ -333,6 +340,7 @@ describe("SettingsModal Component", () => {
   });
 
   it("shows only current capability-filtered Gemini model options", async () => {
+    setTextProviderForTest("google");
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("AI & Models"));
 
