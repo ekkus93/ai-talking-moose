@@ -7,7 +7,7 @@ Verified against the Google Gemini API documentation on 2026-08-21.
 The backend defines provider-neutral traits in `src-tauri/src/ai/traits.rs`:
 
 - `RealtimeConversationProvider` / `LiveSession`: bidirectional Live API sessions.
-- `TextModel`: short remarks and ambient text generation (current default: `gemini-3.7-flash`).
+- `TextModel`: provider-neutral short remarks and typed/ambient text generation. When the **Google text provider** is selected, its default model is `gemini-3.7-flash`; fresh profiles now default to the separate Local text provider.
 - `SpeechSynthesizer`: standalone speech synthesis for non-Live remarks.
 
 Google model IDs, capability metadata, and the Live WebSocket endpoint are centralized in
@@ -15,6 +15,8 @@ Google model IDs, capability metadata, and the Live WebSocket endpoint are centr
 catalog rather than maintaining a second UI-only list. Persisted stale or capability-incompatible
 model IDs normalize to the current defaults, and settings updates reject a model selected for the
 wrong capability.
+
+The Google text-model catalog/default is not the same thing as the application's `text_provider` default. Local Text V1 routes typed replies and ambient remarks through `LocalTextModel` when `text_provider = local`; it does not construct a Google text request and does not fall back to Google on Local failure. Gemini Live and Google TTS remain independent Google-backed capabilities. See `LOCAL_LLM_ARCHITECTURE.md` and `PRIVACY.md`.
 
 ## 2. Current Gemini Live configuration
 
