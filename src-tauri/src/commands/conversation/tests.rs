@@ -123,6 +123,8 @@ fn typed_text_routes_selected_local_provider_and_restores_idle_on_failure() {
 #[test]
 fn typed_text_routes_selected_google_provider_without_fake_fallback() {
     let app_state = AppState::new_for_tests().unwrap();
+    app_state.settings.write().text_provider =
+        crate::ai::types::TextProvider::Google;
     assert_eq!(
         app_state.settings.read().text_provider,
         crate::ai::types::TextProvider::Google
