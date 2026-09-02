@@ -1,0 +1,198 @@
+name: Local LLM Real CPU Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Catalog model to accept"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - smollm2-360m-instruct-q4-k-m
+          - qwen3-0-6b-instruct-q4-k-m
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-llm-real-cpu-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  CARGO_INCREMENTAL: "0"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  real-cpu-acceptance:
+    name: Real GGUF CPU acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify acceptance source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "Local LLM acceptance checkout: $actual"
+          test "$actual" = "$GITHUB_SHA"
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            cmake \
+            libasound2-dev \
+            libayatana-appindicator3-dev \
+            libclang-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            util-linux
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: local-llm-acceptance-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            local-llm-acceptance-${{ runner.os }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Build opt-in acceptance binary
+        run: |
+          cargo build --locked --manifest-path src-tauri/Cargo.toml \
+            --features local-llm-acceptance \
+            --bin local_llm_acceptance
+
+      - name: Install, isolate, and exercise selected models
+        id: acceptance
+        shell: bash
+        env:
+          SELECTED_MODEL: ${{ inputs.model }}
+        run: |
+          set -euo pipefail
+          binary="$GITHUB_WORKSPACE/src-tauri/target/debug/local_llm_acceptance"
+          work_root="$RUNNER_TEMP/talking-moose-local-llm-acceptance"
+          model_root="$work_root/models"
+          report_root="$work_root/reports"
+          mkdir -p "$model_root" "$report_root"
+
+          case "$SELECTED_MODEL" in
+            all)
+              models=(
+                "smollm2-360m-instruct-q4-k-m"
+                "qwen3-0-6b-instruct-q4-k-m"
+              )
+              ;;
+            smollm2-360m-instruct-q4-k-m|qwen3-0-6b-instruct-q4-k-m)
+              models=("$SELECTED_MODEL")
+              ;;
+            *)
+              echo "unsupported acceptance model: $SELECTED_MODEL" >&2
+              exit 2
+              ;;
+          esac
+
+          cpu_name="$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -n 1)"
+          test -n "$cpu_name"
+
+          for model in "${models[@]}"; do
+            echo "Installing and verifying $model through the production installer"
+            "$binary" install \
+              "$model" \
+              "$model_root" \
+              "$report_root/$model-install.json"
+
+            echo "Generating with $model inside an OS network namespace with no default route"
+            sudo unshare --net -- env \
+              "GITHUB_SHA=$GITHUB_SHA" \
+              "TALKING_MOOSE_ACCEPTANCE_HOST_CPU=$cpu_name" \
+              "$binary" generate \
+              "$model" \
+              "$model_root" \
+              "$report_root/$model-generate.json" \
+              --require-network-denied
+          done
+
+          sudo chown -R "$(id -u):$(id -g)" "$work_root"
+          echo "report_root=$report_root" >> "$GITHUB_OUTPUT"
+
+      - name: Validate machine-readable evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          report_root="${{ steps.acceptance.outputs.report_root }}"
+          python3 - "$report_root" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          install_reports = sorted(root.glob("*-install.json"))
+          generate_reports = sorted(root.glob("*-generate.json"))
+          if not install_reports or len(install_reports) != len(generate_reports):
+              raise SystemExit("Local LLM acceptance report set is incomplete")
+
+          print("## Local LLM real CPU acceptance", file=open("/dev/stdout", "w"))
+          summary = pathlib.Path(__import__("os").environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as out:
+              out.write("## Local LLM real CPU acceptance\n\n")
+              out.write("| Model | Bytes | Cold-load estimate | Ambient tokens | Ambient duration | Tokens/sec | RSS delta | Reload | Network denied |\n")
+              out.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |\n")
+              for generate_path in generate_reports:
+                  model = generate_path.name.removesuffix("-generate.json")
+                  install_path = root / f"{model}-install.json"
+                  install = json.loads(install_path.read_text(encoding="utf-8"))
+                  generate = json.loads(generate_path.read_text(encoding="utf-8"))
+                  assert install["schema_version"] == 1
+                  assert generate["schema_version"] == 1
+                  assert install["model_id"] == generate["model_id"] == model
+                  assert install["revision"] == generate["revision"]
+                  assert install["sha256"] == generate["sha256"]
+                  assert install["expected_bytes"] == generate["expected_bytes"]
+                  assert install["production_installer_verified"] is True
+                  assert generate["network_denied_required"] is True
+                  assert generate["network_denial_probe_passed"] is True
+                  assert generate["ambient_non_empty"] is True
+                  assert generate["owner_drop_reload_success"] is True
+                  if model.startswith("qwen3-"):
+                      assert generate["non_thinking_output_clean"] is True
+                  tps = generate["ambient_tokens_per_second"]
+                  tps_text = "n/a" if tps is None else f"{tps:.2f}"
+                  rss = generate["resident_bytes_delta"]
+                  rss_text = "n/a" if rss is None else str(rss)
+                  out.write(
+                      f"| `{model}` | {install['expected_bytes']} | "
+                      f"{generate['cold_load_estimate_ms']} ms | "
+                      f"{generate['ambient_output_tokens']} / {generate['ambient_requested_max_output_tokens']} | "
+                      f"{generate['ambient_generation_duration_ms']} ms | {tps_text} | {rss_text} | "
+                      f"yes | yes |\n"
+                  )
+          PY
+
+      - name: Upload real-model acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-real-cpu-${{ github.sha }}
+          path: ${{ runner.temp }}/talking-moose-local-llm-acceptance/reports/*.json
+          if-no-files-found: warn
+          retention-days: 30

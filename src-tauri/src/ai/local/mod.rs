@@ -1,3 +1,5 @@
+#[cfg(feature = "local-llm-acceptance")]
+pub mod acceptance;
 pub mod catalog;
 #[cfg(test)]
 mod compile_proof;

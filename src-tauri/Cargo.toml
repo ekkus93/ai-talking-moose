@@ -8,11 +8,17 @@ edition = "2021"
 
 [features]
 frontend-contract-export = []
+local-llm-acceptance = []
 
 [[bin]]
 name = "export_frontend_contract"
 path = "src/bin/export_frontend_contract.rs"
 required-features = ["frontend-contract-export"]
+
+[[bin]]
+name = "local_llm_acceptance"
+path = "src/bin/local_llm_acceptance.rs"
+required-features = ["local-llm-acceptance"]
 
 [lib]
 name = "talking_moose_lib"
