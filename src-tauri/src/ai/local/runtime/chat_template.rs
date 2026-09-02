@@ -66,7 +66,7 @@ fn validate_embedded_template_source(
 
     if required_fragments
         .iter()
-        .all(|fragment| source.contains(fragment))
+        .all(|fragment| source.contains(*fragment))
     {
         Ok(())
     } else {
@@ -111,8 +111,10 @@ mod tests {
     use super::super::types::LocalRuntimeErrorKind;
     use super::*;
 
-    const SMOLLM2_CANONICAL_TEMPLATE: &str = "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}";
-    const QWEN3_CANONICAL_TEMPLATE_FRAGMENT: &str = "{% if messages[0].role == 'system' %}{{ '<|im_start|>system\n' + messages[0].content + '<|im_end|>\n' }}{% endif %}{% for message in messages %}{{ '<|im_start|>' + message.role + '\n' + message.content + '<|im_end|>\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% if enable_thinking is defined and enable_thinking is false %}{{ '<think>\n\n</think>\n\n' }}{% endif %}{% endif %}";
+    const SMOLLM2_CANONICAL_TEMPLATE: &str =
+        "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}";
+    const QWEN3_CANONICAL_TEMPLATE_FRAGMENT: &str =
+        "{% if messages[0].role == 'system' %}{{ '<|im_start|>system\n' + messages[0].content + '<|im_end|>\n' }}{% endif %}{% for message in messages %}{{ '<|im_start|>' + message.role + '\n' + message.content + '<|im_end|>\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% if enable_thinking is defined and enable_thinking is false %}{{ '<think>\n\n</think>\n\n' }}{% endif %}{% endif %}";
 
     #[test]
     fn smollm2_family_fixtures_match_canonical_template_behavior() {
@@ -172,13 +174,15 @@ mod tests {
 
     #[test]
     fn generic_chatml_is_not_an_implicit_family_fallback() {
-        let generic_chatml = "{% for message in messages %}{{ '<|im_start|>' + message.role + '\n' + message.content + '<|im_end|>\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}";
+        let generic_chatml =
+            "{% for message in messages %}{{ '<|im_start|>' + message.role + '\n' + message.content + '<|im_end|>\n' }}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}";
 
         for template_hint in [
             LocalModelTemplateHint::SmolLm2,
             LocalModelTemplateHint::Qwen3NonThinking,
         ] {
-            let error = validate_embedded_template_source(template_hint, generic_chatml).unwrap_err();
+            let error =
+                validate_embedded_template_source(template_hint, generic_chatml).unwrap_err();
             assert_eq!(error.kind, LocalRuntimeErrorKind::ChatTemplate);
         }
     }
