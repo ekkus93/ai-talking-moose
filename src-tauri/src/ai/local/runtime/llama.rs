@@ -237,8 +237,8 @@ impl RuntimeEngine for LlamaEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{LocalRuntimeErrorKind, RuntimeModelIdentity};
+    use super::*;
     use crate::ai::local::DEFAULT_LOCAL_TEXT_MODEL_ID;
     use std::fs;
     use tempfile::tempdir;
@@ -297,7 +297,10 @@ mod tests {
             .expect_err("a corrupt GGUF must fail instead of becoming a loaded model");
 
         assert_eq!(error.kind, LocalRuntimeErrorKind::ModelLoad);
-        assert_eq!(error.message, "The selected local model could not be loaded.");
+        assert_eq!(
+            error.message,
+            "The selected local model could not be loaded."
+        );
         assert!(!error.message.contains(path.to_string_lossy().as_ref()));
         assert!(engine.model.is_none());
     }

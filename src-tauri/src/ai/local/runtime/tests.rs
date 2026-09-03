@@ -138,7 +138,9 @@ fn request(prompt: impl Into<String>) -> LocalRuntimeGenerateRequest {
 fn seed_installed_catalog_artifact(installer: &LocalModelInstaller, model_id: &str) {
     let entry = local_model_entry(model_id).expect("test model must exist in catalog");
     let artifact = installer.model_path(model_id).unwrap();
-    let revision_dir = artifact.parent().expect("catalog artifact has revision dir");
+    let revision_dir = artifact
+        .parent()
+        .expect("catalog artifact has revision dir");
     fs::create_dir_all(revision_dir).unwrap();
     let file = fs::File::create(&artifact).unwrap();
     file.set_len(entry.expected_bytes).unwrap();
@@ -359,7 +361,10 @@ async fn generation_and_delete_are_serialized_without_runtime_corruption() {
         .into_iter()
         .find(|descriptor| descriptor.id == DEFAULT_LOCAL_TEXT_MODEL_ID)
         .unwrap();
-    assert_eq!(descriptor.install_state, LocalModelInstallState::NotInstalled);
+    assert_eq!(
+        descriptor.install_state,
+        LocalModelInstallState::NotInstalled
+    );
 }
 
 #[tokio::test]
