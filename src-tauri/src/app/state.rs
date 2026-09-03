@@ -361,16 +361,20 @@ impl AppState {
         let settings = Arc::new(RwLock::new(AppSettings::default()));
 
         // Load persisted settings from SQLite if present. Persist a normalized copy
-        // when a version migration occurs so future starts do not repeat it.
-        if let Ok(Some(json_str)) = db.get_setting("app_settings") {
-            if let Ok((loaded, migrated)) = AppSettings::from_persisted_json(&json_str) {
-                *settings.write() = loaded.clone();
-                if migrated {
-                    let normalized =
-                        serde_json::to_string(&loaded).map_err(|error| error.to_string())?;
-                    db.set_setting("app_settings", &normalized)
-                        .map_err(|error| error.to_string())?;
-                }
+        // when a version migration occurs so future starts do not repeat it. A read or
+        // decode failure must abort startup rather than silently substituting fresh defaults.
+        if let Some(json_str) = db
+            .get_setting("app_settings")
+            .map_err(|error| format!("failed to read persisted app settings: {error}"))?
+        {
+            let (loaded, migrated) = AppSettings::from_persisted_json(&json_str)
+                .map_err(|error| format!("failed to decode persisted app settings: {error}"))?;
+            *settings.write() = loaded.clone();
+            if migrated {
+                let normalized =
+                    serde_json::to_string(&loaded).map_err(|error| error.to_string())?;
+                db.set_setting("app_settings", &normalized)
+                    .map_err(|error| error.to_string())?;
             }
         }
 
@@ -786,6 +790,25 @@ mod tests {
         assert_eq!(config.behavior.quiet_hours_start, 1);
         assert_eq!(config.behavior.quiet_hours_end, 6);
         assert_eq!(config.behavior.max_comments_per_hour, 2);
+    }
+
+    #[test]
+    fn malformed_persisted_settings_abort_startup_instead_of_using_fresh_defaults() {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let db = Database::new(&path).unwrap();
+        db.set_setting("app_settings", "{not-valid-json").unwrap();
+        drop(db);
+
+        let secret_store =
+            SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        let result = AppState::new_with_secret_store(Some(&path), secret_store);
+
+        let error = match result {
+            Ok(_) => panic!("malformed persisted settings must not be replaced by defaults"),
+            Err(error) => error,
+        };
+        assert!(error.contains("failed to decode persisted app settings"));
     }
 
     #[test]
