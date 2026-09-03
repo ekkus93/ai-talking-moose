@@ -111,6 +111,31 @@ async fn oversized_artifact_is_rejected_and_staging_is_cleaned() {
 }
 
 #[tokio::test]
+async fn same_size_wrong_hash_is_rejected_without_installing_artifact() {
+    let dir = tempdir().unwrap();
+    let installer = LocalModelInstaller::with_transport(
+        dir.path().to_path_buf(),
+        Arc::new(StaticBytesTransport {
+            bytes: b"abd",
+            wait_for_cancel_after_write: false,
+        }),
+    )
+    .unwrap();
+    let cancellation = CancellationToken::new();
+
+    let error = installer
+        .install_inner(&TEST_ENTRY, &cancellation, None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.kind, LocalModelInstallErrorKind::Sha256Mismatch);
+    assert!(staging_is_empty(dir.path()));
+    let revision_dir = dir.path().join(TEST_ENTRY.id).join(TEST_ENTRY.revision);
+    assert!(!revision_dir.join(TEST_ENTRY.artifact_filename).exists());
+    assert!(!revision_dir.join(INSTALL_MARKER).exists());
+}
+
+#[tokio::test]
 async fn interrupted_download_cleans_partial_staging_file() {
     let dir = tempdir().unwrap();
     let installer = LocalModelInstaller::with_transport(

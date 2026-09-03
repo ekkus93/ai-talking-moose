@@ -181,6 +181,40 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
     expect(screen.getByText("Install failed")).toBeInTheDocument();
   });
 
+  it("rolls back optimistic download state when install and status refresh both fail", async () => {
+    vi.mocked(tauriBridge.getLocalLlmModels)
+      .mockResolvedValueOnce([
+        descriptor(MODEL_ID),
+        descriptor(SECOND_MODEL_ID),
+      ])
+      .mockRejectedValueOnce(new Error("status refresh rejected"));
+    vi.spyOn(tauriBridge, "installLocalLlmModel").mockRejectedValue(
+      new Error("install rejected"),
+    );
+
+    render(
+      <LocalLlmSettingsPanel
+        selectedModelId={MODEL_ID}
+        onSelectModel={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Download & Verify/i }),
+    );
+
+    expect(
+      await screen.findByText(
+        /Could not read local model status:.*status refresh rejected/i,
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Cancel Download/i }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("Not installed")).toBeInTheDocument();
+  });
+
   it("reports backend selection rejection without selecting a replacement", async () => {
     const onSelectModel = vi
       .fn<(modelId: string) => Promise<void>>()

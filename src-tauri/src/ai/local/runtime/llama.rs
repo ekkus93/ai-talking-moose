@@ -237,7 +237,11 @@ impl RuntimeEngine for LlamaEngine {
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::{LocalRuntimeErrorKind, RuntimeModelIdentity};
     use super::*;
+    use crate::ai::local::DEFAULT_LOCAL_TEXT_MODEL_ID;
+    use std::fs;
+    use tempfile::tempdir;
 
     fn assert_send<T: Send>() {}
     fn assert_sync<T: Sync>() {}
@@ -268,5 +272,36 @@ mod tests {
             LlamaEngine::add_bos_from_metadata(None),
             AddBos::Always
         ));
+    }
+
+    #[test]
+    fn corrupt_gguf_fails_load_with_safe_model_error() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("corrupt.gguf");
+        fs::write(&path, b"this is not a GGUF model").unwrap();
+        let spec = RuntimeModelSpec {
+            identity: RuntimeModelIdentity {
+                id: DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+                revision: "corrupt-test-revision".to_string(),
+                quantization: "Q4_K_M".to_string(),
+            },
+            path: path.clone(),
+            context_size: 1_024,
+            thread_count: 1,
+            max_output_tokens: 8,
+        };
+        let mut engine = LlamaEngine::initialize().unwrap();
+
+        let error = engine
+            .load_model(&spec)
+            .expect_err("a corrupt GGUF must fail instead of becoming a loaded model");
+
+        assert_eq!(error.kind, LocalRuntimeErrorKind::ModelLoad);
+        assert_eq!(
+            error.message,
+            "The selected local model could not be loaded."
+        );
+        assert!(!error.message.contains(path.to_string_lossy().as_ref()));
+        assert!(engine.model.is_none());
     }
 }

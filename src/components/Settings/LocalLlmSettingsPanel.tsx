@@ -178,6 +178,11 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
         message: `${installed.display_name} installed and verified.`,
       });
     } catch (error) {
+      // Roll back the optimistic Downloading state before asking the backend for a
+      // fresh snapshot. If that refresh also fails, the UI remains conservative
+      // instead of falsely presenting a download as still active.
+      setModels((current) => replaceDescriptor(current, selectedModel));
+      setProgress(null);
       setResult({ success: false, message: String(error) });
       await refreshModels();
     } finally {
