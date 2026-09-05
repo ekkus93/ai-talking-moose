@@ -37,6 +37,7 @@ dist/
 
 run_opencode*.sh*
 run_claude*.sh*
+run_codex*.sh*
 *~
 
 __pycache__/
@@ -46,3 +47,5 @@ __pycache__/
 # Local LLM model weights are installed into user data at runtime, never Git.
 *.gguf
 *.GGUF
+
+
