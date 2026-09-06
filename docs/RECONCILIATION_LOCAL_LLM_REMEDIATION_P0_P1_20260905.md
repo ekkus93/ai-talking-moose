@@ -2,7 +2,7 @@
 
 ## Status
 
-**P0 scope/reopening records are frozen. P1 installer cancellation remediation is in implementation/CI validation.**
+**P0 scope/reopening records are frozen. P1 installer cancellation remediation is complete and validated on merged `master`.**
 
 This record implements the baseline and evidence rules from `docs/SPEC(20260905-141500).md` and tracks the first implementation tranche from `docs/TODO(20260905-141500).md`.
 
@@ -14,7 +14,7 @@ The source-review baseline remains exactly:
 bb85beb4b61c6a25d7b5935ce4f6918b65afe8d6
 ```
 
-Implementation starts only after the remediation specification/TODO is merged to the then-current `master`; no earlier Local LLM feature branch is an implementation authority.
+Implementation started from merged remediation-plan `master` SHA `202fd5c563c613759771d323a937411cebd222c7`; no earlier Local LLM feature branch is an implementation authority.
 
 Scope boundaries remain unchanged:
 
@@ -79,4 +79,13 @@ Local sandbox validation before push:
 - Rust formatting/Clippy/tests — unavailable locally because this sandbox does not contain a Rust toolchain;
 - TypeScript/ESLint/Prettier/Vitest/build — unavailable locally because npm dependency installation is blocked by sandbox DNS/network access.
 
-Exact-head CI is therefore mandatory before any P1 task is marked complete.
+P1 closure evidence:
+
+- implementation PR: `#46` — **Local LLM: make installer cancellation truthful**;
+- exact implementation head: `3888cf671399a67da70a7c39531e29b37922f70d`;
+- exact-head PR CI: run `34009203437` — **pass**;
+- merged `master`: `6f9aa2dac6f99d69eaa86d8e9ea666173124e7eb`;
+- post-merge `master` CI: run `34010580951` — **pass**;
+- passing gates include Rustfmt, Clippy, Rust tests, backend failure/stress matrices, frontend typecheck/lint/format/tests/build, dependency/security audits, macOS bundles, Local LLM compile proofs, and canonical `npm run check:all`.
+
+Accordingly, `LLMR-100` through `LLMR-104` are closed. `LLMR-001` and `LLMR-002` are closed. `LLMR-003` remains intentionally partial: the verification-cancellation, pre-promotion-race, and verifying-status probes are complete, while later-tranche probes remain open under their owning P2+ tasks.
