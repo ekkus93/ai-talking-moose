@@ -146,6 +146,25 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
     expect(screen.getByText("Verifying")).toBeInTheDocument();
   });
 
+  it("renders promoting as an active finalization phase", async () => {
+    vi.mocked(tauriBridge.getLocalLlmModels).mockResolvedValueOnce([
+      descriptor(MODEL_ID, "promoting"),
+      descriptor(SECOND_MODEL_ID),
+    ]);
+
+    render(
+      <LocalLlmSettingsPanel
+        selectedModelId={MODEL_ID}
+        onSelectModel={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(await screen.findByText("Finalizing install")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Cancel Download/i }),
+    ).toBeInTheDocument();
+  });
+
   it("surfaces install failure and refreshes authoritative failed status", async () => {
     const failed = descriptor(MODEL_ID, "failed", {
       kind: "sha256_mismatch",

@@ -32,6 +32,8 @@ const installStateLabel = (
       return "Downloading";
     case "verifying":
       return "Verifying";
+    case "promoting":
+      return "Finalizing install";
     case "installed":
       return "Installed";
     case "failed":
@@ -135,7 +137,8 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
   const isInstallActive =
     installPending ||
     selectedModel?.install_state === "downloading" ||
-    selectedModel?.install_state === "verifying";
+    selectedModel?.install_state === "verifying" ||
+    selectedModel?.install_state === "promoting";
   const modelSelectionDisabled =
     status !== "ready" ||
     selectionPending ||
