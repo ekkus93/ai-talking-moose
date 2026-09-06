@@ -3,8 +3,9 @@ use talking_moose_lib::ai::google::{
     GoogleModelDescriptor, GoogleTtsVoiceDescriptor, GOOGLE_MODELS, GOOGLE_TTS_VOICES,
 };
 use talking_moose_lib::ai::local::{
-    LocalModelDescriptor, LocalModelDiagnostics, LocalModelInstallError,
+    LocalLlmDiagnostics, LocalModelDescriptor, LocalModelDiagnostics, LocalModelInstallError,
     LocalModelInstallErrorKind, LocalModelInstallProgress, LocalModelInstallState,
+    LocalRuntimeDiagnostics, LocalRuntimeErrorKind, LocalRuntimePhase,
 };
 use talking_moose_lib::ai::types::{ProviderError, ProviderErrorKind};
 use talking_moose_lib::app::state::{AppSettings, OnboardingStatus};
@@ -42,6 +43,8 @@ struct FrontendIpcShapes {
     local_model_install_error: LocalModelInstallError,
     local_model_descriptor: LocalModelDescriptor,
     local_model_diagnostics: LocalModelDiagnostics,
+    local_runtime_diagnostics: LocalRuntimeDiagnostics,
+    local_llm_diagnostics: LocalLlmDiagnostics,
     local_model_install_progress: LocalModelInstallProgress,
     audio_device_info: AudioDeviceInfo,
     audio_capture_diagnostics: AudioCaptureDiagnostics,
@@ -119,6 +122,27 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
         retryable: true,
     };
     let local_model_error = representative_local_install_error();
+    let local_model_diagnostics = LocalModelDiagnostics {
+        model_root_ready: true,
+        installs_in_progress: 1,
+        last_error: Some(local_model_error.clone()),
+    };
+    let local_runtime_diagnostics = LocalRuntimeDiagnostics {
+        selected_model_id: "contract-local-model".to_string(),
+        loaded_model_id: Some("contract-local-model".to_string()),
+        loaded_revision: Some("0123456789012345678901234567890123456789".to_string()),
+        loaded_quantization: Some("Q4_K_M".to_string()),
+        loaded: true,
+        phase: LocalRuntimePhase::Ready,
+        thread_count: 2,
+        context_size: 4_096,
+        generation_in_progress: true,
+        last_error_category: Some(LocalRuntimeErrorKind::Decode),
+        last_generation_duration_ms: Some(50),
+        last_prompt_tokens: Some(12),
+        last_output_tokens: Some(4),
+        last_tokens_per_second: Some(80.0),
+    };
     let audio_diagnostics = representative_audio_diagnostics();
 
     FrontendIpcShapes {
@@ -188,12 +212,14 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
             recommended_max_output: 192,
             install_state: LocalModelInstallState::Installed,
             active: true,
-            error: Some(local_model_error.clone()),
+            error: Some(local_model_error),
         },
-        local_model_diagnostics: LocalModelDiagnostics {
-            model_root_ready: true,
-            installs_in_progress: 1,
-            last_error: Some(local_model_error),
+        local_model_diagnostics: local_model_diagnostics.clone(),
+        local_runtime_diagnostics: local_runtime_diagnostics.clone(),
+        local_llm_diagnostics: LocalLlmDiagnostics {
+            installer: local_model_diagnostics,
+            selected_install_state: Some(LocalModelInstallState::Verifying),
+            runtime: local_runtime_diagnostics,
         },
         local_model_install_progress: LocalModelInstallProgress {
             model_id: "contract-local-model".to_string(),

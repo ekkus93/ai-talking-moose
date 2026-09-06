@@ -11,8 +11,8 @@ import {
   GoogleModelDescriptor,
   GoogleTtsVoiceDescriptor,
   ConversationLifecycle,
+  LocalLlmDiagnostics,
   LocalModelDescriptor,
-  LocalModelDiagnostics,
   LocalModelInstallProgress,
   MemoryRecord,
   MicrophonePermissionState,
@@ -117,9 +117,9 @@ export const nativeTauriBridge = {
     return invoke<LocalModelDescriptor[]>("get_local_llm_models");
   },
 
-  async getLocalLlmDiagnostics(): Promise<LocalModelDiagnostics> {
+  async getLocalLlmDiagnostics(): Promise<LocalLlmDiagnostics> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<LocalModelDiagnostics>("get_local_llm_diagnostics");
+    return invoke<LocalLlmDiagnostics>("get_local_llm_diagnostics");
   },
 
   async installLocalLlmModel(modelId: string): Promise<LocalModelDescriptor> {

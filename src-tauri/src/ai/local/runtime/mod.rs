@@ -4,6 +4,8 @@
 //! Application state and commands interact only with the neutral runtime manager/types.
 
 mod chat_template;
+#[cfg(test)]
+mod diagnostics_tests;
 mod llama;
 mod manager;
 mod reasoning;

@@ -1,5 +1,5 @@
 use crate::ai::local::{
-    global_local_model_installer, LocalModelDescriptor, LocalModelDiagnostics,
+    global_local_model_installer, LocalLlmDiagnostics, LocalModelDescriptor,
     LocalModelInstallProgress, LocalModelInstallProgressCallback, LocalModelInstallState,
     LocalTextModel,
 };
@@ -54,10 +54,25 @@ pub async fn get_local_llm_models(
 }
 
 #[tauri::command]
-pub async fn get_local_llm_diagnostics() -> Result<LocalModelDiagnostics, String> {
-    Ok(global_local_model_installer()
-        .map_err(safe_installer_error)?
-        .diagnostics())
+pub async fn get_local_llm_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<LocalLlmDiagnostics, String> {
+    let selected_model_id = state.settings.read().local_text_model.clone();
+    let installer = global_local_model_installer().map_err(safe_installer_error)?;
+    let selected_install_state = installer
+        .descriptors(&selected_model_id)
+        .into_iter()
+        .find(|descriptor| descriptor.id == selected_model_id)
+        .map(|descriptor| descriptor.install_state);
+    let runtime = state
+        .local_llm_runtime
+        .diagnostics(selected_model_id.clone());
+
+    Ok(LocalLlmDiagnostics {
+        installer: installer.diagnostics(),
+        selected_install_state,
+        runtime,
+    })
 }
 
 #[tauri::command]

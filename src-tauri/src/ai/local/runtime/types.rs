@@ -9,14 +9,14 @@ pub(super) const MAX_TEMPERATURE: f32 = 2.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum LocalRuntimePhase {
+pub enum LocalRuntimePhase {
     Ready,
     ShuttingDown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum LocalRuntimeErrorKind {
+pub enum LocalRuntimeErrorKind {
     ShuttingDown,
     UnknownModel,
     ModelNotInstalled,
@@ -237,7 +237,7 @@ pub(crate) struct LocalRuntimeGeneration {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
-pub(crate) struct LocalRuntimeDiagnostics {
+pub struct LocalRuntimeDiagnostics {
     pub selected_model_id: String,
     pub loaded_model_id: Option<String>,
     pub loaded_revision: Option<String>,

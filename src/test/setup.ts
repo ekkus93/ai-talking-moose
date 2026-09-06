@@ -209,9 +209,28 @@ const dispatchTauriCommand = async (
   }
   if (cmd === "get_local_llm_diagnostics") {
     return {
-      model_root_ready: true,
-      installs_in_progress: 0,
-      last_error: null,
+      installer: {
+        model_root_ready: true,
+        installs_in_progress: 0,
+        last_error: null,
+      },
+      selected_install_state: "not_installed",
+      runtime: {
+        selected_model_id: "smollm2-360m-instruct-q4-k-m",
+        loaded_model_id: null,
+        loaded_revision: null,
+        loaded_quantization: null,
+        loaded: false,
+        phase: "ready",
+        thread_count: 2,
+        context_size: 4_096,
+        generation_in_progress: false,
+        last_error_category: null,
+        last_generation_duration_ms: null,
+        last_prompt_tokens: null,
+        last_output_tokens: null,
+        last_tokens_per_second: null,
+      },
     };
   }
   if (cmd === "install_local_llm_model") {
