@@ -9,7 +9,6 @@ use crate::ai::local::installer::{
     LocalModelInstallErrorKind, LocalModelInstallState, LocalModelInstaller,
 };
 use parking_lot::{Mutex, RwLock};
-use std::fs;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -356,35 +355,21 @@ impl LocalRuntimeManager {
 }
 
 impl RuntimeModelSpec {
-    fn for_installed_entry(
+    pub(super) fn for_installed_entry(
         installer: &LocalModelInstaller,
         entry: &'static LocalModelCatalogEntry,
         policy: LocalRuntimePolicy,
     ) -> Result<Self, LocalRuntimeError> {
-        let descriptor = installer
-            .descriptors(entry.id)
-            .into_iter()
-            .find(|descriptor| descriptor.id == entry.id)
-            .ok_or_else(LocalRuntimeError::unknown_model)?;
-        if descriptor.install_state != LocalModelInstallState::Installed {
+        if !installer.marker_shape_is_valid(entry) {
             return Err(LocalRuntimeError::model_not_installed());
         }
 
-        let model_path = installer
-            .model_path(entry.id)
-            .map_err(|_| LocalRuntimeError::unknown_model())?;
-        let canonical_root =
-            fs::canonicalize(installer.root()).map_err(|_| LocalRuntimeError::unsafe_artifact())?;
-        let canonical_path =
-            fs::canonicalize(model_path).map_err(|_| LocalRuntimeError::model_not_installed())?;
-        if !canonical_path.starts_with(&canonical_root) {
-            return Err(LocalRuntimeError::unsafe_artifact());
-        }
-        let metadata =
-            fs::metadata(&canonical_path).map_err(|_| LocalRuntimeError::unsafe_artifact())?;
-        if !metadata.is_file() || metadata.len() != entry.expected_bytes {
-            return Err(LocalRuntimeError::unsafe_artifact());
-        }
+        let canonical_path = installer
+            .verified_runtime_artifact_path(entry)
+            .map_err(|error| match error.kind {
+                LocalModelInstallErrorKind::UnknownModel => LocalRuntimeError::unknown_model(),
+                _ => LocalRuntimeError::unsafe_artifact(),
+            })?;
 
         Ok(Self {
             identity: RuntimeModelIdentity {

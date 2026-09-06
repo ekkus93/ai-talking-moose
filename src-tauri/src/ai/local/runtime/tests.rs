@@ -5,7 +5,8 @@ use super::types::{
     DEFAULT_CONTEXT_SIZE, MAX_DEFAULT_THREADS, MAX_PROMPT_BYTES,
 };
 use crate::ai::local::{
-    local_model_entry, LocalModelInstallState, LocalModelInstaller, DEFAULT_LOCAL_TEXT_MODEL_ID,
+    local_model_entry, LocalModelCatalogEntry, LocalModelInstallState, LocalModelInstaller,
+    LocalModelTemplateHint, DEFAULT_LOCAL_TEXT_MODEL_ID,
 };
 use parking_lot::Mutex;
 use std::fs;
@@ -15,6 +16,23 @@ use std::time::Duration;
 use tempfile::tempdir;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
+
+static RUNTIME_TEST_ENTRY: LocalModelCatalogEntry = LocalModelCatalogEntry {
+    id: "runtime-test-model",
+    display_name: "Runtime Test Model",
+    family: "Test",
+    parameter_scale: "tiny",
+    quantization: "test",
+    artifact_filename: "runtime-test-model.gguf",
+    source_url: "https://example.invalid/runtime-test-model.gguf",
+    revision: "0123456789012345678901234567890123456789",
+    expected_bytes: 3,
+    sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    license: "Apache-2.0",
+    context_limit: 32,
+    recommended_max_output: 8,
+    template_hint: LocalModelTemplateHint::SmolLm2,
+};
 
 #[derive(Clone)]
 struct FakeEngine {
@@ -135,6 +153,30 @@ fn request(prompt: impl Into<String>) -> LocalRuntimeGenerateRequest {
     }
 }
 
+fn seed_runtime_test_artifact(installer: &LocalModelInstaller, bytes: &[u8]) -> PathBuf {
+    let revision_dir = installer
+        .root()
+        .join(RUNTIME_TEST_ENTRY.id)
+        .join(RUNTIME_TEST_ENTRY.revision);
+    fs::create_dir_all(&revision_dir).unwrap();
+    let artifact = revision_dir.join(RUNTIME_TEST_ENTRY.artifact_filename);
+    fs::write(&artifact, bytes).unwrap();
+    let marker = serde_json::json!({
+        "schema_version": 1,
+        "model_id": RUNTIME_TEST_ENTRY.id,
+        "revision": RUNTIME_TEST_ENTRY.revision,
+        "artifact_filename": RUNTIME_TEST_ENTRY.artifact_filename,
+        "expected_bytes": RUNTIME_TEST_ENTRY.expected_bytes,
+        "sha256": RUNTIME_TEST_ENTRY.sha256,
+    });
+    fs::write(
+        revision_dir.join(".talking-moose-local-llm.json"),
+        serde_json::to_vec_pretty(&marker).unwrap(),
+    )
+    .unwrap();
+    artifact
+}
+
 fn seed_installed_catalog_artifact(installer: &LocalModelInstaller, model_id: &str) {
     let entry = local_model_entry(model_id).expect("test model must exist in catalog");
     let artifact = installer.model_path(model_id).unwrap();
@@ -164,6 +206,9 @@ fn seed_installed_catalog_artifact(installer: &LocalModelInstaller, model_id: &s
         .find(|descriptor| descriptor.id == model_id)
         .expect("seeded model descriptor must exist");
     assert_eq!(descriptor.install_state, LocalModelInstallState::Installed);
+    installer
+        .seed_runtime_verification_cache_for_test(entry)
+        .expect("runtime fixture cache seed must remain shape-valid");
 }
 
 #[test]
@@ -227,6 +272,39 @@ fn request_bounds_fail_closed_before_native_inference() {
     invalid = request("prompt");
     invalid.temperature = 2.01;
     assert!(LocalRuntimeManager::validate_request(&invalid).is_err());
+}
+
+#[test]
+fn runtime_spec_accepts_current_bytes_that_match_the_pinned_sha() {
+    let dir = tempdir().unwrap();
+    let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
+    let artifact = seed_runtime_test_artifact(&installer, b"abc");
+
+    let spec = RuntimeModelSpec::for_installed_entry(
+        &installer,
+        &RUNTIME_TEST_ENTRY,
+        LocalRuntimePolicy::for_available_parallelism(4),
+    )
+    .unwrap();
+
+    assert_eq!(spec.path, fs::canonicalize(artifact).unwrap());
+}
+
+#[test]
+fn runtime_spec_rejects_same_size_wrong_bytes_before_native_load() {
+    let dir = tempdir().unwrap();
+    let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
+    seed_runtime_test_artifact(&installer, b"abd");
+    assert!(installer.marker_shape_is_valid(&RUNTIME_TEST_ENTRY));
+
+    let error = RuntimeModelSpec::for_installed_entry(
+        &installer,
+        &RUNTIME_TEST_ENTRY,
+        LocalRuntimePolicy::for_available_parallelism(4),
+    )
+    .unwrap_err();
+
+    assert_eq!(error.kind, LocalRuntimeErrorKind::UnsafeArtifact);
 }
 
 #[tokio::test]

@@ -1,6 +1,6 @@
 use super::*;
 use crate::ai::local::catalog::LocalModelTemplateHint;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex as StdMutex;
 use tempfile::tempdir;
 
@@ -78,7 +78,7 @@ fn assert_cancelled_install_is_not_installed(
     error: &LocalModelInstallError,
 ) {
     assert_eq!(error.kind, LocalModelInstallErrorKind::Cancelled);
-    assert!(!installer.install_is_valid(&TEST_ENTRY));
+    assert!(!installer.marker_shape_is_valid(&TEST_ENTRY));
     assert!(!test_marker_path(root).exists());
     assert!(staging_is_empty(root));
 }
@@ -97,6 +97,84 @@ fn write_test_marker(revision_dir: &Path) {
         serde_json::to_vec(&marker).unwrap(),
     )
     .unwrap();
+}
+
+fn seed_test_shape_install(root: &Path) {
+    let revision_dir = test_revision_dir(root);
+    fs::create_dir_all(&revision_dir).unwrap();
+    fs::write(test_artifact_path(root), b"abc").unwrap();
+    write_test_marker(&revision_dir);
+}
+
+#[test]
+fn redirect_policy_allows_only_https_targets_within_the_hop_limit() {
+    let https = reqwest::Url::parse("https://example.invalid/model.gguf").unwrap();
+    let http = reqwest::Url::parse("http://example.invalid/model.gguf").unwrap();
+
+    assert_eq!(
+        model_redirect_decision(&https, MAX_MODEL_REDIRECTS),
+        ModelRedirectDecision::Follow
+    );
+    assert_eq!(
+        model_redirect_decision(&http, 1),
+        ModelRedirectDecision::RejectInsecureScheme
+    );
+    assert_eq!(
+        model_redirect_decision(&https, MAX_MODEL_REDIRECTS + 1),
+        ModelRedirectDecision::RejectLimit
+    );
+}
+
+#[test]
+fn installer_diagnostics_report_the_latest_unresolved_error_chronologically() {
+    let dir = tempdir().unwrap();
+    let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
+
+    installer.record_install_error("first-model", LocalModelInstallError::network());
+    installer.record_install_error("second-model", LocalModelInstallError::sha256_mismatch());
+    assert_eq!(
+        installer.diagnostics().last_error.unwrap().kind,
+        LocalModelInstallErrorKind::Sha256Mismatch
+    );
+
+    installer.clear_install_error("second-model");
+    assert_eq!(
+        installer.diagnostics().last_error.unwrap().kind,
+        LocalModelInstallErrorKind::Network
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn runtime_verification_caches_unchanged_bytes_and_rejects_same_size_mutation() {
+    let dir = tempdir().unwrap();
+    let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
+    seed_test_shape_install(dir.path());
+    assert!(installer.marker_shape_is_valid(&TEST_ENTRY));
+
+    let hash_runs = Arc::new(AtomicUsize::new(0));
+    let observed = hash_runs.clone();
+    installer.set_runtime_verification_observer(Some(Arc::new(move || {
+        observed.fetch_add(1, Ordering::SeqCst);
+    })));
+
+    let first = installer
+        .verified_runtime_artifact_path(&TEST_ENTRY)
+        .unwrap();
+    let second = installer
+        .verified_runtime_artifact_path(&TEST_ENTRY)
+        .unwrap();
+    assert_eq!(first, second);
+    assert_eq!(hash_runs.load(Ordering::SeqCst), 1);
+
+    fs::write(test_artifact_path(dir.path()), b"abd").unwrap();
+    assert!(installer.marker_shape_is_valid(&TEST_ENTRY));
+
+    let error = installer
+        .verified_runtime_artifact_path(&TEST_ENTRY)
+        .unwrap_err();
+    assert_eq!(error.kind, LocalModelInstallErrorKind::Sha256Mismatch);
+    assert_eq!(hash_runs.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
@@ -418,7 +496,7 @@ async fn cancelled_install_can_be_retried_successfully() {
     let outcome = installer.install_entry(&TEST_ENTRY, None).await.unwrap();
 
     assert_eq!(outcome.model_id, TEST_ENTRY.id);
-    assert!(installer.install_is_valid(&TEST_ENTRY));
+    assert!(installer.marker_shape_is_valid(&TEST_ENTRY));
     assert_eq!(fs::read(test_artifact_path(dir.path())).unwrap(), b"abc");
     assert!(test_marker_path(dir.path()).is_file());
     assert!(staging_is_empty(dir.path()));
@@ -640,7 +718,7 @@ fn symlink_artifact_never_counts_as_installed() {
     .unwrap();
     write_test_marker(&revision_dir);
 
-    assert!(!installer.install_is_valid(&TEST_ENTRY));
+    assert!(!installer.marker_shape_is_valid(&TEST_ENTRY));
 }
 
 #[cfg(unix)]
