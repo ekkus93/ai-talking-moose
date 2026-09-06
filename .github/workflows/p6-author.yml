@@ -1,0 +1,50 @@
+name: P6 authoring validator
+
+on:
+  push:
+    branches:
+      - "ralph/local-llm-remediation-p6-20260906"
+
+permissions:
+  contents: write
+
+jobs:
+  author-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact P6 branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Apply P6 transformations
+        run: python3 .github/p6_author.py
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Reject known misleading ownership claims
+        run: |
+          ! grep -R -n -F "llama.cpp has rendered and" src-tauri/src/ai/local docs/LOCAL_LLM_*.md
+          ! grep -R -n -F "llama.cpp layer is responsible for applying" src-tauri/src/ai/local docs/LOCAL_LLM_*.md
+          grep -n -F "TextModel::generate() trait has no cancellation parameter" docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P6_20260906.md
+          grep -n -F "semantic compatibility gate" docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P6_20260906.md
+
+      - name: Check patch whitespace
+        run: git diff --check
+
+      - name: Publish clean P6 implementation commit
+        run: |
+          rm .github/p6_author.py .github/workflows/p6-author.yml
+          git config user.name 'Phillip Chin'
+          git config user.email 'ekkus93@gmail.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'docs: make local runtime semantics truthful'
+          git push origin HEAD:ralph/local-llm-remediation-p6-20260906
