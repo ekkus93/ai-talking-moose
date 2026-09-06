@@ -26,6 +26,9 @@ jobs:
       - name: Apply P6 transformations
         run: python3 .github/p6_author.py
 
+      - name: Format authored Rust
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml
+
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
@@ -33,7 +36,7 @@ jobs:
         run: |
           ! grep -R -n -F "llama.cpp has rendered and" src-tauri/src/ai/local docs/LOCAL_LLM_*.md
           ! grep -R -n -F "llama.cpp layer is responsible for applying" src-tauri/src/ai/local docs/LOCAL_LLM_*.md
-          grep -n -F "TextModel::generate() trait has no cancellation parameter" docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P6_20260906.md
+          grep -n -F 'Normal `TextModel::generate()` has no caller cancellation parameter' docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P6_20260906.md
           grep -n -F "semantic compatibility gate" docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P6_20260906.md
 
       - name: Check patch whitespace
