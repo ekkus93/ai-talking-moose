@@ -70,8 +70,10 @@ impl RuntimeState {
         spec: &RuntimeModelSpec,
         request: &LocalRuntimeGenerateRequest,
         cancellation: &CancellationToken,
+        on_loaded: impl FnOnce(&RuntimeModelSpec),
     ) -> Result<LocalRuntimeGeneration, LocalRuntimeError> {
         self.load_model(spec)?;
+        on_loaded(spec);
         let engine = self
             .engine
             .as_mut()
@@ -204,6 +206,7 @@ impl LocalRuntimeManager {
 
         self.inner.telemetry.write().generation_in_progress = true;
         let state = self.inner.state.clone();
+        let telemetry_inner = self.inner.clone();
         let policy = self.inner.policy;
         let result = tokio::task::spawn_blocking(move || {
             let entry = local_model_entry(&request.model_id)
@@ -212,7 +215,11 @@ impl LocalRuntimeManager {
             if request.max_output_tokens > spec.max_output_tokens {
                 return Err(LocalRuntimeError::invalid_request());
             }
-            state.lock().generate(&spec, &request, &cancellation)
+            state
+                .lock()
+                .generate(&spec, &request, &cancellation, |loaded_spec| {
+                    telemetry_inner.telemetry.write().loaded = Some(loaded_spec.clone());
+                })
         })
         .await
         .map_err(|_| LocalRuntimeError::initialization())
@@ -273,8 +280,7 @@ impl LocalRuntimeManager {
         result
     }
 
-    // P5 exposes sanitized runtime telemetry here; the frontend IPC shape is wired separately.
-    #[allow(dead_code)]
+    /// Return the sanitized production runtime telemetry used by Local LLM diagnostics.
     pub(crate) fn diagnostics(&self, selected_model_id: String) -> LocalRuntimeDiagnostics {
         let phase = self.inner.lifecycle.read().phase;
         let telemetry = self.inner.telemetry.read();

@@ -161,6 +161,49 @@ export interface LocalModelDiagnostics {
   last_error: LocalModelInstallError | null;
 }
 
+export type LocalRuntimePhase = "ready" | "shutting_down";
+
+export type LocalRuntimeErrorKind =
+  | "shutting_down"
+  | "unknown_model"
+  | "model_not_installed"
+  | "unsafe_artifact"
+  | "initialization"
+  | "model_load"
+  | "model_not_loaded"
+  | "invalid_request"
+  | "prompt_too_long"
+  | "context_creation"
+  | "tokenization"
+  | "chat_template"
+  | "decode"
+  | "output_decode"
+  | "cancelled"
+  | "model_delete";
+
+export interface LocalRuntimeDiagnostics {
+  selected_model_id: string;
+  loaded_model_id: string | null;
+  loaded_revision: string | null;
+  loaded_quantization: string | null;
+  loaded: boolean;
+  phase: LocalRuntimePhase;
+  thread_count: number;
+  context_size: number;
+  generation_in_progress: boolean;
+  last_error_category: LocalRuntimeErrorKind | null;
+  last_generation_duration_ms: number | null;
+  last_prompt_tokens: number | null;
+  last_output_tokens: number | null;
+  last_tokens_per_second: number | null;
+}
+
+export interface LocalLlmDiagnostics {
+  installer: LocalModelDiagnostics;
+  selected_install_state: LocalModelInstallState | null;
+  runtime: LocalRuntimeDiagnostics;
+}
+
 export interface LocalModelInstallProgress {
   model_id: string;
   install_state: Extract<LocalModelInstallState, "downloading" | "verifying">;

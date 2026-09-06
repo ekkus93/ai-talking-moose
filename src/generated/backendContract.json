@@ -274,6 +274,50 @@
         "retryable": true
       }
     },
+    "LocalRuntimeDiagnostics": {
+      "selected_model_id": "contract-local-model",
+      "loaded_model_id": "contract-local-model",
+      "loaded_revision": "0123456789012345678901234567890123456789",
+      "loaded_quantization": "Q4_K_M",
+      "loaded": true,
+      "phase": "ready",
+      "thread_count": 2,
+      "context_size": 4096,
+      "generation_in_progress": true,
+      "last_error_category": "decode",
+      "last_generation_duration_ms": 50,
+      "last_prompt_tokens": 12,
+      "last_output_tokens": 4,
+      "last_tokens_per_second": 80.0
+    },
+    "LocalLlmDiagnostics": {
+      "installer": {
+        "model_root_ready": true,
+        "installs_in_progress": 1,
+        "last_error": {
+          "kind": "network",
+          "message": "contract local model error",
+          "retryable": true
+        }
+      },
+      "selected_install_state": "verifying",
+      "runtime": {
+        "selected_model_id": "contract-local-model",
+        "loaded_model_id": "contract-local-model",
+        "loaded_revision": "0123456789012345678901234567890123456789",
+        "loaded_quantization": "Q4_K_M",
+        "loaded": true,
+        "phase": "ready",
+        "thread_count": 2,
+        "context_size": 4096,
+        "generation_in_progress": true,
+        "last_error_category": "decode",
+        "last_generation_duration_ms": 50,
+        "last_prompt_tokens": 12,
+        "last_output_tokens": 4,
+        "last_tokens_per_second": 80.0
+      }
+    },
     "LocalModelInstallProgress": {
       "model_id": "contract-local-model",
       "install_state": "verifying",

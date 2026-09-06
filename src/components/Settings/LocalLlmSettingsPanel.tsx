@@ -10,6 +10,7 @@ import {
 import { tauriBridge } from "../../lib/tauriBridge";
 import type {
   ConnectionTestResult,
+  LocalLlmDiagnostics,
   LocalModelDescriptor,
   LocalModelInstallProgress,
 } from "../../types/moose";
@@ -18,6 +19,8 @@ interface LocalLlmSettingsPanelProps {
   selectedModelId: string;
   onSelectModel: (modelId: string) => Promise<void>;
 }
+
+const DIAGNOSTICS_POLL_MS = 1_000;
 
 const formatModelSize = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MiB`;
@@ -41,6 +44,36 @@ const installStateLabel = (
   }
 };
 
+const runtimeStateLabel = (diagnostics: LocalLlmDiagnostics): string => {
+  if (diagnostics.runtime.phase === "shutting_down") return "Shutting down";
+  if (diagnostics.runtime.generation_in_progress) return "Generating";
+  return diagnostics.runtime.loaded ? "Loaded" : "Unloaded";
+};
+
+const loadedIdentityLabel = (diagnostics: LocalLlmDiagnostics): string => {
+  const runtime = diagnostics.runtime;
+  if (!runtime.loaded_model_id) return "None";
+  const revision = runtime.loaded_revision
+    ? ` @ ${runtime.loaded_revision}`
+    : "";
+  const quantization = runtime.loaded_quantization
+    ? ` (${runtime.loaded_quantization})`
+    : "";
+  return `${runtime.loaded_model_id}${revision}${quantization}`;
+};
+
+const lastGenerationLabel = (diagnostics: LocalLlmDiagnostics): string => {
+  const runtime = diagnostics.runtime;
+  const duration = runtime.last_generation_duration_ms ?? "—";
+  const promptTokens = runtime.last_prompt_tokens ?? "—";
+  const outputTokens = runtime.last_output_tokens ?? "—";
+  const throughput =
+    runtime.last_tokens_per_second === null
+      ? "—"
+      : runtime.last_tokens_per_second.toFixed(1);
+  return `${duration} ms • ${promptTokens} prompt • ${outputTokens} output • ${throughput} tok/s`;
+};
+
 const replaceDescriptor = (
   models: LocalModelDescriptor[],
   descriptor: LocalModelDescriptor,
@@ -58,6 +91,10 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
   const [progress, setProgress] = useState<LocalModelInstallProgress | null>(
     null,
   );
+  const [diagnostics, setDiagnostics] = useState<LocalLlmDiagnostics | null>(
+    null,
+  );
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   const [selectionPending, setSelectionPending] = useState(false);
   const [installPending, setInstallPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
@@ -120,6 +157,31 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
       unlisten?.();
     };
   }, [refreshModels]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshDiagnostics = async () => {
+      try {
+        const nextDiagnostics = await tauriBridge.getLocalLlmDiagnostics();
+        if (!active) return;
+        setDiagnostics(nextDiagnostics);
+        setDiagnosticsError(null);
+      } catch {
+        if (!active) return;
+        setDiagnosticsError("Runtime diagnostics unavailable.");
+      }
+    };
+
+    void refreshDiagnostics();
+    const interval = window.setInterval(
+      () => void refreshDiagnostics(),
+      DIAGNOSTICS_POLL_MS,
+    );
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const selectedModel = useMemo(
     () => models.find((model) => model.id === selectedModelId) ?? null,
@@ -398,6 +460,45 @@ export const LocalLlmSettingsPanel: React.FC<LocalLlmSettingsPanelProps> = ({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {diagnostics && (
+        <div
+          className="border border-gray-400 rounded p-3 bg-white text-[10px] space-y-1"
+          aria-label="Local LLM diagnostics"
+        >
+          <div className="font-bold text-xs">Local LLM Diagnostics</div>
+          <div>
+            Installer phase:{" "}
+            {diagnostics.selected_install_state
+              ? installStateLabel(diagnostics.selected_install_state)
+              : "Unavailable"}
+          </div>
+          <div>Runtime state: {runtimeStateLabel(diagnostics)}</div>
+          <div>Selected model: {diagnostics.runtime.selected_model_id}</div>
+          <div>Loaded model: {loadedIdentityLabel(diagnostics)}</div>
+          <div>Threads: {diagnostics.runtime.thread_count}</div>
+          <div>Context: {diagnostics.runtime.context_size} tokens</div>
+          <div>
+            Generation:{" "}
+            {diagnostics.runtime.generation_in_progress
+              ? "In progress"
+              : "Idle"}
+          </div>
+          <div>
+            Installer error: {diagnostics.installer.last_error?.kind ?? "None"}
+          </div>
+          <div>
+            Runtime error: {diagnostics.runtime.last_error_category ?? "None"}
+          </div>
+          <div>Last generation: {lastGenerationLabel(diagnostics)}</div>
+        </div>
+      )}
+
+      {diagnosticsError && (
+        <div className="text-[10px] text-red-800" role="status">
+          {diagnosticsError}
         </div>
       )}
 

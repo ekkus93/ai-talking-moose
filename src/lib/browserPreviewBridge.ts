@@ -11,8 +11,8 @@ import type {
   ConversationLifecycle,
   GoogleModelDescriptor,
   GoogleTtsVoiceDescriptor,
+  LocalLlmDiagnostics,
   LocalModelDescriptor,
-  LocalModelDiagnostics,
   LocalModelInstallProgress,
   MemoryRecord,
   MicrophonePermissionState,
@@ -239,11 +239,31 @@ export const browserPreviewBridge = {
     return previewLocalLlmModels();
   },
 
-  async getLocalLlmDiagnostics(): Promise<LocalModelDiagnostics> {
+  async getLocalLlmDiagnostics(): Promise<LocalLlmDiagnostics> {
+    const selectedModelId = frontendDefaultSettings().local_text_model;
     return {
-      model_root_ready: true,
-      installs_in_progress: 0,
-      last_error: null,
+      installer: {
+        model_root_ready: true,
+        installs_in_progress: 0,
+        last_error: null,
+      },
+      selected_install_state: "not_installed",
+      runtime: {
+        selected_model_id: selectedModelId,
+        loaded_model_id: null,
+        loaded_revision: null,
+        loaded_quantization: null,
+        loaded: false,
+        phase: "ready",
+        thread_count: 2,
+        context_size: 4_096,
+        generation_in_progress: false,
+        last_error_category: null,
+        last_generation_duration_ms: null,
+        last_prompt_tokens: null,
+        last_output_tokens: null,
+        last_tokens_per_second: null,
+      },
     };
   },
 

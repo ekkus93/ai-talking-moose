@@ -15,7 +15,13 @@ describe("local LLM lifecycle bridge", () => {
       "smollm2-360m-instruct-q4-k-m",
       "qwen3-0-6b-instruct-q4-k-m",
     ]);
-    expect(diagnostics.model_root_ready).toBe(true);
+    expect(diagnostics.installer.model_root_ready).toBe(true);
+    expect(diagnostics.selected_install_state).toBe("not_installed");
+    expect(diagnostics.runtime.selected_model_id).toBe(
+      "smollm2-360m-instruct-q4-k-m",
+    );
+    expect(diagnostics.runtime.phase).toBe("ready");
+    expect(diagnostics.runtime.loaded).toBe(false);
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("get_local_llm_models");
     expect(vi.mocked(invoke)).toHaveBeenCalledWith("get_local_llm_diagnostics");
   });
