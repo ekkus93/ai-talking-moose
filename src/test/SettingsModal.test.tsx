@@ -263,7 +263,9 @@ describe("SettingsModal Component", () => {
 
     const localSelect = await screen.findByLabelText("Local Text Model");
     expect(localSelect).toHaveValue("smollm2-360m-instruct-q4-k-m");
-    expect(screen.getByText(/Smallest supported model/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Smallest supported model/i),
+    ).toBeInTheDocument();
 
     fireEvent.change(localSelect, {
       target: { value: "qwen3-0-6b-instruct-q4-k-m" },
