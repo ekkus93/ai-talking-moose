@@ -2,9 +2,9 @@
 
 ## Status
 
-**P3 runtime-diagnostics implementation is prepared for exact-head CI validation.**
+**P3 runtime-diagnostics remediation is complete and validated on merged `master`.**
 
-This record covers `LLMR-300` through `LLMR-303` from `docs/TODO(20260905-141500).md`. It does not mark those tracker items complete before exact-head PR CI, merge, and post-merge `master` validation.
+This record closes `LLMR-300` through `LLMR-303` from `docs/TODO(20260905-141500).md` after exact-head PR CI, expected-head merge, and post-merge `master` validation all succeeded.
 
 Implementation base: `1f3d9802bd3f0f41d143e2085baa0528bc5cd952`, the exact P2-closure `master` that passed post-merge CI `34020262705`.
 
@@ -73,19 +73,18 @@ Positive controls prove the fake engine actually receives the first two values a
 
 A focused frontend test verifies the Settings diagnostics surface renders runtime identity/state/performance data and safe error categories.
 
-## Validation state
+## Closure evidence
 
 The implementation was authored directly on a fresh branch from exact green P2 `master` after the initial experimental bootstrap workflow proved too brittle for semantic source editing. The failed bootstrap runs are tooling evidence only and are not part of the implementation history.
 
-Before this P3 work is marked complete, the final implementation head must pass:
+Final implementation evidence:
 
-- Rustfmt;
-- focused runtime diagnostics test;
-- generated frontend contract regeneration/drift check;
-- Tauri command registration contract;
-- Rust-to-TypeScript IPC shape gate;
-- TypeScript typecheck;
-- focused frontend bridge/UI diagnostics tests;
-- ordinary exact-head repository CI.
+- mechanical finalizer run `34022901258` completed successfully and produced tree `79ed1943f06594ab53733b93b015515cd813d920`;
+- the implementation history was collapsed without changing that validated tree to clean head `ebcc36ebf6e985b443a808d39eede80780e6efac`;
+- PR #50, `Local LLM: expose safe runtime diagnostics`, used base `1f3d9802bd3f0f41d143e2085baa0528bc5cd952` and exact head `ebcc36ebf6e985b443a808d39eede80780e6efac`;
+- exact-head PR CI `34023525137` completed successfully, including Rust quality/tests, frontend quality/tests, dependency and release gates, all Local LLM compile proofs, both macOS bundle smoke jobs, and canonical `npm run check:all`;
+- PR #50 was squash-merged with the expected-head guard on `ebcc36ebf6e985b443a808d39eede80780e6efac`;
+- the resulting merged `master` SHA is `d0279cd479669d5d4aaf58a6988d463174611c5b`, with the same validated tree `79ed1943f06594ab53733b93b015515cd813d920`;
+- post-merge `master` CI `34025909865` completed successfully on exact SHA `d0279cd479669d5d4aaf58a6988d463174611c5b`; every current job was green, including canonical `npm run check:all`, Rust quality/tests, security/dependency audits, all Local LLM compile proofs, and both macOS bundle smoke jobs.
 
-After exact-head CI passes, the implementation PR must be squash-merged with an expected-head guard and the resulting `master` SHA must pass post-merge CI before P3 tracker closure is recorded.
+Therefore `LLMR-300`, `LLMR-301`, `LLMR-302`, and `LLMR-303` are complete. The P3-owned `LLMR-003` regression probes for production diagnostics reachability and diagnostics privacy are also complete. `LLMR-003` remains open overall because later-phase P4/P5 probes remain outstanding.
