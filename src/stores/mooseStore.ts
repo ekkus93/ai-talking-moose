@@ -31,19 +31,6 @@ let lastPersistedSettings: AppSettings | null = null;
 
 const cloneSettings = (settings: AppSettings): AppSettings => ({ ...settings });
 
-const settingsPatch = (
-  current: AppSettings,
-  next: AppSettings,
-): SettingsPatch => {
-  const patch: SettingsPatch = {};
-  for (const key of Object.keys(next) as Array<keyof AppSettings>) {
-    if (!Object.is(current[key], next[key])) {
-      Object.assign(patch, { [key]: next[key] });
-    }
-  }
-  return patch;
-};
-
 const applySettingsPatch = (
   settings: AppSettings,
   patch: SettingsPatch,
@@ -221,8 +208,8 @@ interface MooseStoreState {
   triggerCanned: (type: string) => Promise<void>;
 
   loadSettings: () => Promise<void>;
-  updateSettings: (newSettings: AppSettings) => Promise<void>;
-  updateSettingsContinuous: (newSettings: AppSettings) => void;
+  updateSettingsPatch: (patch: SettingsPatch) => Promise<void>;
+  updateSettingsContinuousPatch: (patch: SettingsPatch) => void;
   loadDevices: () => Promise<void>;
   loadGoogleTtsVoices: () => Promise<void>;
   loadMemories: () => Promise<void>;
@@ -396,33 +383,32 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     });
   },
 
-  updateSettings: async (newSettings) => {
+  updateSettingsPatch: async (discretePatch) => {
     const current = get().settings;
     ensurePersistedSettingsBaseline(current);
-    const discretePatch = current ? settingsPatch(current, newSettings) : {};
     const patch = {
       ...takePendingContinuousSettingsPatch(),
       ...discretePatch,
     };
+    if (!current || patchIsEmpty(patch)) return;
 
-    // Discrete controls update optimistically too. Persistence is serialized, so
-    // an older completion can never overwrite a newer local edit.
-    set({ settings: newSettings });
+    // Components submit only the fields they intend to change. Apply that intent to
+    // the latest optimistic view; persistence is serialized and independently rebased
+    // onto the last successfully persisted snapshot.
+    set({ settings: applySettingsPatch(current, patch) });
     await enqueueSettingsPatch(patch);
   },
 
-  updateSettingsContinuous: (newSettings) => {
+  updateSettingsContinuousPatch: (patch) => {
     const current = get().settings;
     ensurePersistedSettingsBaseline(current);
-    const patch = current ? settingsPatch(current, newSettings) : {};
+    if (!current || patchIsEmpty(patch)) return;
 
-    // Continuous controls stay immediate and coalesce only the fields changed
-    // during the pointer/input burst. The patch is later rebased onto the last
-    // successfully persisted snapshot if an older write fails.
-    set({ settings: newSettings });
-    if (!patchIsEmpty(patch)) {
-      scheduleContinuousSettingsWrite(patch);
-    }
+    // Continuous controls stay immediate and coalesce only explicitly changed fields.
+    // The patch is later rebased onto the last successfully persisted snapshot if an
+    // older write fails.
+    set({ settings: applySettingsPatch(current, patch) });
+    scheduleContinuousSettingsWrite(patch);
   },
 
   loadDevices: async () => {
