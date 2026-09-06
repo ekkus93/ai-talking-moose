@@ -27,6 +27,7 @@ pub enum LocalModelInstallState {
     NotInstalled,
     Downloading,
     Verifying,
+    Promoting,
     Installed,
     Failed,
 }
@@ -309,11 +310,40 @@ impl LocalModelDownloadTransport for ReqwestLocalModelDownloadTransport {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocalModelInstallPhase {
+    Downloading,
+    Verifying,
+    Promoting,
+}
+
+#[derive(Clone)]
+struct InFlightInstall {
+    cancellation: CancellationToken,
+    phase: LocalModelInstallPhase,
+}
+
+type VerificationObserver = Arc<dyn Fn() + Send + Sync>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PromotionCheckpoint {
+    BeforeRename,
+    AfterRename,
+    BeforeMarkerCommit,
+}
+
+#[cfg(test)]
+type PromotionObserver = Arc<dyn Fn(PromotionCheckpoint) + Send + Sync>;
+
 pub struct LocalModelInstaller {
     root: PathBuf,
     transport: Arc<dyn LocalModelDownloadTransport>,
-    in_flight: Mutex<HashMap<String, CancellationToken>>,
+    in_flight: Mutex<HashMap<String, InFlightInstall>>,
     last_errors: Mutex<HashMap<String, LocalModelInstallError>>,
+    #[cfg(test)]
+    verification_observer: Mutex<Option<VerificationObserver>>,
+    #[cfg(test)]
+    promotion_observer: Mutex<Option<PromotionObserver>>,
 }
 
 impl LocalModelInstaller {
@@ -328,6 +358,10 @@ impl LocalModelInstaller {
             transport: Arc::new(ReqwestLocalModelDownloadTransport::new()?),
             in_flight: Mutex::new(HashMap::new()),
             last_errors: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            verification_observer: Mutex::new(None),
+            #[cfg(test)]
+            promotion_observer: Mutex::new(None),
         })
     }
 
@@ -347,11 +381,62 @@ impl LocalModelInstaller {
             transport,
             in_flight: Mutex::new(HashMap::new()),
             last_errors: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            verification_observer: Mutex::new(None),
+            #[cfg(test)]
+            promotion_observer: Mutex::new(None),
         })
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    fn set_in_flight_phase(&self, model_id: &str, phase: LocalModelInstallPhase) {
+        if let Some(in_flight) = self.in_flight.lock().get_mut(model_id) {
+            in_flight.phase = phase;
+        }
+    }
+
+    fn in_flight_install_state(&self, model_id: &str) -> Option<LocalModelInstallState> {
+        self.in_flight
+            .lock()
+            .get(model_id)
+            .map(|in_flight| match in_flight.phase {
+                LocalModelInstallPhase::Downloading => LocalModelInstallState::Downloading,
+                LocalModelInstallPhase::Verifying => LocalModelInstallState::Verifying,
+                LocalModelInstallPhase::Promoting => LocalModelInstallState::Promoting,
+            })
+    }
+
+    #[cfg(test)]
+    fn set_verification_observer(&self, observer: Option<VerificationObserver>) {
+        *self.verification_observer.lock() = observer;
+    }
+
+    #[cfg(test)]
+    fn set_promotion_observer(&self, observer: Option<PromotionObserver>) {
+        *self.promotion_observer.lock() = observer;
+    }
+
+    fn verification_observer(&self) -> Option<VerificationObserver> {
+        #[cfg(test)]
+        {
+            self.verification_observer.lock().clone()
+        }
+        #[cfg(not(test))]
+        {
+            None
+        }
+    }
+
+    fn notify_promotion_checkpoint(&self, checkpoint: PromotionCheckpoint) {
+        #[cfg(test)]
+        if let Some(observer) = self.promotion_observer.lock().clone() {
+            observer(checkpoint);
+        }
+        #[cfg(not(test))]
+        let _ = checkpoint;
     }
 
     pub fn model_path(&self, model_id: &str) -> Result<PathBuf, LocalModelInstallError> {
@@ -382,9 +467,9 @@ impl LocalModelInstaller {
     }
 
     pub fn cancel(&self, model_id: &str) -> bool {
-        let token = self.in_flight.lock().get(model_id).cloned();
-        if let Some(token) = token {
-            token.cancel();
+        let in_flight = self.in_flight.lock();
+        if let Some(install) = in_flight.get(model_id) {
+            install.cancellation.cancel();
             true
         } else {
             false
@@ -399,6 +484,15 @@ impl LocalModelInstaller {
         validate_storage_layout(&self.root)?;
         let entry =
             local_model_entry(model_id).ok_or_else(LocalModelInstallError::unknown_model)?;
+        self.install_entry(entry, progress).await
+    }
+
+    async fn install_entry(
+        &self,
+        entry: &'static LocalModelCatalogEntry,
+        progress: Option<LocalModelInstallProgressCallback>,
+    ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
+        validate_storage_layout(&self.root)?;
         if self.install_is_valid(entry) {
             return Ok(LocalModelInstallOutcome {
                 model_id: entry.id.to_string(),
@@ -409,26 +503,65 @@ impl LocalModelInstaller {
 
         let cancellation = {
             let mut in_flight = self.in_flight.lock();
-            if in_flight.contains_key(model_id) {
+            if in_flight.contains_key(entry.id) {
                 return Err(LocalModelInstallError::busy());
             }
-            let token = CancellationToken::new();
-            in_flight.insert(model_id.to_string(), token.clone());
-            token
+            let cancellation = CancellationToken::new();
+            in_flight.insert(
+                entry.id.to_string(),
+                InFlightInstall {
+                    cancellation: cancellation.clone(),
+                    phase: LocalModelInstallPhase::Downloading,
+                },
+            );
+            cancellation
         };
 
-        let result = self
+        let pending_result = self
             .install_inner(entry, &cancellation, progress.as_ref())
             .await;
-        self.in_flight.lock().remove(model_id);
+        let result = match pending_result {
+            Ok(outcome) => {
+                // The install marker is the durable commit point. Keep the in-flight mutex
+                // locked while deciding whether to write it so cancel() has a single,
+                // truthful linearization point: either cancellation is accepted before the
+                // marker commit, or the operation is no longer cancellable.
+                self.notify_promotion_checkpoint(PromotionCheckpoint::BeforeMarkerCommit);
+                let mut in_flight = self.in_flight.lock();
+                let cancelled = in_flight
+                    .get(entry.id)
+                    .map(|install| install.cancellation.is_cancelled())
+                    .unwrap_or(true);
+                let finalized = if cancelled {
+                    let _ = remove_pending_artifact(&self.root, entry);
+                    Err(LocalModelInstallError::cancelled())
+                } else {
+                    let revision_dir = self.root.join(entry.id).join(entry.revision);
+                    match write_install_marker(&revision_dir, entry) {
+                        Ok(()) => Ok(outcome),
+                        Err(error) => {
+                            let _ = remove_pending_artifact(&self.root, entry);
+                            Err(error)
+                        }
+                    }
+                };
+                in_flight.remove(entry.id);
+                finalized
+            }
+            Err(error) => {
+                self.in_flight.lock().remove(entry.id);
+                Err(error)
+            }
+        };
+
         match &result {
             Ok(_) => {
-                self.last_errors.lock().remove(model_id);
+                self.last_errors.lock().remove(entry.id);
             }
             Err(error) => {
                 self.last_errors
                     .lock()
-                    .insert(model_id.to_string(), error.clone());
+                    .insert(entry.id.to_string(), error.clone());
             }
         }
         result
@@ -475,12 +608,15 @@ impl LocalModelInstaller {
                 .join(STAGING_DIR)
                 .join(format!("{}-{}.partial", entry.id, Uuid::new_v4()));
         let result = async {
+            self.set_in_flight_phase(entry.id, LocalModelInstallPhase::Downloading);
             self.transport
                 .download(entry, &staging_path, cancellation, progress)
                 .await?;
             if cancellation.is_cancelled() {
                 return Err(LocalModelInstallError::cancelled());
             }
+
+            self.set_in_flight_phase(entry.id, LocalModelInstallPhase::Verifying);
             if let Some(callback) = progress {
                 callback(LocalModelInstallProgress {
                     model_id: entry.id.to_string(),
@@ -489,9 +625,31 @@ impl LocalModelInstaller {
                     total_bytes: entry.expected_bytes,
                 });
             }
-            verify_artifact(&staging_path, entry.expected_bytes, entry.sha256)?;
+            verify_artifact_async(
+                staging_path.clone(),
+                entry.expected_bytes,
+                entry.sha256.to_string(),
+                cancellation.clone(),
+                self.verification_observer(),
+            )
+            .await?;
+            if cancellation.is_cancelled() {
+                return Err(LocalModelInstallError::cancelled());
+            }
+
             validate_storage_layout(&self.root)?;
-            promote_artifact(&self.root, entry, &staging_path)?;
+            self.set_in_flight_phase(entry.id, LocalModelInstallPhase::Promoting);
+            self.notify_promotion_checkpoint(PromotionCheckpoint::BeforeRename);
+            if cancellation.is_cancelled() {
+                return Err(LocalModelInstallError::cancelled());
+            }
+            let final_path = promote_artifact_file(&self.root, entry, &staging_path)?;
+            self.notify_promotion_checkpoint(PromotionCheckpoint::AfterRename);
+            if cancellation.is_cancelled() {
+                let _ = fs::remove_file(&final_path);
+                return Err(LocalModelInstallError::cancelled());
+            }
+
             Ok(LocalModelInstallOutcome {
                 model_id: entry.id.to_string(),
                 revision: entry.revision.to_string(),
@@ -511,10 +669,10 @@ impl LocalModelInstaller {
         selected_model_id: &str,
     ) -> LocalModelDescriptor {
         let error = self.last_errors.lock().get(entry.id).cloned();
-        let in_flight = self.in_flight.lock().contains_key(entry.id);
+        let in_flight_state = self.in_flight_install_state(entry.id);
         let installed = self.install_is_valid(entry);
-        let install_state = if in_flight {
-            LocalModelInstallState::Downloading
+        let install_state = if let Some(in_flight_state) = in_flight_state {
+            in_flight_state
         } else if installed {
             LocalModelInstallState::Installed
         } else if error.is_some() {
@@ -674,11 +832,57 @@ fn ensure_plain_directory(
     Ok(())
 }
 
+async fn verify_artifact_async(
+    path: PathBuf,
+    expected_bytes: u64,
+    expected_sha256: String,
+    cancellation: CancellationToken,
+    observer: Option<VerificationObserver>,
+) -> Result<(), LocalModelInstallError> {
+    let worker_cancellation = cancellation.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        verify_artifact_cancellable(
+            &path,
+            expected_bytes,
+            &expected_sha256,
+            &worker_cancellation,
+            observer.as_ref(),
+        )
+    })
+    .await
+    .map_err(|_| LocalModelInstallError::io("verify the downloaded local model"))?;
+
+    if cancellation.is_cancelled() {
+        return Err(LocalModelInstallError::cancelled());
+    }
+    result
+}
+
+#[cfg(test)]
 fn verify_artifact(
     path: &Path,
     expected_bytes: u64,
     expected_sha256: &str,
 ) -> Result<(), LocalModelInstallError> {
+    verify_artifact_cancellable(
+        path,
+        expected_bytes,
+        expected_sha256,
+        &CancellationToken::new(),
+        None,
+    )
+}
+
+fn verify_artifact_cancellable(
+    path: &Path,
+    expected_bytes: u64,
+    expected_sha256: &str,
+    cancellation: &CancellationToken,
+    observer: Option<&VerificationObserver>,
+) -> Result<(), LocalModelInstallError> {
+    if cancellation.is_cancelled() {
+        return Err(LocalModelInstallError::cancelled());
+    }
     let metadata = fs::symlink_metadata(path)
         .map_err(|_| LocalModelInstallError::io("inspect the downloaded local model"))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -698,13 +902,25 @@ fn verify_artifact(
     let mut context = Sha256Context::new(&SHA256);
     let mut buffer = vec![0_u8; VERIFY_BUFFER_BYTES];
     loop {
+        if cancellation.is_cancelled() {
+            return Err(LocalModelInstallError::cancelled());
+        }
         let read = reader
             .read(&mut buffer)
             .map_err(|_| LocalModelInstallError::io("verify the downloaded local model"))?;
         if read == 0 {
             break;
         }
+        if let Some(observer) = observer {
+            observer();
+        }
+        if cancellation.is_cancelled() {
+            return Err(LocalModelInstallError::cancelled());
+        }
         context.update(&buffer[..read]);
+    }
+    if cancellation.is_cancelled() {
+        return Err(LocalModelInstallError::cancelled());
     }
     let actual = context.finish();
     let actual_hex = actual
@@ -778,11 +994,11 @@ fn write_install_marker(
     result
 }
 
-fn promote_artifact(
+fn promote_artifact_file(
     root: &Path,
     entry: &'static LocalModelCatalogEntry,
     staging_path: &Path,
-) -> Result<(), LocalModelInstallError> {
+) -> Result<PathBuf, LocalModelInstallError> {
     let model_dir = root.join(entry.id);
     ensure_plain_directory(&model_dir, "create the local model directory")?;
     let revision_dir = model_dir.join(entry.revision);
@@ -802,11 +1018,42 @@ fn promote_artifact(
         Err(_) => {
             return Err(LocalModelInstallError::io(
                 "inspect the previous local model artifact",
-            ))
+            ));
         }
     }
     fs::rename(staging_path, &final_path).map_err(|_| LocalModelInstallError::promotion())?;
+    Ok(final_path)
+}
 
+fn remove_pending_artifact(
+    root: &Path,
+    entry: &'static LocalModelCatalogEntry,
+) -> Result<(), LocalModelInstallError> {
+    let final_path = root
+        .join(entry.id)
+        .join(entry.revision)
+        .join(entry.artifact_filename);
+    match fs::symlink_metadata(&final_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            Err(LocalModelInstallError::corrupt_install())
+        }
+        Ok(_) => fs::remove_file(final_path)
+            .map_err(|_| LocalModelInstallError::io("remove a cancelled local model artifact")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(LocalModelInstallError::io(
+            "inspect a cancelled local model artifact",
+        )),
+    }
+}
+
+#[cfg(test)]
+fn promote_artifact(
+    root: &Path,
+    entry: &'static LocalModelCatalogEntry,
+    staging_path: &Path,
+) -> Result<(), LocalModelInstallError> {
+    let final_path = promote_artifact_file(root, entry, staging_path)?;
+    let revision_dir = root.join(entry.id).join(entry.revision);
     if let Err(error) = write_install_marker(&revision_dir, entry) {
         let _ = fs::remove_file(&final_path);
         return Err(error);
@@ -946,10 +1193,13 @@ mod tests {
         let installer =
             LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
         let model_id = super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID;
-        installer
-            .in_flight
-            .lock()
-            .insert(model_id.to_string(), CancellationToken::new());
+        installer.in_flight.lock().insert(
+            model_id.to_string(),
+            InFlightInstall {
+                cancellation: CancellationToken::new(),
+                phase: LocalModelInstallPhase::Downloading,
+            },
+        );
         let error = installer.install(model_id, None).await.unwrap_err();
         assert_eq!(error.kind, LocalModelInstallErrorKind::Busy);
     }
@@ -965,10 +1215,13 @@ mod tests {
             LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
         let model_id = super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID;
         let token = CancellationToken::new();
-        installer
-            .in_flight
-            .lock()
-            .insert(model_id.to_string(), token.clone());
+        installer.in_flight.lock().insert(
+            model_id.to_string(),
+            InFlightInstall {
+                cancellation: token.clone(),
+                phase: LocalModelInstallPhase::Downloading,
+            },
+        );
         assert!(installer.cancel(model_id));
         assert!(token.is_cancelled());
         assert!(!installer.cancel("qwen3-0-6b-instruct-q4-k-m"));

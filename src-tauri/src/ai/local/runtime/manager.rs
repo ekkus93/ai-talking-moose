@@ -243,7 +243,9 @@ impl LocalRuntimeManager {
                 descriptor.id == model_id
                     && matches!(
                         descriptor.install_state,
-                        LocalModelInstallState::Downloading | LocalModelInstallState::Verifying
+                        LocalModelInstallState::Downloading
+                            | LocalModelInstallState::Verifying
+                            | LocalModelInstallState::Promoting
                     )
             }) {
                 return Err(LocalRuntimeError::new(
