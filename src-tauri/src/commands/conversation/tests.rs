@@ -1,4 +1,5 @@
 use super::*;
+use crate::ai::types::{ProviderErrorKind, TextProvider};
 use crate::audio::capture::AudioCapture;
 use crate::test_support::{assert_log_capture_live, capture_logs};
 use serde_json::json;
@@ -78,6 +79,85 @@ fn private_memory_consumed_by_conversation_prompt_never_enters_tracing() {
     );
     assert_log_capture_live(&logs);
     assert!(!logs.contains(PRIVATE_MEMORY));
+}
+
+#[tokio::test]
+async fn typed_text_request_uses_one_snapshot_across_concurrent_settings_change() {
+    const PRIVATE_MEMORY: &str = "LLMR_P4_TYPED_PRIVATE_MEMORY";
+    let state = AppState::new_for_tests().unwrap();
+    state
+        .memory
+        .remember(PRIVATE_MEMORY, Some("p4-request-snapshot"))
+        .unwrap();
+    {
+        let mut settings = state.settings.write();
+        settings.text_provider = TextProvider::Local;
+        settings.local_text_model = "missing-local-model-a".to_string();
+        settings.memory_enabled = true;
+        settings.save_transcripts = true;
+        settings.dry = 0.11;
+    }
+
+    let captured = Arc::new(tokio::sync::Barrier::new(2));
+    let resume = Arc::new(tokio::sync::Barrier::new(2));
+    let request_state = state.clone();
+    let request_captured = captured.clone();
+    let request_resume = resume.clone();
+
+    let in_flight = tokio::spawn(async move {
+        let snapshot = request_state.capture_text_request_settings();
+        request_captured.wait().await;
+        request_resume.wait().await;
+        let prompt = build_typed_text_system_instruction(&request_state, &snapshot);
+        let error = generate_typed_text_with_snapshot(
+            &request_state,
+            &snapshot,
+            "request A".to_string(),
+        )
+        .await
+        .expect_err("captured Local request should fail as Local");
+        (snapshot, prompt, error.kind)
+    });
+
+    captured.wait().await;
+    {
+        let mut settings = state.settings.write();
+        settings.text_provider = TextProvider::Google;
+        settings.google_text_model = "gemini-3.6-flash".to_string();
+        settings.memory_enabled = false;
+        settings.save_transcripts = false;
+        settings.dry = 0.92;
+    }
+    resume.wait().await;
+
+    let (captured_snapshot, captured_prompt, captured_error_kind) =
+        in_flight.await.unwrap();
+    assert_eq!(captured_snapshot.settings.text_provider, TextProvider::Local);
+    assert_eq!(
+        captured_snapshot.settings.local_text_model,
+        "missing-local-model-a"
+    );
+    assert!(captured_snapshot.settings.memory_enabled);
+    assert!(captured_snapshot.settings.save_transcripts);
+    assert_eq!(captured_snapshot.character_config.personality.dry, 0.11);
+    assert!(captured_prompt.contains(PRIVATE_MEMORY));
+    assert_eq!(captured_error_kind, ProviderErrorKind::Model);
+
+    let next_snapshot = state.capture_text_request_settings();
+    let next_prompt = build_typed_text_system_instruction(&state, &next_snapshot);
+    assert_eq!(next_snapshot.settings.text_provider, TextProvider::Google);
+    assert!(!next_snapshot.settings.memory_enabled);
+    assert!(!next_snapshot.settings.save_transcripts);
+    assert_eq!(next_snapshot.character_config.personality.dry, 0.92);
+    assert!(!next_prompt.contains(PRIVATE_MEMORY));
+    let next_error = generate_typed_text_with_snapshot(
+        &state,
+        &next_snapshot,
+        "request B".to_string(),
+    )
+    .await
+    .expect_err("next Google request without a key must fail authentication");
+    assert_eq!(next_error.kind, ProviderErrorKind::Auth);
 }
 
 #[test]

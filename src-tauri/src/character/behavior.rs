@@ -94,7 +94,17 @@ impl BehaviorEngine {
         event: &AmbientEvent,
         context: AmbientPolicyContext,
     ) -> AmbientDecision {
-        self.evaluate_ambient_event_at(Utc::now(), event, context)
+        let config = self.config.clone();
+        self.evaluate_ambient_event_with_config(event, context, &config)
+    }
+
+    pub(crate) fn evaluate_ambient_event_with_config(
+        &mut self,
+        event: &AmbientEvent,
+        context: AmbientPolicyContext,
+        config: &CharacterConfig,
+    ) -> AmbientDecision {
+        self.evaluate_ambient_event_at_with_config(Utc::now(), event, context, config)
     }
 
     pub(crate) fn evaluate_ambient_event_at(
@@ -102,6 +112,17 @@ impl BehaviorEngine {
         now: DateTime<Utc>,
         event: &AmbientEvent,
         context: AmbientPolicyContext,
+    ) -> AmbientDecision {
+        let config = self.config.clone();
+        self.evaluate_ambient_event_at_with_config(now, event, context, &config)
+    }
+
+    fn evaluate_ambient_event_at_with_config(
+        &mut self,
+        now: DateTime<Utc>,
+        event: &AmbientEvent,
+        context: AmbientPolicyContext,
+        config: &CharacterConfig,
     ) -> AmbientDecision {
         if !context.privacy_allowed {
             return AmbientDecision::denied(event.category, AmbientDecisionReason::PrivacyDenied);
@@ -115,7 +136,7 @@ impl BehaviorEngine {
                 AmbientDecisionReason::ConversationActive,
             );
         }
-        if !self.config.behavior.unsolicited_comments {
+        if !config.behavior.unsolicited_comments {
             return AmbientDecision::denied(
                 event.category,
                 AmbientDecisionReason::UnsolicitedDisabled,
@@ -123,19 +144,18 @@ impl BehaviorEngine {
         }
 
         let fingerprint = event.fingerprint();
-        let effective_hourly_limit = self
-            .config
+        let effective_hourly_limit = config
             .behavior
             .max_comments_per_hour
             .min(HARD_MAX_AMBIENT_COMMENTS_PER_HOUR);
         if let Err(reason) = self.cooldowns.check_ambient_gate(
             now,
-            self.config.behavior.min_cooldown_seconds,
+            config.behavior.min_cooldown_seconds,
             effective_hourly_limit,
             (
-                self.config.behavior.quiet_hours_enabled,
-                self.config.behavior.quiet_hours_start,
-                self.config.behavior.quiet_hours_end,
+                config.behavior.quiet_hours_enabled,
+                config.behavior.quiet_hours_start,
+                config.behavior.quiet_hours_end,
             ),
             Some(&fingerprint),
         ) {
@@ -154,7 +174,7 @@ impl BehaviorEngine {
             return AmbientDecision::denied(event.category, reason);
         }
 
-        let threshold = 0.8 - (self.config.personality.talkativeness * 0.6);
+        let threshold = 0.8 - (config.personality.talkativeness * 0.6);
         if event.importance < threshold {
             return AmbientDecision::denied(
                 event.category,
