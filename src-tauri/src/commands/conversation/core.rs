@@ -1,4 +1,5 @@
 use crate::ai::types::{LiveOutboundDiagnostics, LiveSessionConfig};
+use crate::app::request_snapshot::TextRequestSettingsSnapshot;
 use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 #[cfg(test)]
@@ -30,6 +31,36 @@ fn build_conversation_system_instruction(state: &AppState, memory_enabled: bool)
     let memories = model_prompt_memories(state, memory_enabled);
     let character_config = state.behavior_engine.lock().config.clone();
     PromptBuilder::build_system_instruction(&character_config, &memories, None, false)
+}
+
+fn build_typed_text_system_instruction(
+    state: &AppState,
+    snapshot: &TextRequestSettingsSnapshot,
+) -> String {
+    let memories = model_prompt_memories(state, snapshot.settings.memory_enabled);
+    PromptBuilder::build_system_instruction(
+        &snapshot.character_config,
+        &memories,
+        None,
+        false,
+    )
+}
+
+async fn generate_typed_text_with_snapshot(
+    state: &AppState,
+    snapshot: &TextRequestSettingsSnapshot,
+    prompt: String,
+) -> Result<crate::ai::types::TextResponse, crate::ai::types::ProviderError> {
+    let system_instruction = build_typed_text_system_instruction(state, snapshot);
+    state
+        .get_text_model_for(&snapshot.settings)
+        .generate(crate::ai::types::TextRequest {
+            prompt,
+            system_instruction: Some(system_instruction),
+            temperature: Some(0.85),
+            max_tokens: Some(1024),
+        })
+        .await
 }
 
 fn normalize_text_message(message: String) -> Result<Option<String>, String> {
@@ -270,7 +301,8 @@ pub async fn send_text_message<R: Runtime>(
     let Some(msg_trimmed) = normalize_text_message(message)? else {
         return Ok(String::new());
     };
-    let settings = state.settings.read().clone();
+    let request_snapshot = state.capture_text_request_settings();
+    let settings = &request_snapshot.settings;
 
     let _ = app.emit("moose://transcript/user", &msg_trimmed);
     persist_transcript_if_enabled(
@@ -283,18 +315,12 @@ pub async fn send_text_message<R: Runtime>(
 
     transition_and_emit(&state.character_state, &app, CharacterState::Thinking)?;
 
-    let system_instruction =
-        build_conversation_system_instruction(state.inner(), settings.memory_enabled);
-
-    let text_model = state.get_text_model();
-    let text_res = match text_model
-        .generate(crate::ai::types::TextRequest {
-            prompt: msg_trimmed,
-            system_instruction: Some(system_instruction),
-            temperature: Some(0.85),
-            max_tokens: Some(1024),
-        })
-        .await
+    let text_res = match generate_typed_text_with_snapshot(
+        state.inner(),
+        &request_snapshot,
+        msg_trimmed,
+    )
+    .await
     {
         Ok(response) => response,
         Err(error_value) => {

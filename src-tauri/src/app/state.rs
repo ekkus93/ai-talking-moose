@@ -1,11 +1,9 @@
 use crate::ai::google::{
     normalize_live_model, normalize_text_model, normalize_tts_model, GoogleAuth,
-    GoogleLiveProvider, GoogleSpeechSynthesizer, GoogleTextModel, DEFAULT_LIVE_MODEL,
-    DEFAULT_TEXT_MODEL, DEFAULT_TTS_MODEL,
+    GoogleLiveProvider, GoogleSpeechSynthesizer, DEFAULT_LIVE_MODEL, DEFAULT_TEXT_MODEL,
+    DEFAULT_TTS_MODEL,
 };
-use crate::ai::local::{
-    global_local_model_installer, LocalRuntimeManager, LocalTextModel, DEFAULT_LOCAL_TEXT_MODEL_ID,
-};
+use crate::ai::local::{LocalRuntimeManager, DEFAULT_LOCAL_TEXT_MODEL_ID};
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::ai::types::TextProvider;
 use crate::asr::moonshine::MoonshineModelInstaller;
@@ -29,6 +27,7 @@ use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use thiserror::Error;
 use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +82,16 @@ pub struct AppSettings {
 }
 
 pub const CURRENT_SETTINGS_VERSION: u32 = 3;
+
+#[derive(Debug, Error)]
+pub enum PersistedSettingsError {
+    #[error(
+        "persisted settings were written by newer application version {found}; this build supports settings version {current}"
+    )]
+    FutureVersion { found: u64, current: u32 },
+    #[error("persisted settings JSON is invalid: {0}")]
+    Decode(#[from] serde_json::Error),
+}
 
 pub const CURRENT_ONBOARDING_VERSION: u32 = 1;
 const ONBOARDING_ACKNOWLEDGED_VERSION_SETTING: &str = "onboarding_acknowledged_version";
@@ -148,8 +157,19 @@ impl AppSettings {
     /// created before an ASR selector or explicit text-provider selector existed.
     /// New profiles default to local Moonshine ASR while legacy profiles without an
     /// ASR selector migrate to Gemini Live audio because that was their only microphone path.
-    pub fn from_persisted_json(json: &str) -> Result<(Self, bool), serde_json::Error> {
+    pub fn from_persisted_json(json: &str) -> Result<(Self, bool), PersistedSettingsError> {
         let value: serde_json::Value = serde_json::from_str(json)?;
+        if let Some(persisted_version) = value
+            .get("settings_version")
+            .and_then(serde_json::Value::as_u64)
+        {
+            if persisted_version > u64::from(CURRENT_SETTINGS_VERSION) {
+                return Err(PersistedSettingsError::FutureVersion {
+                    found: persisted_version,
+                    current: CURRENT_SETTINGS_VERSION,
+                });
+            }
+        }
         let had_asr_mode = value.get("asr_mode").is_some();
         let had_legacy_microphone_permission = value.get("microphone_permission_granted").is_some();
         let had_current_version = value
@@ -421,21 +441,8 @@ impl AppState {
     }
 
     pub fn get_text_model(&self) -> Box<dyn TextModel> {
-        let settings = self.settings.read();
-        match settings.text_provider {
-            TextProvider::Google => {
-                let key = self.secrets.get_google_api_key().unwrap_or_default();
-                Box::new(GoogleTextModel::new(
-                    GoogleAuth::new(key),
-                    settings.google_text_model.clone(),
-                ))
-            }
-            TextProvider::Local => Box::new(LocalTextModel::new(
-                self.local_llm_runtime.clone(),
-                global_local_model_installer(),
-                settings.local_text_model.clone(),
-            )),
-        }
+        let settings = self.settings_snapshot();
+        self.get_text_model_for(&settings)
     }
 
     pub fn get_speech_synthesizer(&self) -> Box<dyn SpeechSynthesizer> {
@@ -573,6 +580,53 @@ mod tests {
         assert_eq!(settings.text_provider, TextProvider::Local);
         assert_eq!(settings.google_text_model, "gemini-3.6-flash");
         assert_eq!(settings.local_text_model, "local-catalog-id");
+    }
+
+    #[test]
+    fn future_settings_version_fails_closed_without_rewriting_persistence() {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let db = Database::new(&path).unwrap();
+        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.insert(
+            "settings_version".to_string(),
+            serde_json::json!(CURRENT_SETTINGS_VERSION + 1),
+        );
+        object.insert(
+            "future_provider_policy".to_string(),
+            serde_json::json!({"private_mode": "future-only"}),
+        );
+        object.insert("tts_voice".to_string(), serde_json::json!("Puck"));
+        let original = serde_json::to_string_pretty(&value).unwrap();
+        db.set_setting("app_settings", &original).unwrap();
+        drop(db);
+
+        let typed_error = AppSettings::from_persisted_json(&original).unwrap_err();
+        assert!(matches!(
+            typed_error,
+            PersistedSettingsError::FutureVersion {
+                found,
+                current: CURRENT_SETTINGS_VERSION,
+            } if found == u64::from(CURRENT_SETTINGS_VERSION + 1)
+        ));
+
+        let secret_store =
+            SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        let startup_error = match AppState::new_with_secret_store(Some(&path), secret_store) {
+            Ok(_) => panic!("future settings must fail startup closed"),
+            Err(error) => error,
+        };
+        assert!(startup_error.contains("newer application version"));
+        assert!(!startup_error.contains("future_provider_policy"));
+        assert!(!startup_error.contains("future-only"));
+
+        let reopened = Database::new(&path).unwrap();
+        assert_eq!(
+            reopened.get_setting("app_settings").unwrap().as_deref(),
+            Some(original.as_str()),
+            "future-version startup failure must not rewrite or strip persisted JSON"
+        );
     }
 
     #[test]

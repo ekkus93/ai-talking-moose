@@ -1,5 +1,6 @@
 use crate::ai::types::TextRequest;
-use crate::app::state::AppState;
+use crate::app::request_snapshot::TextRequestSettingsSnapshot;
+use crate::app::state::{AppSettings, AppState};
 use crate::character::ambient::{AmbientEvent, AmbientEventCategory};
 use crate::character::behavior::AmbientPolicyContext;
 #[cfg(test)]
@@ -22,11 +23,19 @@ fn bound_ambient_output(text: &str) -> Option<String> {
     Some(trimmed.chars().take(MAX_AMBIENT_OUTPUT_CHARS).collect())
 }
 
+fn build_ambient_model_prompt_for(
+    state: &AppState,
+    snapshot: &TextRequestSettingsSnapshot,
+    event_summary: &str,
+) -> String {
+    let memories = model_prompt_memories(state, snapshot.settings.memory_enabled);
+    PromptBuilder::build_ambient_prompt(&snapshot.character_config, event_summary, &memories)
+}
+
+#[cfg(test)]
 fn build_ambient_model_prompt(state: &AppState, event_summary: &str) -> String {
-    let memory_enabled = state.settings.read().memory_enabled;
-    let memories = model_prompt_memories(state, memory_enabled);
-    let config = state.behavior_engine.lock().config.clone();
-    PromptBuilder::build_ambient_prompt(&config, event_summary, &memories)
+    let snapshot = state.capture_text_request_settings();
+    build_ambient_model_prompt_for(state, &snapshot, event_summary)
 }
 
 fn ambient_text_request(prompt: String) -> TextRequest {
@@ -38,23 +47,31 @@ fn ambient_text_request(prompt: String) -> TextRequest {
     }
 }
 
-async fn generate_ambient_text(
+async fn generate_ambient_text_for(
     state: &AppState,
+    settings: &AppSettings,
     prompt: String,
 ) -> Result<String, crate::ai::types::ProviderError> {
     state
-        .get_text_model()
+        .get_text_model_for(settings)
         .generate(ambient_text_request(prompt))
         .await
         .map(|response| response.text)
 }
 
-fn ambient_privacy_allowed(state: &AppState, category: AmbientEventCategory) -> bool {
-    let settings = state.settings.read();
+#[cfg(test)]
+async fn generate_ambient_text(
+    state: &AppState,
+    prompt: String,
+) -> Result<String, crate::ai::types::ProviderError> {
+    let settings = state.settings_snapshot();
+    generate_ambient_text_for(state, &settings, prompt).await
+}
+
+fn ambient_privacy_allowed_for(settings: &AppSettings, category: AmbientEventCategory) -> bool {
     match category {
         AmbientEventCategory::Application => settings.active_app_observation,
-        // Window-title observation is deliberately unsupported in V1. Keep this
-        // fail-closed even if a legacy settings blob contains a stale true value.
+        // Window-title observation remains deliberately unsupported in V1.
         AmbientEventCategory::WindowTitle => false,
         AmbientEventCategory::Manual
         | AmbientEventCategory::Idle
@@ -65,15 +82,30 @@ fn ambient_privacy_allowed(state: &AppState, category: AmbientEventCategory) -> 
     }
 }
 
+#[cfg(test)]
+fn ambient_privacy_allowed(state: &AppState, category: AmbientEventCategory) -> bool {
+    let settings = state.settings_snapshot();
+    ambient_privacy_allowed_for(&settings, category)
+}
+
+fn ambient_policy_context_for(
+    state: &AppState,
+    settings: &AppSettings,
+    category: AmbientEventCategory,
+) -> AmbientPolicyContext {
+    AmbientPolicyContext {
+        privacy_allowed: ambient_privacy_allowed_for(settings, category),
+        muted: *state.is_muted.read(),
+        conversation_active: state.conversation_mgr.is_active(),
+    }
+}
+
 fn ambient_policy_context(
     state: &AppState,
     category: AmbientEventCategory,
 ) -> AmbientPolicyContext {
-    AmbientPolicyContext {
-        privacy_allowed: ambient_privacy_allowed(state, category),
-        muted: *state.is_muted.read(),
-        conversation_active: state.conversation_mgr.is_active(),
-    }
+    let settings = state.settings_snapshot();
+    ambient_policy_context_for(state, &settings, category)
 }
 
 fn configured_ambient_hide_delay(state: &AppState) -> Duration {
@@ -142,11 +174,12 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
 ) -> Result<Option<String>, String> {
-    let context = ambient_policy_context(state, event.category);
+    let request_snapshot = state.capture_text_request_settings();
+    let context = ambient_policy_context_for(state, &request_snapshot.settings, event.category);
     let decision = state
         .behavior_engine
         .lock()
-        .evaluate_ambient_event(&event, context);
+        .evaluate_ambient_event_with_config(&event, context, &request_snapshot.character_config);
     let _ = app.emit("moose://ambient/decision", &decision);
     if !decision.should_speak {
         return Ok(None);
@@ -168,8 +201,9 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
     }
     transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;
 
-    let prompt = build_ambient_model_prompt(state, &event.summary);
-    let generated = match generate_ambient_text(state, prompt).await {
+    let prompt = build_ambient_model_prompt_for(state, &request_snapshot, &event.summary);
+    let generated = match generate_ambient_text_for(state, &request_snapshot.settings, prompt).await
+    {
         Ok(text) => text,
         Err(error_value) => {
             restore_after_ambient_failure(state, app, appeared_for_ambient)?;
@@ -320,6 +354,93 @@ mod tests {
             enabled_prompt.contains(PRIVATE_MEMORY),
             "re-enabling memory must restore retained memory to the ambient prompt"
         );
+    }
+
+    #[tokio::test]
+    async fn ambient_request_uses_one_snapshot_across_concurrent_settings_change() {
+        const PRIVATE_MEMORY: &str = "LLMR_P4_AMBIENT_PRIVATE_MEMORY";
+        let state = AppState::new_for_tests().unwrap();
+        state
+            .memory
+            .remember(PRIVATE_MEMORY, Some("p4-ambient-snapshot"))
+            .unwrap();
+        {
+            let mut settings = state.settings.write();
+            settings.text_provider = TextProvider::Local;
+            settings.local_text_model = "missing-local-model-a".to_string();
+            settings.memory_enabled = true;
+            settings.active_app_observation = true;
+            settings.talkativeness = 1.0;
+        }
+
+        let captured = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+        let resume = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+        let request_state = state.clone();
+        let request_captured = captured.clone();
+        let request_resume = resume.clone();
+
+        let in_flight = tokio::spawn(async move {
+            let snapshot = request_state.capture_text_request_settings();
+            request_captured.wait().await;
+            request_resume.wait().await;
+            let privacy_allowed =
+                ambient_privacy_allowed_for(&snapshot.settings, AmbientEventCategory::Application);
+            let prompt =
+                build_ambient_model_prompt_for(&request_state, &snapshot, "application changed");
+            let error =
+                generate_ambient_text_for(&request_state, &snapshot.settings, prompt.clone())
+                    .await
+                    .expect_err("captured ambient request should remain Local");
+            (snapshot, privacy_allowed, prompt, error.kind)
+        });
+
+        captured.wait().await;
+        {
+            let mut settings = state.settings.write();
+            settings.text_provider = TextProvider::Google;
+            settings.google_text_model = "gemini-3.6-flash".to_string();
+            settings.memory_enabled = false;
+            settings.active_app_observation = false;
+            settings.talkativeness = 0.0;
+        }
+        resume.wait().await;
+
+        let (captured_snapshot, privacy_allowed, captured_prompt, error_kind) =
+            in_flight.await.unwrap();
+        assert_eq!(
+            captured_snapshot.settings.text_provider,
+            TextProvider::Local
+        );
+        assert!(captured_snapshot.settings.memory_enabled);
+        assert!(privacy_allowed);
+        assert_eq!(
+            captured_snapshot.character_config.personality.talkativeness,
+            1.0
+        );
+        assert!(captured_prompt.contains(PRIVATE_MEMORY));
+        assert_eq!(error_kind, ProviderErrorKind::Model);
+
+        let next_snapshot = state.capture_text_request_settings();
+        assert_eq!(next_snapshot.settings.text_provider, TextProvider::Google);
+        assert!(!next_snapshot.settings.memory_enabled);
+        assert!(!ambient_privacy_allowed_for(
+            &next_snapshot.settings,
+            AmbientEventCategory::Application
+        ));
+        assert_eq!(
+            next_snapshot.character_config.personality.talkativeness,
+            0.0
+        );
+        let next_prompt =
+            build_ambient_model_prompt_for(&state, &next_snapshot, "application changed");
+        assert!(!next_prompt.contains(PRIVATE_MEMORY));
+        let next_error = generate_ambient_text_for(&state, &next_snapshot.settings, next_prompt)
+            .await
+            .expect_err("next ambient Google request without key must fail auth");
+        assert_eq!(next_error.kind, ProviderErrorKind::Auth);
+
+        let delivery_context = ambient_policy_context(&state, AmbientEventCategory::Application);
+        assert!(!delivery_context.privacy_allowed);
     }
 
     #[test]
