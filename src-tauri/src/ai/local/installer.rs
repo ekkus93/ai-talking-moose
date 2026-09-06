@@ -18,6 +18,7 @@ const STAGING_DIR: &str = ".staging";
 const INSTALL_MARKER: &str = ".talking-moose-local-llm.json";
 const INSTALL_MARKER_VERSION: u32 = 1;
 const VERIFY_BUFFER_BYTES: usize = 1024 * 1024;
+const MAX_MODEL_REDIRECTS: usize = 5;
 
 static GLOBAL_LOCAL_MODEL_INSTALLER: OnceLock<Arc<LocalModelInstaller>> = OnceLock::new();
 
@@ -228,10 +229,38 @@ struct ReqwestLocalModelDownloadTransport {
     client: reqwest::Client,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModelRedirectDecision {
+    Follow,
+    RejectInsecureScheme,
+    RejectLimit,
+}
+
+fn model_redirect_decision(url: &reqwest::Url, previous_count: usize) -> ModelRedirectDecision {
+    if url.scheme() != "https" {
+        ModelRedirectDecision::RejectInsecureScheme
+    } else if previous_count > MAX_MODEL_REDIRECTS {
+        ModelRedirectDecision::RejectLimit
+    } else {
+        ModelRedirectDecision::Follow
+    }
+}
+
 impl ReqwestLocalModelDownloadTransport {
     fn new() -> Result<Self, LocalModelInstallError> {
+        let redirect = reqwest::redirect::Policy::custom(|attempt| {
+            match model_redirect_decision(attempt.url(), attempt.previous().len()) {
+                ModelRedirectDecision::Follow => attempt.follow(),
+                ModelRedirectDecision::RejectInsecureScheme => {
+                    attempt.error("local model redirect target must use HTTPS")
+                }
+                ModelRedirectDecision::RejectLimit => {
+                    attempt.error("local model redirect limit exceeded")
+                }
+            }
+        });
         let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(5))
+            .redirect(redirect)
             .build()
             .map_err(|_| LocalModelInstallError::network())?;
         Ok(Self { client })
@@ -323,6 +352,84 @@ struct InFlightInstall {
     phase: LocalModelInstallPhase,
 }
 
+#[derive(Debug, Clone)]
+struct RecordedInstallError {
+    sequence: u64,
+    error: LocalModelInstallError,
+}
+
+#[derive(Debug, Default)]
+struct InstallErrorState {
+    next_sequence: u64,
+    by_model: HashMap<String, RecordedInstallError>,
+}
+
+impl InstallErrorState {
+    fn record(&mut self, model_id: &str, error: LocalModelInstallError) {
+        self.next_sequence = self.next_sequence.saturating_add(1);
+        self.by_model.insert(
+            model_id.to_string(),
+            RecordedInstallError {
+                sequence: self.next_sequence,
+                error,
+            },
+        );
+    }
+
+    fn clear(&mut self, model_id: &str) {
+        self.by_model.remove(model_id);
+    }
+
+    fn for_model(&self, model_id: &str) -> Option<LocalModelInstallError> {
+        self.by_model
+            .get(model_id)
+            .map(|recorded| recorded.error.clone())
+    }
+
+    fn latest(&self) -> Option<LocalModelInstallError> {
+        self.by_model
+            .values()
+            .max_by_key(|recorded| recorded.sequence)
+            .map(|recorded| recorded.error.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeArtifactFingerprint {
+    canonical_path: PathBuf,
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(unix)]
+    changed_seconds: i64,
+    #[cfg(unix)]
+    changed_nanoseconds: i64,
+}
+
+impl RuntimeArtifactFingerprint {
+    fn from_metadata(canonical_path: PathBuf, metadata: &fs::Metadata) -> Self {
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+
+        Self {
+            canonical_path,
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            #[cfg(unix)]
+            device: metadata.dev(),
+            #[cfg(unix)]
+            inode: metadata.ino(),
+            #[cfg(unix)]
+            changed_seconds: metadata.ctime(),
+            #[cfg(unix)]
+            changed_nanoseconds: metadata.ctime_nsec(),
+        }
+    }
+}
+
 type VerificationObserver = Arc<dyn Fn() + Send + Sync>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -339,9 +446,12 @@ pub struct LocalModelInstaller {
     root: PathBuf,
     transport: Arc<dyn LocalModelDownloadTransport>,
     in_flight: Mutex<HashMap<String, InFlightInstall>>,
-    last_errors: Mutex<HashMap<String, LocalModelInstallError>>,
+    error_state: Mutex<InstallErrorState>,
+    runtime_verifications: Mutex<HashMap<String, RuntimeArtifactFingerprint>>,
     #[cfg(test)]
     verification_observer: Mutex<Option<VerificationObserver>>,
+    #[cfg(test)]
+    runtime_verification_observer: Mutex<Option<VerificationObserver>>,
     #[cfg(test)]
     promotion_observer: Mutex<Option<PromotionObserver>>,
 }
@@ -357,9 +467,12 @@ impl LocalModelInstaller {
             root,
             transport: Arc::new(ReqwestLocalModelDownloadTransport::new()?),
             in_flight: Mutex::new(HashMap::new()),
-            last_errors: Mutex::new(HashMap::new()),
+            error_state: Mutex::new(InstallErrorState::default()),
+            runtime_verifications: Mutex::new(HashMap::new()),
             #[cfg(test)]
             verification_observer: Mutex::new(None),
+            #[cfg(test)]
+            runtime_verification_observer: Mutex::new(None),
             #[cfg(test)]
             promotion_observer: Mutex::new(None),
         })
@@ -380,9 +493,12 @@ impl LocalModelInstaller {
             root,
             transport,
             in_flight: Mutex::new(HashMap::new()),
-            last_errors: Mutex::new(HashMap::new()),
+            error_state: Mutex::new(InstallErrorState::default()),
+            runtime_verifications: Mutex::new(HashMap::new()),
             #[cfg(test)]
             verification_observer: Mutex::new(None),
+            #[cfg(test)]
+            runtime_verification_observer: Mutex::new(None),
             #[cfg(test)]
             promotion_observer: Mutex::new(None),
         })
@@ -415,6 +531,11 @@ impl LocalModelInstaller {
     }
 
     #[cfg(test)]
+    fn set_runtime_verification_observer(&self, observer: Option<VerificationObserver>) {
+        *self.runtime_verification_observer.lock() = observer;
+    }
+
+    #[cfg(test)]
     fn set_promotion_observer(&self, observer: Option<PromotionObserver>) {
         *self.promotion_observer.lock() = observer;
     }
@@ -427,6 +548,13 @@ impl LocalModelInstaller {
         #[cfg(not(test))]
         {
             None
+        }
+    }
+
+    fn notify_runtime_verification(&self) {
+        #[cfg(test)]
+        if let Some(observer) = self.runtime_verification_observer.lock().clone() {
+            observer();
         }
     }
 
@@ -458,12 +586,24 @@ impl LocalModelInstaller {
     }
 
     pub fn diagnostics(&self) -> LocalModelDiagnostics {
-        let last_error = self.last_errors.lock().values().last().cloned();
+        let last_error = self.error_state.lock().latest();
         LocalModelDiagnostics {
             model_root_ready: validate_storage_layout(&self.root).is_ok(),
             installs_in_progress: self.in_flight.lock().len(),
             last_error,
         }
+    }
+
+    fn record_install_error(&self, model_id: &str, error: LocalModelInstallError) {
+        self.error_state.lock().record(model_id, error);
+    }
+
+    fn clear_install_error(&self, model_id: &str) {
+        self.error_state.lock().clear(model_id);
+    }
+
+    fn clear_runtime_verification(&self, model_id: &str) {
+        self.runtime_verifications.lock().remove(model_id);
     }
 
     pub fn cancel(&self, model_id: &str) -> bool {
@@ -493,13 +633,14 @@ impl LocalModelInstaller {
         progress: Option<LocalModelInstallProgressCallback>,
     ) -> Result<LocalModelInstallOutcome, LocalModelInstallError> {
         validate_storage_layout(&self.root)?;
-        if self.install_is_valid(entry) {
+        if self.marker_shape_is_valid(entry) {
             return Ok(LocalModelInstallOutcome {
                 model_id: entry.id.to_string(),
                 revision: entry.revision.to_string(),
                 installed_bytes: entry.expected_bytes,
             });
         }
+        self.clear_runtime_verification(entry.id);
 
         let cancellation = {
             let mut in_flight = self.in_flight.lock();
@@ -555,14 +696,8 @@ impl LocalModelInstaller {
         };
 
         match &result {
-            Ok(_) => {
-                self.last_errors.lock().remove(entry.id);
-            }
-            Err(error) => {
-                self.last_errors
-                    .lock()
-                    .insert(entry.id.to_string(), error.clone());
-            }
+            Ok(_) => self.clear_install_error(entry.id),
+            Err(error) => self.record_install_error(entry.id, error.clone()),
         }
         result
     }
@@ -592,7 +727,8 @@ impl LocalModelInstaller {
                 ))
             }
         }
-        self.last_errors.lock().remove(model_id);
+        self.clear_install_error(model_id);
+        self.clear_runtime_verification(model_id);
         Ok(())
     }
 
@@ -668,9 +804,9 @@ impl LocalModelInstaller {
         entry: &'static LocalModelCatalogEntry,
         selected_model_id: &str,
     ) -> LocalModelDescriptor {
-        let error = self.last_errors.lock().get(entry.id).cloned();
+        let error = self.error_state.lock().for_model(entry.id);
         let in_flight_state = self.in_flight_install_state(entry.id);
-        let installed = self.install_is_valid(entry);
+        let installed = self.marker_shape_is_valid(entry);
         let install_state = if let Some(in_flight_state) = in_flight_state {
             in_flight_state
         } else if installed {
@@ -699,7 +835,105 @@ impl LocalModelInstaller {
         }
     }
 
-    fn install_is_valid(&self, entry: &'static LocalModelCatalogEntry) -> bool {
+    fn runtime_artifact_fingerprint(
+        &self,
+        entry: &'static LocalModelCatalogEntry,
+    ) -> Result<(PathBuf, RuntimeArtifactFingerprint), LocalModelInstallError> {
+        if !self.marker_shape_is_valid(entry) {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+
+        let artifact_path = self
+            .root
+            .join(entry.id)
+            .join(entry.revision)
+            .join(entry.artifact_filename);
+        let canonical_root =
+            fs::canonicalize(&self.root).map_err(|_| LocalModelInstallError::corrupt_install())?;
+        let canonical_path = fs::canonicalize(&artifact_path)
+            .map_err(|_| LocalModelInstallError::corrupt_install())?;
+        if !canonical_path.starts_with(&canonical_root) {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+
+        let metadata = fs::symlink_metadata(&artifact_path)
+            .map_err(|_| LocalModelInstallError::corrupt_install())?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() != entry.expected_bytes
+        {
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+        let fingerprint =
+            RuntimeArtifactFingerprint::from_metadata(canonical_path.clone(), &metadata);
+        Ok((canonical_path, fingerprint))
+    }
+
+    pub(crate) fn verified_runtime_artifact_path(
+        &self,
+        entry: &'static LocalModelCatalogEntry,
+    ) -> Result<PathBuf, LocalModelInstallError> {
+        let (canonical_path, fingerprint) = match self.runtime_artifact_fingerprint(entry) {
+            Ok(result) => result,
+            Err(error) => {
+                self.clear_runtime_verification(entry.id);
+                return Err(error);
+            }
+        };
+        if self
+            .runtime_verifications
+            .lock()
+            .get(entry.id)
+            .is_some_and(|cached| cached == &fingerprint)
+        {
+            return Ok(canonical_path);
+        }
+
+        self.notify_runtime_verification();
+        if let Err(error) = verify_artifact_cancellable(
+            &canonical_path,
+            entry.expected_bytes,
+            entry.sha256,
+            &CancellationToken::new(),
+            None,
+        ) {
+            self.clear_runtime_verification(entry.id);
+            return Err(error);
+        }
+
+        let (canonical_after, fingerprint_after) = match self.runtime_artifact_fingerprint(entry) {
+            Ok(result) => result,
+            Err(error) => {
+                self.clear_runtime_verification(entry.id);
+                return Err(error);
+            }
+        };
+        if fingerprint_after != fingerprint {
+            self.clear_runtime_verification(entry.id);
+            return Err(LocalModelInstallError::corrupt_install());
+        }
+
+        self.runtime_verifications
+            .lock()
+            .insert(entry.id.to_string(), fingerprint_after);
+        Ok(canonical_after)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_runtime_verification_cache_for_test(
+        &self,
+        entry: &'static LocalModelCatalogEntry,
+    ) -> Result<(), LocalModelInstallError> {
+        let (_, fingerprint) = self.runtime_artifact_fingerprint(entry)?;
+        self.runtime_verifications
+            .lock()
+            .insert(entry.id.to_string(), fingerprint);
+        Ok(())
+    }
+
+    // This is deliberately a fast marker/shape check for UI/status refreshes. Runtime use has a
+    // separate cryptographic verification path in `verified_runtime_artifact_path`.
+    pub(crate) fn marker_shape_is_valid(&self, entry: &'static LocalModelCatalogEntry) -> bool {
         if validate_storage_layout(&self.root).is_err() {
             return false;
         }

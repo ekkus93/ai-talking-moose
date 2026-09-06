@@ -89,7 +89,20 @@ shasum -a 256 "$candidate"
 
 Record the exact integer byte count and lowercase 64-hex SHA-256 in `catalog.rs`. Verify them a second time from a separately retrieved artifact or independent evidence when practical. Do not round the production `expected_bytes` value to a displayed MB size.
 
-The production installer independently enforces both values before atomic promotion. A mismatch is an install failure, not permission to accept a nearby artifact.
+The production installer independently enforces both values before atomic promotion. A mismatch is an install failure, not permission to accept a nearby artifact. Every redirect target is also required to remain on HTTPS, with a finite redirect-hop limit; a downgrade to HTTP is rejected before redirected bytes can be trusted.
+
+### Installed state versus runtime verification
+
+The ordinary model-list/status path intentionally uses a **marker/shape-valid install** check: catalog-owned directories must be plain directories, the GGUF must be a plain file with the expected byte count, and the install marker must exactly match the pinned catalog identity. This keeps Settings/status refreshes fast and does **not** claim that the current GGUF bytes have just been cryptographically re-hashed.
+
+Before a model is handed to llama.cpp for runtime use, the backend performs a separate SHA-256 verification of the current GGUF bytes against the pinned catalog hash. Successful runtime verification is cached only in memory for the current process. The cache key/fingerprint includes the canonical artifact path, exact length, modification/change metadata, and file identity where the platform exposes it. If that fingerprint changes, the next runtime use re-hashes the GGUF. The fingerprint is re-read after hashing as a fail-closed guard against mutation during verification. Installer replacement/delete operations also invalidate the cached verification.
+
+Therefore:
+
+- `installed` in ordinary UI/status data means marker/shape-valid and available for a runtime verification attempt;
+- **verified for runtime use** means the current bytes matched the pinned SHA-256 under the runtime verification/cache policy;
+- repeated generations against the same unchanged artifact do not re-hash the full GGUF;
+- a same-size replacement or mutation that changes the observed file fingerprint is re-hashed and fails closed if its SHA-256 no longer matches.
 
 ## Adding or changing a catalog entry
 
@@ -141,6 +154,6 @@ If the changed model affects the recommended default, base that decision on meas
 
 ## Integrity and distribution policy
 
-The production installer downloads only after explicit user action, streams into a unique staging file, bounds bytes against the catalog value, verifies exact size and SHA-256, and only then promotes the artifact into the revision-scoped install directory.
+The production installer downloads only after explicit user action, requires HTTPS for the initial catalog URL and every redirect hop, streams into a unique staging file, bounds bytes against the catalog value, verifies exact size and SHA-256, and only then promotes the artifact into the revision-scoped install directory. Runtime load performs the additional current-byte verification described above before handing an artifact to llama.cpp.
 
 Ordinary CI, release builds, generated-contract export, and macOS bundles remain model-weight-free. `scripts/check_local_llm_packaging_policy.py`, `.gitignore`, and `scripts/verify_macos_bundle.sh` enforce that boundary. Model licenses are therefore tracked separately from shipped runtime/dependency notices.
