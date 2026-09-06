@@ -2,11 +2,11 @@
 
 ## Status
 
-**P2 installer integrity/network/diagnostics implementation is prepared for exact-head CI validation.**
+**P2 installer integrity/network/diagnostics remediation is complete and validated on merged `master`.**
 
 This record covers `LLMR-200` through `LLMR-204` from `docs/TODO(20260905-141500).md`. It builds on the merged P1 cancellation work and does not close later runtime-diagnostics, settings, frontend-write, template, or final-gate tasks.
 
-Implementation base: `6f9aa2dac6f99d69eaa86d8e9ea666173124e7eb` (the exact merged P1 `master` that passed post-merge CI `34010580951`; the P0/P1 closure PR is documentation-only).
+Final P2 implementation base: `43881dca61fac165cd8472029d63d3c69d67e8df` (merged P0/P1 closure `master`).
 
 ## LLMR-200 — HTTPS redirect invariant
 
@@ -81,12 +81,37 @@ Installer concerns remain locally separated by dedicated state/helpers for:
 
 The public Tauri command and frontend contract surfaces are unchanged by P2.
 
-## Validation state
+## Validation and closure evidence
 
-Local dependency-independent checks before push:
+Dependency-independent checks before the implementation PR:
 
 - `git diff --check` — pass;
 - generated frontend tree hygiene — pass;
 - Tauri command registration contract — pass (`43/43`), including the negative rename probe.
 
-This environment has no Rust toolchain, so Rustfmt, Clippy, Rust tests, and the complete canonical repository gate must be supplied by exact-head CI before P2 is marked complete.
+CI and merge evidence:
+
+- pre-rebase P2 head `8dbbd957ae6a3d2e00fec5e786894d507d926b46` — CI `34013368816` passed after rerunning one transient macOS arm64 runner I/O failure on the same SHA;
+- merged P0/P1 closure base `43881dca61fac165cd8472029d63d3c69d67e8df`;
+- final P2 PR head `9a6ea2a6d090450c87ac01589aa4493caef8e617` — exact-head CI `34015871421` passed;
+- PR #48 `Local LLM: harden installer integrity before runtime use` — squash merged with the expected-head guard;
+- merged P2 `master` SHA `51ad339b8c5faf129b5f06a03da153b657988ae9`;
+- post-merge `master` CI `34017283156` — passed on that exact SHA, including Frontend quality, Rust quality, dependency/security audits, release/static gate, Linux/macOS Local LLM compile proofs, both macOS unsigned bundle smoke jobs, and canonical `npm run check:all`.
+
+## Tracker closure
+
+The evidence above closes the implementation and acceptance requirements for:
+
+- `LLMR-200` — HTTPS redirect enforcement;
+- `LLMR-201` — chronological installer `last_error`;
+- `LLMR-202` — runtime-use current-byte reverification and cache invalidation;
+- `LLMR-203` — install-validity terminology;
+- `LLMR-204` — installer/runtime responsibility reconciliation.
+
+It also closes the P2-owned `LLMR-003` regression probes:
+
+- chronological last-error probe;
+- HTTPS downgrade redirect probe;
+- same-size post-install mutation probe.
+
+The remaining `LLMR-003` probes stay open for their owning later phases: future-settings-version destructive downgrade and split-settings-snapshot race (P4), stale frontend full-object overwrite (P5), and runtime-diagnostics production reachability/privacy sentinel (P3). Therefore `LLMR-003` as a whole is not yet complete.
