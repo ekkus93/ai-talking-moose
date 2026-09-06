@@ -45,9 +45,10 @@ enum InstallerState {
 
 /// Provider-neutral text model backed by the application-owned local llama.cpp runtime.
 ///
-/// The model keeps system/user content structured until it reaches the runtime. The native
-/// llama.cpp layer is responsible for applying the selected GGUF's embedded chat template; this
-/// type never invents or concatenates model control tokens.
+/// The model keeps system/user content structured until it reaches the local runtime. The runtime
+/// validates family-specific invariants in the selected GGUF's embedded template, renders the
+/// supported family ChatML shape deterministically, and applies any generation-prompt policy.
+/// This provider adapter never invents or concatenates model control tokens.
 pub struct LocalTextModel {
     runtime: Arc<dyn LocalGenerationRuntime>,
     installer: InstallerState,
@@ -145,6 +146,11 @@ impl TextModel for LocalTextModel {
             InstallerState::Ready(installer) => installer.clone(),
             InstallerState::Unavailable(error) => return Err(error.clone()),
         };
+        // TextModel::generate has no caller-provided cancellation handle. The token keeps the
+        // runtime API cooperatively cancellable for internal/direct runtime uses, but normal
+        // typed/ambient generation cannot currently cancel an in-flight decode through this
+        // provider-neutral trait. Do not describe speech Cancel, model switching, deletion, or
+        // shutdown serialization as cancelling this token.
         let generation = self
             .runtime
             .generate(installer, runtime_request, CancellationToken::new())

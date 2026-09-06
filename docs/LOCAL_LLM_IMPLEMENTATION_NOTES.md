@@ -147,13 +147,21 @@ Model loading explicitly uses `with_n_gpu_layers(0)`. Context construction expli
 
 Requests reject empty prompts, prompts larger than 64 KiB, zero output-token limits, non-finite temperatures, and temperatures outside 0.0–2.0. Output tokens are additionally capped by the catalog recommendation, and tokenized prompt plus requested output must fit within the selected bounded context.
 
-### Cancellation and bounded shutdown limitation
+### Cancellation ownership and bounded shutdown limitation
 
-Cancellation is cooperative. The runtime checks a `CancellationToken` before model/context work, between prompt-decode chunks, and between generated-token decode iterations.
+The native runtime's cancellation mechanism is cooperative. `LocalRuntimeManager::generate()` accepts a `CancellationToken`, checks it before blocking generation work, and llama.cpp generation checks it between bounded decode operations. The safe binding does not expose an abort callback setter, so an individual native `decode` call cannot be force-interrupted without dropping into unsafe raw FFI.
 
-The underlying llama.cpp API has an abort callback, but the safe high-level `LlamaContextParams` surface in `llama-cpp-2 0.1.154` does not expose an abort-callback setter. P5 therefore does **not** reach into unsafe raw FFI solely to force interruption. If a native `decode` call is already executing, cancellation cannot interrupt that individual call and is observed after it returns.
+That capability must not be confused with an application-exposed Local text cancel feature. The provider-neutral `TextModel::generate()` trait has no cancellation parameter, and `LocalTextModel::generate()` currently creates a fresh private token for each normal typed/ambient request. No production owner can signal that token today. Model switching is realized by the next serialized generation loading the newly selected identity; deletion waits for active generation before unload/removal; shutdown stops admission of new work and then waits for the operation lock. Speech cancellation controls synthesis/playback, not the already-running Local text decode.
 
-Application exit is nevertheless bounded: `ExitRequested` immediately calls `begin_shutdown()` so no new local work is admitted, then async teardown gives `LocalRuntimeManager::shutdown()` at most five seconds. If an in-progress native decode prevents timely unload, the application logs a safe timeout without prompt/output/path data and continues process exit. The OS then reclaims remaining native state. This is the explicit V1 fail-safe for a native call that cannot be cooperatively interrupted.
+No new user-facing generation-cancellation API is required by Local LLM V1, so the post-review remediation deliberately does not invent one. If product scope later requires cancelling typed/ambient inference, it needs a provider-neutral request/ownership design rather than Local-only plumbing.
+
+Application exit remains bounded: `ExitRequested` immediately calls `begin_shutdown()` so no new local work is admitted, then async teardown gives `LocalRuntimeManager::shutdown()` at most five seconds. If an in-progress native decode prevents timely unload, the application logs a safe timeout without prompt/output/path data and continues process exit. The OS then reclaims remaining native state.
+
+### Chat-template ownership
+
+The pinned runtime does not execute the embedded Jinja template generically for Local LLM V1. SmolLM2's conditional default-system behavior and Qwen3's `enable_thinking` semantics exceed what the selected high-level template API can express faithfully. The runtime reads the GGUF template and checks the required family invariants, then renders the supported ChatML shape itself and applies Qwen3's explicit non-thinking prefill/output sanitization. Unsupported or incompatible template semantics fail closed.
+
+A normalized or byte-exact template fingerprint was evaluated and intentionally not added. The catalog already pins the immutable SHA-256 of the **entire GGUF**, and P2 rehashes those bytes before first runtime load in each process. A second hash of one metadata field would duplicate artifact identity while being more brittle. The existing family-invariant checks therefore remain a semantic compatibility gate. Their tests include accepted pinned-family fixtures plus altered/missing family invariants that fail closed.
 
 ### Diagnostics and privacy
 

@@ -95,6 +95,18 @@ The runtime manager is responsible for:
 
 `LocalTextModel` adapts the provider-neutral `TextRequest` into a local runtime request and returns a provider-neutral `TextResponse`. Chat control tokens are not assembled at ambient or conversation call sites. Supported families use the app's validated family/template policy; incompatible template metadata fails explicitly.
 
+### Generation cancellation ownership
+
+The local runtime accepts a cooperative `CancellationToken` and checks it at bounded decode boundaries, but the provider-neutral `TextModel::generate()` interface does not expose a caller cancellation handle. Normal typed and ambient Local generation therefore create a private, initially active token and do **not** currently provide a user-facing way to cancel an in-flight text decode. Speech cancellation acts on synthesis/playback after text generation; it must not be described as cancelling Local LLM inference.
+
+Model replacement and deletion are serialized behind the same runtime operation lock, so they wait for active generation rather than racing it. Shutdown first stops admission of new runtime work, then waits for the operation lock subject to the application's bounded shutdown timeout. None of those paths currently signals the private `TextModel` generation token. This is intentional V1 behavior; adding user-facing generation cancellation would require an explicit provider-neutral ownership/API design.
+
+### Chat-template ownership
+
+The application does **not** ask llama.cpp to execute the embedded Jinja template for these two model families. `llama-cpp-2 0.1.154` cannot supply all family kwargs/semantics needed by the pinned SmolLM2 and Qwen3 templates. Instead, the runtime reads the embedded template, validates the family invariants it relies on, renders the supported ChatML message shape deterministically, and then applies Qwen3's explicit non-thinking generation prefill/defensive output policy. Unsupported family/template semantics fail closed.
+
+A separate byte fingerprint of the embedded template string is intentionally not used: the catalog pins the complete GGUF SHA-256 and P2 runtime-use verification rehashes the artifact before first load. That whole-file cryptographic identity is stronger than a second template-only fingerprint. The template validator is therefore a semantic compatibility gate, not an independent artifact-integrity mechanism.
+
 ## Network and privacy boundaries
 
 There are two distinct Local-model network phases:

@@ -37,7 +37,14 @@ fn render_family_chat_prompt(
     rendered
 }
 
-fn validate_embedded_template_source(
+/// Validate only the embedded-template semantics that the app-owned family renderer depends on.
+///
+/// The whole GGUF already has an immutable catalog SHA-256 and is rehashed before first runtime
+/// load, so a second byte-for-byte fingerprint of this metadata string would duplicate the stronger
+/// artifact-integrity boundary. These checks instead fail closed if a pinned artifact no longer
+/// advertises the family semantics required by our deterministic renderer. They do not execute the
+/// embedded Jinja template and do not claim arbitrary templates with similar syntax are supported.
+fn validate_embedded_template_family_invariants(
     template_hint: LocalModelTemplateHint,
     source: &str,
 ) -> Result<(), LocalRuntimeError> {
@@ -82,7 +89,7 @@ pub(super) fn validate_model_chat_template(
     let source = template
         .to_str()
         .map_err(|_| LocalRuntimeError::chat_template())?;
-    validate_embedded_template_source(template_hint, source)
+    validate_embedded_template_family_invariants(template_hint, source)
 }
 
 pub(super) fn render_chat_prompt(
@@ -160,12 +167,12 @@ mod tests {
 
     #[test]
     fn canonical_embedded_family_templates_are_accepted() {
-        validate_embedded_template_source(
+        validate_embedded_template_family_invariants(
             LocalModelTemplateHint::SmolLm2,
             SMOLLM2_CANONICAL_TEMPLATE,
         )
         .unwrap();
-        validate_embedded_template_source(
+        validate_embedded_template_family_invariants(
             LocalModelTemplateHint::Qwen3NonThinking,
             QWEN3_CANONICAL_TEMPLATE_FRAGMENT,
         )
@@ -181,8 +188,8 @@ mod tests {
             LocalModelTemplateHint::SmolLm2,
             LocalModelTemplateHint::Qwen3NonThinking,
         ] {
-            let error =
-                validate_embedded_template_source(template_hint, generic_chatml).unwrap_err();
+            let error = validate_embedded_template_family_invariants(template_hint, generic_chatml)
+                .unwrap_err();
             assert_eq!(error.kind, LocalRuntimeErrorKind::ChatTemplate);
         }
     }
@@ -193,7 +200,7 @@ mod tests {
             SMOLLM2_DEFAULT_SYSTEM_INSTRUCTION,
             "different default system instruction",
         );
-        let error = validate_embedded_template_source(
+        let error = validate_embedded_template_family_invariants(
             LocalModelTemplateHint::SmolLm2,
             &smol_without_default_system,
         )
@@ -202,7 +209,7 @@ mod tests {
 
         let qwen_without_non_thinking_switch =
             QWEN3_CANONICAL_TEMPLATE_FRAGMENT.replace("enable_thinking", "thinking_mode");
-        let error = validate_embedded_template_source(
+        let error = validate_embedded_template_family_invariants(
             LocalModelTemplateHint::Qwen3NonThinking,
             &qwen_without_non_thinking_switch,
         )
