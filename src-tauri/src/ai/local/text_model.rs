@@ -45,9 +45,10 @@ enum InstallerState {
 
 /// Provider-neutral text model backed by the application-owned local llama.cpp runtime.
 ///
-/// The model keeps system/user content structured until it reaches the runtime. The native
-/// llama.cpp layer is responsible for applying the selected GGUF's embedded chat template; this
-/// type never invents or concatenates model control tokens.
+/// The model keeps system/user content structured until it reaches the runtime. The application
+/// runtime validates the selected GGUF's embedded template as a family-compatibility contract and
+/// then renders the supported SmolLM2/Qwen framing itself. This provider layer does not invent or
+/// concatenate model control tokens.
 pub struct LocalTextModel {
     runtime: Arc<dyn LocalGenerationRuntime>,
     installer: InstallerState,
@@ -145,6 +146,10 @@ impl TextModel for LocalTextModel {
             InstallerState::Ready(installer) => installer.clone(),
             InstallerState::Unavailable(error) => return Err(error.clone()),
         };
+        // TextModel has no application-facing cancellation parameter. Normal typed/ambient Local
+        // requests therefore use a fresh private token. The runtime still accepts a token so its
+        // decode loop can be exercised cooperatively by internal/runtime tests, but this call does
+        // not advertise user/application cancellation that the product cannot currently invoke.
         let generation = self
             .runtime
             .generate(installer, runtime_request, CancellationToken::new())
@@ -163,6 +168,7 @@ mod tests {
 
     struct FakeRuntime {
         requests: Mutex<Vec<LocalRuntimeGenerateRequest>>,
+        cancellation_states: Mutex<Vec<bool>>,
         result: Result<LocalRuntimeGeneration, LocalRuntimeError>,
     }
 
@@ -172,9 +178,12 @@ mod tests {
             &self,
             _installer: Arc<LocalModelInstaller>,
             request: LocalRuntimeGenerateRequest,
-            _cancellation: CancellationToken,
+            cancellation: CancellationToken,
         ) -> Result<LocalRuntimeGeneration, LocalRuntimeError> {
             self.requests.lock().push(request);
+            self.cancellation_states
+                .lock()
+                .push(cancellation.is_cancelled());
             self.result.clone()
         }
     }
@@ -194,6 +203,7 @@ mod tests {
     ) -> Arc<FakeRuntime> {
         Arc::new(FakeRuntime {
             requests: Mutex::new(Vec::new()),
+            cancellation_states: Mutex::new(Vec::new()),
             result,
         })
     }
@@ -230,6 +240,7 @@ mod tests {
         assert_eq!(request.temperature, 0.55);
         assert_eq!(request.max_output_tokens, 32);
         assert_eq!(request.seed, RANDOM_GENERATION_SEED);
+        assert_eq!(runtime.cancellation_states.lock().as_slice(), &[false]);
     }
 
     #[tokio::test]

@@ -5,8 +5,9 @@ const THINK_START: &str = "<think>";
 const THINK_END: &str = "</think>";
 const QWEN3_NON_THINKING_PREFILL: &str = "<think>\n\n</think>\n\n";
 
-/// Apply the generation-prompt portion of model-family policy after llama.cpp has rendered and
-/// validated the GGUF's embedded chat template.
+/// Apply the generation-prompt portion of model-family policy after the application-owned family
+/// renderer has constructed the base ChatML framing and the GGUF's embedded template source has
+/// passed compatibility validation.
 ///
 /// `llama-cpp-2` 0.1.154 does not expose arbitrary Jinja template kwargs. Qwen3's documented
 /// `enable_thinking=false` template behavior is an empty reasoning block immediately after the

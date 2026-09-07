@@ -121,7 +121,7 @@ The native binding pulls a C/C++ llama.cpp build into the Rust dependency graph.
 
 Until the selected binding is proven safe for concurrent contexts in this application, Local LLM V1 will use a single runtime manager with serialized generation. Model load/unload/delete/switch operations share the same ownership boundary so an artifact cannot be removed while inference is using it.
 
-Inference is CPU-only in V1: model/context configuration must request zero GPU layers and no GPU offload. CUDA, Vulkan, ROCm, OpenCL, and MKL features are not enabled by this project. On Apple Silicon, Metal code may still be compiled by the binding's target-specific dependency, but it is not selected for model offload in V1. Request output/context sizes are bounded independently of model metadata. Runtime calls that cannot be cooperatively interrupted will be isolated from async executor threads, and application shutdown must have a bounded/non-hanging policy before real-model acceptance closes.
+Inference is CPU-only in V1: model/context configuration must request zero GPU layers and no GPU offload. CUDA, Vulkan, ROCm, OpenCL, and MKL features are not enabled by this project. On Apple Silicon, Metal code may still be compiled by the binding's target-specific dependency, but it is not selected for model offload in V1. Request output/context sizes are bounded independently of model metadata. The decode loop contains cooperative cancellation checkpoints for an internally supplied token, but normal `TextModel::generate()` has no application cancellation parameter. Runtime calls that cannot be interrupted at the current native call boundary are isolated from async executor threads, and application shutdown uses a bounded/non-hanging policy.
 
 ## P5 runtime implementation
 
@@ -149,11 +149,23 @@ Requests reject empty prompts, prompts larger than 64 KiB, zero output-token lim
 
 ### Cancellation and bounded shutdown limitation
 
-Cancellation is cooperative. The runtime checks a `CancellationToken` before model/context work, between prompt-decode chunks, and between generated-token decode iterations.
+The runtime's cancellation mechanism is cooperative at the decode-loop level, but **normal Local text generation is not application-cancellable in V1**. The provider-neutral `TextModel::generate()` contract has no cancellation parameter, and `LocalTextModel` creates a fresh private `CancellationToken` for each typed or ambient request. Direct runtime tests can supply/cancel a token to prove the checkpoints before model/context work, between prompt-decode chunks, and between generated-token decode iterations; ordinary application callers cannot reach that token.
 
-The underlying llama.cpp API has an abort callback, but the safe high-level `LlamaContextParams` surface in `llama-cpp-2 0.1.154` does not expose an abort-callback setter. P5 therefore does **not** reach into unsafe raw FFI solely to force interruption. If a native `decode` call is already executing, cancellation cannot interrupt that individual call and is observed after it returns.
+Model switch and model deletion do not cancel an active generation. They serialize behind it through the runtime operation mutex, then perform unload/switch/delete after generation leaves the critical section. Shutdown likewise does not pretend to cancel the private request token: `begin_shutdown()` rejects new Local work, and teardown waits for the serialized runtime transition subject to the application's five-second shutdown bound. There is currently no typed-message or ambient-generation Cancel affordance, so P6 does not add a first-class generation-cancellation API solely to expose an otherwise unused handle.
 
-Application exit is nevertheless bounded: `ExitRequested` immediately calls `begin_shutdown()` so no new local work is admitted, then async teardown gives `LocalRuntimeManager::shutdown()` at most five seconds. If an in-progress native decode prevents timely unload, the application logs a safe timeout without prompt/output/path data and continues process exit. The OS then reclaims remaining native state. This is the explicit V1 fail-safe for a native call that cannot be cooperatively interrupted.
+The underlying llama.cpp API has an abort callback, but the safe high-level `LlamaContextParams` surface in `llama-cpp-2 0.1.154` does not expose an abort-callback setter. V1 therefore does **not** reach into unsafe raw FFI solely to force interruption. If a native `decode` call is already executing, an internal cooperative cancellation request cannot interrupt that individual call and is observed after it returns.
+
+Application exit remains bounded: `ExitRequested` immediately calls `begin_shutdown()` so no new local work is admitted, then async teardown gives `LocalRuntimeManager::shutdown()` at most five seconds. If an in-progress native decode prevents timely unload, the application logs a safe timeout without prompt/output/path data and continues process exit. The OS then reclaims remaining native state. This is the explicit V1 fail-safe for a native call that cannot be cooperatively interrupted.
+
+### Chat-template ownership and compatibility
+
+The application, not llama.cpp's generic template renderer, owns prompt framing for the two supported Local families. `LlamaModel::chat_template(None)` retrieves the selected GGUF's embedded Jinja source only as a fail-closed compatibility contract. `runtime/chat_template.rs` then renders the supported system/user/assistant ChatML shape deterministically in application code.
+
+SmolLM2 injects its pinned default system instruction when the request supplies none. Qwen3 uses the same application-owned ChatML base framing, after which `runtime/reasoning.rs` appends the explicit `enable_thinking=false` equivalent empty `<think>\n\n</think>\n\n` assistant prefill. Generated Qwen output is then sanitized so an unexpected reasoning block cannot escape the runtime; malformed or ambiguous reasoning markup fails closed.
+
+P6 intentionally does not use a brittle whole-template hash. The pinned artifacts may contain harmless Jinja whitespace/trim-marker formatting differences while preserving the required family semantics. Compatibility is therefore identified by a deterministic **ordered family signature**: common ChatML tokens plus family-specific anchors must occur in the expected semantic order, and cross-family sentinels are rejected. This is stronger than the previous unordered substring bag, but it is not claimed to be a general Jinja equivalence proof. Adding or changing a supported artifact/template requires an explicit signature/fixture review. Unsupported templates fail with `ChatTemplate`; there is no generic ChatML fallback.
+
+This P6 change does not alter the rendered SmolLM2 or Qwen prompt bytes asserted by the existing family fixtures, so it does not by itself trigger a P12 real-model rerun. A future framing change would.
 
 ### Diagnostics and privacy
 
