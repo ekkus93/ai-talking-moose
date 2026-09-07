@@ -42,7 +42,7 @@ const replaceModel = (
   );
 
 export const AsrSettingsPanel: React.FC = () => {
-  const { settings, updateSettings } = useMooseStore();
+  const { settings, updateSettingsPatch } = useMooseStore();
   const [models, setModels] = useState<AsrModelDescriptor[]>([]);
   const [progress, setProgress] = useState<
     Partial<Record<LocalAsrMode, AsrModelProgressEvent>>
@@ -103,7 +103,7 @@ export const AsrSettingsPanel: React.FC = () => {
   const selectMode = async (mode: AsrMode) => {
     setError(null);
     try {
-      await updateSettings({ ...settings, asr_mode: mode });
+      await updateSettingsPatch({ asr_mode: mode });
       await loadModels();
     } catch (selectionError) {
       setError(String(selectionError));

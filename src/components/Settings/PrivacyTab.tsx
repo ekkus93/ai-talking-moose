@@ -4,13 +4,12 @@ import { MicrophonePermissionCard } from "./MicrophonePermissionCard";
 import { Trash2, RotateCcw } from "lucide-react";
 
 export const PrivacyTab: React.FC = () => {
-  const { settings, updateSettings, memories, forgetEverything } =
+  const { settings, updateSettingsPatch, memories, forgetEverything } =
     useMooseStore();
   if (!settings) return null;
 
   const resetPrivacyDefaults = async () => {
-    await updateSettings({
-      ...settings,
+    await updateSettingsPatch({
       active_app_observation: false,
       window_title_observation: false,
       memory_enabled: false,
@@ -84,8 +83,7 @@ export const PrivacyTab: React.FC = () => {
           type="checkbox"
           checked={settings.active_app_observation}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               active_app_observation: e.target.checked,
             })
           }
@@ -99,8 +97,7 @@ export const PrivacyTab: React.FC = () => {
           type="checkbox"
           checked={settings.memory_enabled}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               memory_enabled: e.target.checked,
             })
           }
@@ -114,8 +111,7 @@ export const PrivacyTab: React.FC = () => {
           type="checkbox"
           checked={settings.save_transcripts}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               save_transcripts: e.target.checked,
             })
           }

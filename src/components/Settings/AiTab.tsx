@@ -36,7 +36,7 @@ export const AiTab: React.FC<AiTabProps> = ({
 }) => {
   const {
     settings,
-    updateSettings,
+    updateSettingsPatch,
     saveGoogleApiKey,
     clearGoogleApiKey,
     hasApiKey,
@@ -60,7 +60,7 @@ export const AiTab: React.FC<AiTabProps> = ({
 
   const selectTextProvider = (provider: TextProvider) => {
     if (provider === settings.text_provider) return;
-    void updateSettings({ ...settings, text_provider: provider });
+    void updateSettingsPatch({ text_provider: provider });
   };
 
   const handleSaveApiKey = async () => {
@@ -162,8 +162,7 @@ export const AiTab: React.FC<AiTabProps> = ({
           <LocalLlmSettingsPanel
             selectedModelId={settings.local_text_model}
             onSelectModel={async (modelId) => {
-              await updateSettings({
-                ...settings,
+              await updateSettingsPatch({
                 local_text_model: modelId,
               });
             }}
@@ -183,8 +182,7 @@ export const AiTab: React.FC<AiTabProps> = ({
               aria-busy={googleModelsStatus === "loading"}
               onChange={(event) => {
                 if (!modelSelectorsDisabled) {
-                  void updateSettings({
-                    ...settings,
+                  void updateSettingsPatch({
                     google_text_model: event.target.value,
                   });
                 }
@@ -241,8 +239,7 @@ export const AiTab: React.FC<AiTabProps> = ({
           aria-busy={googleModelsStatus === "loading"}
           onChange={(event) => {
             if (!modelSelectorsDisabled) {
-              void updateSettings({
-                ...settings,
+              void updateSettingsPatch({
                 live_model: event.target.value,
               });
             }

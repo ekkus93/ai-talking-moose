@@ -16,7 +16,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
 }) => {
   const {
     settings,
-    updateSettings,
+    updateSettingsPatch,
     inputDevices,
     outputDevices,
     googleTtsVoices,
@@ -37,8 +37,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           id="settings-input-device"
           value={settings.input_device || ""}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               input_device: e.target.value || null,
             })
           }
@@ -64,8 +63,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           id="settings-output-device"
           value={settings.output_device || ""}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               output_device: e.target.value || null,
             })
           }
@@ -88,9 +86,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           <select
             id="settings-tts-voice"
             value={settings.tts_voice}
-            onChange={(e) =>
-              updateSettings({ ...settings, tts_voice: e.target.value })
-            }
+            onChange={(e) => updateSettingsPatch({ tts_voice: e.target.value })}
             className="w-full p-1.5 border border-black rounded bg-white font-bold"
           >
             {!googleTtsVoices.some(

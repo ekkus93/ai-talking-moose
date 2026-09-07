@@ -3,7 +3,7 @@ import { useMooseStore } from "../../stores/mooseStore";
 import { Keyboard } from "lucide-react";
 
 export const GeneralTab: React.FC = () => {
-  const { settings, updateSettings } = useMooseStore();
+  const { settings, updateSettingsPatch } = useMooseStore();
   if (!settings) return null;
 
   return (
@@ -16,8 +16,7 @@ export const GeneralTab: React.FC = () => {
           type="checkbox"
           checked={settings.launch_at_login}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               launch_at_login: e.target.checked,
             })
           }
@@ -30,8 +29,7 @@ export const GeneralTab: React.FC = () => {
           type="checkbox"
           checked={settings.show_in_menu_bar}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               show_in_menu_bar: e.target.checked,
             })
           }
@@ -44,8 +42,7 @@ export const GeneralTab: React.FC = () => {
           type="checkbox"
           checked={settings.always_on_top}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               always_on_top: e.target.checked,
             })
           }
@@ -58,8 +55,7 @@ export const GeneralTab: React.FC = () => {
           type="checkbox"
           checked={settings.restore_position}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               restore_position: e.target.checked,
             })
           }

@@ -3,7 +3,7 @@ import { useMooseStore } from "../../stores/mooseStore";
 import { formatLocalHour } from "./formatLocalHour";
 
 export const BehaviorTab: React.FC = () => {
-  const { settings, updateSettings, updateSettingsContinuous } =
+  const { settings, updateSettingsPatch, updateSettingsContinuousPatch } =
     useMooseStore();
   if (!settings) return null;
 
@@ -17,8 +17,7 @@ export const BehaviorTab: React.FC = () => {
           type="checkbox"
           checked={settings.unsolicited_comments}
           onChange={(e) =>
-            updateSettings({
-              ...settings,
+            updateSettingsPatch({
               unsolicited_comments: e.target.checked,
             })
           }
@@ -42,8 +41,7 @@ export const BehaviorTab: React.FC = () => {
           value={settings.talkativeness}
           aria-label="Talkativeness"
           onChange={(e) =>
-            updateSettingsContinuous({
-              ...settings,
+            updateSettingsContinuousPatch({
               talkativeness: parseFloat(e.target.value),
             })
           }
@@ -69,8 +67,7 @@ export const BehaviorTab: React.FC = () => {
           value={settings.max_comments_per_hour}
           aria-label="Maximum ambient comments per hour"
           onChange={(e) =>
-            updateSettingsContinuous({
-              ...settings,
+            updateSettingsContinuousPatch({
               max_comments_per_hour: parseInt(e.target.value),
             })
           }
@@ -84,8 +81,7 @@ export const BehaviorTab: React.FC = () => {
             type="checkbox"
             checked={settings.quiet_hours_enabled}
             onChange={(e) =>
-              updateSettings({
-                ...settings,
+              updateSettingsPatch({
                 quiet_hours_enabled: e.target.checked,
               })
             }
@@ -102,8 +98,7 @@ export const BehaviorTab: React.FC = () => {
               aria-label="Quiet hours start"
               value={settings.quiet_hours_start}
               onChange={(e) =>
-                updateSettings({
-                  ...settings,
+                updateSettingsPatch({
                   quiet_hours_start: Number(e.target.value),
                 })
               }
@@ -125,8 +120,7 @@ export const BehaviorTab: React.FC = () => {
               aria-label="Quiet hours end"
               value={settings.quiet_hours_end}
               onChange={(e) =>
-                updateSettings({
-                  ...settings,
+                updateSettingsPatch({
                   quiet_hours_end: Number(e.target.value),
                 })
               }
