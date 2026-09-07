@@ -37,35 +37,67 @@ fn render_family_chat_prompt(
     rendered
 }
 
+fn ordered_fragments_present(source: &str, fragments: &[&str]) -> bool {
+    let mut remaining = source;
+    for fragment in fragments {
+        let Some(index) = remaining.find(fragment) else {
+            return false;
+        };
+        remaining = &remaining[index + fragment.len()..];
+    }
+    true
+}
+
+fn matches_supported_family_signature(template_hint: LocalModelTemplateHint, source: &str) -> bool {
+    if !source.contains("<|im_start|>") || !source.contains("<|im_end|>") {
+        return false;
+    }
+
+    match template_hint {
+        LocalModelTemplateHint::SmolLm2 => {
+            !source.contains("enable_thinking")
+                && ordered_fragments_present(
+                    source,
+                    &[
+                        "for message in messages",
+                        "loop.first",
+                        "messages[0]",
+                        SMOLLM2_DEFAULT_SYSTEM_INSTRUCTION,
+                        "message['role']",
+                        "message['content']",
+                        "endfor",
+                        "add_generation_prompt",
+                        "<|im_start|>assistant",
+                    ],
+                )
+        }
+        LocalModelTemplateHint::Qwen3NonThinking => {
+            !source.contains(SMOLLM2_DEFAULT_SYSTEM_INSTRUCTION)
+                && ordered_fragments_present(
+                    source,
+                    &[
+                        "messages[0].role",
+                        "<|im_start|>system",
+                        "for message in messages",
+                        "message.role",
+                        "message.content",
+                        "endfor",
+                        "add_generation_prompt",
+                        "<|im_start|>assistant",
+                        "enable_thinking",
+                        "<think>",
+                        "</think>",
+                    ],
+                )
+        }
+    }
+}
+
 fn validate_embedded_template_source(
     template_hint: LocalModelTemplateHint,
     source: &str,
 ) -> Result<(), LocalRuntimeError> {
-    let required_fragments: &[&str] = match template_hint {
-        LocalModelTemplateHint::SmolLm2 => &[
-            "<|im_start|>",
-            "<|im_end|>",
-            "add_generation_prompt",
-            "messages[0]",
-            "system",
-            "assistant",
-            SMOLLM2_DEFAULT_SYSTEM_INSTRUCTION,
-        ],
-        LocalModelTemplateHint::Qwen3NonThinking => &[
-            "<|im_start|>",
-            "<|im_end|>",
-            "add_generation_prompt",
-            "assistant",
-            "enable_thinking",
-            "<think>",
-            "</think>",
-        ],
-    };
-
-    if required_fragments
-        .iter()
-        .all(|fragment| source.contains(*fragment))
-    {
+    if matches_supported_family_signature(template_hint, source) {
         Ok(())
     } else {
         Err(LocalRuntimeError::chat_template())
@@ -92,9 +124,10 @@ pub(super) fn render_chat_prompt(
 ) -> Result<String, LocalRuntimeError> {
     // The pinned llama.cpp template API intentionally supports only a subset of Jinja semantics.
     // Both catalog families use semantics outside that subset: SmolLM2 conditionally injects its
-    // default system instruction and Qwen3 uses `enable_thinking`. Validate the GGUF's embedded
-    // family invariants, then render the only message shape this runtime supports deterministically
-    // instead of silently accepting llama.cpp's lossy generic-template interpretation.
+    // default system instruction and Qwen3 uses `enable_thinking`. The embedded GGUF template is
+    // therefore a fail-closed compatibility contract, not the renderer. Validate an ordered
+    // family signature from that source, then render the only message shape this application
+    // supports deterministically instead of accepting a lossy generic-template interpretation.
     validate_model_chat_template(model, template_hint)?;
     let rendered = render_family_chat_prompt(
         template_hint,
@@ -205,6 +238,43 @@ mod tests {
         let error = validate_embedded_template_source(
             LocalModelTemplateHint::Qwen3NonThinking,
             &qwen_without_non_thinking_switch,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, LocalRuntimeErrorKind::ChatTemplate);
+    }
+
+    #[test]
+    fn unordered_fragment_bags_fail_closed() {
+        let smol_reordered = format!(
+            "add_generation_prompt <|im_start|>assistant <|im_start|> <|im_end|> for message in messages loop.first messages[0] {} message['role'] message['content'] endfor",
+            SMOLLM2_DEFAULT_SYSTEM_INSTRUCTION
+        );
+        let error =
+            validate_embedded_template_source(LocalModelTemplateHint::SmolLm2, &smol_reordered)
+                .unwrap_err();
+        assert_eq!(error.kind, LocalRuntimeErrorKind::ChatTemplate);
+
+        let qwen_reordered = "enable_thinking <think> </think> add_generation_prompt <|im_start|>assistant <|im_start|> <|im_end|> messages[0].role <|im_start|>system for message in messages message.role message.content endfor";
+        let error = validate_embedded_template_source(
+            LocalModelTemplateHint::Qwen3NonThinking,
+            qwen_reordered,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, LocalRuntimeErrorKind::ChatTemplate);
+    }
+
+    #[test]
+    fn family_signatures_do_not_cross_accept() {
+        let error = validate_embedded_template_source(
+            LocalModelTemplateHint::Qwen3NonThinking,
+            SMOLLM2_CANONICAL_TEMPLATE,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, LocalRuntimeErrorKind::ChatTemplate);
+
+        let error = validate_embedded_template_source(
+            LocalModelTemplateHint::SmolLm2,
+            QWEN3_CANONICAL_TEMPLATE_FRAGMENT,
         )
         .unwrap_err();
         assert_eq!(error.kind, LocalRuntimeErrorKind::ChatTemplate);
