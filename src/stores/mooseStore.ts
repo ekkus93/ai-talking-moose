@@ -16,7 +16,7 @@ const lifecycleIsActive = (lifecycle: ConversationLifecycle) =>
   lifecycle !== "idle" && lifecycle !== "failed";
 
 const CONTINUOUS_SETTINGS_WRITE_DELAY_MS = 100;
-type SettingsPatch = Partial<AppSettings>;
+export type SettingsPatch = Partial<AppSettings>;
 
 interface QueuedSettingsWrite {
   patch: SettingsPatch;
@@ -30,19 +30,6 @@ let settingsWriteWorkerRunning = false;
 let lastPersistedSettings: AppSettings | null = null;
 
 const cloneSettings = (settings: AppSettings): AppSettings => ({ ...settings });
-
-const settingsPatch = (
-  current: AppSettings,
-  next: AppSettings,
-): SettingsPatch => {
-  const patch: SettingsPatch = {};
-  for (const key of Object.keys(next) as Array<keyof AppSettings>) {
-    if (!Object.is(current[key], next[key])) {
-      Object.assign(patch, { [key]: next[key] });
-    }
-  }
-  return patch;
-};
 
 const applySettingsPatch = (
   settings: AppSettings,
@@ -221,8 +208,8 @@ interface MooseStoreState {
   triggerCanned: (type: string) => Promise<void>;
 
   loadSettings: () => Promise<void>;
-  updateSettings: (newSettings: AppSettings) => Promise<void>;
-  updateSettingsContinuous: (newSettings: AppSettings) => void;
+  updateSettingsPatch: (patch: SettingsPatch) => Promise<void>;
+  updateSettingsContinuousPatch: (patch: SettingsPatch) => void;
   loadDevices: () => Promise<void>;
   loadGoogleTtsVoices: () => Promise<void>;
   loadMemories: () => Promise<void>;
@@ -396,33 +383,36 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     });
   },
 
-  updateSettings: async (newSettings) => {
+  updateSettingsPatch: async (patch) => {
+    if (patchIsEmpty(patch)) return;
     const current = get().settings;
+    if (!current) return;
     ensurePersistedSettingsBaseline(current);
-    const discretePatch = current ? settingsPatch(current, newSettings) : {};
-    const patch = {
+
+    const combinedPatch = {
       ...takePendingContinuousSettingsPatch(),
-      ...discretePatch,
+      ...patch,
     };
 
-    // Discrete controls update optimistically too. Persistence is serialized, so
-    // an older completion can never overwrite a newer local edit.
-    set({ settings: newSettings });
-    await enqueueSettingsPatch(patch);
+    // Components express only the fields they intend to change. Apply that
+    // intent to the store's authoritative current view instead of trusting a
+    // complete object captured by an older render. Persistence remains
+    // serialized and each queued patch rebases on the last successful write.
+    set({ settings: applySettingsPatch(current, patch) });
+    await enqueueSettingsPatch(combinedPatch);
   },
 
-  updateSettingsContinuous: (newSettings) => {
+  updateSettingsContinuousPatch: (patch) => {
+    if (patchIsEmpty(patch)) return;
     const current = get().settings;
+    if (!current) return;
     ensurePersistedSettingsBaseline(current);
-    const patch = current ? settingsPatch(current, newSettings) : {};
 
-    // Continuous controls stay immediate and coalesce only the fields changed
-    // during the pointer/input burst. The patch is later rebased onto the last
-    // successfully persisted snapshot if an older write fails.
-    set({ settings: newSettings });
-    if (!patchIsEmpty(patch)) {
-      scheduleContinuousSettingsWrite(patch);
-    }
+    // Continuous controls update immediately but enqueue only field intent.
+    // Coalescing and later failure reconciliation therefore cannot reintroduce
+    // unrelated values from a stale component render.
+    set({ settings: applySettingsPatch(current, patch) });
+    scheduleContinuousSettingsWrite(patch);
   },
 
   loadDevices: async () => {

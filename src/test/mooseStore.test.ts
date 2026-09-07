@@ -57,16 +57,13 @@ describe("mooseStore State Management", () => {
     const initial = frontendDefaultSettings();
     useMooseStore.setState({ settings: initial });
 
-    useMooseStore.getState().updateSettingsContinuous({
-      ...initial,
+    useMooseStore.getState().updateSettingsContinuousPatch({
       talkativeness: 0.2,
     });
-    useMooseStore.getState().updateSettingsContinuous({
-      ...useMooseStore.getState().settings!,
+    useMooseStore.getState().updateSettingsContinuousPatch({
       talkativeness: 0.4,
     });
-    useMooseStore.getState().updateSettingsContinuous({
-      ...useMooseStore.getState().settings!,
+    useMooseStore.getState().updateSettingsContinuousPatch({
       talkativeness: 0.6,
     });
 
@@ -86,13 +83,10 @@ describe("mooseStore State Management", () => {
     const initial = frontendDefaultSettings();
     useMooseStore.setState({ settings: initial });
 
-    useMooseStore.getState().updateSettingsContinuous({
-      ...initial,
+    useMooseStore.getState().updateSettingsContinuousPatch({
       talkativeness: 0.7,
     });
-    const latest = useMooseStore.getState().settings!;
-    await useMooseStore.getState().updateSettings({
-      ...latest,
+    await useMooseStore.getState().updateSettingsPatch({
       unsolicited_comments: false,
     });
     await vi.advanceTimersByTimeAsync(100);
@@ -121,14 +115,12 @@ describe("mooseStore State Management", () => {
         if (persisted.length === 1) await firstWrite;
       });
 
-    const discrete = useMooseStore.getState().updateSettings({
-      ...initial,
+    const discrete = useMooseStore.getState().updateSettingsPatch({
       unsolicited_comments: false,
     });
     await vi.waitFor(() => expect(persist).toHaveBeenCalledTimes(1));
 
-    useMooseStore.getState().updateSettingsContinuous({
-      ...useMooseStore.getState().settings!,
+    useMooseStore.getState().updateSettingsContinuousPatch({
       talkativeness: 0.8,
     });
     expect(useMooseStore.getState().settings).toMatchObject({
@@ -158,12 +150,10 @@ describe("mooseStore State Management", () => {
       .spyOn(tauriBridge, "updateSettings")
       .mockResolvedValue(undefined);
 
-    useMooseStore.getState().updateSettingsContinuous({
-      ...initial,
+    useMooseStore.getState().updateSettingsContinuousPatch({
       talkativeness: 0.73,
     });
-    await useMooseStore.getState().updateSettings({
-      ...useMooseStore.getState().settings!,
+    await useMooseStore.getState().updateSettingsPatch({
       unsolicited_comments: false,
     });
     await vi.advanceTimersByTimeAsync(100);
@@ -197,8 +187,7 @@ describe("mooseStore State Management", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    useMooseStore.getState().updateSettingsContinuous({
-      ...initial,
+    useMooseStore.getState().updateSettingsContinuousPatch({
       talkativeness: 0.91,
     });
     await vi.advanceTimersByTimeAsync(100);
@@ -211,8 +200,7 @@ describe("mooseStore State Management", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
     expect(consoleLog).not.toHaveBeenCalled();
 
-    await useMooseStore.getState().updateSettings({
-      ...useMooseStore.getState().settings!,
+    await useMooseStore.getState().updateSettingsPatch({
       unsolicited_comments: false,
     });
 
@@ -234,8 +222,7 @@ describe("mooseStore State Management", () => {
     );
     vi.spyOn(tauriBridge, "getSettings").mockResolvedValue(initial);
 
-    await useMooseStore.getState().updateSettings({
-      ...initial,
+    await useMooseStore.getState().updateSettingsPatch({
       volume: 0.25,
     });
 
