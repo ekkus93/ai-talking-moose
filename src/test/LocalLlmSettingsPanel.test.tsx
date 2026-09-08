@@ -72,14 +72,20 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
     progressListener = undefined;
   });
 
-  it("renders live download progress and sends an explicit cancel request", async () => {
-    let resolveInstall: ((value: LocalModelDescriptor) => void) | undefined;
-    vi.spyOn(tauriBridge, "installLocalLlmModel").mockImplementation(
-      () =>
-        new Promise<LocalModelDescriptor>((resolve) => {
-          resolveInstall = resolve;
-        }),
-    );
+  it("cancels a verifying install to a non-installed end state and allows retry", async () => {
+    let rejectFirstInstall: ((reason?: unknown) => void) | undefined;
+    let installCalls = 0;
+    const installSpy = vi
+      .spyOn(tauriBridge, "installLocalLlmModel")
+      .mockImplementation(() => {
+        installCalls += 1;
+        if (installCalls === 1) {
+          return new Promise<LocalModelDescriptor>((_resolve, reject) => {
+            rejectFirstInstall = reject;
+          });
+        }
+        return Promise.resolve(descriptor(MODEL_ID, "installed"));
+      });
     const cancelSpy = vi
       .spyOn(tauriBridge, "cancelLocalLlmInstall")
       .mockResolvedValue(true);
@@ -101,15 +107,14 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
     await act(async () => {
       progressListener?.({
         model_id: MODEL_ID,
-        install_state: "downloading",
-        downloaded_bytes: 50 * 1024 * 1024,
+        install_state: "verifying",
+        downloaded_bytes: 100 * 1024 * 1024,
         total_bytes: 100 * 1024 * 1024,
       });
     });
     expect(
-      screen.getByLabelText("Local model download progress"),
+      screen.getByText(/Verifying SHA-256 and byte count/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("50 MiB / 100 MiB")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Cancel Download/i }));
     await waitFor(() => expect(cancelSpy).toHaveBeenCalledWith(MODEL_ID));
@@ -118,8 +123,26 @@ describe("LocalLlmSettingsPanel residual lifecycle coverage", () => {
     ).toBeInTheDocument();
 
     await act(async () => {
-      resolveInstall?.(descriptor(MODEL_ID, "installed"));
+      rejectFirstInstall?.(
+        new Error("The local model download was cancelled."),
+      );
     });
+
+    const retry = await screen.findByRole("button", {
+      name: /Download & Verify/i,
+    });
+    expect(
+      screen.queryByRole("button", { name: /Cancel Download/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/installed and verified/i),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(retry);
+    expect(
+      await screen.findByText(/SmolLM2 360M installed and verified/i),
+    ).toBeInTheDocument();
+    expect(installSpy).toHaveBeenCalledTimes(2);
   });
 
   it("renders verification progress distinctly from download progress", async () => {
