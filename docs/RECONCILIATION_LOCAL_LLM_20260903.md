@@ -4,6 +4,8 @@
 
 **P15 implementation and evidence are COMPLETE. Local LLM V1 satisfies the Final Gate.**
 
+> **Post-review status — 2026-09-09:** The statement above is preserved as the historical 2026-09-03 V1 closure. A later 2026-09-05 source review narrowly reopened `LLM-042`, `LLM-045`, `LLM-054`, `LLM-082`, `LLM-114`, `LLM-152`, and the installer-cancellable portion of the Final Gate. The active remediation authority is `docs/SPEC(20260905-141500).md` / `docs/TODO(20260905-141500).md`. P0-P8 remediation is accepted on `master`; P9/P10 remain the documentation/final-audit path. See `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P9_20260909.md` and the post-review addendum at the end of this report.
+
 This report closes `LLM-150` through `LLM-153` from `docs/TODO(20260831-081800).md` against exact implementation, CI, real-model, packaging, privacy, and negative-probe evidence.
 
 The final reconciliation deliberately found and fixed two issues instead of treating prior green phases as sufficient:
@@ -375,3 +377,33 @@ All Local LLM V1 Final Gate requirements are supported by the evidence above and
 ## Conclusion
 
 Local LLM V1 is ready for final docs-closeout CI and merge. P0 through P15 are implemented and evidenced. The remaining action is procedural: the exact PR #43 closeout head that updates this report/TODO must pass CI before squash merge; after merge, the resulting `master` push CI is the final repository-state confirmation.
+
+---
+
+## Post-review remediation addendum — 2026-09-09
+
+The 2026-09-03 conclusion above remains the canonical record of what was believed and evidenced at that time. It is not deleted or retroactively rewritten. The later source review at baseline `bb85beb4b61c6a25d7b5935ce4f6918b65afe8d6` discovered additional correctness gaps and therefore narrowly reopened the historical claims listed in the status banner.
+
+The complete finding inventory, exact P0-P8 remediation PR/SHA/CI chain, deterministic test mapping, P12 rerun decision, updated architecture semantics, and residual/deferred gates are recorded in:
+
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P0_P1_20260905.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P2_20260905.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P3_20260906.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P4_20260906.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P5_20260906.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P6_20260907.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P7_20260908.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P8_20260908.md`;
+- `docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P9_20260909.md`.
+
+### Remediation summary
+
+The post-review implementation now provides truthful cancellable installer verification/promotion semantics, nonblocking SHA verification, HTTPS-only redirect targets, chronological installer errors, runtime-use current-byte SHA admission, production-reachable privacy-safe runtime diagnostics, fail-closed future settings versions, one immutable settings snapshot per text-generation request, patch-oriented frontend settings writes, truthful generation-cancellation ownership documentation, deterministic supported-template identification, strengthened frontend cancellation end-state coverage, and diagnostics/IPC drift negative proof.
+
+The post-review P12 decision is **no rerun required through P9** because none of those changes materially alters the accepted model identities, llama.cpp generation backend, tokenizer/model loading semantics after successful admission, rendered SmolLM2/Qwen prompt framing, Qwen non-thinking control policy, provider routing, or decode/generation algorithm. If P10 changes any of those semantics, the decision must be reopened.
+
+### Evidence and deferral boundaries
+
+Ordinary CI remains model-weight-free and proves source/tests/contracts/audits/compile/bundle properties. The accepted P12 real-GGUF run remains the generation-semantic evidence. Existing P13 packaging/license evidence remains preserved; P9 does not claim a new signed/notarized release candidate. Cooperative native generation cancellation, bounded shutdown, CPU-only V1, unavailable first-token timing, fully local voice, signed/notarized P13 execution, physical Mac audio/TCC acceptance, and human voice audition remain explicit limitations/deferred gates as detailed in the P9 reconciliation.
+
+Formal reclosure of the historical reopened claims and restoration of the installer-cancellable Final Gate statement occurs only in P10 after the final focused source audit, exact-head ordinary CI, expected-head merge, and exact post-merge `master` CI. Until then, the historical 2026-09-03 Final Gate must not be interpreted as superseding the active remediation tracker.

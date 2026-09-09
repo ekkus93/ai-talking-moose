@@ -169,3 +169,45 @@ Canonical P12 and P13 evidence is recorded in:
 
 - `docs/LOCAL_LLM_CPU_ACCEPTANCE_20260902.md`;
 - `docs/RECONCILIATION_LOCAL_LLM_P13_20260902.md`.
+
+## Post-review production semantics — 2026-09-09
+
+The 2026-09-05 source review found several places where the implementation guarantees were stronger or narrower than the original V1 prose implied. The remediation tracker `docs/TODO(20260905-141500).md` is authoritative for those corrections. The resulting production semantics are:
+
+### Request-scoped settings ownership
+
+Typed and ambient text generation capture one immutable request settings snapshot before provider selection. Provider identity, provider-specific model ID, memory inclusion, prompt/personality inputs, and typed transcript-retention policy are derived from that snapshot. A concurrent settings write affects the next request, not half of the current request. Ambient delivery retains the separate post-generation current-state privacy suppression gate.
+
+### Runtime diagnostics path
+
+`LocalRuntimeManager::diagnostics()` is the authoritative runtime telemetry source. Production Tauri command `get_local_llm_diagnostics` composes installer and runtime diagnostics, carries them through the Rust-generated frontend contract and typed TypeScript bridge, and feeds the Local LLM Settings diagnostics surface. Diagnostics expose identity/state/performance and safe error categories only; prompt, output, memory, transcript, credential, filesystem-path, and raw native-error payloads are excluded.
+
+### Installer phase and cancellation semantics
+
+An authoritative in-flight installer record owns both the cancellation token and truthful phase. Active phases include `downloading`, `verifying`, and `promoting`. Large SHA-256 verification runs on a blocking worker and cooperatively checks cancellation per bounded chunk. Cancellation is checked again after verification and before promotion. A promoted artifact is not considered installed until the install marker is committed; accepted cancellation before that commit leaves no valid marker and cannot later turn the same operation into `installed`.
+
+Every redirect target must remain HTTPS and the redirect count is bounded. Installer `last_error` chronology is explicit rather than inferred from unordered map iteration.
+
+### Runtime-use artifact admission
+
+Fast model-list/status refreshes use marker/shape validity and do not hash hundreds of megabytes. Before first runtime load in a process, the current GGUF bytes are rehashed against the pinned catalog SHA-256. Successful verification is cached only while a conservative file identity/fingerprint remains unchanged. A changed fingerprint forces rehash, and a mismatch fails closed before llama.cpp receives the artifact path. There is no fallback to Google, Fake, or another Local model.
+
+### Persisted settings compatibility
+
+`AppSettings::from_persisted_json()` inspects `settings_version` before destructive normalization. A persisted version newer than the application understands fails closed with a typed safe compatibility error. Unknown future fields are not normalized away and the rejected document is not overwritten with defaults or a downgraded schema.
+
+### Frontend settings writes
+
+Settings components submit patch intent rather than reconstructing complete `AppSettings` objects from render-time snapshots. The Zustand store owns optimistic/reconciled state and constructs the complete object sent to the Tauri persistence boundary. This prevents a stale component callback from overwriting unrelated newer settings while preserving ordered persistence, continuous-control coalescing, and rejected-write reconciliation.
+
+### Generation cancellation ownership
+
+The provider-neutral `TextModel::generate()` API has no application cancellation handle. Normal `LocalTextModel::generate()` requests create a private token used by the runtime's cooperative decode checks; typed and ambient callers cannot cancel that token. Model switch/delete are serialized with generation, and application shutdown rejects new work and waits only within the existing bounded teardown policy. This is deliberately not described as user-visible/native forced cancellation.
+
+### Chat-template ownership
+
+The application—not generic llama.cpp chat-template application—owns the supported SmolLM2 and Qwen ChatML rendering. The embedded GGUF template is a compatibility input used for deterministic family/signature validation. SmolLM2 system behavior and Qwen non-thinking framing are application-owned, and malformed/unsupported template signatures fail closed. P6 changed the ownership documentation and compatibility discriminator without changing rendered prompt framing, so no P12 real-model rerun was required.
+
+### Remaining V1 limits
+
+The Local runtime remains CPU-only by policy. Cooperative native generation cancellation remains limited to the safe high-level binding surface; shutdown is bounded rather than a forced native abort; first-token latency is still unavailable from the pinned runtime API and is recorded as unavailable rather than synthesized. Fully local voice remains deferred. Signed/notarized P13 release execution, physical Mac audio/TCC acceptance, and human voice audition remain owner-deferred and are not implied by ordinary CI.
