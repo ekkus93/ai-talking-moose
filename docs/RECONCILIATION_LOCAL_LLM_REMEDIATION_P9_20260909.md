@@ -2,11 +2,15 @@
 
 ## Status
 
-**P9 documentation and historical reconciliation is prepared on the fully accepted P8-closure generation.**
+**P9 documentation and historical reconciliation implementation is accepted and the P9 tracker closeout is prepared.**
 
-This record covers `LLMR-900` through `LLMR-903`. It does not close the authoritative remediation tracker until the P9 exact-head ordinary CI, expected-head guarded merge, and exact post-merge `master` CI are accepted.
+This record covers `LLMR-900` through `LLMR-903`. P9 changes documentation and historical interpretation only; P10 remains the final focused source audit and remediation Final Gate.
 
 Implementation base: `8d2e318cec837de3a26c35fe9afc3c0f5847ea69`, the P8 tracker-closeout `master` produced by PR #64. Exact post-closure master CI `34309719864` completed successfully on that SHA.
+
+P9 implementation PR #65 used exact head `4537c4a0e4937ccef8143ca89622e3e41196fb89`. Exact-head CI `34327812759` completed successfully, including the then-canonical `npm run check:all` gate. PR #65 was squash-merged with the expected-head guard to exact `master` SHA `c3400e78d4a265a282d765ee762b2c431edb6b34`; exact post-merge master CI `34330866678` completed successfully.
+
+Before this tracker-only closeout, CI performance remediation PR #66 was separately accepted. Its exact head `2798815cb228672eb52db305b1c349b0ad486b07` passed CI `34338993830` and was guarded-squash-merged to exact `master` SHA `6008939c475e67620dc0003bb6bb3d27eb045f80`. Exact master push CI `34372468221` passed on that SHA using the new CI-plumbing fast path. PR #66 changes CI orchestration and matrix execution ownership; it does not change Local LLM model identity, runtime behavior, prompt rendering, provider routing, or P9 documentation semantics.
 
 P9 is documentation/reconciliation only. It does not change model identity, runtime loading, installer behavior, prompt bytes, chat-template rendering, provider routing, tokenization, or generation semantics.
 
@@ -71,6 +75,7 @@ This separation preserves historical evidence while preventing the old 2026-09-0
 | P6 | PR #59, head `31ac0b76b99c28d0f5225c0c6ebcfd8176c78231` | exact-head CI `34144002755`; merged `0782091c8f46bb6471b86a2e724364e10b611077`; post-merge CI `34146860974` |
 | P7 | PR #61, head `40a531319b49bb1f51306eb4ca07b430558b86d8` | exact-head CI `34274531469`; merged implementation `d80f6ab804d8dcc698836283d87bab77da9fcf65`; post-merge CI `34278242897`; accepted P7 closure master `e3533f5cab2c8730683701b11277871e8042c7fb` passed CI `34287904554` |
 | P8 | PR #63, head `f22d161d37a08e8aa52eebd0b815a542b86783e6`; closure PR #64 head `da447b3aee7caa6c49edaf3cce9d971841620e1e` | implementation CI `34290605186`; merged implementation `32fb0b1bd82ee548311510a98e0d6f237c4f06f4`; post-merge CI `34294230896`; closure CI `34306366112`; accepted P8 closure master `8d2e318cec837de3a26c35fe9afc3c0f5847ea69` passed CI `34309719864` |
+| P9 | PR #65, head `4537c4a0e4937ccef8143ca89622e3e41196fb89` | exact-head CI `34327812759`; merged `c3400e78d4a265a282d765ee762b2c431edb6b34`; post-merge CI `34330866678` |
 
 The phase-specific reconciliation documents remain the detailed authority for exact tests, tree identities, superseded failed authoring runs, and closure mechanics.
 
@@ -80,7 +85,7 @@ The remediation intentionally distinguishes evidence types:
 
 - **source inspection** — the 2026-09-05 finding inventory and later focused audits identify ownership/control-flow defects and documentation mismatches;
 - **deterministic tests/probes** — barrier-controlled races, installer fixtures, privacy sentinels, command/shape mutation probes, and frontend lifecycle tests prove specific invariants without public-network/model/hardware dependence;
-- **ordinary CI** — frontend/Rust quality, dependency/security/release gates, Local LLM target compile proofs, macOS unsigned bundle smoke jobs, generated-contract checks, and literal canonical `npm run check:all`;
+- **ordinary CI** — path-scoped frontend/Rust/contract/dependency/release/Local LLM gates selected by changed inputs; explicit full validation retains the complete cross-platform compile/bundle matrix and literal canonical `npm run check:all`;
 - **real-model evidence** — the accepted P12 real CPU/network-denied model run from the original V1 remains the generation-semantic evidence because P0-P9 do not materially change those semantics;
 - **deferred physical/release evidence** — signed/notarized release execution, physical Mac audio/TCC acceptance, and human voice audition are owner-deferred and are not inferred from CI.
 
@@ -119,11 +124,8 @@ The following are explicit supported boundaries, not silent success claims:
 
 ## P9 closure boundary
 
-P9 changes documentation and historical interpretation only. The P9 tracker section must remain open until:
+P9 implementation is accepted through exact post-merge master CI. This documentation-only closeout marks only `LLMR-900` through `LLMR-903` complete in the authoritative tracker.
 
-- exact-head ordinary P9 CI succeeds, including canonical `npm run check:all`;
-- the P9 implementation PR is squash-merged with an expected-head guard;
-- ordinary CI succeeds on the exact resulting `master` SHA;
-- a separate documentation-only tracker closeout then marks only `LLMR-900` through `LLMR-903` complete.
+The closeout branch is based on exact `master` `6008939c475e67620dc0003bb6bb3d27eb045f80`, after CI optimization PR #66 and its successful exact-master push CI `34372468221`. The closeout must itself pass the docs-only exact-head CI path and be expected-head guarded when merged. Its resulting exact master push must also pass before P9 is considered procedurally accepted.
 
-P10 remains the final source audit and remediation Final Gate. P9 does not pre-close `LLMR-1000` through `LLMR-1003` or the Final Remediation Gate checklist.
+P10 remains entirely open. P9 does not pre-close `LLMR-1000` through `LLMR-1003` or the Final Remediation Gate checklist.
