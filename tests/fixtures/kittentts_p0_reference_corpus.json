@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "model_family": "KittenML/kitten-tts-mini-0.8",
+  "reference_frontend": "KittenTTS v0.8 TextPreprocessor + phonemizer EspeakBackend(en-us, preserve_punctuation=true, with_stress=true)",
+  "notes": "normalized_text is the intended semantic normalization target used to compare permissive G2P candidates. official_ipa is populated by the P0 reference oracle; candidate IPA must never be promoted to reference data.",
+  "cases": [
+    {"id":"ordinary_01","category":"ordinary","text":"Oh good. Another dialog box.","normalized_text":"Oh good. Another dialog box.","synthesize":true},
+    {"id":"ordinary_02","category":"ordinary","text":"You clicked me. I hope you're proud of yourself.","normalized_text":"You clicked me. I hope you're proud of yourself.","synthesize":true},
+    {"id":"ordinary_03","category":"ordinary","text":"I was sleeping, but apparently that's not important.","normalized_text":"I was sleeping, but apparently that's not important.","synthesize":true},
+    {"id":"punctuation_01","category":"punctuation","text":"Really? Yes! Maybe; probably, unfortunately.","normalized_text":"Really? Yes! Maybe; probably, unfortunately.","synthesize":false},
+    {"id":"contraction_01","category":"contractions","text":"I can't believe you've done that, and I won't pretend I didn't notice.","normalized_text":"I can't believe you've done that, and I won't pretend I didn't notice.","synthesize":true},
+    {"id":"possessive_01","category":"possessives","text":"The Moose's patience isn't infinite.","normalized_text":"The Moose's patience isn't infinite.","synthesize":false},
+    {"id":"integer_01","category":"numbers","text":"There are 42 windows open.","normalized_text":"There are forty-two windows open.","synthesize":true},
+    {"id":"decimal_01","category":"numbers","text":"The value is 3.14, more or less.","normalized_text":"The value is three point one four, more or less.","synthesize":false},
+    {"id":"negative_01","category":"numbers","text":"The temperature changed by -12 degrees.","normalized_text":"The temperature changed by negative twelve degrees.","synthesize":false},
+    {"id":"ordinal_01","category":"ordinals","text":"This is the 21st time you've clicked me.","normalized_text":"This is the twenty-first time you've clicked me.","synthesize":false},
+    {"id":"percent_01","category":"percentages","text":"CPU usage is 87.5% right now.","normalized_text":"CPU usage is eighty-seven point five percent right now.","synthesize":false},
+    {"id":"currency_01","category":"currency","text":"That upgrade costs $19.99.","normalized_text":"That upgrade costs nineteen dollars and ninety-nine cents.","synthesize":true},
+    {"id":"currency_scale_01","category":"currency","text":"Apparently somebody wants $2.5M for that.","normalized_text":"Apparently somebody wants two point five million dollars for that.","synthesize":false},
+    {"id":"time_01","category":"time","text":"Wake me again at 3:30 PM.","normalized_text":"Wake me again at three thirty PM.","synthesize":false},
+    {"id":"date_01","category":"dates","text":"The meeting is September 9, 2026.","normalized_text":"The meeting is September ninth, two thousand twenty-six.","synthesize":false},
+    {"id":"abbrev_01","category":"abbreviations","text":"Dr. Moose has reviewed Fig. 3.","normalized_text":"Doctor Moose has reviewed Figure three.","synthesize":false},
+    {"id":"initialism_01","category":"initialisms","text":"The CPU and API are both awake.","normalized_text":"The CPU and API are both awake.","synthesize":false},
+    {"id":"version_01","category":"versions","text":"Python-3.12 is not the same as Python-3.13.","normalized_text":"Python three point one two is not the same as Python three point one three.","synthesize":false},
+    {"id":"unit_01","category":"units","text":"The file is 80MB and the audio is 24kHz.","normalized_text":"The file is eighty megabytes and the audio is twenty-four kilohertz.","synthesize":false},
+    {"id":"proper_01","category":"proper_names","text":"Phillip asked the Moose about Oakland and Gemini.","normalized_text":"Phillip asked the Moose about Oakland and Gemini.","synthesize":true},
+    {"id":"proper_02","category":"proper_names","text":"Qwen and Tauri are having an argument again.","normalized_text":"Qwen and Tauri are having an argument again.","synthesize":false},
+    {"id":"oov_01","category":"oov","text":"The flibbertigibbet recalibrated the mooseotron.","normalized_text":"The flibbertigibbet recalibrated the mooseotron.","synthesize":false},
+    {"id":"hyphen_01","category":"hyphenation","text":"That was a well-timed, CPU-only response.","normalized_text":"That was a well-timed, CPU-only response.","synthesize":false},
+    {"id":"quote_01","category":"quotes","text":"He said, \"Don't click the Moose.\" You clicked it anyway.","normalized_text":"He said, Don't click the Moose. You clicked it anyway.","synthesize":false},
+    {"id":"long_01","category":"longer_sentence","text":"I could explain why opening thirty-seven browser tabs seemed reasonable at the time, but that would require pretending there was a plan.","normalized_text":"I could explain why opening thirty-seven browser tabs seemed reasonable at the time, but that would require pretending there was a plan.","synthesize":true}
+  ]
+}

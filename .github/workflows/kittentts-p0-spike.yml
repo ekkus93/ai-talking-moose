@@ -1,0 +1,251 @@
+name: KittenTTS P0 feasibility
+
+on:
+  push:
+    branches:
+      - ralph/kittentts-p0-20260909
+    paths:
+      - ".github/workflows/kittentts-p0-spike.yml"
+      - "tools/kittentts-p0/**"
+      - "tests/fixtures/kittentts_p0_reference_corpus.json"
+      - "docs/RECONCILIATION_KITTENTTS_P0_20260909.md"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kittentts-p0-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freeze-lock:
+    name: Freeze P0 Cargo dependency graph
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      lock_changed: ${{ steps.lock.outputs.lock_changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate exact P0 Cargo lock
+        id: lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile --manifest-path tools/kittentts-p0/Cargo.toml
+          if git diff --quiet -- tools/kittentts-p0/Cargo.lock && git ls-files --error-unmatch tools/kittentts-p0/Cargo.lock >/dev/null 2>&1; then
+            echo 'lock_changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'lock_changed=true' >> "$GITHUB_OUTPUT"
+          git config user.name 'Phillip Chin'
+          git config user.email 'ekkus93@gmail.com'
+          git add tools/kittentts-p0/Cargo.lock
+          git commit -m 'test: freeze KittenTTS P0 Cargo lock'
+          git push origin HEAD:"${GITHUB_REF_NAME}"
+
+  probe:
+    name: CPU probe (${{ matrix.label }})
+    needs: freeze-lock
+    if: needs.freeze-lock.outputs.lock_changed == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            os: ubuntu-24.04
+            ort_asset: onnxruntime-linux-x64-1.23.2.tgz
+            ort_sha256: 1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b
+          - label: macos-arm64
+            os: macos-15
+            ort_asset: onnxruntime-osx-arm64-1.23.2.tgz
+            ort_sha256: b4d513ab2b26f088c66891dbbc1408166708773d7cc4163de7bdca0e9bbb7856
+          - label: macos-x86_64
+            os: macos-15-intel
+            ort_asset: onnxruntime-osx-x86_64-1.23.2.tgz
+            ort_sha256: d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Cache P0 Cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/kittentts-p0/target
+          key: ${{ runner.os }}-${{ runner.arch }}-ktt-p0-cargo-v3-${{ hashFiles('tools/kittentts-p0/Cargo.lock') }}
+      - name: Download pinned ONNX Runtime 1.23.2
+        shell: bash
+        env:
+          ORT_ASSET: ${{ matrix.ort_asset }}
+          ORT_SHA256: ${{ matrix.ort_sha256 }}
+        run: |
+          set -euo pipefail
+          root="$PWD/.cache/kittentts-p0/ort"
+          mkdir -p "$root"
+          archive="$root/$ORT_ASSET"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/$ORT_ASSET" \
+            -o "$archive"
+          echo "$ORT_SHA256  $archive" | shasum -a 256 -c -
+          runtime_name="${ORT_ASSET%.tgz}"
+          rm -rf "$root/$runtime_name"
+          tar -xzf "$archive" -C "$root"
+          runtime_dir="$root/$runtime_name"
+          test -d "$runtime_dir/lib"
+          ls "$runtime_dir/lib"/libonnxruntime*
+          echo "ORT_LIB_LOCATION=$runtime_dir/lib" >> "$GITHUB_ENV"
+          echo 'ORT_PREFER_DYNAMIC_LINK=1' >> "$GITHUB_ENV"
+          if [[ "$(uname -s)" == 'Darwin' ]]; then
+            echo "DYLD_LIBRARY_PATH=$runtime_dir/lib:${DYLD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          else
+            echo "LD_LIBRARY_PATH=$runtime_dir/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          fi
+          python3 - <<PY
+          import json
+          from pathlib import Path
+          Path('ort-artifact.json').write_text(json.dumps({
+              'version': '1.23.2',
+              'asset': '$ORT_ASSET',
+              'sha256': '$ORT_SHA256',
+              'license': 'MIT',
+              'source': 'microsoft/onnxruntime release v1.23.2',
+          }, indent=2) + '\n')
+          PY
+      - name: Resolve immutable upstream model revision
+        id: model
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision="$(git ls-remote https://huggingface.co/KittenML/kitten-tts-mini-0.8 HEAD | awk '{print $1}')"
+          test "${#revision}" -eq 40
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "Kitten model revision: $revision"
+      - name: Cache Kitten model files
+        uses: actions/cache@v4
+        with:
+          path: .cache/kittentts-p0/model
+          key: ktt-mini-0.8-${{ steps.model.outputs.revision }}
+      - name: Download exact Kitten model assets
+        shell: bash
+        env:
+          MODEL_REVISION: ${{ steps.model.outputs.revision }}
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/kittentts-p0/model
+          base="https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/${MODEL_REVISION}"
+          for file in kitten_tts_mini_v0_8.onnx voices.npz config.json; do
+            if [[ ! -s ".cache/kittentts-p0/model/$file" ]]; then
+              curl --fail --location --retry 3 --retry-delay 2 \
+                "$base/$file?download=true" \
+                -o ".cache/kittentts-p0/model/$file"
+            fi
+          done
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('.cache/kittentts-p0/model')
+          result = {}
+          for path in sorted(root.iterdir()):
+              if path.is_file():
+                  result[path.name] = {
+                      'bytes': path.stat().st_size,
+                      'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                  }
+          Path('model-artifacts.json').write_text(json.dumps(result, indent=2) + '\n')
+          print(json.dumps(result, indent=2))
+          PY
+      - name: Download pinned permissive CMU dictionary
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 2 \
+            https://raw.githubusercontent.com/ayutaz/piper-plus/244ffeb44108347a514ebfc0c2f773d938c9613b/src/rust/piper-plus-g2p/data/cmudict_data.json \
+            -o cmudict_data.json
+          test "$(python3 -c 'from pathlib import Path; print(Path("cmudict_data.json").stat().st_size)')" = '3748042'
+          test "$(shasum -a 256 cmudict_data.json | awk '{print $1}')" = 'f78ed3bfa40146b70b9de78a7c67ef3be6b6c11671bb2a050442f232252a3f01'
+      - name: Install P0 reference-oracle dependencies
+        shell: bash
+        run: python -m pip install --disable-pip-version-check phonemizer==3.4.0 espeakng-loader==0.2.4
+      - name: Generate official Kitten eSpeak reference model inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p0-output
+          python tools/kittentts-p0/reference_ipa.py \
+            tests/fixtures/kittentts_p0_reference_corpus.json \
+            p0-output/reference.json
+      - name: Verify production candidate Cargo graph is permissive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/kittentts-p0/license_gate.py --self-test
+          cargo tree --locked --manifest-path tools/kittentts-p0/Cargo.toml -e features > p0-output/cargo-tree.txt
+          if grep -Eiq '(^|[^[:alpha:]])espeak([-_]|[^[:alpha:]]|$)|phonemizer' p0-output/cargo-tree.txt; then
+            echo 'Unexpected eSpeak/phonemizer dependency in production candidate graph' >&2
+            grep -Ei 'espeak|phonemizer' p0-output/cargo-tree.txt >&2 || true
+            exit 1
+          fi
+          if grep -Eiq '(^|[[:space:]])kittentts v' p0-output/cargo-tree.txt; then
+            echo 'kittentts-rs must not be part of the selected P0 runtime graph' >&2
+            grep -Ei 'kittentts' p0-output/cargo-tree.txt >&2 || true
+            exit 1
+          fi
+          cargo metadata --locked --manifest-path tools/kittentts-p0/Cargo.toml --format-version 1 > p0-output/cargo-metadata.json
+          python tools/kittentts-p0/license_gate.py \
+            p0-output/cargo-metadata.json \
+            p0-output/license-inventory.json
+      - name: Build and run permissive Rust CPU candidate
+        shell: bash
+        env:
+          CMUDICT_PATH: ${{ github.workspace }}/cmudict_data.json
+        run: |
+          set -euo pipefail
+          cargo run --release --locked --manifest-path tools/kittentts-p0/Cargo.toml -- \
+            tests/fixtures/kittentts_p0_reference_corpus.json \
+            .cache/kittentts-p0/model/kitten_tts_mini_v0_8.onnx \
+            .cache/kittentts-p0/model/voices.npz \
+            p0-output/candidate.json \
+            Jasper
+      - name: Compare official and permissive model inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/kittentts-p0/compare_probe.py \
+            p0-output/reference.json \
+            p0-output/candidate.json \
+            p0-output/comparison.json
+          cp model-artifacts.json p0-output/model-artifacts.json
+          cp ort-artifact.json p0-output/ort-artifact.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          comparison = json.loads(Path('p0-output/comparison.json').read_text())
+          candidate = json.loads(Path('p0-output/candidate.json').read_text())
+          print(json.dumps({
+              'case_count': comparison['case_count'],
+              'exact_model_input_cases': comparison['exact_model_input_cases'],
+              'aggregate_normalized_token_edit_distance': comparison['aggregate_normalized_token_edit_distance'],
+              'synthesized_cases': comparison['synthesized_cases'],
+              'canonical_max_rtf': comparison['max_synthesized_rtf'],
+              'canonical_cold_load_ms': comparison['cold_load_ms'],
+              'max_rss_mib_after_load': comparison['max_rss_mib_after_load'],
+              'max_rss_mib_after_synthesis': comparison['max_rss_mib_after_synthesis'],
+              'thread_benchmarks': candidate['thread_benchmarks'],
+          }, indent=2))
+          PY
+      - name: Upload P0 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: kittentts-p0-${{ matrix.label }}
+          path: p0-output
+          if-no-files-found: error
+          retention-days: 14
