@@ -256,6 +256,7 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check "$BASE_SHA" "$HEAD_SHA"
+          bash -n scripts/prepare_ubuntu_apt.sh
           bash -n scripts/run_backend_failure_matrix.sh
           bash -n scripts/run_backend_stress_matrix.sh
           test -s .github/workflows/ci.yml
@@ -307,7 +308,7 @@ jobs:
         uses: actions/checkout@v7
       - name: Install Linux build dependencies
         run: |
-          sudo apt-get update
+          bash scripts/prepare_ubuntu_apt.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \
@@ -345,7 +346,7 @@ jobs:
         uses: actions/checkout@v7
       - name: Install Linux build dependencies
         run: |
-          sudo apt-get update
+          bash scripts/prepare_ubuntu_apt.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \
@@ -382,7 +383,7 @@ jobs:
           cache: npm
       - name: Install Linux build dependencies
         run: |
-          sudo apt-get update
+          bash scripts/prepare_ubuntu_apt.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \
@@ -425,7 +426,7 @@ jobs:
       - name: Install Linux llama.cpp build dependencies
         if: matrix.os == 'linux'
         run: |
-          sudo apt-get update
+          bash scripts/prepare_ubuntu_apt.sh
           sudo apt-get install -y --no-install-recommends build-essential clang cmake libclang-dev
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -500,6 +501,7 @@ jobs:
             scripts/collect_release_licenses.py \
             scripts/check_local_llm_packaging_policy.py \
             scripts/measure_local_llm_bundle_impact.py
+          bash -n scripts/prepare_ubuntu_apt.sh
           bash -n scripts/prepare_moonshine_macos.sh
           bash -n scripts/verify_macos_bundle.sh
           bash -n scripts/verify_app_build_provenance.sh
@@ -615,7 +617,7 @@ jobs:
           cache: npm
       - name: Install Linux build dependencies
         run: |
-          sudo apt-get update
+          bash scripts/prepare_ubuntu_apt.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \

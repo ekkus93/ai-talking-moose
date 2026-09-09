@@ -14,7 +14,11 @@ fail() {
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "this script must run on macOS"
 case "$arch" in arm64|x86_64) ;; *) fail "unsupported macOS architecture: $arch" ;; esac
-[[ "$(uname -m)" == "$arch" ]] || fail "requested architecture $arch does not match host $(uname -m)"
+host_arch="$(uname -m)"
+if [[ "$host_arch" != "$arch" ]]; then
+  [[ "$host_arch" == "arm64" && "$arch" == "x86_64" ]] \
+    || fail "requested architecture $arch cannot be built on host $host_arch"
+fi
 
 for command in git cmake python3 lipo otool install_name_tool codesign; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
@@ -44,7 +48,7 @@ trap cleanup EXIT
 source_dir="$workspace/moonshine"
 build_dir="$workspace/build"
 
-printf 'Preparing Moonshine %s (%s) for macOS %s\n' "$runtime_release" "$source_commit" "$arch"
+printf 'Preparing Moonshine %s (%s) for macOS %s on host %s\n' "$runtime_release" "$source_commit" "$arch" "$host_arch"
 mkdir -p "$source_dir"
 git -C "$source_dir" init -q
 git -C "$source_dir" remote add origin https://github.com/moonshine-ai/moonshine.git

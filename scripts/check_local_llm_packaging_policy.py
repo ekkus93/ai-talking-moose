@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN_CARGO = ROOT / "src-tauri/Cargo.toml"
 PROOF_CARGO = ROOT / "src-tauri/llama-compile-proof/Cargo.toml"
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
+FULL_VALIDATION_WORKFLOW = ROOT / ".github/workflows/full-validation-label.yml"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release.yml"
 TAURI_CONFIG = ROOT / "src-tauri/tauri.conf.json"
 PACKAGE_JSON = ROOT / "package.json"
@@ -27,7 +28,8 @@ LOCAL_LLM_NOTICE = ROOT / "src-tauri/native/macos/notices/LocalLlmRuntime/README
 LLAMA_VERSION = "=0.1.154"
 LLAMA_CPP_RS_COMMIT = "bed81ad4ab1a6c904b11d425608e50f976d8ea62"
 LLAMA_CPP_NATIVE_COMMIT = "5f55650a78f92aff4d48d671423e888fac0469ff"
-REQUIRED_COMPILE_LABELS = {"linux-x86_64", "macos-arm64", "macos-x86_64"}
+REQUIRED_ORDINARY_COMPILE_LABELS = {"linux-x86_64", "macos-arm64"}
+REQUIRED_FULL_COMPILE_LABELS = {"linux-x86_64", "macos-arm64", "macos-x86_64"}
 FORBIDDEN_ORDINARY_CI_TOKENS = (
     ".gguf",
     "local_llm_acceptance",
@@ -67,19 +69,54 @@ def check_llama_pins() -> None:
         require_llama_dependency(proof, name, "compile-proof Cargo.toml")
 
 
+def workflow_labels(text: str) -> set[str]:
+    return set(re.findall(r"^\s*- label:\s*([^\s#]+)\s*$", text, flags=re.MULTILINE))
+
+
 def check_compile_matrix() -> None:
-    text = CI_WORKFLOW.read_text(encoding="utf-8")
-    if "local-llm-compile-proof:" not in text:
+    ordinary = CI_WORKFLOW.read_text(encoding="utf-8")
+    full = FULL_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
+
+    if "local-llm-compile-proof:" not in ordinary:
         fail("ordinary CI is missing the Local LLM compile-proof job")
-    labels = set(re.findall(r"^\s*- label:\s*([^\s#]+)\s*$", text, flags=re.MULTILINE))
-    missing = REQUIRED_COMPILE_LABELS - labels
+    missing = REQUIRED_ORDINARY_COMPILE_LABELS - workflow_labels(ordinary)
     if missing:
         fail(f"ordinary CI compile matrix is missing: {', '.join(sorted(missing))}")
+
+    if "local-llm-proof:" not in full:
+        fail("explicit full validation is missing the Local LLM compile-proof job")
+    missing = REQUIRED_FULL_COMPILE_LABELS - workflow_labels(full)
+    if missing:
+        fail(f"explicit full-validation compile matrix is missing: {', '.join(sorted(missing))}")
+
     command = "cargo test --manifest-path src-tauri/llama-compile-proof/Cargo.toml --locked"
-    if command not in text:
+    if command not in ordinary:
         fail("ordinary CI no longer runs the locked llama.cpp compile/CPU-policy proof")
-    if re.search(r"(?:brew|apt(?:-get)?)\s+.*install.*llama", text, flags=re.IGNORECASE):
-        fail("ordinary CI must not install a developer/system llama.cpp package")
+    if command not in full:
+        fail("explicit full validation no longer runs the locked llama.cpp compile/CPU-policy proof")
+
+    for name, text in (("ordinary CI", ordinary), ("full validation", full)):
+        if re.search(r"(?:brew|apt(?:-get)?)\s+.*install.*llama", text, flags=re.IGNORECASE):
+            fail(f"{name} must not install a developer/system llama.cpp package")
+
+
+def check_full_validation_bundle_smoke() -> None:
+    text = FULL_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
+    if "macos-bundle-smoke:" not in text:
+        fail("explicit full validation is missing macOS bundle smoke coverage")
+    for token in (
+        "target: aarch64-apple-darwin",
+        "target: x86_64-apple-darwin",
+        "runs-on: macos-15",
+        "npm run tauri build -- --debug --bundles app --target",
+        "bash scripts/verify_macos_bundle.sh",
+        "bash scripts/verify_app_build_provenance.sh",
+        "Cache pinned Moonshine native runtime",
+    ):
+        if token not in text:
+            fail(f"explicit full-validation bundle smoke is missing {token!r}")
+    if "name: Canonical npm run check:all" not in text or "run: npm run check:all" not in text:
+        fail("explicit full validation must retain the literal canonical npm run check:all gate")
 
 
 def check_ordinary_ci_is_model_weight_free() -> None:
@@ -92,7 +129,7 @@ def check_ordinary_ci_is_model_weight_free() -> None:
         if token in lowered:
             fail(f"npm run check:all references real-model acceptance token {token!r}")
 
-    for path in (CI_WORKFLOW, RELEASE_WORKFLOW):
+    for path in (CI_WORKFLOW, FULL_VALIDATION_WORKFLOW, RELEASE_WORKFLOW):
         text = path.read_text(encoding="utf-8").lower()
         for token in FORBIDDEN_ORDINARY_CI_TOKENS:
             if token in text:
@@ -177,14 +214,15 @@ def check_model_license_document() -> None:
 def main() -> None:
     check_llama_pins()
     check_compile_matrix()
+    check_full_validation_bundle_smoke()
     check_ordinary_ci_is_model_weight_free()
     check_bundle_configuration()
     check_native_runtime_notice()
     check_model_license_document()
     print(
         "local-llm-packaging-policy-ok "
-        "targets=linux-x86_64,macos-arm64,macos-x86_64 "
-        "weights=external runtime=llama-cpp-2@0.1.154"
+        "ordinary=linux-x86_64,macos-arm64 full=linux-x86_64,macos-arm64,macos-x86_64 "
+        "bundle-smoke=debug-cross-arch weights=external runtime=llama-cpp-2@0.1.154"
     )
 
 
