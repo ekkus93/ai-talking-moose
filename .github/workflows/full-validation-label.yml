@@ -1,0 +1,299 @@
+name: Full validation
+
+on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - labeled
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: full-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  guard:
+    name: Verify exact PR head
+    if: github.event.label.name == 'full-validation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      expected_sha: ${{ steps.guard.outputs.expected_sha }}
+    steps:
+      - name: Verify labeled PR head is still current
+        id: guard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          ref_json="$(curl --fail-with-body --silent --show-error \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$REPOSITORY/git/ref/heads/$HEAD_REF")"
+          actual_head_sha="$(printf '%s' "$ref_json" | jq -r '.object.sha')"
+          test "$actual_head_sha" = "$EXPECTED_HEAD_SHA"
+          echo "expected_sha=$EXPECTED_HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+  canonical:
+    name: Canonical npm run check:all
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.expected_sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache Cargo and canonical build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-full-canonical-v2-${{ hashFiles('src-tauri/Cargo.lock') }}-${{ needs.guard.outputs.expected_sha }}
+          restore-keys: |
+            ${{ runner.os }}-full-canonical-v2-${{ hashFiles('src-tauri/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+      - name: Run literal canonical repository gate
+        run: npm run check:all
+      - name: Verify named backend failure and stress matrices
+        env:
+          TALKING_MOOSE_MATRIX_VERIFY_ONLY: "1"
+        run: |
+          bash scripts/run_backend_failure_matrix.sh
+          bash scripts/run_backend_stress_matrix.sh
+
+  dependency-audit:
+    name: Dependency audit
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.expected_sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Audit production Node dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit development Node dependencies
+        run: npm audit --include=dev --audit-level=high
+      - name: Audit Rust dependencies
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: src-tauri
+
+  release-static:
+    name: Release metadata static gate
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.expected_sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+      - name: Validate release metadata and icon set
+        run: python3 scripts/validate_release_metadata.py
+      - name: Validate release helper syntax
+        run: |
+          python3 -m py_compile \
+            scripts/generate_app_icons.py \
+            scripts/validate_release_metadata.py \
+            scripts/collect_release_licenses.py \
+            scripts/check_local_llm_packaging_policy.py \
+            scripts/measure_local_llm_bundle_impact.py
+          bash -n scripts/prepare_moonshine_macos.sh
+          bash -n scripts/verify_macos_bundle.sh
+          bash -n scripts/verify_app_build_provenance.sh
+          bash -n scripts/verify_macos_release.sh
+          bash -n scripts/run_p2_p3_macos_physical_acceptance.sh
+          bash -n scripts/run_p13_macos_release_acceptance.sh
+          bash -n scripts/run_backend_failure_matrix.sh
+          bash -n scripts/run_backend_stress_matrix.sh
+      - name: Validate Local LLM packaging policy
+        run: python3 scripts/check_local_llm_packaging_policy.py
+      - name: Validate dependency license collection
+        run: python3 scripts/collect_release_licenses.py
+
+  local-llm-proof:
+    name: Local LLM compile proof (${{ matrix.label }})
+    needs: guard
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-latest
+            os: linux
+          - label: macos-arm64
+            runner: macos-15
+            os: macos
+          - label: macos-x86_64
+            runner: macos-15-intel
+            os: macos
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 12
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.expected_sha }}
+      - name: Install Linux llama.cpp build dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential clang cmake libclang-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.label }}-llm-proof-${{ hashFiles('src-tauri/llama-compile-proof/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-llm-proof-
+      - name: Compile and run llama.cpp CPU-policy proof
+        run: cargo test --manifest-path src-tauri/llama-compile-proof/Cargo.toml --locked
+
+  macos-bundle-smoke:
+    name: macOS unsigned bundle smoke (${{ matrix.arch }})
+    needs: guard
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-apple-darwin
+            deployment_target: "13.4"
+          - arch: x86_64
+            target: x86_64-apple-darwin
+            deployment_target: "13.4"
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.expected_sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Cache Cargo and debug bundle build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target/${{ matrix.target }}
+          key: ${{ runner.os }}-${{ matrix.target }}-tauri-debug-v2-${{ hashFiles('src-tauri/Cargo.lock') }}-${{ needs.guard.outputs.expected_sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-tauri-debug-v2-${{ hashFiles('src-tauri/Cargo.lock') }}-
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+      - name: Validate release metadata and native runtime manifest
+        run: |
+          python3 scripts/validate_release_metadata.py
+          python3 scripts/validate_moonshine_runtime_manifest.py
+      - name: Cache pinned Moonshine native runtime
+        id: moonshine-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/native/macos/libmoonshine.dylib
+            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+            src-tauri/native/macos/notices/MoonshineRuntime
+            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
+            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
+          key: moonshine-macos-${{ matrix.arch }}-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
+      - name: Prepare pinned Moonshine native runtime
+        if: steps.moonshine-cache.outputs.cache-hit != 'true'
+        run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+      - name: Verify prepared runtime architecture
+        run: |
+          test -s src-tauri/native/macos/libmoonshine.dylib
+          test -s src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+          lipo -archs src-tauri/native/macos/libmoonshine.dylib | tr ' ' '\n' | grep -Fx '${{ matrix.arch }}'
+          lipo -archs src-tauri/native/macos/libonnxruntime.1.23.2.dylib | tr ' ' '\n' | grep -Fx '${{ matrix.arch }}'
+      - name: Collect dependency license texts
+        run: python3 scripts/collect_release_licenses.py
+      - name: Build unsigned debug macOS application smoke bundle
+        run: npm run tauri build -- --debug --bundles app --target "${{ matrix.target }}"
+      - name: Verify self-contained native runtime bundle
+        shell: bash
+        run: |
+          app_path="$(find "src-tauri/target/${{ matrix.target }}/debug/bundle/macos" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          bash scripts/verify_macos_bundle.sh "$app_path" "${{ matrix.arch }}"
+      - name: Verify packaged build provenance
+        shell: bash
+        run: |
+          app_path="$(find "src-tauri/target/${{ matrix.target }}/debug/bundle/macos" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          bash scripts/verify_app_build_provenance.sh "$app_path" "${{ needs.guard.outputs.expected_sha }}"
