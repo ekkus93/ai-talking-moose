@@ -97,9 +97,13 @@ fn emit_git_rerun_paths() {
 }
 
 fn build_commit() -> String {
+    // An explicit release/acceptance override is authoritative. Otherwise prefer
+    // the checkout that Cargo is actually compiling. On pull_request events,
+    // GitHub's ambient GITHUB_SHA can name a synthetic merge commit even when a
+    // workflow deliberately checks out the exact PR head for provenance.
     commit_from_env("TALKING_MOOSE_BUILD_COMMIT")
-        .or_else(|| commit_from_env("GITHUB_SHA"))
         .or_else(git_commit)
+        .or_else(|| commit_from_env("GITHUB_SHA"))
         .unwrap_or_else(|| UNKNOWN_BUILD_COMMIT.to_string())
 }
 
