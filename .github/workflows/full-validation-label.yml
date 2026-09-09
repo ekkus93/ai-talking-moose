@@ -243,6 +243,22 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - name: Configure Homebrew OpenSSL for llama.cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! openssl_prefix="$(brew --prefix openssl@3 2>/dev/null)"; then
+            brew install openssl@3
+            openssl_prefix="$(brew --prefix openssl@3)"
+          fi
+          test -f "$openssl_prefix/include/openssl/err.h"
+          echo "OPENSSL_ROOT_DIR=$openssl_prefix" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$openssl_prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$openssl_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          echo "CPPFLAGS=-I$openssl_prefix/include ${CPPFLAGS:-}" >> "$GITHUB_ENV"
+          echo "CFLAGS=-I$openssl_prefix/include ${CFLAGS:-}" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=-I$openssl_prefix/include ${CXXFLAGS:-}" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-L$openssl_prefix/lib ${LDFLAGS:-}" >> "$GITHUB_ENV"
       - name: Cache Cargo and debug bundle build outputs
         uses: actions/cache@v4
         with:
@@ -250,9 +266,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target/${{ matrix.target }}
-          key: ${{ runner.os }}-${{ matrix.target }}-tauri-debug-v2-${{ hashFiles('src-tauri/Cargo.lock') }}-${{ needs.guard.outputs.expected_sha }}
+          key: ${{ runner.os }}-${{ matrix.target }}-tauri-debug-v3-${{ hashFiles('src-tauri/Cargo.lock') }}-${{ needs.guard.outputs.expected_sha }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-tauri-debug-v2-${{ hashFiles('src-tauri/Cargo.lock') }}-
+            ${{ runner.os }}-${{ matrix.target }}-tauri-debug-v3-${{ hashFiles('src-tauri/Cargo.lock') }}-
             ${{ runner.os }}-${{ matrix.target }}-cargo-
       - name: Install frontend dependencies
         run: npm ci
