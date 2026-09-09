@@ -6,7 +6,7 @@
 **Source architecture baseline recorded by the tracker:** `80027a70815bfa8db6c9faa03b3a8e7501f2fe4d`
 **Validated implementation head before history collapse:** `61a8c5675cf60bc64fce27ca3edbb7095f6d8840`
 **Authoritative P0 evidence run:** `34407263250`
-**Status:** P0 implementation evidence complete; final clean-head validation and merge remain pending
+**Status:** P0 COMPLETE — clean-head validation, guarded merge, and exact merged-master CI accepted 2026-09-09
 
 ## 1. KTT-001 architecture freeze
 
@@ -191,4 +191,32 @@ The implementation evidence supports the following P0 selection:
 7. **Compatibility caveat:** deterministic token drift is material for some OOV/initialism/proper-name cases and must remain visible in production frontend tests.
 8. **Performance caveat:** macOS Intel is feasible but can be slower than real time.
 
-KTT-001 through KTT-004 have sufficient implementation evidence to close once this P0 tree is validated again at its final clean commit, merged with an exact-head guard, and post-merge repository CI is green. The tracker remains intentionally unchecked until that merge/closure sequence is complete.
+KTT-001 through KTT-004 are accepted and closed. The tracker P0 section is checked only after the clean-head validation, guarded merge, and exact merged-master CI evidence below were all successful.
+
+## 10. Final P0 closure evidence — 2026-09-09
+
+The iterative P0 branch was collapsed to one clean commit on accepted planning master `e0fc7338433bc1a5b8133339a12cdd03ae3daa0b`.
+
+Final clean implementation head:
+
+`0e5d9fdbe9c006fa505f3e3e13db6d8c7a7c1b2d`
+
+Exact-head gates on that commit:
+
+- ordinary repository CI `34409269416`: PASS;
+- specialized KittenTTS P0 feasibility run `34409217053`: PASS;
+- specialized matrix included Linux x86_64, macOS arm64, and macOS x86_64 real-model CPU probes plus the permissive-license gate.
+
+PR #71 (`test: prove KittenTTS P0 feasibility`) was non-draft, mergeable, and still pointed exactly at `0e5d9fdbe9c006fa505f3e3e13db6d8c7a7c1b2d` immediately before merge. It was squash-merged with `expected_head_sha` guarding that exact head.
+
+Resulting implementation master:
+
+`bb76b73782063ba7da4548de76108fc93b82bee0`
+
+Exact post-merge master CI:
+
+- run `34410662180`: PASS;
+- event: push;
+- head SHA: `bb76b73782063ba7da4548de76108fc93b82bee0`.
+
+P0 is therefore procedurally and technically accepted. The next tracker phase is P1, beginning with KTT-100. The G2P drift and Intel macOS performance caveats recorded above remain design constraints for later implementation; closing P0 does not erase them.
