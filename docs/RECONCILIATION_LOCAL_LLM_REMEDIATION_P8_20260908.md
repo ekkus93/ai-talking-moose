@@ -2,51 +2,55 @@
 
 ## Status
 
-**P8 contract/CI/cross-platform integrity work is prepared for exact-head validation on the accepted P7-closure generation.**
+**P8 implementation is complete and post-merge validated; this record is the separate tracker closeout.**
 
-This record covers `LLMR-800` through `LLMR-803`. It does not close the authoritative TODO until the P8 exact-head ordinary CI, expected-head merge, and exact post-merge `master` CI are accepted.
+This record closes `LLMR-800` through `LLMR-803` only. P9/P10 remain open and are not advanced by this documentation-only closeout.
 
-Implementation base: `e3533f5cab2c8730683701b11277871e8042c7fb`, the P7 tracker-closeout `master` produced by guarded squash merge of PR #62. Exact post-merge master CI `34287904554` completed successfully on that SHA, including canonical `npm run check:all`.
+## Validation history
+
+- accepted P7 tracker-closeout base: `e3533f5cab2c8730683701b11277871e8042c7fb`;
+- P7 exact post-closure master CI: `34287904554` — success;
+- P8 implementation head: `f22d161d37a08e8aa52eebd0b815a542b86783e6`;
+- implementation PR: #63, `Local LLM: harden contract drift proof`;
+- exact-head P8 CI: `34290605186` — success on `f22d161d37a08e8aa52eebd0b815a542b86783e6`;
+- guarded squash merge result: `32fb0b1bd82ee548311510a98e0d6f237c4f06f4` on `master`;
+- merged tree: `9889b1e487336d06b83a894a5b80c8bef6488966`;
+- exact post-merge master CI: `34294230896` — success on `32fb0b1bd82ee548311510a98e0d6f237c4f06f4`.
+
+The accepted post-merge run passed frontend quality, Rust quality, release metadata/static validation, dependency audit, security audit, Linux/macOS Local LLM compile proofs, both unsigned macOS bundle smoke jobs, and canonical `npm run check:all`.
 
 ## LLMR-800 — Generated frontend contract reconciliation
 
-The authoritative Rust exporter already emits representative Local LLM IPC objects for the diagnostics path, including `LocalModelDiagnostics`, `LocalRuntimeDiagnostics`, and `LocalLlmDiagnostics`. The tracked generated contract contains a standalone `LocalRuntimeDiagnostics` representative with `generation_in_progress`, and `src/types/moose.ts` contains the corresponding TypeScript interface field.
+The authoritative Rust exporter emits representative Local LLM IPC objects for the diagnostics path, including `LocalModelDiagnostics`, `LocalRuntimeDiagnostics`, and `LocalLlmDiagnostics`. The tracked generated contract includes `LocalRuntimeDiagnostics.generation_in_progress`, with the corresponding TypeScript interface field.
 
-P8 adds `scripts/check_local_llm_contract_negative_probes.mjs` and wires it into `check:frontend`. The script creates a temporary miniature checkout containing only the files consumed by the production contract/command checkers. It first requires both production checkers to pass against the real checkout. It then renames `LocalRuntimeDiagnostics.generation_in_progress` only in the temporary generated Rust representative and requires the real `check_frontend_contract_shapes.mjs` gate to fail with both the Rust-only renamed key and the TypeScript-only original key. The temporary directory is removed unconditionally and no tracked file is mutated.
+P8 added `scripts/check_local_llm_contract_negative_probes.mjs` and wired it into `check:frontend`, therefore into canonical `npm run check:all`. The probe uses a temporary miniature checkout and requires the production frontend shape checker to reject a deliberate rename of `LocalRuntimeDiagnostics.generation_in_progress`. The existing generated-contract drift gate still regenerates `src/generated/backendContract.json`, requires no tracked drift, and runs the production shape checker.
 
-The existing `check:generated-backend-contract` path remains authoritative for Rust-to-generated-JSON drift: it regenerates `src/generated/backendContract.json`, requires a clean diff, and then runs the frontend shape checker. In combination, the drift gate catches a stale generated artifact and the new negative probe proves a regenerated diagnostics-field rename cannot silently agree with stale TypeScript.
+Closure result: generated Rust/TypeScript diagnostics shapes have positive and negative drift proof and cannot silently diverge under the covered contract path.
 
 ## LLMR-801 — Tauri diagnostics command registration and fixtures
 
-`get_local_llm_diagnostics` is already:
+`get_local_llm_diagnostics` is implemented as a production Tauri command, registered in `tauri::generate_handler!`, invoked by `tauriBridge.getLocalLlmDiagnostics()`, and represented in frontend dispatcher/bridge coverage.
 
-- implemented as a production Tauri command;
-- present in `tauri::generate_handler!`;
-- invoked by `tauriBridge.getLocalLlmDiagnostics()`;
-- represented in the frontend test dispatcher and bridge tests.
+The P8 negative probe deliberately renames only the Rust registration in its temporary checkout and requires the production Tauri command checker to reject the mismatch while the real checkout remains unchanged.
 
-The new P8 negative-probe script copies `src/lib/tauriBridge.ts` and `src-tauri/src/lib.rs` into its temporary checkout, deliberately renames only the Rust `get_local_llm_diagnostics` registration, and requires the real `check_tauri_command_contract.mjs` gate to fail because the frontend-invoked command is no longer registered. This is diagnostics-specific negative evidence rather than relying only on the older generic command mutation proof.
+Closure result: the frontend-invoked Local diagnostics command is registered and diagnostics-specific command-name drift is negatively proven.
 
 ## LLMR-802 — Model-weight-free ordinary CI
 
-The new P8 proof is text/AST/JSON-only. It copies TypeScript, generated JSON, bridge source, and Rust registration source into a temporary directory; it downloads or loads no GGUF artifact and invokes no Local runtime inference.
+The P8 probes are text/AST/JSON-only and use temporary small fixtures. They download or load no catalog GGUF artifact and invoke no Local inference. Ordinary CI retained all three Local LLM compile proofs, both macOS bundle smoke jobs, dependency/security/release gates, frontend quality, Rust quality, and canonical `npm run check:all`.
 
-Existing ordinary CI retains the Linux/macOS Local LLM compile proofs, both unsigned macOS bundle smoke jobs, dependency/security/release gates, frontend quality, Rust quality, and canonical `npm run check:all`. No P8 implementation requires catalog model weights or live Gemini access.
+Closure result: the new P8 integrity/contract proof remains model-weight-free and preserves the ordinary cross-platform CI matrix.
 
 ## LLMR-803 — P12 real-model rerun decision
 
 **Decision: no P12 real-model rerun is required for the remediation as currently implemented.**
 
-Across P0-P8, the changes address installer cancellation/integrity, runtime-use artifact admission verification, diagnostics exposure, immutable settings snapshots, frontend patch-oriented settings writes, truthful cancellation/template documentation, regression matrices, and contract/CI proof. They do not change the pinned model identities, llama.cpp generation backend, tokenizer/model loading semantics after successful admission, chat-template bytes, application-owned SmolLM2/Qwen prompt framing, Qwen non-thinking control semantics, provider routing contract, or decode/generation algorithm.
+Across P0-P8, the remediation changes installer cancellation/integrity, runtime-use artifact admission verification, diagnostics exposure, immutable settings snapshots, frontend patch-oriented writes, truthful cancellation/template documentation, regression matrices, and contract/CI proof. It does not materially change pinned model identity, the llama.cpp generation backend, tokenizer/model loading semantics after successful admission, chat-template bytes, application-owned SmolLM2/Qwen prompt framing, Qwen non-thinking control semantics, provider routing, or the decode/generation algorithm.
 
-The P2 runtime-use SHA revalidation can reject a tampered artifact earlier, but an accepted pinned artifact is handed to the same runtime and generation path. That is an integrity/admission change rather than a real-model generation-semantic change. P6/P7/P8 likewise make no prompt-byte/control-token or generation-semantic change.
+The P2 runtime-use SHA revalidation can reject a tampered artifact earlier, but an accepted pinned artifact is handed to the same runtime and generation path; that is an integrity/admission change, not a real-model generation-semantic change. P6/P7/P8 likewise introduce no prompt-byte/control-token or generation-semantic change.
 
-P9/P10 are documentation/reconciliation/final-audit phases. If later implementation work unexpectedly changes model identity, runtime loading semantics, template rendering, prompt framing, tokenization, or generation behavior, this decision must be reopened and the affected P12 acceptance rerun before final closure. Otherwise the existing accepted P12 real-model evidence remains applicable.
+If P9/P10 unexpectedly introduce implementation changes to model identity, runtime loading, template rendering, prompt framing, tokenization, or generation behavior, this decision must be reopened and the affected P12 acceptance rerun. Otherwise the existing accepted P12 real-model evidence remains applicable.
 
-## Required closure evidence
+## P8 closure result
 
-- the new diagnostics field negative probe passes by proving the production shape checker rejects the deliberate temporary rename;
-- the new diagnostics command-name negative probe passes by proving the production command checker rejects the deliberate temporary registration rename;
-- ordinary exact-head P8 CI passes, including generated-contract drift, frontend/Rust quality, dependency/security/release gates, all Local LLM compile proofs, both macOS bundle smokes, and canonical `npm run check:all`;
-- expected-head guarded merge succeeds;
-- exact post-merge `master` CI succeeds before the P8 tracker section is closed.
+`LLMR-800`, `LLMR-801`, `LLMR-802`, and `LLMR-803` satisfy every listed task and acceptance item. The authoritative tracker may mark exactly the 24 P8 boxes complete. P9/P10 remain open for historical reconciliation, documentation, residual-limitations publication, and the final remediation gate.
