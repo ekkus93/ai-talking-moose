@@ -85,15 +85,17 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </label>
           <select
             id="settings-tts-voice"
-            value={settings.tts_voice}
-            onChange={(e) => updateSettingsPatch({ tts_voice: e.target.value })}
+            value={settings.google_tts_voice}
+            onChange={(e) =>
+              updateSettingsPatch({ google_tts_voice: e.target.value })
+            }
             className="w-full p-1.5 border border-black rounded bg-white font-bold"
           >
             {!googleTtsVoices.some(
-              (voice) => voice.id === settings.tts_voice,
+              (voice) => voice.id === settings.google_tts_voice,
             ) && (
-              <option value={settings.tts_voice} disabled>
-                Unavailable: {settings.tts_voice}
+              <option value={settings.google_tts_voice} disabled>
+                Unavailable: {settings.google_tts_voice}
               </option>
             )}
             {googleTtsVoices.map((voice) => (
@@ -109,7 +111,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           onClick={async () => {
             setIsAuditioning(true);
             try {
-              await tauriBridge.auditionVoice(settings.tts_voice);
+              await tauriBridge.auditionVoice(settings.google_tts_voice);
             } finally {
               setTimeout(() => setIsAuditioning(false), 2500);
             }
@@ -121,7 +123,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           <span>
             {isAuditioning
               ? "Playing Sample..."
-              : `Audition "${settings.tts_voice}" Voice Sample`}
+              : `Audition "${settings.google_tts_voice}" Voice Sample`}
           </span>
         </button>
       </div>

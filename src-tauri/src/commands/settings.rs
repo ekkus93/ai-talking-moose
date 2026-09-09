@@ -255,7 +255,7 @@ pub async fn test_ai_connection(
     let (event_tx, _event_rx) = mpsc::channel(8);
     let config = LiveSessionConfig {
         model: settings.live_model,
-        voice_name: Some(settings.tts_voice),
+        voice_name: Some(settings.live_voice),
         system_instruction: Some("Talking Moose connectivity test".to_string()),
         sample_rate_in: 16_000,
         sample_rate_out: 24_000,

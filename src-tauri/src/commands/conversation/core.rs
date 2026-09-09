@@ -134,7 +134,7 @@ pub async fn start_conversation<R: Runtime>(
 
     let config = LiveSessionConfig {
         model: settings.live_model.clone(),
-        voice_name: Some(settings.tts_voice.clone()),
+        voice_name: Some(settings.live_voice.clone()),
         system_instruction: Some(system_instruction),
         sample_rate_in: 16_000,
         sample_rate_out: 24_000,

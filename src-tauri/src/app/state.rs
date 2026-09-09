@@ -1,11 +1,14 @@
 use crate::ai::google::{
-    normalize_live_model, normalize_text_model, normalize_tts_model, GoogleAuth,
-    GoogleLiveProvider, GoogleSpeechSynthesizer, DEFAULT_LIVE_MODEL, DEFAULT_TEXT_MODEL,
-    DEFAULT_TTS_MODEL,
+    normalize_live_model, normalize_text_model, normalize_tts_model, normalize_tts_voice,
+    GoogleAuth, GoogleLiveProvider, GoogleSpeechSynthesizer, DEFAULT_LIVE_MODEL,
+    DEFAULT_TEXT_MODEL, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE,
 };
 use crate::ai::local::{LocalRuntimeManager, DEFAULT_LOCAL_TEXT_MODEL_ID};
+use crate::ai::local_tts::{
+    PendingLocalSpeechSynthesizer, DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE,
+};
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
-use crate::ai::types::TextProvider;
+use crate::ai::types::{TextProvider, TtsProvider};
 use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
@@ -55,7 +58,10 @@ pub struct AppSettings {
     pub input_device: Option<String>,
     pub output_device: Option<String>,
     pub volume: f32,
-    pub tts_voice: String,
+    pub tts_provider: TtsProvider,
+    pub google_tts_voice: String,
+    pub local_tts_voice: String,
+    pub live_voice: String,
     pub speaking_rate: f32,
     pub pitch: f32,
 
@@ -64,7 +70,8 @@ pub struct AppSettings {
     pub live_model: String,
     pub google_text_model: String,
     pub local_text_model: String,
-    pub tts_model: String,
+    pub google_tts_model: String,
+    pub local_tts_model: String,
 
     // Privacy
     pub active_app_observation: bool,
@@ -81,7 +88,7 @@ pub struct AppSettings {
     pub verbosity: f32,
 }
 
-pub const CURRENT_SETTINGS_VERSION: u32 = 3;
+pub const CURRENT_SETTINGS_VERSION: u32 = 4;
 
 #[derive(Debug, Error)]
 pub enum PersistedSettingsError {
@@ -125,7 +132,10 @@ impl Default for AppSettings {
             input_device: None,
             output_device: None,
             volume: 1.0,
-            tts_voice: "Fenrir".to_string(),
+            tts_provider: TtsProvider::Google,
+            google_tts_voice: DEFAULT_TTS_VOICE.to_string(),
+            local_tts_voice: DEFAULT_LOCAL_TTS_VOICE.to_string(),
+            live_voice: DEFAULT_TTS_VOICE.to_string(),
             speaking_rate: 0.95,
             pitch: -1.5,
 
@@ -135,7 +145,8 @@ impl Default for AppSettings {
             live_model: DEFAULT_LIVE_MODEL.to_string(),
             google_text_model: DEFAULT_TEXT_MODEL.to_string(),
             local_text_model: DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
-            tts_model: DEFAULT_TTS_MODEL.to_string(),
+            google_tts_model: DEFAULT_TTS_MODEL.to_string(),
+            local_tts_model: DEFAULT_LOCAL_TTS_MODEL_ID.to_string(),
 
             active_app_observation: false,
             window_title_observation: false,
@@ -189,6 +200,22 @@ impl AppSettings {
             .and_then(serde_json::Value::as_str)
             .map(ToOwned::to_owned);
         let had_legacy_text_model = legacy_text_model.is_some();
+        let had_tts_provider = value.get("tts_provider").is_some();
+        let had_google_tts_model = value.get("google_tts_model").is_some();
+        let had_google_tts_voice = value.get("google_tts_voice").is_some();
+        let had_local_tts_model = value.get("local_tts_model").is_some();
+        let had_local_tts_voice = value.get("local_tts_voice").is_some();
+        let had_live_voice = value.get("live_voice").is_some();
+        let legacy_tts_model = value
+            .get("tts_model")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned);
+        let had_legacy_tts_model = legacy_tts_model.is_some();
+        let legacy_tts_voice = value
+            .get("tts_voice")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned);
+        let had_legacy_tts_voice = legacy_tts_voice.is_some();
 
         let mut settings: Self = serde_json::from_value(value)?;
         if !had_asr_mode {
@@ -204,17 +231,44 @@ impl AppSettings {
                 settings.google_text_model = legacy_text_model;
             }
         }
+        if !had_tts_provider {
+            // Existing profiles predate Local TTS and therefore used Google standalone TTS.
+            settings.tts_provider = TtsProvider::Google;
+        }
+        if !had_google_tts_model {
+            if let Some(legacy_tts_model) = legacy_tts_model {
+                settings.google_tts_model = legacy_tts_model;
+            }
+        }
+        if !had_google_tts_voice {
+            if let Some(legacy_tts_voice) = legacy_tts_voice.as_ref() {
+                settings.google_tts_voice = legacy_tts_voice.clone();
+            }
+        }
+        if !had_live_voice {
+            if let Some(legacy_tts_voice) = legacy_tts_voice.as_ref() {
+                settings.live_voice = legacy_tts_voice.clone();
+            }
+        }
 
         let normalized_live_model = normalize_live_model(&settings.live_model).to_string();
         let normalized_google_text_model =
             normalize_text_model(&settings.google_text_model).to_string();
-        let normalized_tts_model = normalize_tts_model(&settings.tts_model).to_string();
+        let normalized_google_tts_model =
+            normalize_tts_model(&settings.google_tts_model).to_string();
+        let normalized_google_tts_voice =
+            normalize_tts_voice(&settings.google_tts_voice).to_string();
+        let normalized_live_voice = normalize_tts_voice(&settings.live_voice).to_string();
         let models_migrated = normalized_live_model != settings.live_model
             || normalized_google_text_model != settings.google_text_model
-            || normalized_tts_model != settings.tts_model;
+            || normalized_google_tts_model != settings.google_tts_model
+            || normalized_google_tts_voice != settings.google_tts_voice
+            || normalized_live_voice != settings.live_voice;
         settings.live_model = normalized_live_model;
         settings.google_text_model = normalized_google_text_model;
-        settings.tts_model = normalized_tts_model;
+        settings.google_tts_model = normalized_google_tts_model;
+        settings.google_tts_voice = normalized_google_tts_voice;
+        settings.live_voice = normalized_live_voice;
 
         // Window-title observation is an unsupported V1 compatibility field, not an
         // authoritative preference. Persist it fail-closed even for legacy profiles.
@@ -229,8 +283,16 @@ impl AppSettings {
                 || !had_text_provider
                 || !had_google_text_model
                 || !had_local_text_model
+                || !had_tts_provider
+                || !had_google_tts_model
+                || !had_google_tts_voice
+                || !had_local_tts_model
+                || !had_local_tts_voice
+                || !had_live_voice
                 || had_legacy_provider
                 || had_legacy_text_model
+                || had_legacy_tts_model
+                || had_legacy_tts_voice
                 || models_migrated
                 || had_enabled_window_title_observation,
         ))
@@ -447,12 +509,17 @@ impl AppState {
 
     pub fn get_speech_synthesizer(&self) -> Box<dyn SpeechSynthesizer> {
         let settings = self.settings.read();
-        let key = self.secrets.get_google_api_key().unwrap_or_default();
-        Box::new(GoogleSpeechSynthesizer::new(
-            GoogleAuth::new(key),
-            settings.tts_model.clone(),
-            settings.tts_voice.clone(),
-        ))
+        match settings.tts_provider {
+            TtsProvider::Google => {
+                let key = self.secrets.get_google_api_key().unwrap_or_default();
+                Box::new(GoogleSpeechSynthesizer::new(
+                    GoogleAuth::new(key),
+                    settings.google_tts_model.clone(),
+                    settings.google_tts_voice.clone(),
+                ))
+            }
+            TtsProvider::Local => Box::new(PendingLocalSpeechSynthesizer),
+        }
     }
 
     pub fn get_live_provider(&self) -> Arc<dyn RealtimeConversationProvider> {
@@ -494,9 +561,36 @@ mod tests {
         assert_eq!(settings.text_provider, TextProvider::Local);
         assert_eq!(settings.google_text_model, DEFAULT_TEXT_MODEL);
         assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
+        assert_eq!(settings.tts_provider, TtsProvider::Google);
+        assert_eq!(settings.google_tts_model, DEFAULT_TTS_MODEL);
+        assert_eq!(settings.google_tts_voice, DEFAULT_TTS_VOICE);
+        assert_eq!(settings.local_tts_model, DEFAULT_LOCAL_TTS_MODEL_ID);
+        assert_eq!(settings.local_tts_voice, DEFAULT_LOCAL_TTS_VOICE);
+        assert_eq!(settings.live_voice, DEFAULT_TTS_VOICE);
         assert!(!settings.active_app_observation);
         assert!(!settings.memory_enabled);
         assert!(!settings.save_transcripts);
+    }
+
+    #[tokio::test]
+    async fn local_tts_selection_fails_closed_before_runtime_integration() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().tts_provider = TtsProvider::Local;
+
+        let error = state
+            .get_speech_synthesizer()
+            .synthesize(TtsRequest {
+                text: "private local utterance".to_string(),
+                voice_name: Some(DEFAULT_LOCAL_TTS_VOICE.to_string()),
+                speaking_rate: Some(1.0),
+                pitch: None,
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.kind, ProviderErrorKind::Setup);
+        assert!(!error.retryable);
+        assert!(!error.message.contains("private local utterance"));
     }
 
     #[test]
@@ -651,16 +745,61 @@ mod tests {
     }
 
     #[test]
-    fn legacy_tts_model_is_normalized_to_current_configured_model() {
+    fn version_three_tts_settings_migrate_once_to_split_google_local_and_live_ownership() {
         let mut value = serde_json::to_value(AppSettings::default()).unwrap();
-        value.as_object_mut().unwrap().insert(
+        let object = value.as_object_mut().unwrap();
+        object.insert("settings_version".to_string(), serde_json::json!(3));
+        object.remove("tts_provider");
+        object.remove("google_tts_model");
+        object.remove("google_tts_voice");
+        object.remove("local_tts_model");
+        object.remove("local_tts_voice");
+        object.remove("live_voice");
+        object.insert(
             "tts_model".to_string(),
             serde_json::Value::String("en-US-Standard-B".to_string()),
         );
+        object.insert(
+            "tts_voice".to_string(),
+            serde_json::Value::String("Puck".to_string()),
+        );
+
         let (settings, migrated) =
             AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
         assert!(migrated);
-        assert_eq!(settings.tts_model, DEFAULT_TTS_MODEL);
+        assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
+        assert_eq!(settings.tts_provider, TtsProvider::Google);
+        assert_eq!(settings.google_tts_model, DEFAULT_TTS_MODEL);
+        assert_eq!(settings.google_tts_voice, "Puck");
+        assert_eq!(settings.live_voice, "Puck");
+        assert_eq!(settings.local_tts_model, DEFAULT_LOCAL_TTS_MODEL_ID);
+        assert_eq!(settings.local_tts_voice, DEFAULT_LOCAL_TTS_VOICE);
+
+        let normalized = serde_json::to_value(&settings).unwrap();
+        assert!(normalized.get("tts_model").is_none());
+        assert!(normalized.get("tts_voice").is_none());
+
+        let (round_tripped, migrated_again) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert!(!migrated_again);
+        assert_eq!(round_tripped.google_tts_voice, "Puck");
+        assert_eq!(round_tripped.live_voice, "Puck");
+    }
+
+    #[test]
+    fn split_tts_voice_settings_round_trip_independently() {
+        let original = AppSettings {
+            google_tts_voice: "Kore".to_string(),
+            local_tts_voice: "Luna".to_string(),
+            live_voice: "Puck".to_string(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let (loaded, migrated) = AppSettings::from_persisted_json(&json).unwrap();
+        assert!(!migrated);
+        assert_eq!(loaded.google_tts_voice, "Kore");
+        assert_eq!(loaded.local_tts_voice, "Luna");
+        assert_eq!(loaded.live_voice, "Puck");
     }
 
     #[test]

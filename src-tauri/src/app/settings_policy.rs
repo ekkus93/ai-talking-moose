@@ -2,6 +2,7 @@ use crate::ai::google::{
     validate_live_model, validate_text_model, validate_tts_model, validate_tts_voice,
 };
 use crate::ai::local::local_model_entry;
+use crate::ai::local_tts::{validate_local_tts_model, validate_local_tts_voice};
 use crate::app::state::AppSettings;
 use crate::audio::devices::AudioDeviceInfo;
 use crate::character::behavior::BehaviorEngine;
@@ -53,8 +54,11 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
     if local_model_entry(&settings.local_text_model).is_none() {
         return Err("unsupported local text model".to_string());
     }
-    validate_tts_voice(&settings.tts_voice)?;
-    validate_tts_model(&settings.tts_model)?;
+    validate_tts_voice(&settings.google_tts_voice)?;
+    validate_tts_voice(&settings.live_voice)?;
+    validate_tts_model(&settings.google_tts_model)?;
+    validate_local_tts_model(&settings.local_tts_model)?;
+    validate_local_tts_voice(&settings.local_tts_voice)?;
     optional_device_id("input device ID", settings.input_device.as_deref())?;
     optional_device_id("output device ID", settings.output_device.as_deref())?;
 
@@ -91,7 +95,7 @@ pub(crate) fn conversation_restart_required(previous: &AppSettings, next: &AppSe
         || previous.live_model != next.live_model
         || previous.input_device != next.input_device
         || previous.output_device != next.output_device
-        || previous.tts_voice != next.tts_voice
+        || previous.live_voice != next.live_voice
         || previous.memory_enabled != next.memory_enabled
         || previous.save_transcripts != next.save_transcripts
 }
@@ -242,8 +246,16 @@ mod tests {
         assert!(conversation_restart_required(&previous, &next));
 
         let mut next = previous.clone();
-        next.tts_voice = "Puck".to_string();
+        next.live_voice = "Puck".to_string();
         assert!(conversation_restart_required(&previous, &next));
+
+        let mut next = previous.clone();
+        next.google_tts_voice = "Puck".to_string();
+        assert!(!conversation_restart_required(&previous, &next));
+
+        let mut next = previous.clone();
+        next.local_tts_voice = "Luna".to_string();
+        assert!(!conversation_restart_required(&previous, &next));
 
         let mut next = previous.clone();
         next.memory_enabled = !previous.memory_enabled;
@@ -293,14 +305,18 @@ mod tests {
             ("input_device", "conversation capture and microphone test"),
             ("output_device", "conversation and standalone playback"),
             ("volume", "shared CPAL playback gain"),
-            ("tts_voice", "Live and standalone speech selection"),
+            ("tts_provider", "standalone TTS provider selection"),
+            ("google_tts_voice", "Google standalone speech selection"),
+            ("local_tts_voice", "Local standalone speech selection"),
+            ("live_voice", "Gemini Live session voice selection"),
             ("speaking_rate", "standalone TTS request"),
             ("pitch", "standalone TTS request"),
             ("text_provider", "text model provider selection"),
             ("live_model", "Gemini Live session configuration"),
             ("google_text_model", "Google text model construction"),
             ("local_text_model", "Local model catalog selection"),
-            ("tts_model", "Google speech synthesizer construction"),
+            ("google_tts_model", "Google speech synthesizer construction"),
+            ("local_tts_model", "Local speech model selection"),
             ("active_app_observation", "desktop observation privacy gate"),
             ("memory_enabled", "prompt memory privacy gate"),
             ("save_transcripts", "transcript retention policy"),
@@ -341,6 +357,8 @@ mod tests {
             .all(|(_, classification)| !classification.is_empty()));
         assert!(serialized.get("provider").is_none());
         assert!(serialized.get("text_model").is_none());
+        assert!(serialized.get("tts_model").is_none());
+        assert!(serialized.get("tts_voice").is_none());
         assert!(serialized.get("microphone_permission_granted").is_none());
     }
 

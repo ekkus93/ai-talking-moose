@@ -46,7 +46,7 @@ fn tts_request(
     (
         TtsRequest {
             text: text.to_string(),
-            voice_name: Some(voice_override.unwrap_or_else(|| settings.tts_voice.clone())),
+            voice_name: Some(voice_override.unwrap_or_else(|| settings.google_tts_voice.clone())),
             speaking_rate: Some(settings.speaking_rate),
             pitch: Some(settings.pitch),
         },
