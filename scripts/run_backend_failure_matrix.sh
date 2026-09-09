@@ -4,10 +4,6 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 manifest="$repo_root/src-tauri/Cargo.toml"
 export TALKING_MOOSE_ALLOW_LIVE_API=0
-
-# Dependencies are fetched/compiled by the ordinary Rust quality gate before this
-# suite runs in CI. Keep Cargo itself offline here so the failure matrix cannot
-# accidentally turn a missing cache into network activity.
 export CARGO_NET_OFFLINE=true
 
 cases=(
@@ -49,6 +45,16 @@ for entry in "${cases[@]}"; do
     printf 'backend_failure_matrix: missing test for %s: %s\n' "$scenario" "$test_name" >&2
     exit 1
   fi
+done
+
+if [[ "${TALKING_MOOSE_MATRIX_VERIFY_ONLY:-0}" == "1" ]]; then
+  printf 'backend_failure_matrix: verified all %d scenario tests are present; complete Rust test suite owns execution\n' "${#cases[@]}"
+  exit 0
+fi
+
+for entry in "${cases[@]}"; do
+  scenario="${entry%%|*}"
+  test_name="${entry#*|}"
   printf 'backend_failure_matrix: %s -> %s\n' "$scenario" "$test_name"
   cargo test --offline --manifest-path "$manifest" --lib --all-features \
     "$test_name" -- --exact
