@@ -28,6 +28,16 @@ for entry in "${cases[@]}"; do
     printf 'backend_stress_matrix: missing test for %s: %s\n' "$scenario" "$test_name" >&2
     exit 1
   fi
+done
+
+if [[ "${TALKING_MOOSE_MATRIX_VERIFY_ONLY:-0}" == "1" ]]; then
+  printf 'backend_stress_matrix: verified all %d scenario tests are present; complete Rust test suite owns execution\n' "${#cases[@]}"
+  exit 0
+fi
+
+for entry in "${cases[@]}"; do
+  scenario="${entry%%|*}"
+  test_name="${entry#*|}"
   printf 'backend_stress_matrix: %s -> %s\n' "$scenario" "$test_name"
   cargo test --offline --manifest-path "$manifest" --lib --all-features \
     "$test_name" -- --exact
