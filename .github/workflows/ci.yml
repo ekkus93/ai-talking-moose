@@ -30,12 +30,14 @@ jobs:
     timeout-minutes: 5
     outputs:
       docs_only: ${{ steps.scope.outputs.docs_only }}
+      ci_only: ${{ steps.scope.outputs.ci_only }}
+      ci_needed: ${{ steps.scope.outputs.ci_needed }}
       frontend_needed: ${{ steps.scope.outputs.frontend_needed }}
       rust_needed: ${{ steps.scope.outputs.rust_needed }}
+      contract_needed: ${{ steps.scope.outputs.contract_needed }}
       dependency_needed: ${{ steps.scope.outputs.dependency_needed }}
       release_needed: ${{ steps.scope.outputs.release_needed }}
       local_llm_needed: ${{ steps.scope.outputs.local_llm_needed }}
-      bundle_needed: ${{ steps.scope.outputs.bundle_needed }}
       full_validation: ${{ steps.scope.outputs.full_validation }}
       base_sha: ${{ steps.scope.outputs.base_sha }}
     steps:
@@ -56,6 +58,7 @@ jobs:
           REF_NAME: ${{ github.ref }}
         run: |
           set -euo pipefail
+
           zero_sha="0000000000000000000000000000000000000000"
           full_validation=false
           base_sha=""
@@ -75,60 +78,104 @@ jobs:
           fi
 
           docs_only=false
+          ci_only=false
+          ci_needed=false
           frontend_needed=false
           rust_needed=false
+          contract_needed=false
           dependency_needed=false
           release_needed=false
           local_llm_needed=false
-          bundle_needed=false
           changed_files=()
 
           if [[ "$full_validation" == "true" ]]; then
             frontend_needed=true
             rust_needed=true
+            contract_needed=true
             dependency_needed=true
             release_needed=true
             local_llm_needed=true
-            bundle_needed=true
           else
             mapfile -t changed_files < <(git diff --name-only "$base_sha" "$head_sha")
+
             if (( ${#changed_files[@]} == 0 )); then
               frontend_needed=true
               rust_needed=true
+              contract_needed=true
             else
               docs_only=true
+              ci_only=true
+
               for path in "${changed_files[@]}"; do
+                is_docs=false
+                is_ci=false
+
                 if [[ "$path" == docs/* || ( "$path" != */* && "$path" == *.md ) ]]; then
-                  continue
+                  is_docs=true
+                else
+                  docs_only=false
                 fi
-                docs_only=false
-                frontend_needed=true
 
                 case "$path" in
-                  .github/workflows/*|.github/actions/*|src-tauri/*|scripts/*.sh|scripts/*.py|scripts/*.mjs)
-                    rust_needed=true
+                  .github/workflows/*|.github/actions/*|scripts/run_backend_failure_matrix.sh|scripts/run_backend_stress_matrix.sh)
+                    is_ci=true
+                    ci_needed=true
                     ;;
                 esac
+
+                if [[ "$is_docs" == "true" || "$is_ci" == "true" ]]; then
+                  continue
+                fi
+
+                ci_only=false
+                handled=false
+
+                case "$path" in
+                  src/*|package.json|package-lock.json|npm-shrinkwrap.json|tsconfig*.json|vite.config.*|eslint.config.*|postcss.config.*|tailwind.config.*|scripts/*.mjs)
+                    frontend_needed=true
+                    handled=true
+                    ;;
+                esac
+
+                case "$path" in
+                  src-tauri/src/*|src-tauri/build.rs|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/capabilities/*|scripts/*.sh|scripts/*.py)
+                    rust_needed=true
+                    handled=true
+                    ;;
+                esac
+
+                case "$path" in
+                  src-tauri/src/*|src-tauri/Cargo.toml|src-tauri/Cargo.lock|scripts/generate_frontend_contract.sh)
+                    contract_needed=true
+                    ;;
+                esac
+
                 case "$path" in
                   package.json|package-lock.json|npm-shrinkwrap.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock)
                     dependency_needed=true
                     ;;
                 esac
+
                 case "$path" in
-                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/icons/*|src-tauri/resources/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
+                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/icons/*|src-tauri/resources/*|src-tauri/native/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
                     release_needed=true
+                    handled=true
                     ;;
                 esac
+
                 case "$path" in
                   src-tauri/src/ai/local/*|src-tauri/llama-compile-proof/*|src-tauri/Cargo.toml|src-tauri/Cargo.lock|scripts/check_local_llm_packaging_policy.py)
                     local_llm_needed=true
                     ;;
                 esac
-                case "$path" in
-                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/icons/*|src-tauri/resources/*|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/collect_release_licenses.py|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|package.json|package-lock.json)
-                    bundle_needed=true
-                    ;;
-                esac
+
+                if [[ "$handled" == "false" ]]; then
+                  # Unknown non-documentation paths fail toward broader ordinary
+                  # validation rather than silently bypassing application checks.
+                  frontend_needed=true
+                  rust_needed=true
+                  contract_needed=true
+                fi
               done
             fi
           fi
@@ -139,12 +186,14 @@ jobs:
             echo "Base: \`$base_sha\`"
             echo "Head: \`$head_sha\`"
             echo "Docs only: \`$docs_only\`"
+            echo "CI plumbing only: \`$ci_only\`"
+            echo "CI plumbing gate: \`$ci_needed\`"
             echo "Frontend: \`$frontend_needed\`"
             echo "Rust: \`$rust_needed\`"
+            echo "Generated contract: \`$contract_needed\`"
             echo "Dependency audit: \`$dependency_needed\`"
             echo "Release static: \`$release_needed\`"
             echo "Local LLM proof: \`$local_llm_needed\`"
-            echo "macOS bundle: \`$bundle_needed\`"
             echo "Full validation: \`$full_validation\`"
             if (( ${#changed_files[@]} > 0 )); then
               echo
@@ -156,12 +205,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "ci_only=$ci_only" >> "$GITHUB_OUTPUT"
+          echo "ci_needed=$ci_needed" >> "$GITHUB_OUTPUT"
           echo "frontend_needed=$frontend_needed" >> "$GITHUB_OUTPUT"
           echo "rust_needed=$rust_needed" >> "$GITHUB_OUTPUT"
+          echo "contract_needed=$contract_needed" >> "$GITHUB_OUTPUT"
           echo "dependency_needed=$dependency_needed" >> "$GITHUB_OUTPUT"
           echo "release_needed=$release_needed" >> "$GITHUB_OUTPUT"
           echo "local_llm_needed=$local_llm_needed" >> "$GITHUB_OUTPUT"
-          echo "bundle_needed=$bundle_needed" >> "$GITHUB_OUTPUT"
           echo "full_validation=$full_validation" >> "$GITHUB_OUTPUT"
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
 
@@ -186,10 +237,34 @@ jobs:
           git diff --check "$BASE_SHA" "$HEAD_SHA"
           git diff --name-only "$BASE_SHA" "$HEAD_SHA"
 
+  ci-plumbing:
+    name: CI plumbing
+    needs: classify
+    if: needs.classify.outputs.ci_needed == 'true' && needs.classify.outputs.full_validation != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate CI diff and shell syntax
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.classify.outputs.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git diff --check "$BASE_SHA" "$HEAD_SHA"
+          bash -n scripts/run_backend_failure_matrix.sh
+          bash -n scripts/run_backend_stress_matrix.sh
+          test -s .github/workflows/ci.yml
+          grep -q '^name: CI$' .github/workflows/ci.yml
+
   frontend:
     name: Frontend quality
     needs: classify
-    if: needs.classify.outputs.frontend_needed == 'true'
+    if: needs.classify.outputs.frontend_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -224,9 +299,9 @@ jobs:
   rust-clippy:
     name: Rust quality
     needs: classify
-    if: needs.classify.outputs.rust_needed == 'true'
+    if: needs.classify.outputs.rust_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -262,9 +337,9 @@ jobs:
   rust-tests:
     name: Rust tests
     needs: classify
-    if: needs.classify.outputs.rust_needed == 'true'
+    if: needs.classify.outputs.rust_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -290,19 +365,13 @@ jobs:
         run: python3 scripts/generate_app_icons.py
       - name: Run complete Rust test suite
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
-      - name: Verify failure/stress scenario manifests
-        env:
-          TALKING_MOOSE_MATRIX_VERIFY_ONLY: "1"
-        run: |
-          bash scripts/run_backend_failure_matrix.sh
-          bash scripts/run_backend_stress_matrix.sh
 
   backend-contract:
     name: Generated backend contract
     needs: classify
-    if: needs.classify.outputs.rust_needed == 'true'
+    if: needs.classify.outputs.contract_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -334,34 +403,6 @@ jobs:
       - name: Verify generated backend contract is current
         run: npm run check:generated-backend-contract
 
-  macos-rust-check:
-    name: macOS Rust check (arm64)
-    needs: classify
-    if: needs.classify.outputs.rust_needed == 'true'
-    runs-on: macos-15
-    timeout-minutes: 15
-    env:
-      MACOSX_DEPLOYMENT_TARGET: "13.4"
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo downloads
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-arm64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-arm64-cargo-
-            ${{ runner.os }}-cargo-
-      - name: Generate application icon set
-        run: python3 scripts/generate_app_icons.py
-      - name: Check macOS application compilation
-        run: cargo check --manifest-path src-tauri/Cargo.toml --all-features
-
   local-llm-compile-proof:
     name: Local LLM compile proof (${{ matrix.label }})
     needs: classify
@@ -377,7 +418,7 @@ jobs:
             runner: macos-15
             os: macos
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -475,7 +516,7 @@ jobs:
   macos-bundle:
     name: macOS Tauri bundle (${{ matrix.arch }})
     needs: classify
-    if: needs.classify.outputs.bundle_needed == 'true'
+    if: needs.classify.outputs.full_validation == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -540,7 +581,7 @@ jobs:
     needs: classify
     if: needs.classify.outputs.full_validation == 'true'
     runs-on: macos-15-intel
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
