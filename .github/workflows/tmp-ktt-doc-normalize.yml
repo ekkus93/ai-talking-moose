@@ -1,0 +1,45 @@
+name: Temporary KittenTTS docs normalization
+
+on:
+  push:
+    branches:
+      - ralph/kittentts-local-tts-spec-20260909
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ralph/kittentts-local-tts-spec-20260909
+      - name: Normalize planning-document whitespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path('docs/SPEC(20260909-120003).md'),
+              Path('docs/TODO(20260909-120003).md'),
+          ]
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              had_final_newline = text.endswith('\n')
+              normalized = '\n'.join(line.rstrip() for line in text.splitlines())
+              if had_final_newline:
+                  normalized += '\n'
+              path.write_text(normalized, encoding='utf-8')
+          PY
+          git diff --check
+          if git diff --quiet -- docs/SPEC\(20260909-120003\).md docs/TODO\(20260909-120003\).md; then
+            exit 0
+          fi
+          git config user.name 'Phillip Chin'
+          git config user.email 'ekkus93@gmail.com'
+          git add docs/SPEC\(20260909-120003\).md docs/TODO\(20260909-120003\).md
+          git commit -m 'docs: normalize KittenTTS planning whitespace'
+          git push origin HEAD:ralph/kittentts-local-tts-spec-20260909
