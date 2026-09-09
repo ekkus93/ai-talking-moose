@@ -26,8 +26,122 @@ env:
   TALKING_MOOSE_ALLOW_LIVE_API: "0"
 
 jobs:
+  classify:
+    name: Classify CI scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+      native_sensitive: ${{ steps.scope.outputs.native_sensitive }}
+      base_sha: ${{ steps.scope.outputs.base_sha }}
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          zero_sha="0000000000000000000000000000000000000000"
+          force_full=false
+          base_sha=""
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || "$REF_NAME" == refs/tags/* ]]; then
+            force_full=true
+          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+          else
+            base_sha="$BEFORE_SHA"
+          fi
+
+          if [[ -z "$base_sha" || "$base_sha" == "$zero_sha" ]]; then
+            force_full=true
+          fi
+
+          if [[ "$force_full" == "true" ]]; then
+            docs_only=false
+            native_sensitive=true
+            echo "Full CI forced for $EVENT_NAME on $REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          else
+            mapfile -t changed_files < <(git diff --name-only "$base_sha" "$HEAD_SHA")
+
+            if (( ${#changed_files[@]} == 0 )); then
+              docs_only=false
+              native_sensitive=true
+            else
+              docs_only=true
+              native_sensitive=false
+
+              for path in "${changed_files[@]}"; do
+                if [[ "$path" == docs/* || ( "$path" != */* && "$path" == *.md ) ]]; then
+                  :
+                else
+                  docs_only=false
+                fi
+
+                case "$path" in
+                  .github/workflows/*|.github/actions/*|src-tauri/*|scripts/*|package.json|package-lock.json|npm-shrinkwrap.json)
+                    native_sensitive=true
+                    ;;
+                esac
+              done
+            fi
+
+            {
+              echo "### CI scope"
+              echo
+              echo "Base: \`$base_sha\`"
+              echo "Head: \`$HEAD_SHA\`"
+              echo "Docs only: \`$docs_only\`"
+              echo "Native/build sensitive: \`$native_sensitive\`"
+              echo
+              echo "Changed files:"
+              for path in "${changed_files[@]}"; do
+                echo "- \`$path\`"
+              done
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "native_sensitive=$native_sensitive" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+
+  docs-only:
+    name: Docs-only fast path
+    needs: classify
+    if: needs.classify.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate documentation diff
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.classify.outputs.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git diff --check "$BASE_SHA" "$HEAD_SHA"
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA"
+
   frontend:
     name: Frontend quality
+    needs: classify
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -92,6 +206,8 @@ jobs:
 
   rust:
     name: Rust quality
+    needs: classify
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -151,6 +267,8 @@ jobs:
 
   local-llm-compile-proof:
     name: Local LLM compile proof (${{ matrix.label }})
+    needs: classify
+    if: needs.classify.outputs.native_sensitive == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -198,6 +316,8 @@ jobs:
 
   dependency-audit:
     name: Dependency audit
+    needs: classify
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -232,6 +352,8 @@ jobs:
 
   release-static:
     name: Release metadata static gate
+    needs: classify
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -299,6 +421,8 @@ jobs:
 
   macos-bundle:
     name: macOS Tauri bundle (${{ matrix.arch }})
+    needs: classify
+    if: needs.classify.outputs.native_sensitive == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -372,9 +496,8 @@ jobs:
 
   canonical-check-all:
     name: Canonical npm run check:all
-    needs:
-      - frontend
-      - rust
+    needs: classify
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
