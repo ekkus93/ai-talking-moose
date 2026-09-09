@@ -2,7 +2,7 @@
 
 ## Status
 
-**P10 focused source audit complete; optimized final full-validation and merge/reclosure evidence pending.**
+**P10 COMPLETE — focused audit, optimized exact-head full validation, guarded merge, and exact merged-master CI all accepted.**
 
 This record covers the source-audit portion of `LLMR-1000` / `LLMR-1002` and defines the evidence path for `LLMR-1001` / `LLMR-1003`. It does not pre-close merge- or CI-dependent tracker boxes.
 
@@ -183,3 +183,30 @@ P13 signed/notarized execution, physical Mac audio/TCC acceptance, and human voi
 4. verify exact merged `master` ordinary CI;
 5. create a documentation-only final reclosure that records the exact optimized full-validation/merge/master evidence, closes `LLMR-1000` through `LLMR-1003`, formally recloses `LLM-042`, `LLM-045`, `LLM-054`, `LLM-082`, `LLM-114`, `LLM-152`, and closes the Final Remediation Gate checklist;
 6. docs-only closeout CI + expected-head guarded merge + exact final master CI.
+
+
+## Final P10 closure evidence — 2026-09-09
+
+P10 is formally accepted and the post-review Local LLM Final Gate is reclosed.
+
+Exact evidence:
+
+- accepted P9-closeout base: `a1e8892e010d4ed226ca39ce487f08685fb79297`;
+- final P10 PR: #68;
+- final validated PR head: `c94ef628eb2b60637a3488ff981136d5e8c9e145`;
+- exact-head ordinary CI `34387806598`: **success**;
+- optimized exact-head full-validation run `34387831210`: **success**;
+- optimized full-validation wall clock: 10 minutes (`2026-09-09T18:14:49Z` → `2026-09-09T18:24:49Z`), replacing the rejected >20-minute design while preserving the P10 acceptance surface;
+- guarded squash merge used exact expected head `c94ef628eb2b60637a3488ff981136d5e8c9e145`;
+- resulting exact `master`: `2520a98265da14678c3df59223fcc1f598e653bd`;
+- exact post-merge master CI `34389089979`: **success**.
+
+The accepted optimized full gate included literal `npm run check:all`, dependency and RustSec auditing, release/static policy, Linux/macOS arm64/macOS x86_64 Local LLM compile proofs, and both unsigned macOS application bundle smoke builds with native-runtime and exact-provenance verification.
+
+The focused source audit found no mandatory unresolved defect. Installer cancellation end-state tests justify restoring the cancellable installer Final Gate statement. `LLM-042`, `LLM-045`, `LLM-054`, `LLM-082`, `LLM-114`, and `LLM-152` are formally reclosed through the remediation evidence chain.
+
+No P12 rerun is required: the accepted P10 work changes CI execution/provenance/bootstrap mechanics and documentation, not model identity/bytes, tokenizer/model loading semantics, prompt rendering, Qwen non-thinking framing, provider routing, or decode/generation behavior. Existing P12 real-model evidence remains applicable.
+
+Signed/notarized P13 release execution, physical Mac audio/TCC acceptance, and human voice acceptance remain explicitly owner-deferred and are not misclassified as complete.
+
+This closeout intentionally records the accepted implementation/full-validation/merge/master evidence. Its own documentation-only CI is procedural closeout evidence and is not recursively required to rewrite this record again.

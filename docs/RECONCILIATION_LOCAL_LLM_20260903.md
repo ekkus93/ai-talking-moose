@@ -407,3 +407,14 @@ The post-review P12 decision is **no rerun required through P9** because none of
 Ordinary CI remains model-weight-free and proves source/tests/contracts/audits/compile/bundle properties. The accepted P12 real-GGUF run remains the generation-semantic evidence. Existing P13 packaging/license evidence remains preserved; P9 does not claim a new signed/notarized release candidate. Cooperative native generation cancellation, bounded shutdown, CPU-only V1, unavailable first-token timing, fully local voice, signed/notarized P13 execution, physical Mac audio/TCC acceptance, and human voice audition remain explicit limitations/deferred gates as detailed in the P9 reconciliation.
 
 Formal reclosure of the historical reopened claims and restoration of the installer-cancellable Final Gate statement occurs only in P10 after the final focused source audit, exact-head ordinary CI, expected-head merge, and exact post-merge `master` CI. Until then, the historical 2026-09-03 Final Gate must not be interpreted as superseding the active remediation tracker.
+
+
+---
+
+## Post-review remediation reclosure — 2026-09-09
+
+The later source-review reopening recorded above is now **reclosed**. The original 2026-09-03 evidence remains historical evidence; this addendum supplies the later remediation evidence rather than rewriting that record.
+
+The reopened claims `LLM-042`, `LLM-045`, `LLM-054`, `LLM-082`, `LLM-114`, `LLM-152`, and the cancellable installer Final Gate statement were remediated through `docs/TODO(20260905-141500).md`. Final P10 PR #68 passed ordinary exact-head CI `34387806598` and optimized exact-head full validation `34387831210` on `c94ef628eb2b60637a3488ff981136d5e8c9e145`. The optimized full gate retained canonical/frontend/Rust/generated-contract, dependency/RustSec, release-static, all three Local LLM architecture proofs, and both macOS unsigned bundle smokes, while reducing wall time to 10 minutes.
+
+PR #68 was squash-merged with the exact expected-head guard to `master` `2520a98265da14678c3df59223fcc1f598e653bd`; exact post-merge master CI `34389089979` succeeded. The final focused source audit found no mandatory unresolved defect. Existing P12 real-model evidence remains applicable because no model/prompt/provider/decode semantics changed. Deferred signed/notarized P13, physical Mac audio/TCC, and human voice gates remain deferred.
