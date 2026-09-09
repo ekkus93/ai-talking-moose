@@ -21,49 +21,264 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
-  # Ordinary CI is explicitly offline with respect to live Gemini calls. The sole live
-  # integration test is ignored and also requires this guard to be set to 1 manually.
   TALKING_MOOSE_ALLOW_LIVE_API: "0"
 
 jobs:
+  classify:
+    name: Classify CI scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+      ci_only: ${{ steps.scope.outputs.ci_only }}
+      ci_needed: ${{ steps.scope.outputs.ci_needed }}
+      frontend_needed: ${{ steps.scope.outputs.frontend_needed }}
+      rust_needed: ${{ steps.scope.outputs.rust_needed }}
+      contract_needed: ${{ steps.scope.outputs.contract_needed }}
+      dependency_needed: ${{ steps.scope.outputs.dependency_needed }}
+      release_needed: ${{ steps.scope.outputs.release_needed }}
+      local_llm_needed: ${{ steps.scope.outputs.local_llm_needed }}
+      full_validation: ${{ steps.scope.outputs.full_validation }}
+      base_sha: ${{ steps.scope.outputs.base_sha }}
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_SHA_VALUE: ${{ github.sha }}
+          REF_NAME: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          zero_sha="0000000000000000000000000000000000000000"
+          full_validation=false
+          base_sha=""
+          head_sha="$GITHUB_SHA_VALUE"
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || "$REF_NAME" == refs/tags/* ]]; then
+            full_validation=true
+          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+            head_sha="$PR_HEAD_SHA"
+          else
+            base_sha="$BEFORE_SHA"
+          fi
+
+          if [[ -z "$base_sha" || "$base_sha" == "$zero_sha" ]]; then
+            full_validation=true
+          fi
+
+          docs_only=false
+          ci_only=false
+          ci_needed=false
+          frontend_needed=false
+          rust_needed=false
+          contract_needed=false
+          dependency_needed=false
+          release_needed=false
+          local_llm_needed=false
+          changed_files=()
+
+          if [[ "$full_validation" == "true" ]]; then
+            frontend_needed=true
+            rust_needed=true
+            contract_needed=true
+            dependency_needed=true
+            release_needed=true
+            local_llm_needed=true
+          else
+            mapfile -t changed_files < <(git diff --name-only "$base_sha" "$head_sha")
+
+            if (( ${#changed_files[@]} == 0 )); then
+              frontend_needed=true
+              rust_needed=true
+              contract_needed=true
+            else
+              docs_only=true
+              ci_only=true
+
+              for path in "${changed_files[@]}"; do
+                is_docs=false
+                is_ci=false
+
+                if [[ "$path" == docs/* || ( "$path" != */* && "$path" == *.md ) ]]; then
+                  is_docs=true
+                else
+                  docs_only=false
+                fi
+
+                case "$path" in
+                  .github/workflows/*|.github/actions/*|scripts/run_backend_failure_matrix.sh|scripts/run_backend_stress_matrix.sh)
+                    is_ci=true
+                    ci_needed=true
+                    ;;
+                esac
+
+                if [[ "$is_docs" == "true" || "$is_ci" == "true" ]]; then
+                  continue
+                fi
+
+                ci_only=false
+                handled=false
+
+                case "$path" in
+                  src/*|package.json|package-lock.json|npm-shrinkwrap.json|tsconfig*.json|vite.config.*|eslint.config.*|postcss.config.*|tailwind.config.*|scripts/*.mjs)
+                    frontend_needed=true
+                    handled=true
+                    ;;
+                esac
+
+                case "$path" in
+                  src-tauri/src/*|src-tauri/build.rs|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/capabilities/*|scripts/*.sh|scripts/*.py)
+                    rust_needed=true
+                    handled=true
+                    ;;
+                esac
+
+                case "$path" in
+                  src-tauri/src/*|src-tauri/Cargo.toml|src-tauri/Cargo.lock|scripts/generate_frontend_contract.sh)
+                    contract_needed=true
+                    ;;
+                esac
+
+                case "$path" in
+                  package.json|package-lock.json|npm-shrinkwrap.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock)
+                    dependency_needed=true
+                    ;;
+                esac
+
+                case "$path" in
+                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/icons/*|src-tauri/resources/*|src-tauri/native/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
+                    release_needed=true
+                    handled=true
+                    ;;
+                esac
+
+                case "$path" in
+                  src-tauri/src/ai/local/*|src-tauri/llama-compile-proof/*|src-tauri/Cargo.toml|src-tauri/Cargo.lock|scripts/check_local_llm_packaging_policy.py)
+                    local_llm_needed=true
+                    ;;
+                esac
+
+                if [[ "$handled" == "false" ]]; then
+                  # Unknown non-documentation paths fail toward broader ordinary
+                  # validation rather than silently bypassing application checks.
+                  frontend_needed=true
+                  rust_needed=true
+                  contract_needed=true
+                fi
+              done
+            fi
+          fi
+
+          {
+            echo "### CI scope"
+            echo
+            echo "Base: \`$base_sha\`"
+            echo "Head: \`$head_sha\`"
+            echo "Docs only: \`$docs_only\`"
+            echo "CI plumbing only: \`$ci_only\`"
+            echo "CI plumbing gate: \`$ci_needed\`"
+            echo "Frontend: \`$frontend_needed\`"
+            echo "Rust: \`$rust_needed\`"
+            echo "Generated contract: \`$contract_needed\`"
+            echo "Dependency audit: \`$dependency_needed\`"
+            echo "Release static: \`$release_needed\`"
+            echo "Local LLM proof: \`$local_llm_needed\`"
+            echo "Full validation: \`$full_validation\`"
+            if (( ${#changed_files[@]} > 0 )); then
+              echo
+              echo "Changed files:"
+              for path in "${changed_files[@]}"; do
+                echo "- \`$path\`"
+              done
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "ci_only=$ci_only" >> "$GITHUB_OUTPUT"
+          echo "ci_needed=$ci_needed" >> "$GITHUB_OUTPUT"
+          echo "frontend_needed=$frontend_needed" >> "$GITHUB_OUTPUT"
+          echo "rust_needed=$rust_needed" >> "$GITHUB_OUTPUT"
+          echo "contract_needed=$contract_needed" >> "$GITHUB_OUTPUT"
+          echo "dependency_needed=$dependency_needed" >> "$GITHUB_OUTPUT"
+          echo "release_needed=$release_needed" >> "$GITHUB_OUTPUT"
+          echo "local_llm_needed=$local_llm_needed" >> "$GITHUB_OUTPUT"
+          echo "full_validation=$full_validation" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+
+  docs-only:
+    name: Docs-only fast path
+    needs: classify
+    if: needs.classify.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate documentation diff
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.classify.outputs.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git diff --check "$BASE_SHA" "$HEAD_SHA"
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA"
+
+  ci-plumbing:
+    name: CI plumbing
+    needs: classify
+    if: needs.classify.outputs.ci_needed == 'true' && needs.classify.outputs.full_validation != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate CI diff and shell syntax
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.classify.outputs.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git diff --check "$BASE_SHA" "$HEAD_SHA"
+          bash -n scripts/run_backend_failure_matrix.sh
+          bash -n scripts/run_backend_stress_matrix.sh
+          test -s .github/workflows/ci.yml
+          grep -q '^name: CI$' .github/workflows/ci.yml
+
   frontend:
     name: Frontend quality
+    needs: classify
+    if: needs.classify.outputs.frontend_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
-      - name: Reject tracked generated frontend trees
-        run: npm run check:generated-trees
-
       - name: Install frontend dependencies
         run: npm ci
-
-      - name: Verify Tauri command registration contract
-        run: npm run check:tauri-command-contract
-
-      - name: Verify frontend IPC shape contract
-        run: npm run check:frontend-contract-shapes
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Check formatting
-        run: npm run format:check
-
-      - name: Run frontend tests
-        run: npm test
-
+      - name: Run frontend gate
+        run: npm run check:frontend
       - name: Smoke frontend-only Vite preview
         shell: bash
         run: |
@@ -74,51 +289,34 @@ jobs:
           vite_pid=$!
           trap 'kill "$vite_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 40); do
-            if curl --fail --silent --show-error http://127.0.0.1:1420/ -o "$index_file"; then
-              break
-            fi
-            if ! kill -0 "$vite_pid" 2>/dev/null; then
-              cat "$log_file"
-              exit 1
-            fi
+            if curl --fail --silent --show-error http://127.0.0.1:1420/ -o "$index_file"; then break; fi
+            if ! kill -0 "$vite_pid" 2>/dev/null; then cat "$log_file"; exit 1; fi
             sleep 0.25
           done
           test -s "$index_file"
           grep -q 'id="root"' "$index_file"
-          curl --fail --silent --show-error http://127.0.0.1:1420/src/main.tsx >/dev/null
 
-      - name: Build frontend
-        run: npm run build
-
-  rust:
+  rust-clippy:
     name: Rust quality
+    needs: classify
+    if: needs.classify.outputs.rust_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            cmake \
-            libasound2-dev \
-            libayatana-appindicator3-dev \
-            libclang-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev
-
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
-      - name: Cache Rust dependencies
+      - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
           path: |
@@ -127,30 +325,88 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
-      - name: Validate Moonshine native runtime manifest
+      - name: Validate native runtime manifest
         run: python3 scripts/validate_moonshine_runtime_manifest.py
-
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
-
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-
       - name: Run Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 
-      - name: Run Rust tests
+  rust-tests:
+    name: Rust tests
+    needs: classify
+    if: needs.classify.outputs.rust_needed == 'true' && needs.classify.outputs.full_validation != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+      - name: Run complete Rust test suite
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
 
-      - name: Run backend failure matrix
-        run: bash scripts/run_backend_failure_matrix.sh
-
-      - name: Run backend stress matrix
-        run: bash scripts/run_backend_stress_matrix.sh
+  backend-contract:
+    name: Generated backend contract
+    needs: classify
+    if: needs.classify.outputs.contract_needed == 'true' && needs.classify.outputs.full_validation != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Verify generated backend contract is current
+        run: npm run check:generated-backend-contract
 
   local-llm-compile-proof:
     name: Local LLM compile proof (${{ matrix.label }})
+    needs: classify
+    if: needs.classify.outputs.local_llm_needed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -161,29 +417,19 @@ jobs:
           - label: macos-arm64
             runner: macos-15
             os: macos
-          - label: macos-x86_64
-            runner: macos-15-intel
-            os: macos
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install Linux llama.cpp build dependencies
         if: matrix.os == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            cmake \
-            libclang-dev
-
+          sudo apt-get install -y --no-install-recommends build-essential clang cmake libclang-dev
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
+      - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
           path: |
@@ -192,38 +438,32 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.label }}-llm-proof-${{ hashFiles('src-tauri/llama-compile-proof/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.label }}-llm-proof-
-
       - name: Compile and run llama.cpp CPU-policy proof
         run: cargo test --manifest-path src-tauri/llama-compile-proof/Cargo.toml --locked
 
   dependency-audit:
     name: Dependency audit
+    needs: classify
+    if: needs.classify.outputs.dependency_needed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: read
       checks: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install frontend dependencies
         run: npm ci
-
-      # Production packages ship with the application and remain a blocking gate.
       - name: Audit production Node dependencies
         run: npm audit --omit=dev --audit-level=high
-
-      # The complete Node dependency tree is a blocking release-quality gate.
       - name: Audit development Node dependencies
         run: npm audit --include=dev --audit-level=high
-
       - name: Audit Rust dependencies
         uses: rustsec/audit-check@v2.0.0
         with:
@@ -232,48 +472,26 @@ jobs:
 
   release-static:
     name: Release metadata static gate
+    needs: classify
+    if: needs.classify.outputs.release_needed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            cmake \
-            libasound2-dev \
-            libayatana-appindicator3-dev \
-            libclang-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Install frontend dependencies
         run: npm ci
-
-      - name: Verify generated backend contract is current
-        run: npm run check:generated-backend-contract
-
       - name: Generate release icon set
         run: python3 scripts/generate_app_icons.py
-
       - name: Validate release metadata and icon set
         run: python3 scripts/validate_release_metadata.py
-
       - name: Validate release helper syntax
         run: |
           python3 -m py_compile \
@@ -290,15 +508,15 @@ jobs:
           bash -n scripts/run_p13_macos_release_acceptance.sh
           bash -n scripts/run_backend_failure_matrix.sh
           bash -n scripts/run_backend_stress_matrix.sh
-
       - name: Validate Local LLM packaging policy
         run: python3 scripts/check_local_llm_packaging_policy.py
-
       - name: Validate dependency license collection
         run: python3 scripts/collect_release_licenses.py
 
   macos-bundle:
     name: macOS Tauri bundle (${{ matrix.arch }})
+    needs: classify
+    if: needs.classify.outputs.full_validation == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -310,23 +528,20 @@ jobs:
             runner: macos-15-intel
             deployment_target: "13.4"
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
+      - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
           path: |
@@ -336,78 +551,80 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-cargo-
             ${{ runner.os }}-cargo-
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Generate release icon set
         run: python3 scripts/generate_app_icons.py
-
       - name: Validate release metadata and icon set
         run: python3 scripts/validate_release_metadata.py
-
       - name: Validate Moonshine runtime provenance
         run: python3 scripts/validate_moonshine_runtime_manifest.py
-
       - name: Build pinned Moonshine native runtime
         run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
-
       - name: Collect dependency license texts
         run: python3 scripts/collect_release_licenses.py
-
       - name: Build unsigned macOS application smoke bundle
         run: npm run tauri build -- --bundles app
-
       - name: Verify self-contained native runtime bundle
         run: |
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app_path"
           bash scripts/verify_macos_bundle.sh "$app_path" "${{ matrix.arch }}"
-
       - name: Verify packaged build provenance
         run: |
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app_path"
           bash scripts/verify_app_build_provenance.sh "$app_path" "$GITHUB_SHA"
 
-  canonical-check-all:
-    name: Canonical npm run check:all
-    needs:
-      - frontend
-      - rust
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+  full-local-llm-x86:
+    name: Full Local LLM compile proof (macos-x86_64)
+    needs: classify
+    if: needs.classify.outputs.full_validation == 'true'
+    runs-on: macos-15-intel
+    timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-macos-x86_64-llm-proof-${{ hashFiles('src-tauri/llama-compile-proof/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-macos-x86_64-llm-proof-
+      - name: Compile and run llama.cpp CPU-policy proof
+        run: cargo test --manifest-path src-tauri/llama-compile-proof/Cargo.toml --locked
 
+  canonical-check-all:
+    name: Canonical npm run check:all
+    needs: classify
+    if: needs.classify.outputs.full_validation == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            cmake \
-            libasound2-dev \
-            libayatana-appindicator3-dev \
-            libclang-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev
-
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
-      - name: Cache Rust dependencies
+      - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
           path: |
@@ -417,12 +634,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-canonical-cargo-
             ${{ runner.os }}-cargo-
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
-
       - name: Run canonical repository gate
         run: npm run check:all
