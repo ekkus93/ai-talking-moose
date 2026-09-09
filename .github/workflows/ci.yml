@@ -56,7 +56,6 @@ jobs:
           REF_NAME: ${{ github.ref }}
         run: |
           set -euo pipefail
-
           zero_sha="0000000000000000000000000000000000000000"
           full_validation=false
           base_sha=""
@@ -93,18 +92,15 @@ jobs:
             bundle_needed=true
           else
             mapfile -t changed_files < <(git diff --name-only "$base_sha" "$head_sha")
-
             if (( ${#changed_files[@]} == 0 )); then
               frontend_needed=true
               rust_needed=true
             else
               docs_only=true
-
               for path in "${changed_files[@]}"; do
                 if [[ "$path" == docs/* || ( "$path" != */* && "$path" == *.md ) ]]; then
                   continue
                 fi
-
                 docs_only=false
                 frontend_needed=true
 
@@ -113,25 +109,21 @@ jobs:
                     rust_needed=true
                     ;;
                 esac
-
                 case "$path" in
                   package.json|package-lock.json|npm-shrinkwrap.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock)
                     dependency_needed=true
                     ;;
                 esac
-
                 case "$path" in
                   src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/icons/*|src-tauri/resources/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
                     release_needed=true
                     ;;
                 esac
-
                 case "$path" in
                   src-tauri/src/ai/local/*|src-tauri/llama-compile-proof/*|src-tauri/Cargo.toml|src-tauri/Cargo.lock|scripts/check_local_llm_packaging_policy.py)
                     local_llm_needed=true
                     ;;
                 esac
-
                 case "$path" in
                   src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/icons/*|src-tauri/resources/*|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/collect_release_licenses.py|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|package.json|package-lock.json)
                     bundle_needed=true
@@ -184,7 +176,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
       - name: Validate documentation diff
         shell: bash
         env:
@@ -204,19 +195,15 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Run frontend gate
         run: npm run check:frontend
-
       - name: Smoke frontend-only Vite preview
         shell: bash
         run: |
@@ -227,13 +214,8 @@ jobs:
           vite_pid=$!
           trap 'kill "$vite_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 40); do
-            if curl --fail --silent --show-error http://127.0.0.1:1420/ -o "$index_file"; then
-              break
-            fi
-            if ! kill -0 "$vite_pid" 2>/dev/null; then
-              cat "$log_file"
-              exit 1
-            fi
+            if curl --fail --silent --show-error http://127.0.0.1:1420/ -o "$index_file"; then break; fi
+            if ! kill -0 "$vite_pid" 2>/dev/null; then cat "$log_file"; exit 1; fi
             sleep 0.25
           done
           test -s "$index_file"
@@ -248,7 +230,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -256,12 +237,10 @@ jobs:
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \
             libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -271,13 +250,12 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
       - name: Validate native runtime manifest
         run: python3 scripts/validate_moonshine_runtime_manifest.py
-
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-
       - name: Run Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 
@@ -290,7 +268,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -298,10 +275,8 @@ jobs:
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \
             libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -311,10 +286,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
       - name: Run complete Rust test suite
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
-
       - name: Verify failure/stress scenario manifests
         env:
           TALKING_MOOSE_MATRIX_VERIFY_ONLY: "1"
@@ -331,13 +306,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -345,10 +318,8 @@ jobs:
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \
             libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -358,10 +329,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Verify generated backend contract is current
         run: npm run check:generated-backend-contract
 
@@ -376,10 +345,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -390,7 +357,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-arm64-cargo-
             ${{ runner.os }}-cargo-
-
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
       - name: Check macOS application compilation
         run: cargo check --manifest-path src-tauri/Cargo.toml --all-features
 
@@ -413,16 +381,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install Linux llama.cpp build dependencies
         if: matrix.os == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential clang cmake libclang-dev
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -432,7 +397,6 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.label }}-llm-proof-${{ hashFiles('src-tauri/llama-compile-proof/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.label }}-llm-proof-
-
       - name: Compile and run llama.cpp CPU-policy proof
         run: cargo test --manifest-path src-tauri/llama-compile-proof/Cargo.toml --locked
 
@@ -448,22 +412,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Audit production Node dependencies
         run: npm audit --omit=dev --audit-level=high
-
       - name: Audit development Node dependencies
         run: npm audit --include=dev --audit-level=high
-
       - name: Audit Rust dependencies
         uses: rustsec/audit-check@v2.0.0
         with:
@@ -479,25 +438,19 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Generate release icon set
         run: python3 scripts/generate_app_icons.py
-
       - name: Validate release metadata and icon set
         run: python3 scripts/validate_release_metadata.py
-
       - name: Validate release helper syntax
         run: |
           python3 -m py_compile \
@@ -514,10 +467,8 @@ jobs:
           bash -n scripts/run_p13_macos_release_acceptance.sh
           bash -n scripts/run_backend_failure_matrix.sh
           bash -n scripts/run_backend_stress_matrix.sh
-
       - name: Validate Local LLM packaging policy
         run: python3 scripts/check_local_llm_packaging_policy.py
-
       - name: Validate dependency license collection
         run: python3 scripts/collect_release_licenses.py
 
@@ -542,16 +493,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -562,34 +510,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-cargo-
             ${{ runner.os }}-cargo-
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Generate release icon set
         run: python3 scripts/generate_app_icons.py
-
       - name: Validate release metadata and icon set
         run: python3 scripts/validate_release_metadata.py
-
       - name: Validate Moonshine runtime provenance
         run: python3 scripts/validate_moonshine_runtime_manifest.py
-
       - name: Build pinned Moonshine native runtime
         run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
-
       - name: Collect dependency license texts
         run: python3 scripts/collect_release_licenses.py
-
       - name: Build unsigned macOS application smoke bundle
         run: npm run tauri build -- --bundles app
-
       - name: Verify self-contained native runtime bundle
         run: |
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app_path"
           bash scripts/verify_macos_bundle.sh "$app_path" "${{ matrix.arch }}"
-
       - name: Verify packaged build provenance
         run: |
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
@@ -605,10 +544,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -618,7 +555,6 @@ jobs:
           key: ${{ runner.os }}-macos-x86_64-llm-proof-${{ hashFiles('src-tauri/llama-compile-proof/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-macos-x86_64-llm-proof-
-
       - name: Compile and run llama.cpp CPU-policy proof
         run: cargo test --manifest-path src-tauri/llama-compile-proof/Cargo.toml --locked
 
@@ -631,13 +567,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -645,12 +579,10 @@ jobs:
             build-essential clang cmake libasound2-dev \
             libayatana-appindicator3-dev libclang-dev librsvg2-dev \
             libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
       - name: Cache Cargo downloads
         uses: actions/cache@v4
         with:
@@ -661,12 +593,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-canonical-cargo-
             ${{ runner.os }}-cargo-
-
       - name: Install frontend dependencies
         run: npm ci
-
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
-
       - name: Run canonical repository gate
         run: npm run check:all
