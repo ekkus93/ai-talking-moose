@@ -23,6 +23,14 @@ pub enum TextProvider {
     Local,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TtsProvider {
+    #[default]
+    Google,
+    Local,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TtsRequest {
     pub text: String,
@@ -217,5 +225,26 @@ mod provider_error_tests {
             "\"local\""
         );
         assert_eq!(TextProvider::default(), TextProvider::Local);
+    }
+
+    #[test]
+    fn tts_provider_serializes_and_round_trips_stable_values() {
+        for (provider, encoded) in [
+            (TtsProvider::Google, "\"google\""),
+            (TtsProvider::Local, "\"local\""),
+        ] {
+            assert_eq!(serde_json::to_string(&provider).unwrap(), encoded);
+            assert_eq!(
+                serde_json::from_str::<TtsProvider>(encoded).unwrap(),
+                provider
+            );
+        }
+        assert_eq!(TtsProvider::default(), TtsProvider::Google);
+    }
+
+    #[test]
+    fn tts_provider_rejects_unknown_and_fake_values() {
+        assert!(serde_json::from_str::<TtsProvider>("\"fake\"").is_err());
+        assert!(serde_json::from_str::<TtsProvider>("\"unknown\"").is_err());
     }
 }
