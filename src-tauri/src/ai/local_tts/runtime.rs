@@ -1,9 +1,7 @@
-use super::installer::{LocalTtsInstallErrorKind, LocalTtsInstallState, LocalTtsInstaller};
+use super::installer::{LocalTtsInstallErrorKind, LocalTtsInstaller};
 use super::manifest::{local_tts_model_manifest, LocalTtsModelManifest, LocalTtsPlatform};
-use super::runtime_verification::{
-    LocalTtsRuntimeVerificationErrorKind, LocalTtsRuntimeVerifier,
-};
-use super::storage::global_local_tts_storage;
+use super::runtime_verification::{LocalTtsRuntimeVerificationErrorKind, LocalTtsRuntimeVerifier};
+use super::storage::{global_local_tts_storage, LocalTtsInstallState};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -44,7 +42,10 @@ impl LocalTtsRuntimeError {
     }
 
     fn shutting_down() -> Self {
-        Self::new(LocalTtsRuntimeErrorKind::ShuttingDown, "The Local TTS runtime is shutting down.")
+        Self::new(
+            LocalTtsRuntimeErrorKind::ShuttingDown,
+            "The Local TTS runtime is shutting down.",
+        )
     }
 
     fn unknown_model() -> Self {
@@ -273,9 +274,10 @@ impl LocalTtsRuntimeManager {
 
     pub async fn ensure_loaded(&self, model_id: &str) -> Result<(), LocalTtsRuntimeError> {
         let platform = current_platform()?;
-        let manifest = local_tts_model_manifest(model_id)
-            .ok_or_else(LocalTtsRuntimeError::unknown_model)?;
-        self.ensure_loaded_identity(runtime_identity(manifest, platform)).await
+        let manifest =
+            local_tts_model_manifest(model_id).ok_or_else(LocalTtsRuntimeError::unknown_model)?;
+        self.ensure_loaded_identity(runtime_identity(manifest, platform))
+            .await
     }
 
     async fn ensure_loaded_identity(
@@ -299,7 +301,11 @@ impl LocalTtsRuntimeManager {
         let result = tokio::task::spawn_blocking(move || {
             {
                 let mut state = state.lock();
-                if state.loaded.as_ref().is_some_and(|loaded| loaded != &identity) {
+                if state
+                    .loaded
+                    .as_ref()
+                    .is_some_and(|loaded| loaded != &identity)
+                {
                     state.unload();
                 }
             }
@@ -366,10 +372,15 @@ impl LocalTtsRuntimeManager {
             if local_tts_model_manifest(&model_id).is_none() {
                 return Err(LocalTtsRuntimeError::unknown_model());
             }
-            let status = installer.status(&model_id, platform).map_err(|error| match error.kind {
-                LocalTtsInstallErrorKind::UnknownModel => LocalTtsRuntimeError::unknown_model(),
-                _ => LocalTtsRuntimeError::model_delete(),
-            })?;
+            let status =
+                installer
+                    .status(&model_id, platform)
+                    .map_err(|error| match error.kind {
+                        LocalTtsInstallErrorKind::UnknownModel => {
+                            LocalTtsRuntimeError::unknown_model()
+                        }
+                        _ => LocalTtsRuntimeError::model_delete(),
+                    })?;
             if matches!(
                 status.install_state,
                 LocalTtsInstallState::Downloading

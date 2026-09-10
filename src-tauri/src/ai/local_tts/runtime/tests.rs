@@ -70,7 +70,11 @@ impl LocalTtsRuntimeEngineFactory for FakeFactory {
     }
 }
 
-fn manager() -> (LocalTtsRuntimeManager, Arc<FakeVerifier>, Arc<EngineCounters>) {
+fn manager() -> (
+    LocalTtsRuntimeManager,
+    Arc<FakeVerifier>,
+    Arc<EngineCounters>,
+) {
     let verifier = Arc::new(FakeVerifier::new());
     let counters = Arc::new(EngineCounters::default());
     let manager = LocalTtsRuntimeManager::with_dependencies(
@@ -106,7 +110,10 @@ async fn warm_runtime_is_reused_and_duplicate_loads_are_serialized() {
     };
     first.await.unwrap().unwrap();
     second.await.unwrap().unwrap();
-    manager.ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID).await.unwrap();
+    manager
+        .ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID)
+        .await
+        .unwrap();
     assert_eq!(verifier.calls.load(Ordering::SeqCst), 1);
     assert_eq!(counters.creates.load(Ordering::SeqCst), 1);
     assert_eq!(counters.loads.load(Ordering::SeqCst), 1);
@@ -130,8 +137,14 @@ async fn changed_runtime_identity_unloads_then_reloads() {
 #[tokio::test]
 async fn invalidation_unloads_and_verification_failure_cannot_reload() {
     let (manager, verifier, counters) = manager();
-    manager.ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID).await.unwrap();
-    manager.invalidate_model(DEFAULT_LOCAL_TTS_MODEL_ID).await.unwrap();
+    manager
+        .ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID)
+        .await
+        .unwrap();
+    manager
+        .invalidate_model(DEFAULT_LOCAL_TTS_MODEL_ID)
+        .await
+        .unwrap();
     assert_eq!(counters.unloads.load(Ordering::SeqCst), 1);
     assert_eq!(
         manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string()).phase,
@@ -154,7 +167,10 @@ async fn invalidation_unloads_and_verification_failure_cannot_reload() {
 #[tokio::test]
 async fn shutdown_unloads_and_rejects_future_loads() {
     let (manager, _verifier, counters) = manager();
-    manager.ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID).await.unwrap();
+    manager
+        .ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID)
+        .await
+        .unwrap();
     manager.shutdown().await.unwrap();
     assert_eq!(counters.unloads.load(Ordering::SeqCst), 1);
     let error = manager
