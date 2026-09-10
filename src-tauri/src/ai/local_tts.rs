@@ -1,11 +1,14 @@
 pub mod installer;
 pub mod manifest;
+pub mod runtime;
 pub mod runtime_verification;
 pub mod storage;
 
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
 use async_trait::async_trait;
+
+pub use runtime::{LocalTtsRuntimeManager, LocalTtsRuntimeStatus};
 
 pub const DEFAULT_LOCAL_TTS_MODEL_ID: &str = "KittenML/kitten-tts-mini-0.8";
 pub const DEFAULT_LOCAL_TTS_VOICE: &str = "Bella";
