@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
 const STAGING_DIR: &str = ".staging";
-const INSTALL_MARKER: &str = ".talking-moose-local-tts.json";
+pub(super) const INSTALL_MARKER: &str = ".talking-moose-local-tts.json";
 const INSTALL_MARKER_SCHEMA_VERSION: u32 = 1;
 const MAX_INSTALL_MARKER_BYTES: u64 = 64 * 1024;
 
@@ -82,14 +82,14 @@ pub struct LocalTtsModelStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct InstallMarkerArtifact {
+pub(super) struct InstallMarkerArtifact {
     filename: String,
     expected_bytes: u64,
     sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct InstallMarker {
+pub(super) struct InstallMarker {
     schema_version: u32,
     storage_id: String,
     provider_model_id: String,
@@ -204,7 +204,7 @@ impl LocalTtsStorage {
     /// Fast status-only validation. This deliberately checks marker identity, file type, and
     /// expected byte counts without hashing model data. KTT-204 owns cryptographic verification
     /// before first runtime use.
-    fn marker_shape_is_valid(
+    pub(super) fn marker_shape_is_valid(
         &self,
         manifest: &'static LocalTtsModelManifest,
         platform: LocalTtsPlatform,
@@ -307,7 +307,7 @@ fn status_descriptor(
     }
 }
 
-fn expected_artifacts(
+pub(super) fn expected_artifacts(
     manifest: &'static LocalTtsModelManifest,
     platform: LocalTtsPlatform,
 ) -> Result<Vec<&'static LocalTtsArtifact>, LocalTtsStatusError> {
@@ -332,7 +332,7 @@ fn expected_install_bytes(
         })
 }
 
-fn install_marker(
+pub(super) fn install_marker(
     manifest: &LocalTtsModelManifest,
     platform: LocalTtsPlatform,
     artifacts: &[&LocalTtsArtifact],
@@ -373,7 +373,7 @@ fn prepare_storage_root(root: &Path) -> Result<(), LocalTtsStatusError> {
     ensure_plain_directory(root)
 }
 
-fn validate_storage_layout(root: &Path) -> Result<(), LocalTtsStatusError> {
+pub(super) fn validate_storage_layout(root: &Path) -> Result<(), LocalTtsStatusError> {
     let models_dir = root.parent().ok_or_else(LocalTtsStatusError::storage)?;
     let staging = root.join(STAGING_DIR);
     for directory in [models_dir, root, staging.as_path()] {
