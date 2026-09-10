@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 
-use super::super::{LocalTtsRuntimeError, LocalTtsRuntimeErrorKind};
+use super::super::LocalTtsRuntimeError;
 
 pub(super) const MAX_INPUT_CHARS: usize = 500;
 
@@ -9,12 +9,10 @@ static DATE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,\s+(\d{4})\b")
         .expect("static date regex")
 });
-static CURRENCY_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\$(-?\d+(?:\.\d+)?)([KMB])?\b").expect("static currency regex")
-});
+static CURRENCY_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\$(-?\d+(?:\.\d+)?)([KMB])?\b").expect("static currency regex"));
 static UNIT_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\b(\d+(?:\.\d+)?)\s*(kHz|MHz|GHz|Hz|KB|MB|GB)\b")
-        .expect("static unit regex")
+    Regex::new(r"(?i)\b(\d+(?:\.\d+)?)\s*(kHz|MHz|GHz|Hz|KB|MB|GB)\b").expect("static unit regex")
 });
 static PERCENT_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(-?\d+(?:\.\d+)?)%").expect("static percent regex"));
@@ -22,15 +20,12 @@ static TIME_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\b(\d{1,2}):(\d{2})(?:\s*(AM|PM|am|pm))?\b").expect("static time regex")
 });
 static VERSION_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b([A-Za-z][A-Za-z0-9_]*)-(\d+(?:\.\d+)+)\b")
-        .expect("static version regex")
+    Regex::new(r"\b([A-Za-z][A-Za-z0-9_]*)-(\d+(?:\.\d+)+)\b").expect("static version regex")
 });
-static ORDINAL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b(\d+)(st|nd|rd|th)\b").expect("static ordinal regex")
-});
+static ORDINAL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b(\d+)(st|nd|rd|th)\b").expect("static ordinal regex"));
 static NUMBER_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(^|[^A-Za-z0-9_])(-?\d+(?:\.\d+)?)([^A-Za-z0-9_]|$)")
-        .expect("static number regex")
+    Regex::new(r"(^|[^A-Za-z0-9_])(-?\d+(?:\.\d+)?)([^A-Za-z0-9_]|$)").expect("static number regex")
 });
 
 pub(super) fn normalize_text(text: &str) -> Result<String, LocalTtsRuntimeError> {
@@ -170,10 +165,7 @@ fn currency_to_words(value: &str, scale: Option<&str>) -> String {
             "B" => "billion",
             _ => "",
         };
-        return format!(
-            "{sign}{} {scale_word} dollars",
-            decimal_to_words(unsigned)
-        );
+        return format!("{sign}{} {scale_word} dollars", decimal_to_words(unsigned));
     }
 
     let mut parts = unsigned.splitn(2, '.');
@@ -338,6 +330,7 @@ const TENS: [&str; 10] = [
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::LocalTtsRuntimeErrorKind;
     use super::*;
 
     #[test]
@@ -349,7 +342,12 @@ mod tests {
         for case in corpus["cases"].as_array().unwrap() {
             let text = case["text"].as_str().unwrap();
             let expected = case["normalized_text"].as_str().unwrap();
-            assert_eq!(normalize_text(text).unwrap(), expected, "case {}", case["id"]);
+            assert_eq!(
+                normalize_text(text).unwrap(),
+                expected,
+                "case {}",
+                case["id"]
+            );
         }
     }
 
