@@ -2,16 +2,18 @@ use super::fs_ops::remove_model_dir;
 use super::transport::{ArtifactProgressCallback, LocalTtsDownloadTransport};
 use super::*;
 use crate::ai::local_tts::manifest::{
-    LocalTtsArtifact, LocalTtsArtifactKind, LocalTtsModelManifest, LocalTtsPlatformArtifact,
-    LocalTtsRuntimeCompatibility, LocalTtsVoiceManifest,
+    local_tts_model_manifest, LocalTtsArtifact, LocalTtsArtifactKind, LocalTtsModelManifest,
+    LocalTtsPlatformArtifact, LocalTtsRuntimeCompatibility, LocalTtsVoiceManifest,
 };
 use crate::ai::local_tts::storage::INSTALL_MARKER;
+use crate::ai::local_tts::DEFAULT_LOCAL_TTS_MODEL_ID;
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tempfile::tempdir;
+use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
 const TEST_MODEL_BYTES: &[u8] = b"model";
@@ -77,7 +79,7 @@ static TEST_VOICES: [LocalTtsVoiceManifest; 1] = [LocalTtsVoiceManifest {
 
 static TEST_MANIFEST: LocalTtsModelManifest = LocalTtsModelManifest {
     id: "test-local-tts",
-    provider_model_id: "test/local-tts",
+    provider_model_id: DEFAULT_LOCAL_TTS_MODEL_ID,
     display_name: "Test Local TTS",
     family: "Test",
     version: "1",
@@ -140,6 +142,113 @@ impl LocalTtsDownloadTransport for MemoryTransport {
     }
 }
 
+#[derive(Clone, Copy)]
+enum FaultMode {
+    Truncated,
+    Oversized,
+    WrongSha,
+    FailSecondArtifact,
+}
+
+struct FaultTransport {
+    mode: FaultMode,
+    calls: AtomicUsize,
+}
+
+#[async_trait]
+impl LocalTtsDownloadTransport for FaultTransport {
+    async fn download(
+        &self,
+        artifact: &'static LocalTtsArtifact,
+        destination: &Path,
+        cancellation: &CancellationToken,
+        progress: Option<&ArtifactProgressCallback>,
+    ) -> Result<(), LocalTtsInstallError> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        if cancellation.is_cancelled() {
+            return Err(LocalTtsInstallError::cancelled());
+        }
+        if matches!(self.mode, FaultMode::FailSecondArtifact) && call == 1 {
+            return Err(LocalTtsInstallError::network());
+        }
+
+        let mut bytes = MemoryTransport::bytes_for(artifact).to_vec();
+        if artifact.filename == "model.onnx" {
+            match self.mode {
+                FaultMode::Truncated => {
+                    bytes.pop();
+                }
+                FaultMode::Oversized => bytes.push(0),
+                FaultMode::WrongSha => bytes[0] ^= 0xff,
+                FaultMode::FailSecondArtifact => {}
+            }
+        }
+
+        tokio::fs::write(destination, &bytes)
+            .await
+            .map_err(|_| LocalTtsInstallError::io("write a faulted test artifact"))?;
+        if let Some(callback) = progress {
+            callback(bytes.len() as u64);
+        }
+        Ok(())
+    }
+}
+
+struct BlockingTransport {
+    calls: AtomicUsize,
+    started: Notify,
+    release: Notify,
+}
+
+impl BlockingTransport {
+    fn new() -> Self {
+        Self {
+            calls: AtomicUsize::new(0),
+            started: Notify::new(),
+            release: Notify::new(),
+        }
+    }
+
+    async fn wait_until_started(&self) {
+        self.started.notified().await;
+    }
+
+    fn release(&self) {
+        self.release.notify_one();
+    }
+}
+
+#[async_trait]
+impl LocalTtsDownloadTransport for BlockingTransport {
+    async fn download(
+        &self,
+        artifact: &'static LocalTtsArtifact,
+        destination: &Path,
+        cancellation: &CancellationToken,
+        progress: Option<&ArtifactProgressCallback>,
+    ) -> Result<(), LocalTtsInstallError> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        if call == 0 {
+            self.started.notify_one();
+            tokio::select! {
+                () = self.release.notified() => {}
+                () = cancellation.cancelled() => return Err(LocalTtsInstallError::cancelled()),
+            }
+        }
+        if cancellation.is_cancelled() {
+            return Err(LocalTtsInstallError::cancelled());
+        }
+        let bytes = MemoryTransport::bytes_for(artifact);
+        tokio::fs::write(destination, bytes)
+            .await
+            .map_err(|_| LocalTtsInstallError::io("write a blocked test artifact"))?;
+        if let Some(callback) = progress {
+            callback(bytes.len() as u64);
+        }
+        Ok(())
+    }
+}
+
 fn installer() -> (
     tempfile::TempDir,
     Arc<LocalTtsInstaller>,
@@ -153,6 +262,65 @@ fn installer() -> (
     let installer =
         Arc::new(LocalTtsInstaller::with_transport(storage, transport.clone()).unwrap());
     (dir, installer, transport)
+}
+
+fn fault_installer(
+    mode: FaultMode,
+) -> (
+    tempfile::TempDir,
+    Arc<LocalTtsInstaller>,
+    Arc<FaultTransport>,
+) {
+    let dir = tempdir().unwrap();
+    let storage = Arc::new(LocalTtsStorage::new(dir.path().join("models").join("tts")).unwrap());
+    let transport = Arc::new(FaultTransport {
+        mode,
+        calls: AtomicUsize::new(0),
+    });
+    let installer =
+        Arc::new(LocalTtsInstaller::with_transport(storage, transport.clone()).unwrap());
+    (dir, installer, transport)
+}
+
+fn blocking_installer() -> (
+    tempfile::TempDir,
+    Arc<LocalTtsInstaller>,
+    Arc<BlockingTransport>,
+) {
+    let dir = tempdir().unwrap();
+    let storage = Arc::new(LocalTtsStorage::new(dir.path().join("models").join("tts")).unwrap());
+    let transport = Arc::new(BlockingTransport::new());
+    let installer =
+        Arc::new(LocalTtsInstaller::with_transport(storage, transport.clone()).unwrap());
+    (dir, installer, transport)
+}
+
+fn assert_no_committed_test_install(installer: &LocalTtsInstaller) {
+    assert!(!installer
+        .storage
+        .marker_shape_is_valid(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64));
+    assert!(!installer.root().join(TEST_MANIFEST.id).exists());
+    assert_eq!(
+        installer.storage.staging_root().read_dir().unwrap().count(),
+        0
+    );
+}
+
+async fn assert_untrusted_model_id_rejected(model_id: &str) {
+    let (_dir, installer, _transport) = installer();
+    let install_error = installer
+        .install(model_id, LocalTtsPlatform::LinuxX86_64, None)
+        .await
+        .unwrap_err();
+    assert_eq!(install_error.kind, LocalTtsInstallErrorKind::UnknownModel);
+
+    let delete_error = installer.delete(model_id).unwrap_err();
+    assert_eq!(delete_error.kind, LocalTtsInstallErrorKind::UnknownModel);
+    assert_eq!(installer.root().read_dir().unwrap().count(), 1);
+    assert_eq!(
+        installer.storage.staging_root().read_dir().unwrap().count(),
+        0
+    );
 }
 
 #[tokio::test]
@@ -204,6 +372,105 @@ async fn progress_reports_download_verify_and_promote_states() {
 }
 
 #[tokio::test]
+async fn path_traversal_model_id_is_rejected_by_public_installer() {
+    assert_untrusted_model_id_rejected("../../outside-model").await;
+}
+
+#[tokio::test]
+async fn absolute_model_id_is_rejected_by_public_installer() {
+    assert_untrusted_model_id_rejected("/tmp/talking-moose-outside-model").await;
+}
+
+#[test]
+fn unsafe_non_directory_delete_is_rejected_without_removing_the_path() {
+    let (_dir, installer, _transport) = installer();
+    let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap();
+    let model_path = installer.root().join(manifest.id);
+    fs::write(&model_path, b"not a model directory").unwrap();
+
+    let error = installer.delete(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap_err();
+    assert_eq!(error.kind, LocalTtsInstallErrorKind::CorruptInstall);
+    assert!(model_path.is_file());
+}
+
+#[tokio::test]
+async fn truncated_artifact_is_rejected_and_partial_state_is_removed() {
+    let (_dir, installer, _transport) = fault_installer(FaultMode::Truncated);
+    let error = installer
+        .install_manifest(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64, None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, LocalTtsInstallErrorKind::SizeMismatch);
+    assert_no_committed_test_install(&installer);
+}
+
+#[tokio::test]
+async fn oversized_artifact_is_rejected_and_partial_state_is_removed() {
+    let (_dir, installer, _transport) = fault_installer(FaultMode::Oversized);
+    let error = installer
+        .install_manifest(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64, None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, LocalTtsInstallErrorKind::SizeMismatch);
+    assert_no_committed_test_install(&installer);
+}
+
+#[tokio::test]
+async fn wrong_sha_is_rejected_and_partial_state_is_removed() {
+    let (_dir, installer, _transport) = fault_installer(FaultMode::WrongSha);
+    let error = installer
+        .install_manifest(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64, None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, LocalTtsInstallErrorKind::Sha256Mismatch);
+    assert_no_committed_test_install(&installer);
+}
+
+#[tokio::test]
+async fn multi_file_partial_download_failure_never_commits_install() {
+    let (_dir, installer, transport) = fault_installer(FaultMode::FailSecondArtifact);
+    let error = installer
+        .install_manifest(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64, None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, LocalTtsInstallErrorKind::Network);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 2);
+    assert_no_committed_test_install(&installer);
+}
+
+#[tokio::test]
+async fn cancellation_at_each_reported_lifecycle_phase_never_commits_install() {
+    for target in [
+        LocalTtsInstallState::Downloading,
+        LocalTtsInstallState::Verifying,
+        LocalTtsInstallState::Promoting,
+    ] {
+        let (_dir, installer, _transport) = installer();
+        let cancelling_installer = installer.clone();
+        let callback: LocalTtsInstallProgressCallback = Arc::new(move |progress| {
+            if progress.install_state == target {
+                cancelling_installer.cancel(TEST_MANIFEST.provider_model_id);
+            }
+        });
+
+        let error = installer
+            .install_manifest(
+                &TEST_MANIFEST,
+                LocalTtsPlatform::LinuxX86_64,
+                Some(callback),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.kind,
+            LocalTtsInstallErrorKind::Cancelled,
+            "{target:?}"
+        );
+        assert_no_committed_test_install(&installer);
+    }
+}
+
+#[tokio::test]
 async fn accepted_cancellation_before_marker_commit_cannot_leave_install_ready() {
     let (_dir, installer, _transport) = installer();
     let cancelling_installer = installer.clone();
@@ -215,10 +482,52 @@ async fn accepted_cancellation_before_marker_commit_cannot_leave_install_ready()
         .await
         .unwrap_err();
     assert_eq!(error.kind, LocalTtsInstallErrorKind::Cancelled);
-    assert!(!installer
-        .storage
-        .marker_shape_is_valid(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64));
-    assert!(!installer.root().join(TEST_MANIFEST.id).exists());
+    assert_no_committed_test_install(&installer);
+}
+
+#[tokio::test]
+async fn concurrent_duplicate_install_is_rejected_as_busy() {
+    let (_dir, installer, transport) = blocking_installer();
+    let first_installer = installer.clone();
+    let first = tokio::spawn(async move {
+        first_installer
+            .install_manifest(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64, None)
+            .await
+    });
+    transport.wait_until_started().await;
+
+    let duplicate = installer
+        .install_manifest(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64, None)
+        .await
+        .unwrap_err();
+    assert_eq!(duplicate.kind, LocalTtsInstallErrorKind::Busy);
+
+    assert!(installer.cancel(TEST_MANIFEST.provider_model_id));
+    transport.release();
+    let first_error = first.await.unwrap().unwrap_err();
+    assert_eq!(first_error.kind, LocalTtsInstallErrorKind::Cancelled);
+    assert_no_committed_test_install(&installer);
+}
+
+#[tokio::test]
+async fn delete_while_install_is_active_is_rejected_as_busy() {
+    let (_dir, installer, transport) = blocking_installer();
+    let first_installer = installer.clone();
+    let first = tokio::spawn(async move {
+        first_installer
+            .install_manifest(&TEST_MANIFEST, LocalTtsPlatform::LinuxX86_64, None)
+            .await
+    });
+    transport.wait_until_started().await;
+
+    let delete_error = installer.delete(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap_err();
+    assert_eq!(delete_error.kind, LocalTtsInstallErrorKind::Busy);
+
+    assert!(installer.cancel(TEST_MANIFEST.provider_model_id));
+    transport.release();
+    let first_error = first.await.unwrap().unwrap_err();
+    assert_eq!(first_error.kind, LocalTtsInstallErrorKind::Cancelled);
+    assert_no_committed_test_install(&installer);
 }
 
 #[tokio::test]
