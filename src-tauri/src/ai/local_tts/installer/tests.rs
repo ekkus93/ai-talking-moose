@@ -266,7 +266,11 @@ fn installer() -> (
 
 fn fault_installer(
     mode: FaultMode,
-) -> (tempfile::TempDir, Arc<LocalTtsInstaller>, Arc<FaultTransport>) {
+) -> (
+    tempfile::TempDir,
+    Arc<LocalTtsInstaller>,
+    Arc<FaultTransport>,
+) {
     let dir = tempdir().unwrap();
     let storage = Arc::new(LocalTtsStorage::new(dir.path().join("models").join("tts")).unwrap());
     let transport = Arc::new(FaultTransport {
@@ -457,7 +461,11 @@ async fn cancellation_at_each_reported_lifecycle_phase_never_commits_install() {
             )
             .await
             .unwrap_err();
-        assert_eq!(error.kind, LocalTtsInstallErrorKind::Cancelled, "{target:?}");
+        assert_eq!(
+            error.kind,
+            LocalTtsInstallErrorKind::Cancelled,
+            "{target:?}"
+        );
         assert_no_committed_test_install(&installer);
     }
 }
