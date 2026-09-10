@@ -360,7 +360,7 @@ impl LocalTtsRuntimeManager {
                 .engine
                 .as_mut()
                 .ok_or_else(LocalTtsRuntimeError::model_load)?;
-            operation(engine)
+            operation(engine.as_mut())
         })
         .await
         .map_err(|_| LocalTtsRuntimeError::model_load())
