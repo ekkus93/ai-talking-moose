@@ -54,6 +54,16 @@ impl LocalTtsRuntimeEngine for FakeEngine {
         Ok(())
     }
 
+    fn synthesize(
+        &mut self,
+        _request: &LocalTtsInferenceRequest,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        Ok(LocalTtsInferenceOutput {
+            samples: vec![0.0, 0.25, -0.25],
+            sample_rate_hz: 24_000,
+        })
+    }
+
     fn unload(&mut self) {
         self.counters.unloads.fetch_add(1, Ordering::SeqCst);
     }
