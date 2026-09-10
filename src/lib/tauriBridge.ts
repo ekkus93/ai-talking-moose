@@ -20,6 +20,7 @@ import {
   OnboardingStatus,
   TranscriptRecord,
   ToolAuditRecord,
+  TtsCatalog,
 } from "../types/moose";
 import { browserPreviewBridge } from "./browserPreviewBridge";
 
@@ -76,6 +77,11 @@ export const nativeTauriBridge = {
   async getGoogleTtsVoices(): Promise<GoogleTtsVoiceDescriptor[]> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<GoogleTtsVoiceDescriptor[]>("get_google_tts_voices");
+  },
+
+  async getTtsCatalog(): Promise<TtsCatalog> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<TtsCatalog>("get_tts_catalog");
   },
 
   async getAsrModels(): Promise<AsrModelDescriptor[]> {

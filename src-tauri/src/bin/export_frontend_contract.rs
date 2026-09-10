@@ -7,6 +7,10 @@ use talking_moose_lib::ai::local::{
     LocalModelInstallErrorKind, LocalModelInstallProgress, LocalModelInstallState,
     LocalRuntimeDiagnostics, LocalRuntimeErrorKind, LocalRuntimePhase,
 };
+use talking_moose_lib::ai::tts_catalog::{
+    tts_catalog, GeminiLiveVoiceCatalog, TtsCatalog, TtsModelDescriptor, TtsProviderDescriptor,
+    TtsVoiceDescriptor,
+};
 use talking_moose_lib::ai::types::{ProviderError, ProviderErrorKind};
 use talking_moose_lib::app::state::{AppSettings, OnboardingStatus};
 use talking_moose_lib::asr::{
@@ -29,6 +33,7 @@ struct FrontendContract<'a> {
     settings: AppSettings,
     google_models: &'a [GoogleModelDescriptor],
     google_tts_voices: &'a [GoogleTtsVoiceDescriptor],
+    tts_catalog: TtsCatalog,
     ipc_shapes: FrontendIpcShapes,
 }
 
@@ -58,6 +63,11 @@ struct FrontendIpcShapes {
     transcript_record: TranscriptRecord,
     google_model_descriptor: GoogleModelDescriptor,
     google_tts_voice_descriptor: GoogleTtsVoiceDescriptor,
+    tts_model_descriptor: TtsModelDescriptor,
+    tts_voice_descriptor: TtsVoiceDescriptor,
+    tts_provider_descriptor: TtsProviderDescriptor,
+    gemini_live_voice_catalog: GeminiLiveVoiceCatalog,
+    tts_catalog: TtsCatalog,
     connection_test_result: ConnectionTestResult,
 }
 
@@ -144,6 +154,11 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
         last_tokens_per_second: Some(80.0),
     };
     let audio_diagnostics = representative_audio_diagnostics();
+    let catalog = tts_catalog();
+    let tts_model_descriptor = catalog.providers[0].models[0].clone();
+    let tts_voice_descriptor = catalog.providers[0].voices[0].clone();
+    let tts_provider_descriptor = catalog.providers[0].clone();
+    let gemini_live_voice_catalog = catalog.gemini_live.clone();
 
     FrontendIpcShapes {
         provider_error: ProviderError {
@@ -271,6 +286,11 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
         },
         google_model_descriptor: GOOGLE_MODELS[0],
         google_tts_voice_descriptor: GOOGLE_TTS_VOICES[0],
+        tts_model_descriptor,
+        tts_voice_descriptor,
+        tts_provider_descriptor,
+        gemini_live_voice_catalog,
+        tts_catalog: catalog,
         connection_test_result: ConnectionTestResult {
             success: true,
             message: "contract connection result".to_string(),
@@ -283,6 +303,7 @@ fn main() {
         settings: AppSettings::default(),
         google_models: GOOGLE_MODELS,
         google_tts_voices: GOOGLE_TTS_VOICES,
+        tts_catalog: tts_catalog(),
         ipc_shapes: representative_ipc_shapes(),
     };
     println!(

@@ -20,11 +20,13 @@ import type {
   OnboardingStatus,
   TranscriptRecord,
   ToolAuditRecord,
+  TtsCatalog,
 } from "../types/moose";
 import {
   frontendDefaultSettings,
   frontendGoogleModels,
   frontendGoogleTtsVoices,
+  frontendTtsCatalog,
 } from "./backendContract";
 import type { TauriBridge } from "./tauriBridge";
 
@@ -202,6 +204,10 @@ export const browserPreviewBridge = {
 
   async getGoogleTtsVoices(): Promise<GoogleTtsVoiceDescriptor[]> {
     return frontendGoogleTtsVoices();
+  },
+
+  async getTtsCatalog(): Promise<TtsCatalog> {
+    return frontendTtsCatalog();
   },
 
   async getAsrModels(): Promise<AsrModelDescriptor[]> {
