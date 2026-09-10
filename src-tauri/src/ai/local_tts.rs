@@ -1,5 +1,6 @@
 pub mod installer;
 pub mod manifest;
+pub mod runtime_verification;
 pub mod storage;
 
 use crate::ai::traits::SpeechSynthesizer;
