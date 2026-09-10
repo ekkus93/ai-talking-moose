@@ -234,8 +234,8 @@ struct LocalTtsRuntimeInner {
 /// Shared owner for the Local TTS runtime lifecycle.
 ///
 /// KTT-300 owns lifecycle and admission semantics. KTT-301 supplies the real KittenTTS engine.
-/// All load/unload/delete/shutdown transitions are serialized, and every new model identity must
-/// pass KTT-204 verification before the backend may load it.
+/// Every load and future synthesis operation passes through one serialized operation gate; a new
+/// model/runtime identity must pass KTT-204 verification before the backend may load it.
 pub struct LocalTtsRuntimeManager {
     inner: Arc<LocalTtsRuntimeInner>,
 }
@@ -273,10 +273,27 @@ impl LocalTtsRuntimeManager {
     }
 
     pub async fn ensure_loaded(&self, model_id: &str) -> Result<(), LocalTtsRuntimeError> {
+        self.with_loaded_engine(model_id, |_| Ok(())).await
+    }
+
+    /// Run one runtime operation against a verified, loaded model while holding the authoritative
+    /// Local TTS operation slot. KTT-301 uses this seam for real synthesis so concurrent
+    /// utterances cannot create parallel model instances or bypass runtime identity checks.
+    pub(super) async fn with_loaded_engine<T, F>(
+        &self,
+        model_id: &str,
+        operation: F,
+    ) -> Result<T, LocalTtsRuntimeError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut dyn LocalTtsRuntimeEngine) -> Result<T, LocalTtsRuntimeError>
+            + Send
+            + 'static,
+    {
         let platform = current_platform()?;
         let manifest =
             local_tts_model_manifest(model_id).ok_or_else(LocalTtsRuntimeError::unknown_model)?;
-        self.ensure_loaded_identity(runtime_identity(manifest, platform))
+        self.with_loaded_identity(runtime_identity(manifest, platform), operation)
             .await
     }
 
@@ -284,54 +301,73 @@ impl LocalTtsRuntimeManager {
         &self,
         identity: LocalTtsRuntimeIdentity,
     ) -> Result<(), LocalTtsRuntimeError> {
+        self.with_loaded_identity(identity, |_| Ok(())).await
+    }
+
+    async fn with_loaded_identity<T, F>(
+        &self,
+        identity: LocalTtsRuntimeIdentity,
+        operation: F,
+    ) -> Result<T, LocalTtsRuntimeError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut dyn LocalTtsRuntimeEngine) -> Result<T, LocalTtsRuntimeError>
+            + Send
+            + 'static,
+    {
         self.ensure_running()?;
         let operation_lock = self.inner.operation_lock.clone();
         let _operation = operation_lock.lock_owned().await;
         self.ensure_running()?;
 
-        if self.inner.state.lock().loaded.as_ref() == Some(&identity) {
-            *self.inner.phase.write() = LocalTtsRuntimePhase::Ready;
-            return Ok(());
+        let already_loaded = self.inner.state.lock().loaded.as_ref() == Some(&identity);
+        if !already_loaded {
+            *self.inner.phase.write() = LocalTtsRuntimePhase::Loading;
         }
 
-        *self.inner.phase.write() = LocalTtsRuntimePhase::Loading;
         let state = self.inner.state.clone();
         let verifier = self.inner.verifier.clone();
         let factory = self.inner.factory.clone();
         let result = tokio::task::spawn_blocking(move || {
-            {
-                let mut state = state.lock();
-                if state
-                    .loaded
-                    .as_ref()
-                    .is_some_and(|loaded| loaded != &identity)
+            let needs_load = state.lock().loaded.as_ref() != Some(&identity);
+            if needs_load {
                 {
-                    state.unload();
+                    let mut state = state.lock();
+                    if state.loaded.is_some() {
+                        state.unload();
+                    }
                 }
+
+                let paths = verifier.verify(&identity.model_id, identity.platform)?;
+                let mut state = state.lock();
+                if state.engine.is_none() {
+                    state.engine = Some(factory.create()?);
+                }
+                let engine = state
+                    .engine
+                    .as_mut()
+                    .ok_or_else(LocalTtsRuntimeError::model_load)?;
+                if let Err(error) = engine.load(&identity, &paths) {
+                    engine.unload();
+                    state.loaded = None;
+                    return Err(error);
+                }
+                state.loaded = Some(identity);
             }
-            let paths = verifier.verify(&identity.model_id, identity.platform)?;
+
             let mut state = state.lock();
-            if state.engine.is_none() {
-                state.engine = Some(factory.create()?);
-            }
             let engine = state
                 .engine
                 .as_mut()
                 .ok_or_else(LocalTtsRuntimeError::model_load)?;
-            if let Err(error) = engine.load(&identity, &paths) {
-                engine.unload();
-                state.loaded = None;
-                return Err(error);
-            }
-            state.loaded = Some(identity);
-            Ok(())
+            operation(engine)
         })
         .await
         .map_err(|_| LocalTtsRuntimeError::model_load())
         .and_then(|result| result);
 
         match &result {
-            Ok(()) => {
+            Ok(_) => {
                 *self.inner.phase.write() = LocalTtsRuntimePhase::Ready;
                 *self.inner.last_error.write() = None;
             }
