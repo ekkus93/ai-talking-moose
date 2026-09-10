@@ -202,7 +202,8 @@ impl LocalTtsRuntimeVerifier {
         &self,
         manifest: &'static LocalTtsModelManifest,
         platform: LocalTtsPlatform,
-    ) -> Result<(Vec<PathBuf>, RuntimeVerificationFingerprint), LocalTtsRuntimeVerificationError> {
+    ) -> Result<(Vec<PathBuf>, RuntimeVerificationFingerprint), LocalTtsRuntimeVerificationError>
+    {
         if !self.storage.marker_shape_is_valid(manifest, platform) {
             return Err(LocalTtsRuntimeVerificationError::corrupt_install());
         }
@@ -269,10 +270,9 @@ fn verify_artifact(
     expected_bytes: u64,
     expected_sha256: &str,
 ) -> Result<(), LocalTtsRuntimeVerificationError> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| LocalTtsRuntimeVerificationError::io())?;
-    if metadata.file_type().is_symlink()
-        || !metadata.is_file()
-        || metadata.len() != expected_bytes
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| LocalTtsRuntimeVerificationError::io())?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() != expected_bytes
     {
         return Err(LocalTtsRuntimeVerificationError::corrupt_install());
     }
@@ -400,12 +400,18 @@ mod tests {
         platform_artifacts: &PLATFORM_ARTIFACTS,
     };
 
-    fn fixture() -> (tempfile::TempDir, Arc<LocalTtsStorage>, LocalTtsRuntimeVerifier) {
+    fn fixture() -> (
+        tempfile::TempDir,
+        Arc<LocalTtsStorage>,
+        LocalTtsRuntimeVerifier,
+    ) {
         let dir = tempdir().unwrap();
-        let storage = Arc::new(
-            LocalTtsStorage::new(dir.path().join("models").join("tts")).unwrap(),
-        );
-        let revision_dir = storage.root().join(MANIFEST.id).join(MANIFEST.model_source_revision);
+        let storage =
+            Arc::new(LocalTtsStorage::new(dir.path().join("models").join("tts")).unwrap());
+        let revision_dir = storage
+            .root()
+            .join(MANIFEST.id)
+            .join(MANIFEST.model_source_revision);
         fs::create_dir_all(&revision_dir).unwrap();
         for (filename, bytes) in [
             ("model.onnx", MODEL_BYTES),
@@ -494,7 +500,10 @@ mod tests {
             .verified_artifact_paths_for_manifest(&MANIFEST, LocalTtsPlatform::LinuxX86_64)
             .unwrap();
 
-        let revision_dir = storage.root().join(MANIFEST.id).join(MANIFEST.model_source_revision);
+        let revision_dir = storage
+            .root()
+            .join(MANIFEST.id)
+            .join(MANIFEST.model_source_revision);
         let replacement = revision_dir.join("voices.npz.replacement");
         fs::write(&replacement, VOICES_BYTES).unwrap();
         fs::rename(&replacement, revision_dir.join("voices.npz")).unwrap();
@@ -512,7 +521,10 @@ mod tests {
             .verified_artifact_paths_for_manifest(&MANIFEST, LocalTtsPlatform::LinuxX86_64)
             .unwrap();
 
-        let revision_dir = storage.root().join(MANIFEST.id).join(MANIFEST.model_source_revision);
+        let revision_dir = storage
+            .root()
+            .join(MANIFEST.id)
+            .join(MANIFEST.model_source_revision);
         fs::write(revision_dir.join("g2p.json"), b"longer").unwrap();
 
         let error = verifier
