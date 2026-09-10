@@ -90,6 +90,10 @@ pub fn run() {
                 app_data_dir.join("models").join("llm"),
             )
             .map_err(|error| io::Error::other(error.to_string()))?;
+            ai::local_tts::storage::initialize_global_local_tts_storage(
+                app_data_dir.join("models").join("tts"),
+            )
+            .map_err(|error| io::Error::other(error.to_string()))?;
             let db_path = persistent_database_path(&app_data_dir)?;
             let db_path = db_path.to_str().ok_or_else(|| {
                 io::Error::other("application database path is not valid UTF-8")
