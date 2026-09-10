@@ -261,7 +261,7 @@ pub fn run() {
             api.prevent_exit();
             if let Some(state) = app_handle.try_state::<AppState>() {
                 state.local_llm_runtime.begin_shutdown();
-                state.standalone_speech.local_tts_runtime().begin_shutdown();
+                state.local_tts_runtime.begin_shutdown();
             }
             let handle = app_handle.clone();
             let exit_code = code.unwrap_or(0);
@@ -293,7 +293,7 @@ pub fn run() {
                 let resources = handle.try_state::<AppState>().map(|state| {
                     (
                         state.local_llm_runtime.clone(),
-                        state.standalone_speech.local_tts_runtime(),
+                        state.local_tts_runtime.clone(),
                         state.conversation_mgr.clone(),
                         state.audio_capture.clone(),
                         state.audio_playback.clone(),

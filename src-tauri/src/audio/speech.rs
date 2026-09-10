@@ -1,4 +1,3 @@
-use crate::ai::local_tts::LocalTtsRuntimeManager;
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::TtsRequest;
 use crate::audio::playback::{AudioPlayback, PlaybackEnqueueReport};
@@ -11,21 +10,13 @@ pub const STANDALONE_SPEECH_CANCELLED: &str = "standalone speech cancelled";
 #[derive(Clone)]
 pub struct StandaloneSpeechController {
     current: Arc<Mutex<CancellationToken>>,
-    local_tts_runtime: Arc<LocalTtsRuntimeManager>,
 }
 
 impl StandaloneSpeechController {
     pub fn new() -> Self {
         Self {
             current: Arc::new(Mutex::new(CancellationToken::new())),
-            local_tts_runtime: Arc::new(LocalTtsRuntimeManager::new()),
         }
-    }
-
-    /// Return the one Local TTS runtime manager owned by this application speech controller.
-    /// Cloned controllers share the same manager through `Arc`.
-    pub(crate) fn local_tts_runtime(&self) -> Arc<LocalTtsRuntimeManager> {
-        self.local_tts_runtime.clone()
     }
 
     /// Begin one authoritative standalone utterance. Starting a new utterance
@@ -148,17 +139,6 @@ mod tests {
         async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
             std::future::pending().await
         }
-    }
-
-    #[test]
-    fn cloned_controller_shares_local_tts_runtime_manager() {
-        let controller = StandaloneSpeechController::new();
-        let cloned = controller.clone();
-
-        assert!(Arc::ptr_eq(
-            &controller.local_tts_runtime(),
-            &cloned.local_tts_runtime()
-        ));
     }
 
     #[tokio::test]
