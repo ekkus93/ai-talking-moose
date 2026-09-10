@@ -1,11 +1,11 @@
 # AI Talking Moose — KittenTTS KTT-103 / KTT-104 Reconciliation
 
-**Tracker:** `docs/TODO(20260909-120003).md`  
-**Tasks:** `KTT-103 — Add provider/model/voice capability metadata`; `KTT-104 — Carry settings and metadata through the generated contract`  
-**Implementation base:** `0a0769599c450b3fb74834d0a1ed09f93827eff6`  
-**Final implementation head:** `e5d8b5c23d24f9805d3ff6fa575857b72ad0ea9f`  
-**Implementation PR:** #77  
-**Merged implementation master:** `a2f12865034c9c44e8996ee74d38df31f156288f`  
+**Tracker:** `docs/TODO(20260909-120003).md`
+**Tasks:** `KTT-103 — Add provider/model/voice capability metadata`; `KTT-104 — Carry settings and metadata through the generated contract`
+**Implementation base:** `0a0769599c450b3fb74834d0a1ed09f93827eff6`
+**Final implementation head:** `e5d8b5c23d24f9805d3ff6fa575857b72ad0ea9f`
+**Implementation PR:** #77
+**Merged implementation master:** `a2f12865034c9c44e8996ee74d38df31f156288f`
 **Status:** KTT-103 / KTT-104 COMPLETE — exact-head CI, guarded merge, and exact merged-master CI accepted 2026-09-09
 
 ## Implementation
