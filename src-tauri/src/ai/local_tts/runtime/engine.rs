@@ -17,9 +17,9 @@ use std::sync::OnceLock;
 use tempfile::{Builder as TempFileBuilder, NamedTempFile};
 
 mod normalize;
-use normalize::normalize_text;
 use super::npz::load_npz;
 use super::tokenize::ipa_to_ids;
+use normalize::normalize_text;
 
 const VERIFIED_ARTIFACT_COUNT: usize = 4;
 const MODEL_ARTIFACT_INDEX: usize = 0;
@@ -186,10 +186,9 @@ impl LocalTtsRuntimeEngine for KittenTtsRuntimeEngine {
             }
         }
 
-        let phonemizer = EnglishPhonemizer::new_with_dict(
-            &verified_artifact_paths[G2P_ARTIFACT_INDEX],
-        )
-        .map_err(|_| LocalTtsRuntimeError::model_load())?;
+        let phonemizer =
+            EnglishPhonemizer::new_with_dict(&verified_artifact_paths[G2P_ARTIFACT_INDEX])
+                .map_err(|_| LocalTtsRuntimeError::model_load())?;
 
         let session = Session::builder()
             .map_err(|_| LocalTtsRuntimeError::model_load())?
@@ -339,7 +338,9 @@ fn extract_runtime_library(
                 .tempfile()
                 .map_err(|_| LocalTtsRuntimeError::model_load())?;
             copy_exact(&mut archive, &mut output, size)?;
-            output.flush().map_err(|_| LocalTtsRuntimeError::model_load())?;
+            output
+                .flush()
+                .map_err(|_| LocalTtsRuntimeError::model_load())?;
             return Ok(output);
         }
         skip_exact(&mut archive, padded_tar_size(size))?;
@@ -360,14 +361,22 @@ fn tar_entry_name(header: &[u8; 512]) -> Result<String, LocalTtsRuntimeError> {
 }
 
 fn tar_string(bytes: &[u8]) -> Result<String, LocalTtsRuntimeError> {
-    let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
-    let value = std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    let value =
+        std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
     Ok(value.trim().to_string())
 }
 
 fn tar_octal(bytes: &[u8]) -> Result<u64, LocalTtsRuntimeError> {
-    let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
-    let value = std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    let value =
+        std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
     let value = value.trim();
     if value.is_empty() {
         return Ok(0);
@@ -411,21 +420,33 @@ fn copy_exact(
 
 #[cfg(test)]
 mod tests {
+    use super::super::LocalTtsRuntimeErrorKind;
     use super::*;
     use crate::ai::local_tts::{DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE};
-    use super::super::LocalTtsRuntimeErrorKind;
 
     #[test]
     fn request_validation_rejects_unsupported_values() {
         let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap();
-        assert_eq!(resolve_voice_key(manifest, DEFAULT_LOCAL_TTS_VOICE).unwrap(), "expr-voice-2-f");
+        assert_eq!(
+            resolve_voice_key(manifest, DEFAULT_LOCAL_TTS_VOICE).unwrap(),
+            "expr-voice-2-f"
+        );
         assert_eq!(
             resolve_voice_key(manifest, "not-a-voice").unwrap_err().kind,
             LocalTtsRuntimeErrorKind::InvalidVoice
         );
-        assert_eq!(validate_speed(f32::NAN).unwrap_err().kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
-        assert_eq!(validate_speed(0.0).unwrap_err().kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
-        assert_eq!(validate_pitch(Some(1.0)).unwrap_err().kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
+        assert_eq!(
+            validate_speed(f32::NAN).unwrap_err().kind,
+            LocalTtsRuntimeErrorKind::UnsupportedConfig
+        );
+        assert_eq!(
+            validate_speed(0.0).unwrap_err().kind,
+            LocalTtsRuntimeErrorKind::UnsupportedConfig
+        );
+        assert_eq!(
+            validate_pitch(Some(1.0)).unwrap_err().kind,
+            LocalTtsRuntimeErrorKind::UnsupportedConfig
+        );
         assert!(validate_pitch(None).is_ok());
         assert!(validate_pitch(Some(0.0)).is_ok());
     }
@@ -513,6 +534,9 @@ mod tests {
                 pitch: Some(1.0),
             })
             .unwrap_err();
-        assert_eq!(invalid_pitch.kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
+        assert_eq!(
+            invalid_pitch.kind,
+            LocalTtsRuntimeErrorKind::UnsupportedConfig
+        );
     }
 }
