@@ -194,10 +194,16 @@ async fn changed_runtime_identity_unloads_then_reloads() {
     let (manager, verifier, counters) = manager();
     let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap();
     let first = runtime_identity(manifest, LocalTtsPlatform::LinuxX86_64);
-    manager.ensure_loaded_identity(first.clone()).await.unwrap();
+    manager
+        .with_loaded_identity(first.clone(), |_| Ok(()))
+        .await
+        .unwrap();
     let mut changed = first;
     changed.runtime_compatibility_version += 1;
-    manager.ensure_loaded_identity(changed).await.unwrap();
+    manager
+        .with_loaded_identity(changed, |_| Ok(()))
+        .await
+        .unwrap();
     assert_eq!(verifier.calls.load(Ordering::SeqCst), 2);
     assert_eq!(counters.loads.load(Ordering::SeqCst), 2);
     assert_eq!(counters.unloads.load(Ordering::SeqCst), 1);

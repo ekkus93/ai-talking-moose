@@ -273,11 +273,7 @@ impl LocalTtsRuntimeManager {
     }
 
     pub async fn ensure_loaded(&self, model_id: &str) -> Result<(), LocalTtsRuntimeError> {
-        let platform = current_platform()?;
-        let manifest =
-            local_tts_model_manifest(model_id).ok_or_else(LocalTtsRuntimeError::unknown_model)?;
-        self.ensure_loaded_identity(runtime_identity(manifest, platform))
-            .await
+        self.with_loaded_engine(model_id, |_| Ok(())).await
     }
 
     /// Run one runtime operation against a verified, loaded model while holding the authoritative
@@ -299,13 +295,6 @@ impl LocalTtsRuntimeManager {
             local_tts_model_manifest(model_id).ok_or_else(LocalTtsRuntimeError::unknown_model)?;
         self.with_loaded_identity(runtime_identity(manifest, platform), operation)
             .await
-    }
-
-    async fn ensure_loaded_identity(
-        &self,
-        identity: LocalTtsRuntimeIdentity,
-    ) -> Result<(), LocalTtsRuntimeError> {
-        self.with_loaded_identity(identity, |_| Ok(())).await
     }
 
     async fn with_loaded_identity<T, F>(
