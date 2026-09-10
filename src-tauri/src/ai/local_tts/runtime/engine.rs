@@ -1,7 +1,6 @@
 use super::{
     LocalTtsInferenceOutput, LocalTtsInferenceRequest, LocalTtsRuntimeEngine,
-    LocalTtsRuntimeEngineFactory, LocalTtsRuntimeError, LocalTtsRuntimeErrorKind,
-    LocalTtsRuntimeIdentity,
+    LocalTtsRuntimeEngineFactory, LocalTtsRuntimeError, LocalTtsRuntimeIdentity,
 };
 use crate::ai::local_tts::manifest::{
     local_tts_model_manifest, LocalTtsModelManifest, LocalTtsPlatform,
@@ -15,8 +14,10 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use tempfile::NamedTempFile;
+use tempfile::{Builder as TempFileBuilder, NamedTempFile};
 
+mod normalize;
+use normalize::normalize_text;
 use super::npz::load_npz;
 use super::tokenize::ipa_to_ids;
 
@@ -25,7 +26,7 @@ const MODEL_ARTIFACT_INDEX: usize = 0;
 const VOICES_ARTIFACT_INDEX: usize = 1;
 const G2P_ARTIFACT_INDEX: usize = 2;
 const RUNTIME_ARTIFACT_INDEX: usize = 3;
-const MAX_INPUT_CHARS: usize = 4_000;
+const MAX_MODEL_TOKENS: usize = 512;
 const MIN_SPEED: f32 = 0.25;
 const MAX_SPEED: f32 = 4.0;
 const MAX_RUNTIME_LIBRARY_BYTES: u64 = 256 * 1024 * 1024;
@@ -106,7 +107,7 @@ impl KittenTtsRuntimeEngine {
             .map_err(|_| LocalTtsRuntimeError::invalid_input())?;
         let ipa = tokens.concat();
         let ids = ipa_to_ids(&ipa);
-        if ipa.trim().is_empty() || ids.len() <= 3 {
+        if ipa.trim().is_empty() || ids.len() <= 3 || ids.len() > MAX_MODEL_TOKENS {
             return Err(LocalTtsRuntimeError::invalid_input());
         }
 
@@ -114,7 +115,9 @@ impl KittenTtsRuntimeEngine {
             .voices
             .get(voice_key)
             .ok_or_else(LocalTtsRuntimeError::invalid_voice)?;
-        let style = voice.style_row(normalized.chars().count())?;
+        // P0 matched the official v0.8 style-row contract: byte length of the normalized
+        // text, clamped to the available voice-style rows.
+        let style = voice.style_row(normalized.len())?;
         let input_ids = Tensor::<i64>::from_array(([1usize, ids.len()], ids))
             .map_err(|_| LocalTtsRuntimeError::inference())?;
         let style_tensor = Tensor::<f32>::from_array(([1usize, style.len()], style.to_vec()))
@@ -183,9 +186,10 @@ impl LocalTtsRuntimeEngine for KittenTtsRuntimeEngine {
             }
         }
 
-        let phonemizer =
-            EnglishPhonemizer::new_with_dict(&verified_artifact_paths[G2P_ARTIFACT_INDEX])
-                .map_err(|_| LocalTtsRuntimeError::model_load())?;
+        let phonemizer = EnglishPhonemizer::new_with_dict(
+            &verified_artifact_paths[G2P_ARTIFACT_INDEX],
+        )
+        .map_err(|_| LocalTtsRuntimeError::model_load())?;
 
         let session = Session::builder()
             .map_err(|_| LocalTtsRuntimeError::model_load())?
@@ -218,21 +222,6 @@ impl LocalTtsRuntimeEngine for KittenTtsRuntimeEngine {
         self.phonemizer = None;
         self.model_id = None;
     }
-}
-
-fn normalize_text(text: &str) -> Result<String, LocalTtsRuntimeError> {
-    if text
-        .chars()
-        .any(|character| character.is_control() && !character.is_whitespace())
-    {
-        return Err(LocalTtsRuntimeError::invalid_input());
-    }
-    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let length = normalized.chars().count();
-    if length == 0 || length > MAX_INPUT_CHARS {
-        return Err(LocalTtsRuntimeError::invalid_input());
-    }
-    Ok(normalized)
 }
 
 fn resolve_voice_key(
@@ -340,12 +329,17 @@ fn extract_runtime_library(
             if !matches!(type_flag, 0 | b'0') || size == 0 || size > MAX_RUNTIME_LIBRARY_BYTES {
                 return Err(LocalTtsRuntimeError::model_load());
             }
-            let mut output =
-                NamedTempFile::new().map_err(|_| LocalTtsRuntimeError::model_load())?;
-            copy_exact(&mut archive, &mut output, size)?;
-            output
-                .flush()
+            let suffix = match platform {
+                LocalTtsPlatform::LinuxX86_64 => ".so",
+                LocalTtsPlatform::MacosArm64 | LocalTtsPlatform::MacosX86_64 => ".dylib",
+            };
+            let mut output = TempFileBuilder::new()
+                .prefix("talking-moose-onnxruntime-")
+                .suffix(suffix)
+                .tempfile()
                 .map_err(|_| LocalTtsRuntimeError::model_load())?;
+            copy_exact(&mut archive, &mut output, size)?;
+            output.flush().map_err(|_| LocalTtsRuntimeError::model_load())?;
             return Ok(output);
         }
         skip_exact(&mut archive, padded_tar_size(size))?;
@@ -366,22 +360,14 @@ fn tar_entry_name(header: &[u8; 512]) -> Result<String, LocalTtsRuntimeError> {
 }
 
 fn tar_string(bytes: &[u8]) -> Result<String, LocalTtsRuntimeError> {
-    let end = bytes
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(bytes.len());
-    let value =
-        std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
+    let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
+    let value = std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
     Ok(value.trim().to_string())
 }
 
 fn tar_octal(bytes: &[u8]) -> Result<u64, LocalTtsRuntimeError> {
-    let end = bytes
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(bytes.len());
-    let value =
-        std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
+    let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
+    let value = std::str::from_utf8(&bytes[..end]).map_err(|_| LocalTtsRuntimeError::model_load())?;
     let value = value.trim();
     if value.is_empty() {
         return Ok(0);
@@ -427,50 +413,39 @@ fn copy_exact(
 mod tests {
     use super::*;
     use crate::ai::local_tts::{DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE};
+    use super::super::LocalTtsRuntimeErrorKind;
 
     #[test]
     fn request_validation_rejects_unsupported_values() {
         let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap();
-        assert_eq!(
-            resolve_voice_key(manifest, DEFAULT_LOCAL_TTS_VOICE).unwrap(),
-            "expr-voice-2-f"
-        );
+        assert_eq!(resolve_voice_key(manifest, DEFAULT_LOCAL_TTS_VOICE).unwrap(), "expr-voice-2-f");
         assert_eq!(
             resolve_voice_key(manifest, "not-a-voice").unwrap_err().kind,
             LocalTtsRuntimeErrorKind::InvalidVoice
         );
-        assert_eq!(
-            validate_speed(f32::NAN).unwrap_err().kind,
-            LocalTtsRuntimeErrorKind::UnsupportedConfig
-        );
-        assert_eq!(
-            validate_speed(0.0).unwrap_err().kind,
-            LocalTtsRuntimeErrorKind::UnsupportedConfig
-        );
-        assert_eq!(
-            validate_pitch(Some(1.0)).unwrap_err().kind,
-            LocalTtsRuntimeErrorKind::UnsupportedConfig
-        );
+        assert_eq!(validate_speed(f32::NAN).unwrap_err().kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
+        assert_eq!(validate_speed(0.0).unwrap_err().kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
+        assert_eq!(validate_pitch(Some(1.0)).unwrap_err().kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
         assert!(validate_pitch(None).is_ok());
         assert!(validate_pitch(Some(0.0)).is_ok());
     }
 
     #[test]
-    fn input_normalization_is_bounded_and_rejects_empty_or_control_text() {
-        assert_eq!(normalize_text("  hello\n\tworld  ").unwrap(), "hello world");
+    fn unknown_runtime_identity_fails_closed_before_artifact_use() {
+        let mut engine = KittenTtsRuntimeEngine::new();
+        let identity = LocalTtsRuntimeIdentity {
+            model_id: "unsupported/model".to_string(),
+            model_revision: "invalid".to_string(),
+            runtime_compatibility_version: 0,
+            adapter_contract: "invalid".to_string(),
+            onnx_runtime_version: "invalid".to_string(),
+            g2p_source_revision: "invalid".to_string(),
+            platform: LocalTtsPlatform::LinuxX86_64,
+        };
+        let paths = vec![PathBuf::from("missing"); VERIFIED_ARTIFACT_COUNT];
         assert_eq!(
-            normalize_text("   ").unwrap_err().kind,
-            LocalTtsRuntimeErrorKind::InvalidInput
-        );
-        assert_eq!(
-            normalize_text("hello\0world").unwrap_err().kind,
-            LocalTtsRuntimeErrorKind::InvalidInput
-        );
-        assert_eq!(
-            normalize_text(&"x".repeat(MAX_INPUT_CHARS + 1))
-                .unwrap_err()
-                .kind,
-            LocalTtsRuntimeErrorKind::InvalidInput
+            engine.load(&identity, &paths).unwrap_err().kind,
+            LocalTtsRuntimeErrorKind::UnknownModel
         );
     }
 
@@ -508,6 +483,18 @@ mod tests {
         assert!(!output.samples.is_empty());
         assert!(output.samples.iter().all(|sample| sample.is_finite()));
 
+        let faster = engine
+            .synthesize(&LocalTtsInferenceRequest {
+                text: "Speed is passed directly to Kitten Mini.".to_string(),
+                voice_id: "Jasper".to_string(),
+                speaking_rate: 1.2,
+                pitch: Some(0.0),
+            })
+            .unwrap();
+        assert_eq!(faster.sample_rate_hz, 24_000);
+        assert!(!faster.samples.is_empty());
+        assert!(faster.samples.iter().all(|sample| sample.is_finite()));
+
         let invalid_voice = engine
             .synthesize(&LocalTtsInferenceRequest {
                 text: "This must fail before inference.".to_string(),
@@ -526,9 +513,6 @@ mod tests {
                 pitch: Some(1.0),
             })
             .unwrap_err();
-        assert_eq!(
-            invalid_pitch.kind,
-            LocalTtsRuntimeErrorKind::UnsupportedConfig
-        );
+        assert_eq!(invalid_pitch.kind, LocalTtsRuntimeErrorKind::UnsupportedConfig);
     }
 }
