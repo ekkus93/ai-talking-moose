@@ -104,8 +104,8 @@ fn app_state_clone_reuses_one_local_tts_runtime_manager() {
     let cloned = state.clone();
 
     assert!(Arc::ptr_eq(
-        &state.standalone_speech.local_tts_runtime(),
-        &cloned.standalone_speech.local_tts_runtime()
+        &state.local_tts_runtime,
+        &cloned.local_tts_runtime
     ));
 }
 
