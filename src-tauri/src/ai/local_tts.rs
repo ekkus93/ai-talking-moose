@@ -1,4 +1,5 @@
 pub mod manifest;
+pub mod storage;
 
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
