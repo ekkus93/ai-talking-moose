@@ -1,6 +1,8 @@
 use super::*;
 use crate::ai::local_tts::DEFAULT_LOCAL_TTS_MODEL_ID;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::time::Duration;
+use tokio::sync::Barrier;
 
 struct FakeVerifier {
     calls: AtomicUsize,
@@ -96,6 +98,17 @@ fn manager_is_lazy_and_starts_unloaded() {
     assert_eq!(counters.creates.load(Ordering::SeqCst), 0);
 }
 
+#[test]
+fn app_state_clone_reuses_one_local_tts_runtime_manager() {
+    let state = crate::app::state::AppState::new_for_tests().unwrap();
+    let cloned = state.clone();
+
+    assert!(Arc::ptr_eq(
+        &state.standalone_speech.local_tts_runtime(),
+        &cloned.standalone_speech.local_tts_runtime()
+    ));
+}
+
 #[tokio::test]
 async fn warm_runtime_is_reused_and_duplicate_loads_are_serialized() {
     let (manager, verifier, counters) = manager();
@@ -114,6 +127,62 @@ async fn warm_runtime_is_reused_and_duplicate_loads_are_serialized() {
         .ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID)
         .await
         .unwrap();
+    assert_eq!(verifier.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(counters.creates.load(Ordering::SeqCst), 1);
+    assert_eq!(counters.loads.load(Ordering::SeqCst), 1);
+    assert_eq!(counters.unloads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_runtime_operations_are_serialized_on_one_warm_engine() {
+    let (manager, verifier, counters) = manager();
+    let manager = Arc::new(manager);
+    let start = Arc::new(Barrier::new(3));
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+
+    let first = {
+        let manager = manager.clone();
+        let start = start.clone();
+        let active = active.clone();
+        let max_active = max_active.clone();
+        tokio::spawn(async move {
+            start.wait().await;
+            manager
+                .with_loaded_engine(DEFAULT_LOCAL_TTS_MODEL_ID, move |_engine| {
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active.fetch_max(current, Ordering::SeqCst);
+                    std::thread::sleep(Duration::from_millis(25));
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    Ok(())
+                })
+                .await
+        })
+    };
+    let second = {
+        let manager = manager.clone();
+        let start = start.clone();
+        let active = active.clone();
+        let max_active = max_active.clone();
+        tokio::spawn(async move {
+            start.wait().await;
+            manager
+                .with_loaded_engine(DEFAULT_LOCAL_TTS_MODEL_ID, move |_engine| {
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active.fetch_max(current, Ordering::SeqCst);
+                    std::thread::sleep(Duration::from_millis(25));
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    Ok(())
+                })
+                .await
+        })
+    };
+
+    start.wait().await;
+    first.await.unwrap().unwrap();
+    second.await.unwrap().unwrap();
+
+    assert_eq!(max_active.load(Ordering::SeqCst), 1);
     assert_eq!(verifier.calls.load(Ordering::SeqCst), 1);
     assert_eq!(counters.creates.load(Ordering::SeqCst), 1);
     assert_eq!(counters.loads.load(Ordering::SeqCst), 1);
