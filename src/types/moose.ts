@@ -29,6 +29,7 @@ export interface ProviderError {
 }
 
 export type TextProvider = "google" | "local";
+export type TtsProvider = "google" | "local";
 
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
@@ -310,7 +311,10 @@ export interface AppSettings {
   input_device: string | null;
   output_device: string | null;
   volume: number;
-  tts_voice: string;
+  tts_provider: TtsProvider;
+  google_tts_voice: string;
+  local_tts_voice: string;
+  live_voice: string;
   speaking_rate: number;
   pitch: number;
 
@@ -318,7 +322,8 @@ export interface AppSettings {
   live_model: string;
   google_text_model: string;
   local_text_model: string;
-  tts_model: string;
+  google_tts_model: string;
+  local_tts_model: string;
 
   active_app_observation: boolean;
   window_title_observation: boolean;

@@ -21,8 +21,8 @@ export const P6VoiceAcceptancePanel: React.FC = () => {
       setIsAuditioning(false);
       return;
     }
-    setSelectedVoice(settings?.tts_voice ?? "Fenrir");
-  }, [isSettingsOpen, settings?.tts_voice]);
+    setSelectedVoice(settings?.google_tts_voice ?? "Fenrir");
+  }, [isSettingsOpen, settings?.google_tts_voice]);
 
   useEffect(() => {
     if (!isOpen) {
