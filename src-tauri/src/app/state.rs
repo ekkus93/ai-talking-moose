@@ -5,7 +5,8 @@ use crate::ai::google::{
 };
 use crate::ai::local::{LocalRuntimeManager, DEFAULT_LOCAL_TEXT_MODEL_ID};
 use crate::ai::local_tts::{
-    PendingLocalSpeechSynthesizer, DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE,
+    LocalTtsRuntimeManager, PendingLocalSpeechSynthesizer, DEFAULT_LOCAL_TTS_MODEL_ID,
+    DEFAULT_LOCAL_TTS_VOICE,
 };
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::ai::types::{TextProvider, TtsProvider};
@@ -331,6 +332,7 @@ pub struct AppState {
     pub conversation_mgr: Arc<ConversationManager>,
     pub moonshine_installer: Arc<MoonshineModelInstaller>,
     pub(crate) local_llm_runtime: Arc<LocalRuntimeManager>,
+    pub(crate) local_tts_runtime: Arc<LocalTtsRuntimeManager>,
     pub tool_router: Arc<ToolRouter>,
     pub settings: Arc<RwLock<AppSettings>>,
     pub is_muted: Arc<RwLock<bool>>,
@@ -475,6 +477,7 @@ impl AppState {
                 .map_err(|error| error.to_string())?,
         );
         let local_llm_runtime = Arc::new(LocalRuntimeManager::new());
+        let local_tts_runtime = Arc::new(LocalTtsRuntimeManager::new());
 
         let builtin_tools = Arc::new(BuiltinTools {
             memory_manager: memory.clone(),
@@ -496,6 +499,7 @@ impl AppState {
             conversation_mgr,
             moonshine_installer,
             local_llm_runtime,
+            local_tts_runtime,
             tool_router,
             settings,
             is_muted: Arc::new(RwLock::new(false)),
@@ -570,6 +574,17 @@ mod tests {
         assert!(!settings.active_app_observation);
         assert!(!settings.memory_enabled);
         assert!(!settings.save_transcripts);
+    }
+
+    #[test]
+    fn cloned_app_state_shares_one_local_tts_runtime_manager() {
+        let state = AppState::new_for_tests().unwrap();
+        let cloned = state.clone();
+
+        assert!(Arc::ptr_eq(
+            &state.local_tts_runtime,
+            &cloned.local_tts_runtime
+        ));
     }
 
     #[tokio::test]
