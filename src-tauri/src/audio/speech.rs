@@ -1,3 +1,4 @@
+use crate::ai::local_tts::LocalTtsRuntimeManager;
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::TtsRequest;
 use crate::audio::playback::{AudioPlayback, PlaybackEnqueueReport};
@@ -10,13 +11,21 @@ pub const STANDALONE_SPEECH_CANCELLED: &str = "standalone speech cancelled";
 #[derive(Clone)]
 pub struct StandaloneSpeechController {
     current: Arc<Mutex<CancellationToken>>,
+    local_tts_runtime: Arc<LocalTtsRuntimeManager>,
 }
 
 impl StandaloneSpeechController {
     pub fn new() -> Self {
         Self {
             current: Arc::new(Mutex::new(CancellationToken::new())),
+            local_tts_runtime: Arc::new(LocalTtsRuntimeManager::new()),
         }
+    }
+
+    /// Return the one Local TTS runtime manager owned by this application speech controller.
+    /// Cloned controllers share the same manager through `Arc`.
+    pub(crate) fn local_tts_runtime(&self) -> Arc<LocalTtsRuntimeManager> {
+        self.local_tts_runtime.clone()
     }
 
     /// Begin one authoritative standalone utterance. Starting a new utterance
@@ -141,6 +150,17 @@ mod tests {
         }
     }
 
+    #[test]
+    fn cloned_controller_shares_local_tts_runtime_manager() {
+        let controller = StandaloneSpeechController::new();
+        let cloned = controller.clone();
+
+        assert!(Arc::ptr_eq(
+            &controller.local_tts_runtime(),
+            &cloned.local_tts_runtime()
+        ));
+    }
+
     #[tokio::test]
     async fn standalone_speech_queue_overload_is_bounded_and_reported() {
         let playback = AudioPlayback::new_mock();
@@ -163,7 +183,7 @@ mod tests {
         assert_eq!(playback.queue_length(), playback.max_queued_samples());
         assert_eq!(
             playback.dropped_samples(),
-            u64::try_from(report.dropped_samples).unwrap()
+            u64::try_from(report.dropped_samples()).unwrap()
         );
 
         StandaloneSpeechController::new().cancel(&playback);

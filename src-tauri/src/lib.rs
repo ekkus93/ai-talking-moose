@@ -29,6 +29,7 @@ use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 const LOCAL_LLM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCAL_TTS_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn moonshine_native_smoke_check() -> Result<i32, String> {
     asr::moonshine::native_runtime_smoke_check().map_err(|error| error.message)
@@ -260,6 +261,7 @@ pub fn run() {
             api.prevent_exit();
             if let Some(state) = app_handle.try_state::<AppState>() {
                 state.local_llm_runtime.begin_shutdown();
+                state.standalone_speech.local_tts_runtime().begin_shutdown();
             }
             let handle = app_handle.clone();
             let exit_code = code.unwrap_or(0);
@@ -291,14 +293,20 @@ pub fn run() {
                 let resources = handle.try_state::<AppState>().map(|state| {
                     (
                         state.local_llm_runtime.clone(),
+                        state.standalone_speech.local_tts_runtime(),
                         state.conversation_mgr.clone(),
                         state.audio_capture.clone(),
                         state.audio_playback.clone(),
                     )
                 });
 
-                if let Some((local_llm_runtime, conversation_mgr, audio_capture, audio_playback)) =
-                    resources
+                if let Some((
+                    local_llm_runtime,
+                    local_tts_runtime,
+                    conversation_mgr,
+                    audio_capture,
+                    audio_playback,
+                )) = resources
                 {
                     match tokio::time::timeout(
                         LOCAL_LLM_SHUTDOWN_TIMEOUT,
@@ -317,6 +325,26 @@ pub fn run() {
                             warn!(
                                 timeout_seconds = LOCAL_LLM_SHUTDOWN_TIMEOUT.as_secs(),
                                 "Timed out waiting for local LLM runtime shutdown; continuing application exit"
+                            );
+                        }
+                    }
+                    match tokio::time::timeout(
+                        LOCAL_TTS_SHUTDOWN_TIMEOUT,
+                        local_tts_runtime.shutdown(),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => {
+                            warn!(
+                                kind = ?error.kind,
+                                "Failed to unload local TTS runtime during shutdown"
+                            );
+                        }
+                        Err(_) => {
+                            warn!(
+                                timeout_seconds = LOCAL_TTS_SHUTDOWN_TIMEOUT.as_secs(),
+                                "Timed out waiting for local TTS runtime shutdown; continuing application exit"
                             );
                         }
                     }
