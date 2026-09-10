@@ -72,7 +72,7 @@ fn parse_npy(bytes: &[u8]) -> Result<NpyArray, LocalTtsRuntimeError> {
 
     let major = bytes[6];
     let minor = bytes[7];
-    let (header_len, header_start) = match (major, minor) {
+    let (header_len, header_start): (usize, usize) = match (major, minor) {
         (1, _) => (u16::from_le_bytes([bytes[8], bytes[9]]) as usize, 10),
         (2, _) if bytes.len() >= 12 => (
             u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize,
