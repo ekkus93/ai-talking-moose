@@ -369,6 +369,43 @@ export interface GoogleTtsVoiceDescriptor {
   style: string;
 }
 
+export interface TtsModelDescriptor {
+  id: string;
+  display_name: string;
+}
+
+export interface TtsVoiceDescriptor {
+  id: string;
+  display_name: string;
+  style: string | null;
+}
+
+export interface TtsProviderDescriptor {
+  id: TtsProvider;
+  display_name: string;
+  is_local: boolean;
+  models: TtsModelDescriptor[];
+  voices: TtsVoiceDescriptor[];
+  sample_rate_hz: number;
+  supports_speaking_rate: boolean;
+  supports_pitch: boolean;
+  install_required: boolean;
+  license_summary: string;
+}
+
+export interface GeminiLiveVoiceCatalog {
+  display_name: string;
+  is_local: boolean;
+  sample_rate_hz: number;
+  voices: TtsVoiceDescriptor[];
+  license_summary: string;
+}
+
+export interface TtsCatalog {
+  providers: TtsProviderDescriptor[];
+  gemini_live: GeminiLiveVoiceCatalog;
+}
+
 export interface ConnectionTestResult {
   success: boolean;
   message: string;

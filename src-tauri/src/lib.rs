@@ -195,6 +195,7 @@ pub fn run() {
             acknowledge_onboarding,
             get_google_models,
             get_google_tts_voices,
+            get_tts_catalog,
             update_settings,
             get_asr_models,
             get_asr_diagnostics,

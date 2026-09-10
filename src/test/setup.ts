@@ -5,6 +5,7 @@ import {
   frontendDefaultSettings,
   frontendGoogleModels,
   frontendGoogleTtsVoices,
+  frontendTtsCatalog,
 } from "../lib/backendContract";
 import type {
   AsrModelDescriptor,
@@ -146,6 +147,7 @@ const dispatchTauriCommand = async (
   if (cmd === "update_settings") return undefined;
   if (cmd === "get_google_models") return frontendGoogleModels();
   if (cmd === "get_google_tts_voices") return frontendGoogleTtsVoices();
+  if (cmd === "get_tts_catalog") return frontendTtsCatalog();
   if (cmd === "set_google_api_key") return undefined;
   if (cmd === "clear_google_api_key") return undefined;
   if (cmd === "has_google_api_key") return true;

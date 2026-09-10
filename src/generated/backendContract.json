@@ -184,6 +184,394 @@
       "style": "Warm"
     }
   ],
+  "tts_catalog": {
+    "providers": [
+      {
+        "id": "google",
+        "display_name": "Google Gemini TTS",
+        "is_local": false,
+        "models": [
+          {
+            "id": "gemini-2.5-flash-preview-tts",
+            "display_name": "Gemini 2.5 Flash Preview TTS"
+          }
+        ],
+        "voices": [
+          {
+            "id": "Zephyr",
+            "display_name": "Zephyr",
+            "style": "Bright"
+          },
+          {
+            "id": "Puck",
+            "display_name": "Puck",
+            "style": "Upbeat"
+          },
+          {
+            "id": "Charon",
+            "display_name": "Charon",
+            "style": "Informative"
+          },
+          {
+            "id": "Kore",
+            "display_name": "Kore",
+            "style": "Firm"
+          },
+          {
+            "id": "Fenrir",
+            "display_name": "Fenrir",
+            "style": "Excitable"
+          },
+          {
+            "id": "Leda",
+            "display_name": "Leda",
+            "style": "Youthful"
+          },
+          {
+            "id": "Orus",
+            "display_name": "Orus",
+            "style": "Firm"
+          },
+          {
+            "id": "Aoede",
+            "display_name": "Aoede",
+            "style": "Breezy"
+          },
+          {
+            "id": "Callirrhoe",
+            "display_name": "Callirrhoe",
+            "style": "Easy-going"
+          },
+          {
+            "id": "Autonoe",
+            "display_name": "Autonoe",
+            "style": "Bright"
+          },
+          {
+            "id": "Enceladus",
+            "display_name": "Enceladus",
+            "style": "Breathy"
+          },
+          {
+            "id": "Iapetus",
+            "display_name": "Iapetus",
+            "style": "Clear"
+          },
+          {
+            "id": "Umbriel",
+            "display_name": "Umbriel",
+            "style": "Easy-going"
+          },
+          {
+            "id": "Algieba",
+            "display_name": "Algieba",
+            "style": "Smooth"
+          },
+          {
+            "id": "Despina",
+            "display_name": "Despina",
+            "style": "Smooth"
+          },
+          {
+            "id": "Erinome",
+            "display_name": "Erinome",
+            "style": "Clear"
+          },
+          {
+            "id": "Algenib",
+            "display_name": "Algenib",
+            "style": "Gravelly"
+          },
+          {
+            "id": "Rasalgethi",
+            "display_name": "Rasalgethi",
+            "style": "Informative"
+          },
+          {
+            "id": "Laomedeia",
+            "display_name": "Laomedeia",
+            "style": "Upbeat"
+          },
+          {
+            "id": "Achernar",
+            "display_name": "Achernar",
+            "style": "Soft"
+          },
+          {
+            "id": "Alnilam",
+            "display_name": "Alnilam",
+            "style": "Firm"
+          },
+          {
+            "id": "Schedar",
+            "display_name": "Schedar",
+            "style": "Even"
+          },
+          {
+            "id": "Gacrux",
+            "display_name": "Gacrux",
+            "style": "Mature"
+          },
+          {
+            "id": "Pulcherrima",
+            "display_name": "Pulcherrima",
+            "style": "Forward"
+          },
+          {
+            "id": "Achird",
+            "display_name": "Achird",
+            "style": "Friendly"
+          },
+          {
+            "id": "Zubenelgenubi",
+            "display_name": "Zubenelgenubi",
+            "style": "Casual"
+          },
+          {
+            "id": "Vindemiatrix",
+            "display_name": "Vindemiatrix",
+            "style": "Gentle"
+          },
+          {
+            "id": "Sadachbia",
+            "display_name": "Sadachbia",
+            "style": "Lively"
+          },
+          {
+            "id": "Sadaltager",
+            "display_name": "Sadaltager",
+            "style": "Knowledgeable"
+          },
+          {
+            "id": "Sulafat",
+            "display_name": "Sulafat",
+            "style": "Warm"
+          }
+        ],
+        "sample_rate_hz": 24000,
+        "supports_speaking_rate": true,
+        "supports_pitch": true,
+        "install_required": false,
+        "license_summary": "Google-hosted service; no TTS model/runtime artifacts are distributed by the application."
+      },
+      {
+        "id": "local",
+        "display_name": "KittenTTS Mini 0.8",
+        "is_local": true,
+        "models": [
+          {
+            "id": "KittenML/kitten-tts-mini-0.8",
+            "display_name": "KittenTTS Mini 0.8"
+          }
+        ],
+        "voices": [
+          {
+            "id": "Bella",
+            "display_name": "Bella",
+            "style": null
+          },
+          {
+            "id": "Jasper",
+            "display_name": "Jasper",
+            "style": null
+          },
+          {
+            "id": "Luna",
+            "display_name": "Luna",
+            "style": null
+          },
+          {
+            "id": "Bruno",
+            "display_name": "Bruno",
+            "style": null
+          },
+          {
+            "id": "Rosie",
+            "display_name": "Rosie",
+            "style": null
+          },
+          {
+            "id": "Hugo",
+            "display_name": "Hugo",
+            "style": null
+          },
+          {
+            "id": "Kiki",
+            "display_name": "Kiki",
+            "style": null
+          },
+          {
+            "id": "Leo",
+            "display_name": "Leo",
+            "style": null
+          }
+        ],
+        "sample_rate_hz": 24000,
+        "supports_speaking_rate": true,
+        "supports_pitch": false,
+        "install_required": true,
+        "license_summary": "KittenTTS Mini 0.8: Apache-2.0; Microsoft ONNX Runtime 1.23.2: MIT; selected Rust/G2P dependency graph: permissive-only per the accepted P0 license gate."
+      }
+    ],
+    "gemini_live": {
+      "display_name": "Google Gemini Live",
+      "is_local": false,
+      "sample_rate_hz": 24000,
+      "voices": [
+        {
+          "id": "Zephyr",
+          "display_name": "Zephyr",
+          "style": "Bright"
+        },
+        {
+          "id": "Puck",
+          "display_name": "Puck",
+          "style": "Upbeat"
+        },
+        {
+          "id": "Charon",
+          "display_name": "Charon",
+          "style": "Informative"
+        },
+        {
+          "id": "Kore",
+          "display_name": "Kore",
+          "style": "Firm"
+        },
+        {
+          "id": "Fenrir",
+          "display_name": "Fenrir",
+          "style": "Excitable"
+        },
+        {
+          "id": "Leda",
+          "display_name": "Leda",
+          "style": "Youthful"
+        },
+        {
+          "id": "Orus",
+          "display_name": "Orus",
+          "style": "Firm"
+        },
+        {
+          "id": "Aoede",
+          "display_name": "Aoede",
+          "style": "Breezy"
+        },
+        {
+          "id": "Callirrhoe",
+          "display_name": "Callirrhoe",
+          "style": "Easy-going"
+        },
+        {
+          "id": "Autonoe",
+          "display_name": "Autonoe",
+          "style": "Bright"
+        },
+        {
+          "id": "Enceladus",
+          "display_name": "Enceladus",
+          "style": "Breathy"
+        },
+        {
+          "id": "Iapetus",
+          "display_name": "Iapetus",
+          "style": "Clear"
+        },
+        {
+          "id": "Umbriel",
+          "display_name": "Umbriel",
+          "style": "Easy-going"
+        },
+        {
+          "id": "Algieba",
+          "display_name": "Algieba",
+          "style": "Smooth"
+        },
+        {
+          "id": "Despina",
+          "display_name": "Despina",
+          "style": "Smooth"
+        },
+        {
+          "id": "Erinome",
+          "display_name": "Erinome",
+          "style": "Clear"
+        },
+        {
+          "id": "Algenib",
+          "display_name": "Algenib",
+          "style": "Gravelly"
+        },
+        {
+          "id": "Rasalgethi",
+          "display_name": "Rasalgethi",
+          "style": "Informative"
+        },
+        {
+          "id": "Laomedeia",
+          "display_name": "Laomedeia",
+          "style": "Upbeat"
+        },
+        {
+          "id": "Achernar",
+          "display_name": "Achernar",
+          "style": "Soft"
+        },
+        {
+          "id": "Alnilam",
+          "display_name": "Alnilam",
+          "style": "Firm"
+        },
+        {
+          "id": "Schedar",
+          "display_name": "Schedar",
+          "style": "Even"
+        },
+        {
+          "id": "Gacrux",
+          "display_name": "Gacrux",
+          "style": "Mature"
+        },
+        {
+          "id": "Pulcherrima",
+          "display_name": "Pulcherrima",
+          "style": "Forward"
+        },
+        {
+          "id": "Achird",
+          "display_name": "Achird",
+          "style": "Friendly"
+        },
+        {
+          "id": "Zubenelgenubi",
+          "display_name": "Zubenelgenubi",
+          "style": "Casual"
+        },
+        {
+          "id": "Vindemiatrix",
+          "display_name": "Vindemiatrix",
+          "style": "Gentle"
+        },
+        {
+          "id": "Sadachbia",
+          "display_name": "Sadachbia",
+          "style": "Lively"
+        },
+        {
+          "id": "Sadaltager",
+          "display_name": "Sadaltager",
+          "style": "Knowledgeable"
+        },
+        {
+          "id": "Sulafat",
+          "display_name": "Sulafat",
+          "style": "Warm"
+        }
+      ],
+      "license_summary": "Google-hosted service; no Gemini Live voice model artifacts are distributed by the application."
+    }
+  },
   "ipc_shapes": {
     "ProviderError": {
       "kind": "network",
@@ -491,6 +879,729 @@
     "GoogleTtsVoiceDescriptor": {
       "id": "Zephyr",
       "style": "Bright"
+    },
+    "TtsModelDescriptor": {
+      "id": "gemini-2.5-flash-preview-tts",
+      "display_name": "Gemini 2.5 Flash Preview TTS"
+    },
+    "TtsVoiceDescriptor": {
+      "id": "Zephyr",
+      "display_name": "Zephyr",
+      "style": "Bright"
+    },
+    "TtsProviderDescriptor": {
+      "id": "google",
+      "display_name": "Google Gemini TTS",
+      "is_local": false,
+      "models": [
+        {
+          "id": "gemini-2.5-flash-preview-tts",
+          "display_name": "Gemini 2.5 Flash Preview TTS"
+        }
+      ],
+      "voices": [
+        {
+          "id": "Zephyr",
+          "display_name": "Zephyr",
+          "style": "Bright"
+        },
+        {
+          "id": "Puck",
+          "display_name": "Puck",
+          "style": "Upbeat"
+        },
+        {
+          "id": "Charon",
+          "display_name": "Charon",
+          "style": "Informative"
+        },
+        {
+          "id": "Kore",
+          "display_name": "Kore",
+          "style": "Firm"
+        },
+        {
+          "id": "Fenrir",
+          "display_name": "Fenrir",
+          "style": "Excitable"
+        },
+        {
+          "id": "Leda",
+          "display_name": "Leda",
+          "style": "Youthful"
+        },
+        {
+          "id": "Orus",
+          "display_name": "Orus",
+          "style": "Firm"
+        },
+        {
+          "id": "Aoede",
+          "display_name": "Aoede",
+          "style": "Breezy"
+        },
+        {
+          "id": "Callirrhoe",
+          "display_name": "Callirrhoe",
+          "style": "Easy-going"
+        },
+        {
+          "id": "Autonoe",
+          "display_name": "Autonoe",
+          "style": "Bright"
+        },
+        {
+          "id": "Enceladus",
+          "display_name": "Enceladus",
+          "style": "Breathy"
+        },
+        {
+          "id": "Iapetus",
+          "display_name": "Iapetus",
+          "style": "Clear"
+        },
+        {
+          "id": "Umbriel",
+          "display_name": "Umbriel",
+          "style": "Easy-going"
+        },
+        {
+          "id": "Algieba",
+          "display_name": "Algieba",
+          "style": "Smooth"
+        },
+        {
+          "id": "Despina",
+          "display_name": "Despina",
+          "style": "Smooth"
+        },
+        {
+          "id": "Erinome",
+          "display_name": "Erinome",
+          "style": "Clear"
+        },
+        {
+          "id": "Algenib",
+          "display_name": "Algenib",
+          "style": "Gravelly"
+        },
+        {
+          "id": "Rasalgethi",
+          "display_name": "Rasalgethi",
+          "style": "Informative"
+        },
+        {
+          "id": "Laomedeia",
+          "display_name": "Laomedeia",
+          "style": "Upbeat"
+        },
+        {
+          "id": "Achernar",
+          "display_name": "Achernar",
+          "style": "Soft"
+        },
+        {
+          "id": "Alnilam",
+          "display_name": "Alnilam",
+          "style": "Firm"
+        },
+        {
+          "id": "Schedar",
+          "display_name": "Schedar",
+          "style": "Even"
+        },
+        {
+          "id": "Gacrux",
+          "display_name": "Gacrux",
+          "style": "Mature"
+        },
+        {
+          "id": "Pulcherrima",
+          "display_name": "Pulcherrima",
+          "style": "Forward"
+        },
+        {
+          "id": "Achird",
+          "display_name": "Achird",
+          "style": "Friendly"
+        },
+        {
+          "id": "Zubenelgenubi",
+          "display_name": "Zubenelgenubi",
+          "style": "Casual"
+        },
+        {
+          "id": "Vindemiatrix",
+          "display_name": "Vindemiatrix",
+          "style": "Gentle"
+        },
+        {
+          "id": "Sadachbia",
+          "display_name": "Sadachbia",
+          "style": "Lively"
+        },
+        {
+          "id": "Sadaltager",
+          "display_name": "Sadaltager",
+          "style": "Knowledgeable"
+        },
+        {
+          "id": "Sulafat",
+          "display_name": "Sulafat",
+          "style": "Warm"
+        }
+      ],
+      "sample_rate_hz": 24000,
+      "supports_speaking_rate": true,
+      "supports_pitch": true,
+      "install_required": false,
+      "license_summary": "Google-hosted service; no TTS model/runtime artifacts are distributed by the application."
+    },
+    "GeminiLiveVoiceCatalog": {
+      "display_name": "Google Gemini Live",
+      "is_local": false,
+      "sample_rate_hz": 24000,
+      "voices": [
+        {
+          "id": "Zephyr",
+          "display_name": "Zephyr",
+          "style": "Bright"
+        },
+        {
+          "id": "Puck",
+          "display_name": "Puck",
+          "style": "Upbeat"
+        },
+        {
+          "id": "Charon",
+          "display_name": "Charon",
+          "style": "Informative"
+        },
+        {
+          "id": "Kore",
+          "display_name": "Kore",
+          "style": "Firm"
+        },
+        {
+          "id": "Fenrir",
+          "display_name": "Fenrir",
+          "style": "Excitable"
+        },
+        {
+          "id": "Leda",
+          "display_name": "Leda",
+          "style": "Youthful"
+        },
+        {
+          "id": "Orus",
+          "display_name": "Orus",
+          "style": "Firm"
+        },
+        {
+          "id": "Aoede",
+          "display_name": "Aoede",
+          "style": "Breezy"
+        },
+        {
+          "id": "Callirrhoe",
+          "display_name": "Callirrhoe",
+          "style": "Easy-going"
+        },
+        {
+          "id": "Autonoe",
+          "display_name": "Autonoe",
+          "style": "Bright"
+        },
+        {
+          "id": "Enceladus",
+          "display_name": "Enceladus",
+          "style": "Breathy"
+        },
+        {
+          "id": "Iapetus",
+          "display_name": "Iapetus",
+          "style": "Clear"
+        },
+        {
+          "id": "Umbriel",
+          "display_name": "Umbriel",
+          "style": "Easy-going"
+        },
+        {
+          "id": "Algieba",
+          "display_name": "Algieba",
+          "style": "Smooth"
+        },
+        {
+          "id": "Despina",
+          "display_name": "Despina",
+          "style": "Smooth"
+        },
+        {
+          "id": "Erinome",
+          "display_name": "Erinome",
+          "style": "Clear"
+        },
+        {
+          "id": "Algenib",
+          "display_name": "Algenib",
+          "style": "Gravelly"
+        },
+        {
+          "id": "Rasalgethi",
+          "display_name": "Rasalgethi",
+          "style": "Informative"
+        },
+        {
+          "id": "Laomedeia",
+          "display_name": "Laomedeia",
+          "style": "Upbeat"
+        },
+        {
+          "id": "Achernar",
+          "display_name": "Achernar",
+          "style": "Soft"
+        },
+        {
+          "id": "Alnilam",
+          "display_name": "Alnilam",
+          "style": "Firm"
+        },
+        {
+          "id": "Schedar",
+          "display_name": "Schedar",
+          "style": "Even"
+        },
+        {
+          "id": "Gacrux",
+          "display_name": "Gacrux",
+          "style": "Mature"
+        },
+        {
+          "id": "Pulcherrima",
+          "display_name": "Pulcherrima",
+          "style": "Forward"
+        },
+        {
+          "id": "Achird",
+          "display_name": "Achird",
+          "style": "Friendly"
+        },
+        {
+          "id": "Zubenelgenubi",
+          "display_name": "Zubenelgenubi",
+          "style": "Casual"
+        },
+        {
+          "id": "Vindemiatrix",
+          "display_name": "Vindemiatrix",
+          "style": "Gentle"
+        },
+        {
+          "id": "Sadachbia",
+          "display_name": "Sadachbia",
+          "style": "Lively"
+        },
+        {
+          "id": "Sadaltager",
+          "display_name": "Sadaltager",
+          "style": "Knowledgeable"
+        },
+        {
+          "id": "Sulafat",
+          "display_name": "Sulafat",
+          "style": "Warm"
+        }
+      ],
+      "license_summary": "Google-hosted service; no Gemini Live voice model artifacts are distributed by the application."
+    },
+    "TtsCatalog": {
+      "providers": [
+        {
+          "id": "google",
+          "display_name": "Google Gemini TTS",
+          "is_local": false,
+          "models": [
+            {
+              "id": "gemini-2.5-flash-preview-tts",
+              "display_name": "Gemini 2.5 Flash Preview TTS"
+            }
+          ],
+          "voices": [
+            {
+              "id": "Zephyr",
+              "display_name": "Zephyr",
+              "style": "Bright"
+            },
+            {
+              "id": "Puck",
+              "display_name": "Puck",
+              "style": "Upbeat"
+            },
+            {
+              "id": "Charon",
+              "display_name": "Charon",
+              "style": "Informative"
+            },
+            {
+              "id": "Kore",
+              "display_name": "Kore",
+              "style": "Firm"
+            },
+            {
+              "id": "Fenrir",
+              "display_name": "Fenrir",
+              "style": "Excitable"
+            },
+            {
+              "id": "Leda",
+              "display_name": "Leda",
+              "style": "Youthful"
+            },
+            {
+              "id": "Orus",
+              "display_name": "Orus",
+              "style": "Firm"
+            },
+            {
+              "id": "Aoede",
+              "display_name": "Aoede",
+              "style": "Breezy"
+            },
+            {
+              "id": "Callirrhoe",
+              "display_name": "Callirrhoe",
+              "style": "Easy-going"
+            },
+            {
+              "id": "Autonoe",
+              "display_name": "Autonoe",
+              "style": "Bright"
+            },
+            {
+              "id": "Enceladus",
+              "display_name": "Enceladus",
+              "style": "Breathy"
+            },
+            {
+              "id": "Iapetus",
+              "display_name": "Iapetus",
+              "style": "Clear"
+            },
+            {
+              "id": "Umbriel",
+              "display_name": "Umbriel",
+              "style": "Easy-going"
+            },
+            {
+              "id": "Algieba",
+              "display_name": "Algieba",
+              "style": "Smooth"
+            },
+            {
+              "id": "Despina",
+              "display_name": "Despina",
+              "style": "Smooth"
+            },
+            {
+              "id": "Erinome",
+              "display_name": "Erinome",
+              "style": "Clear"
+            },
+            {
+              "id": "Algenib",
+              "display_name": "Algenib",
+              "style": "Gravelly"
+            },
+            {
+              "id": "Rasalgethi",
+              "display_name": "Rasalgethi",
+              "style": "Informative"
+            },
+            {
+              "id": "Laomedeia",
+              "display_name": "Laomedeia",
+              "style": "Upbeat"
+            },
+            {
+              "id": "Achernar",
+              "display_name": "Achernar",
+              "style": "Soft"
+            },
+            {
+              "id": "Alnilam",
+              "display_name": "Alnilam",
+              "style": "Firm"
+            },
+            {
+              "id": "Schedar",
+              "display_name": "Schedar",
+              "style": "Even"
+            },
+            {
+              "id": "Gacrux",
+              "display_name": "Gacrux",
+              "style": "Mature"
+            },
+            {
+              "id": "Pulcherrima",
+              "display_name": "Pulcherrima",
+              "style": "Forward"
+            },
+            {
+              "id": "Achird",
+              "display_name": "Achird",
+              "style": "Friendly"
+            },
+            {
+              "id": "Zubenelgenubi",
+              "display_name": "Zubenelgenubi",
+              "style": "Casual"
+            },
+            {
+              "id": "Vindemiatrix",
+              "display_name": "Vindemiatrix",
+              "style": "Gentle"
+            },
+            {
+              "id": "Sadachbia",
+              "display_name": "Sadachbia",
+              "style": "Lively"
+            },
+            {
+              "id": "Sadaltager",
+              "display_name": "Sadaltager",
+              "style": "Knowledgeable"
+            },
+            {
+              "id": "Sulafat",
+              "display_name": "Sulafat",
+              "style": "Warm"
+            }
+          ],
+          "sample_rate_hz": 24000,
+          "supports_speaking_rate": true,
+          "supports_pitch": true,
+          "install_required": false,
+          "license_summary": "Google-hosted service; no TTS model/runtime artifacts are distributed by the application."
+        },
+        {
+          "id": "local",
+          "display_name": "KittenTTS Mini 0.8",
+          "is_local": true,
+          "models": [
+            {
+              "id": "KittenML/kitten-tts-mini-0.8",
+              "display_name": "KittenTTS Mini 0.8"
+            }
+          ],
+          "voices": [
+            {
+              "id": "Bella",
+              "display_name": "Bella",
+              "style": null
+            },
+            {
+              "id": "Jasper",
+              "display_name": "Jasper",
+              "style": null
+            },
+            {
+              "id": "Luna",
+              "display_name": "Luna",
+              "style": null
+            },
+            {
+              "id": "Bruno",
+              "display_name": "Bruno",
+              "style": null
+            },
+            {
+              "id": "Rosie",
+              "display_name": "Rosie",
+              "style": null
+            },
+            {
+              "id": "Hugo",
+              "display_name": "Hugo",
+              "style": null
+            },
+            {
+              "id": "Kiki",
+              "display_name": "Kiki",
+              "style": null
+            },
+            {
+              "id": "Leo",
+              "display_name": "Leo",
+              "style": null
+            }
+          ],
+          "sample_rate_hz": 24000,
+          "supports_speaking_rate": true,
+          "supports_pitch": false,
+          "install_required": true,
+          "license_summary": "KittenTTS Mini 0.8: Apache-2.0; Microsoft ONNX Runtime 1.23.2: MIT; selected Rust/G2P dependency graph: permissive-only per the accepted P0 license gate."
+        }
+      ],
+      "gemini_live": {
+        "display_name": "Google Gemini Live",
+        "is_local": false,
+        "sample_rate_hz": 24000,
+        "voices": [
+          {
+            "id": "Zephyr",
+            "display_name": "Zephyr",
+            "style": "Bright"
+          },
+          {
+            "id": "Puck",
+            "display_name": "Puck",
+            "style": "Upbeat"
+          },
+          {
+            "id": "Charon",
+            "display_name": "Charon",
+            "style": "Informative"
+          },
+          {
+            "id": "Kore",
+            "display_name": "Kore",
+            "style": "Firm"
+          },
+          {
+            "id": "Fenrir",
+            "display_name": "Fenrir",
+            "style": "Excitable"
+          },
+          {
+            "id": "Leda",
+            "display_name": "Leda",
+            "style": "Youthful"
+          },
+          {
+            "id": "Orus",
+            "display_name": "Orus",
+            "style": "Firm"
+          },
+          {
+            "id": "Aoede",
+            "display_name": "Aoede",
+            "style": "Breezy"
+          },
+          {
+            "id": "Callirrhoe",
+            "display_name": "Callirrhoe",
+            "style": "Easy-going"
+          },
+          {
+            "id": "Autonoe",
+            "display_name": "Autonoe",
+            "style": "Bright"
+          },
+          {
+            "id": "Enceladus",
+            "display_name": "Enceladus",
+            "style": "Breathy"
+          },
+          {
+            "id": "Iapetus",
+            "display_name": "Iapetus",
+            "style": "Clear"
+          },
+          {
+            "id": "Umbriel",
+            "display_name": "Umbriel",
+            "style": "Easy-going"
+          },
+          {
+            "id": "Algieba",
+            "display_name": "Algieba",
+            "style": "Smooth"
+          },
+          {
+            "id": "Despina",
+            "display_name": "Despina",
+            "style": "Smooth"
+          },
+          {
+            "id": "Erinome",
+            "display_name": "Erinome",
+            "style": "Clear"
+          },
+          {
+            "id": "Algenib",
+            "display_name": "Algenib",
+            "style": "Gravelly"
+          },
+          {
+            "id": "Rasalgethi",
+            "display_name": "Rasalgethi",
+            "style": "Informative"
+          },
+          {
+            "id": "Laomedeia",
+            "display_name": "Laomedeia",
+            "style": "Upbeat"
+          },
+          {
+            "id": "Achernar",
+            "display_name": "Achernar",
+            "style": "Soft"
+          },
+          {
+            "id": "Alnilam",
+            "display_name": "Alnilam",
+            "style": "Firm"
+          },
+          {
+            "id": "Schedar",
+            "display_name": "Schedar",
+            "style": "Even"
+          },
+          {
+            "id": "Gacrux",
+            "display_name": "Gacrux",
+            "style": "Mature"
+          },
+          {
+            "id": "Pulcherrima",
+            "display_name": "Pulcherrima",
+            "style": "Forward"
+          },
+          {
+            "id": "Achird",
+            "display_name": "Achird",
+            "style": "Friendly"
+          },
+          {
+            "id": "Zubenelgenubi",
+            "display_name": "Zubenelgenubi",
+            "style": "Casual"
+          },
+          {
+            "id": "Vindemiatrix",
+            "display_name": "Vindemiatrix",
+            "style": "Gentle"
+          },
+          {
+            "id": "Sadachbia",
+            "display_name": "Sadachbia",
+            "style": "Lively"
+          },
+          {
+            "id": "Sadaltager",
+            "display_name": "Sadaltager",
+            "style": "Knowledgeable"
+          },
+          {
+            "id": "Sulafat",
+            "display_name": "Sulafat",
+            "style": "Warm"
+          }
+        ],
+        "license_summary": "Google-hosted service; no Gemini Live voice model artifacts are distributed by the application."
+      }
     },
     "ConnectionTestResult": {
       "success": true,

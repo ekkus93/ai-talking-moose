@@ -3,6 +3,7 @@ use crate::ai::google::{
     GoogleTtsVoiceDescriptor, GOOGLE_MODELS, GOOGLE_TTS_VOICES,
 };
 use crate::ai::traits::RealtimeConversationProvider;
+use crate::ai::tts_catalog::{tts_catalog, TtsCatalog};
 use crate::ai::types::LiveSessionConfig;
 use crate::app::runtime_preferences::apply_changed_runtime_preferences;
 use crate::app::settings_policy::{
@@ -140,6 +141,11 @@ pub fn get_google_models() -> Vec<GoogleModelDescriptor> {
 #[tauri::command]
 pub fn get_google_tts_voices() -> Vec<GoogleTtsVoiceDescriptor> {
     GOOGLE_TTS_VOICES.to_vec()
+}
+
+#[tauri::command]
+pub fn get_tts_catalog() -> TtsCatalog {
+    tts_catalog()
 }
 
 #[tauri::command]
