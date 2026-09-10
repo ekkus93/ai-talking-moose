@@ -1,0 +1,47 @@
+name: KittenTTS production CPU acceptance
+
+on:
+  push:
+    branches:
+      - ralph/ktt-301-kitten-mini-cpu-inference
+    paths:
+      - ".github/workflows/kittentts-production-cpu-acceptance.yml"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/local_tts/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kittentts-production-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freeze-lock:
+    name: Freeze production Local TTS Cargo graph
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      lock_changed: ${{ steps.lock.outputs.lock_changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate production Cargo lock
+        id: lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+          if git diff --quiet -- src-tauri/Cargo.lock; then
+            echo 'lock_changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'lock_changed=true' >> "$GITHUB_OUTPUT"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri/Cargo.lock
+          git commit -m 'build: freeze KTT-301 production Cargo graph'
+          git push origin HEAD:"${GITHUB_REF_NAME}"

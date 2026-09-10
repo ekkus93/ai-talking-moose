@@ -56,10 +56,19 @@ llama-cpp-2 = { version = "=0.1.154", default-features = false }
 # llama-cpp-2 0.1.154 declares ^0.1.154 for its sys crate; pin the exact
 # matching release because 0.1.155 changed sampler FFI signatures.
 llama-cpp-sys-2 = { version = "=0.1.154", default-features = false }
+# KTT-301: exact P0-selected Local TTS inference stack. The `load-dynamic`
+# feature keeps ONNX Runtime app-owned: the verified KTT-200 runtime artifact
+# is loaded explicitly instead of linking or downloading a system runtime.
+flate2 = "=1.1.9"
+once_cell = "=1.21.4"
+regex = "=1.13.1"
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-23", "load-dynamic"] }
+piper-plus-g2p = { version = "=0.4.0", default-features = false, features = ["english"] }
+tempfile = "=3.27.0"
+zip = { version = "=2.4.2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tauri = { version = "2.1", features = ["test"] }
-tempfile = "3.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 av-foundation = "0.8.1"
