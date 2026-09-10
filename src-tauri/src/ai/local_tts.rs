@@ -1,3 +1,5 @@
+pub mod manifest;
+
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
 use async_trait::async_trait;
