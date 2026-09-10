@@ -183,7 +183,7 @@ mod tests {
         assert_eq!(playback.queue_length(), playback.max_queued_samples());
         assert_eq!(
             playback.dropped_samples(),
-            u64::try_from(report.dropped_samples()).unwrap()
+            u64::try_from(report.dropped_samples).unwrap()
         );
 
         StandaloneSpeechController::new().cancel(&playback);
