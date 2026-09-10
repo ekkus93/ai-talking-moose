@@ -18,8 +18,99 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  reconcile-runtime:
+    name: Wire production Kitten runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      source_changed: ${{ steps.patch.outputs.source_changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Apply KTT-301 runtime integration
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          runtime_path = Path('src-tauri/src/ai/local_tts/runtime.rs')
+          text = runtime_path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              if new in text:
+                  return
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one runtime replacement, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'use std::sync::Arc;\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]',
+              'use std::sync::Arc;\n\nmod engine;\nmod npz;\nmod tokenize;\n\nuse engine::KittenTtsRuntimeEngineFactory;\n\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]',
+          )
+          replace_once(
+              '    RuntimeUnavailable,\n    ModelLoad,\n    ModelDelete,\n',
+              '    RuntimeUnavailable,\n    InvalidInput,\n    InvalidVoice,\n    UnsupportedConfig,\n    Inference,\n    ModelLoad,\n    ModelDelete,\n',
+          )
+          replace_once(
+              '''    fn runtime_unavailable() -> Self {\n        Self::new(\n            LocalTtsRuntimeErrorKind::RuntimeUnavailable,\n            "The Local TTS inference engine is not integrated in this build yet.",\n        )\n    }\n\n''',
+              '',
+          )
+          replace_once(
+              '''    fn model_load() -> Self {\n        Self::new(\n            LocalTtsRuntimeErrorKind::ModelLoad,\n            "The selected Local TTS model could not be loaded.",\n        )\n    }\n''',
+              '''    fn invalid_input() -> Self {\n        Self::new(\n            LocalTtsRuntimeErrorKind::InvalidInput,\n            "The Local TTS input is empty, too long, or unsupported.",\n        )\n    }\n\n    fn invalid_voice() -> Self {\n        Self::new(\n            LocalTtsRuntimeErrorKind::InvalidVoice,\n            "The selected Local TTS voice is unavailable.",\n        )\n    }\n\n    fn unsupported_config() -> Self {\n        Self::new(\n            LocalTtsRuntimeErrorKind::UnsupportedConfig,\n            "The selected Local TTS configuration is unsupported.",\n        )\n    }\n\n    fn inference() -> Self {\n        Self::new(\n            LocalTtsRuntimeErrorKind::Inference,\n            "Local TTS inference failed.",\n        )\n    }\n\n    fn model_load() -> Self {\n        Self::new(\n            LocalTtsRuntimeErrorKind::ModelLoad,\n            "The selected Local TTS model could not be loaded.",\n        )\n    }\n''',
+          )
+          replace_once(
+              'impl std::error::Error for LocalTtsRuntimeError {}\n\n#[derive(Debug, Clone, PartialEq, Eq)]',
+              '''impl std::error::Error for LocalTtsRuntimeError {}\n\n#[derive(Debug, Clone)]\npub struct LocalTtsInferenceRequest {\n    pub text: String,\n    pub voice_id: String,\n    pub speaking_rate: f32,\n    pub pitch: Option<f32>,\n}\n\n#[derive(Debug, Clone)]\npub struct LocalTtsInferenceOutput {\n    pub samples: Vec<f32>,\n    pub sample_rate_hz: u32,\n}\n\n#[derive(Debug, Clone, PartialEq, Eq)]''',
+          )
+          replace_once(
+              '''    ) -> Result<(), LocalTtsRuntimeError>;\n    fn unload(&mut self);\n}\n\ntrait LocalTtsRuntimeEngineFactory''',
+              '''    ) -> Result<(), LocalTtsRuntimeError>;\n    fn synthesize(\n        &mut self,\n        request: &LocalTtsInferenceRequest,\n    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError>;\n    fn unload(&mut self);\n}\n\ntrait LocalTtsRuntimeEngineFactory''',
+          )
+          replace_once(
+              '''struct PendingLocalTtsRuntimeEngineFactory;\n\nimpl LocalTtsRuntimeEngineFactory for PendingLocalTtsRuntimeEngineFactory {\n    fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError> {\n        Err(LocalTtsRuntimeError::runtime_unavailable())\n    }\n}\n\n''',
+              '',
+          )
+          replace_once(
+              '            Arc::new(PendingLocalTtsRuntimeEngineFactory),',
+              '            Arc::new(KittenTtsRuntimeEngineFactory),',
+          )
+          replace_once(
+              '''    pub async fn ensure_loaded(&self, model_id: &str) -> Result<(), LocalTtsRuntimeError> {\n        self.with_loaded_engine(model_id, |_| Ok(())).await\n    }\n\n''',
+              '''    pub async fn ensure_loaded(&self, model_id: &str) -> Result<(), LocalTtsRuntimeError> {\n        self.with_loaded_engine(model_id, |_| Ok(())).await\n    }\n\n    pub async fn synthesize_f32(\n        &self,\n        model_id: &str,\n        request: LocalTtsInferenceRequest,\n    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {\n        self.with_loaded_engine(model_id, move |engine| engine.synthesize(&request))\n            .await\n    }\n\n''',
+          )
+          runtime_path.write_text(text)
+
+          tests_path = Path('src-tauri/src/ai/local_tts/runtime/tests.rs')
+          tests = tests_path.read_text()
+          old = '''        self.counters.loads.fetch_add(1, Ordering::SeqCst);\n        Ok(())\n    }\n\n    fn unload(&mut self) {\n        self.counters.unloads.fetch_add(1, Ordering::SeqCst);\n    }\n'''
+          new = '''        self.counters.loads.fetch_add(1, Ordering::SeqCst);\n        Ok(())\n    }\n\n    fn synthesize(\n        &mut self,\n        _request: &LocalTtsInferenceRequest,\n    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {\n        Ok(LocalTtsInferenceOutput {\n            samples: vec![0.0, 0.25, -0.25],\n            sample_rate_hz: 24_000,\n        })\n    }\n\n    fn unload(&mut self) {\n        self.counters.unloads.fetch_add(1, Ordering::SeqCst);\n    }\n'''
+          if new not in tests:
+              if tests.count(old) != 1:
+                  raise SystemExit('expected one FakeEngine replacement')
+              tests = tests.replace(old, new, 1)
+          tests_path.write_text(tests)
+          PY
+          if git diff --quiet -- src-tauri/src/ai/local_tts/runtime.rs src-tauri/src/ai/local_tts/runtime/tests.rs; then
+            echo 'source_changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'source_changed=true' >> "$GITHUB_OUTPUT"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri/src/ai/local_tts/runtime.rs src-tauri/src/ai/local_tts/runtime/tests.rs
+          git commit -m 'feat: wire KTT-301 production runtime engine'
+          git push origin HEAD:"${GITHUB_REF_NAME}"
+
   freeze-lock:
     name: Freeze production Local TTS Cargo graph
+    needs: reconcile-runtime
+    if: needs.reconcile-runtime.outputs.source_changed == 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
