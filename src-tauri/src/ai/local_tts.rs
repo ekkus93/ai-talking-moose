@@ -160,9 +160,7 @@ impl SpeechSynthesizer for PendingLocalSpeechSynthesizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::local_tts::manifest::{
-        local_tts_model_manifest, LocalTtsPlatform,
-    };
+    use crate::ai::local_tts::manifest::{local_tts_model_manifest, LocalTtsPlatform};
     use std::fs;
     use std::path::PathBuf;
 
@@ -324,7 +322,10 @@ mod tests {
                 .unwrap();
             let destination = revision_dir.join(artifact.filename);
             fs::copy(source, &destination).unwrap();
-            assert_eq!(fs::metadata(destination).unwrap().len(), artifact.expected_bytes);
+            assert_eq!(
+                fs::metadata(destination).unwrap().len(),
+                artifact.expected_bytes
+            );
         }
 
         let marker = storage::install_marker(manifest, platform, &artifacts);
