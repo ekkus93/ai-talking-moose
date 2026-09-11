@@ -213,6 +213,42 @@ export interface LocalModelInstallProgress {
   total_bytes: number;
 }
 
+export type LocalTtsInstallState =
+  | "not_installed"
+  | "downloading"
+  | "verifying"
+  | "promoting"
+  | "installed"
+  | "failed";
+
+export interface LocalTtsStatusError {
+  message: string;
+  retryable: boolean;
+}
+
+export interface LocalTtsModelDescriptor {
+  id: string;
+  display_name: string;
+  version: string;
+  expected_bytes: number;
+  installed_bytes: number | null;
+  license: string;
+  install_state: LocalTtsInstallState;
+  active: boolean;
+  error: LocalTtsStatusError | null;
+}
+
+export interface LocalTtsInstallProgress {
+  model_id: string;
+  artifact_filename: string | null;
+  install_state: Extract<
+    LocalTtsInstallState,
+    "downloading" | "verifying" | "promoting"
+  >;
+  downloaded_bytes: number;
+  total_bytes: number;
+}
+
 export type MicrophonePermissionState =
   "not_requested" | "granted" | "denied" | "unavailable";
 
