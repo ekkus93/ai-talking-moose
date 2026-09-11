@@ -296,11 +296,7 @@ async fn cancellation_while_waiting_for_runtime_slot_returns_promptly() {
         let token = cancellation.clone();
         tokio::spawn(async move {
             manager
-                .synthesize_f32_cancellable(
-                    DEFAULT_LOCAL_TTS_MODEL_ID,
-                    inference_request(),
-                    &token,
-                )
+                .synthesize_f32_cancellable(DEFAULT_LOCAL_TTS_MODEL_ID, inference_request(), &token)
                 .await
         })
     };
@@ -334,11 +330,7 @@ async fn blocking_inference_cancels_without_starving_unrelated_tokio_work() {
         let token = cancellation.clone();
         tokio::spawn(async move {
             manager
-                .synthesize_f32_cancellable(
-                    DEFAULT_LOCAL_TTS_MODEL_ID,
-                    inference_request(),
-                    &token,
-                )
+                .synthesize_f32_cancellable(DEFAULT_LOCAL_TTS_MODEL_ID, inference_request(), &token)
                 .await
         })
     };
@@ -383,11 +375,7 @@ async fn shutdown_cancels_active_synthesis_and_drains_worker() {
         let manager = manager.clone();
         tokio::spawn(async move {
             manager
-                .synthesize_f32_cancellable(
-                    DEFAULT_LOCAL_TTS_MODEL_ID,
-                    inference_request(),
-                    &token,
-                )
+                .synthesize_f32_cancellable(DEFAULT_LOCAL_TTS_MODEL_ID, inference_request(), &token)
                 .await
         })
     };

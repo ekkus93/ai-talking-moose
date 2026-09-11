@@ -135,9 +135,8 @@ impl KittenTtsRuntimeEngine {
             .map_err(|_| LocalTtsRuntimeError::inference())?;
         cancellation.check_cancelled()?;
 
-        let run_options = Arc::new(
-            RunOptions::new().map_err(|_| LocalTtsRuntimeError::inference())?,
-        );
+        let run_options =
+            Arc::new(RunOptions::new().map_err(|_| LocalTtsRuntimeError::inference())?);
         cancellation.install_run_options(run_options.clone());
         let session = self
             .session
