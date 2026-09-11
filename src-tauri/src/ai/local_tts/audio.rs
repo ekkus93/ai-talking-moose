@@ -121,7 +121,10 @@ mod tests {
         let diagnostics = playback.diagnostics();
         assert_eq!(diagnostics.sample_rate_hz, Some(24_000));
         assert_eq!(diagnostics.channels, Some(1));
-        assert_eq!(diagnostics.queue_depth_samples, playback.max_queued_samples());
+        assert_eq!(
+            diagnostics.queue_depth_samples,
+            playback.max_queued_samples()
+        );
         assert_eq!(
             diagnostics.dropped_samples,
             u64::try_from(report.dropped_samples).unwrap()
