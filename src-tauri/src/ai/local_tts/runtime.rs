@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
 mod engine;
@@ -21,6 +22,7 @@ use engine::KittenTtsRuntimeEngineFactory;
 pub enum LocalTtsRuntimePhase {
     Unloaded,
     Loading,
+    Generating,
     Ready,
     Failed,
     ShuttingDown,
@@ -331,11 +333,48 @@ impl RuntimeState {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+struct RuntimeTelemetry {
+    last_model_load_duration_ms: Option<u64>,
+    last_synthesis_duration_ms: Option<u64>,
+    last_generated_audio_duration_ms: Option<f64>,
+    last_real_time_factor: Option<f64>,
+}
+
+impl RuntimeTelemetry {
+    fn record_model_load(&mut self, duration: Duration) {
+        self.last_model_load_duration_ms = Some(duration.as_millis().try_into().unwrap_or(u64::MAX));
+    }
+
+    fn record_synthesis(
+        &mut self,
+        result: &Result<LocalTtsInferenceOutput, LocalTtsRuntimeError>,
+        duration: Duration,
+    ) {
+        self.last_synthesis_duration_ms =
+            Some(duration.as_millis().try_into().unwrap_or(u64::MAX));
+        match result {
+            Ok(output) if output.sample_rate_hz > 0 && !output.samples.is_empty() => {
+                let audio_duration_ms =
+                    output.samples.len() as f64 * 1_000.0 / f64::from(output.sample_rate_hz);
+                self.last_generated_audio_duration_ms = Some(audio_duration_ms);
+                self.last_real_time_factor =
+                    Some(duration.as_secs_f64() * 1_000.0 / audio_duration_ms);
+            }
+            _ => {
+                self.last_generated_audio_duration_ms = None;
+                self.last_real_time_factor = None;
+            }
+        }
+    }
+}
+
 struct LocalTtsRuntimeInner {
     operation_lock: Arc<tokio::sync::Mutex<()>>,
     state: Arc<Mutex<RuntimeState>>,
     phase: RwLock<LocalTtsRuntimePhase>,
     last_error: RwLock<Option<LocalTtsRuntimeErrorKind>>,
+    telemetry: RwLock<RuntimeTelemetry>,
     active_synthesis: Mutex<Option<LocalTtsRuntimeCancellation>>,
     verifier: Arc<dyn RuntimeArtifactVerifier>,
     factory: Arc<dyn LocalTtsRuntimeEngineFactory>,
@@ -368,6 +407,7 @@ impl LocalTtsRuntimeManager {
                 state: Arc::new(Mutex::new(RuntimeState::new())),
                 phase: RwLock::new(LocalTtsRuntimePhase::Unloaded),
                 last_error: RwLock::new(None),
+                telemetry: RwLock::new(RuntimeTelemetry::default()),
                 active_synthesis: Mutex::new(None),
                 verifier,
                 factory,
@@ -392,8 +432,18 @@ impl LocalTtsRuntimeManager {
         model_id: &str,
         request: LocalTtsInferenceRequest,
     ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
-        self.with_loaded_engine(model_id, move |engine| engine.synthesize(&request))
-            .await
+        let inner = self.inner.clone();
+        self.with_loaded_engine(model_id, move |engine| {
+            *inner.phase.write() = LocalTtsRuntimePhase::Generating;
+            let started = Instant::now();
+            let result = engine.synthesize(&request);
+            inner
+                .telemetry
+                .write()
+                .record_synthesis(&result, started.elapsed());
+            result
+        })
+        .await
     }
 
     pub async fn synthesize_f32_cancellable(
@@ -433,10 +483,18 @@ impl LocalTtsRuntimeManager {
         });
 
         let worker_cancellation = runtime_cancellation.clone();
+        let inner = self.inner.clone();
         let result = self
             .with_loaded_identity_locked(identity, move |engine| {
                 worker_cancellation.check_cancelled()?;
-                engine.synthesize_cancellable(&request, &worker_cancellation)
+                *inner.phase.write() = LocalTtsRuntimePhase::Generating;
+                let started = Instant::now();
+                let result = engine.synthesize_cancellable(&request, &worker_cancellation);
+                inner
+                    .telemetry
+                    .write()
+                    .record_synthesis(&result, started.elapsed());
+                result
             })
             .await;
 
@@ -507,6 +565,7 @@ impl LocalTtsRuntimeManager {
         let state = self.inner.state.clone();
         let verifier = self.inner.verifier.clone();
         let factory = self.inner.factory.clone();
+        let inner = self.inner.clone();
         let result = tokio::task::spawn_blocking(move || {
             let needs_load = state.lock().loaded.as_ref() != Some(&identity);
             if needs_load {
@@ -526,7 +585,13 @@ impl LocalTtsRuntimeManager {
                     .engine
                     .as_mut()
                     .ok_or_else(LocalTtsRuntimeError::model_load)?;
-                if let Err(error) = engine.load(&identity, &paths) {
+                let load_started = Instant::now();
+                let load_result = engine.load(&identity, &paths);
+                inner
+                    .telemetry
+                    .write()
+                    .record_model_load(load_started.elapsed());
+                if let Err(error) = load_result {
                     engine.unload();
                     state.loaded = None;
                     return Err(error);
@@ -595,15 +660,10 @@ impl LocalTtsRuntimeManager {
             if local_tts_model_manifest(&model_id).is_none() {
                 return Err(LocalTtsRuntimeError::unknown_model());
             }
-            let status =
-                installer
-                    .status(&model_id, platform)
-                    .map_err(|error| match error.kind {
-                        LocalTtsInstallErrorKind::UnknownModel => {
-                            LocalTtsRuntimeError::unknown_model()
-                        }
-                        _ => LocalTtsRuntimeError::model_delete(),
-                    })?;
+            let status = installer.status(&model_id, platform).map_err(|error| match error.kind {
+                LocalTtsInstallErrorKind::UnknownModel => LocalTtsRuntimeError::unknown_model(),
+                _ => LocalTtsRuntimeError::model_delete(),
+            })?;
             if matches!(
                 status.install_state,
                 LocalTtsInstallState::Downloading
@@ -630,6 +690,11 @@ impl LocalTtsRuntimeManager {
 
     pub fn status(&self, selected_model_id: String) -> LocalTtsRuntimeStatus {
         let loaded = self.inner.state.lock().loaded.clone();
+        let manifest = loaded
+            .as_ref()
+            .and_then(|identity| local_tts_model_manifest(&identity.model_id))
+            .or_else(|| local_tts_model_manifest(&selected_model_id));
+        let telemetry = self.inner.telemetry.read().clone();
         LocalTtsRuntimeStatus {
             selected_model_id,
             loaded_model_id: loaded.as_ref().map(|identity| identity.model_id.clone()),
@@ -640,6 +705,13 @@ impl LocalTtsRuntimeManager {
                 .as_ref()
                 .map(|identity| identity.runtime_compatibility_version),
             phase: *self.inner.phase.read(),
+            sample_rate_hz: manifest.map(|manifest| manifest.sample_rate_hz),
+            inference_thread_count: manifest
+                .map(|manifest| u32::from(manifest.runtime.inference_threads)),
+            last_model_load_duration_ms: telemetry.last_model_load_duration_ms,
+            last_synthesis_duration_ms: telemetry.last_synthesis_duration_ms,
+            last_generated_audio_duration_ms: telemetry.last_generated_audio_duration_ms,
+            last_real_time_factor: telemetry.last_real_time_factor,
             last_error_category: *self.inner.last_error.read(),
         }
     }
@@ -676,13 +748,19 @@ impl Default for LocalTtsRuntimeManager {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct LocalTtsRuntimeStatus {
     pub selected_model_id: String,
     pub loaded_model_id: Option<String>,
     pub loaded_revision: Option<String>,
     pub runtime_compatibility_version: Option<u32>,
     pub phase: LocalTtsRuntimePhase,
+    pub sample_rate_hz: Option<u32>,
+    pub inference_thread_count: Option<u32>,
+    pub last_model_load_duration_ms: Option<u64>,
+    pub last_synthesis_duration_ms: Option<u64>,
+    pub last_generated_audio_duration_ms: Option<f64>,
+    pub last_real_time_factor: Option<f64>,
     pub last_error_category: Option<LocalTtsRuntimeErrorKind>,
 }
 
@@ -718,5 +796,7 @@ fn current_platform() -> Result<LocalTtsPlatform, LocalTtsRuntimeError> {
     Err(LocalTtsRuntimeError::unsupported_platform())
 }
 
+#[cfg(test)]
+mod telemetry_tests;
 #[cfg(test)]
 mod tests;
