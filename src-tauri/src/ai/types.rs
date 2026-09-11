@@ -54,6 +54,7 @@ pub enum ProviderErrorKind {
     Protocol,
     Setup,
     Model,
+    Cancelled,
     Closed,
     Internal,
 }
@@ -92,6 +93,7 @@ impl ProviderError {
                 "The selected conversation model is unavailable or unsupported.",
                 false,
             ),
+            ProviderErrorKind::Cancelled => ("The provider operation was cancelled.", false),
             ProviderErrorKind::Closed => (
                 "The conversation service closed the session. Try starting a new conversation.",
                 true,
@@ -203,6 +205,10 @@ mod provider_error_tests {
         let network = ProviderError::from_kind(ProviderErrorKind::Network);
         assert!(network.retryable);
         assert!(network.message.contains("network"));
+
+        let cancelled = ProviderError::from_kind(ProviderErrorKind::Cancelled);
+        assert!(!cancelled.retryable);
+        assert!(cancelled.message.contains("cancelled"));
     }
 
     #[test]

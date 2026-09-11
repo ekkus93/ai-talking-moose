@@ -1,6 +1,7 @@
 use crate::ai::types::*;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 #[async_trait]
 pub trait TextModel: Send + Sync {
@@ -10,6 +11,19 @@ pub trait TextModel: Send + Sync {
 #[async_trait]
 pub trait SpeechSynthesizer: Send + Sync {
     async fn synthesize(&self, request: TtsRequest) -> Result<AudioStreamData, ProviderError>;
+
+    async fn synthesize_cancellable(
+        &self,
+        request: TtsRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<AudioStreamData, ProviderError> {
+        tokio::select! {
+            () = cancellation.cancelled() => {
+                Err(ProviderError::from_kind(ProviderErrorKind::Cancelled))
+            }
+            result = self.synthesize(request) => result,
+        }
+    }
 }
 
 #[async_trait]
