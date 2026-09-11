@@ -343,7 +343,8 @@ struct RuntimeTelemetry {
 
 impl RuntimeTelemetry {
     fn record_model_load(&mut self, duration: Duration) {
-        self.last_model_load_duration_ms = Some(duration.as_millis().try_into().unwrap_or(u64::MAX));
+        self.last_model_load_duration_ms =
+            Some(duration.as_millis().try_into().unwrap_or(u64::MAX));
     }
 
     fn record_synthesis(
@@ -351,8 +352,7 @@ impl RuntimeTelemetry {
         result: &Result<LocalTtsInferenceOutput, LocalTtsRuntimeError>,
         duration: Duration,
     ) {
-        self.last_synthesis_duration_ms =
-            Some(duration.as_millis().try_into().unwrap_or(u64::MAX));
+        self.last_synthesis_duration_ms = Some(duration.as_millis().try_into().unwrap_or(u64::MAX));
         match result {
             Ok(output) if output.sample_rate_hz > 0 && !output.samples.is_empty() => {
                 let audio_duration_ms =
@@ -660,10 +660,15 @@ impl LocalTtsRuntimeManager {
             if local_tts_model_manifest(&model_id).is_none() {
                 return Err(LocalTtsRuntimeError::unknown_model());
             }
-            let status = installer.status(&model_id, platform).map_err(|error| match error.kind {
-                LocalTtsInstallErrorKind::UnknownModel => LocalTtsRuntimeError::unknown_model(),
-                _ => LocalTtsRuntimeError::model_delete(),
-            })?;
+            let status =
+                installer
+                    .status(&model_id, platform)
+                    .map_err(|error| match error.kind {
+                        LocalTtsInstallErrorKind::UnknownModel => {
+                            LocalTtsRuntimeError::unknown_model()
+                        }
+                        _ => LocalTtsRuntimeError::model_delete(),
+                    })?;
             if matches!(
                 status.install_state,
                 LocalTtsInstallState::Downloading
