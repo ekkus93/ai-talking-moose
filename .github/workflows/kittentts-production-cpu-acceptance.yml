@@ -1,0 +1,177 @@
+name: KittenTTS production CPU acceptance
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/kittentts-production-cpu-acceptance.yml"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/local_tts/**"
+  push:
+    branches:
+      - master
+      - ralph/ktt-301-kitten-mini-cpu-inference
+    paths:
+      - ".github/workflows/kittentts-production-cpu-acceptance.yml"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/local_tts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kittentts-production-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+  MODEL_FILENAME: kitten_tts_mini_v0_8.onnx
+  MODEL_URL: "https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/c02725660cea441db4c383af69f1f26f5cd00947/kitten_tts_mini_v0_8.onnx?download=true"
+  MODEL_BYTES: "78268016"
+  MODEL_SHA256: "0f5bbae4fc4800c98dbc544a87ecfa79510de2fb8222db30d12e5bfe9177df91"
+  VOICES_FILENAME: voices.npz
+  VOICES_URL: "https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/c02725660cea441db4c383af69f1f26f5cd00947/voices.npz?download=true"
+  VOICES_BYTES: "3278902"
+  VOICES_SHA256: "40ad2638952b77b7b2f30127e2608e169fc69dd256b53bd8aaa3409a33193c42"
+  G2P_FILENAME: cmudict_data.json
+  G2P_URL: "https://raw.githubusercontent.com/ayutaz/piper-plus/244ffeb44108347a514ebfc0c2f773d938c9613b/src/rust/piper-plus-g2p/data/cmudict_data.json"
+  G2P_BYTES: "3748042"
+  G2P_SHA256: "f78ed3bfa40146b70b9de78a7c67ef3be6b6c11671bb2a050442f232252a3f01"
+  ORT_FILENAME: onnxruntime-linux-x64-1.23.2.tgz
+  ORT_URL: "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz"
+  ORT_BYTES: "8309231"
+  ORT_SHA256: "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b"
+
+jobs:
+  cpu-acceptance:
+    name: Real Kitten Mini CPU inference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      HIP_VISIBLE_DEVICES: ""
+      ROCR_VISIBLE_DEVICES: ""
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify acceptance metadata matches the production catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          catalog = Path("src-tauri/src/ai/local_tts/manifest/catalog.rs").read_text()
+          artifacts = [
+              ("MODEL_FILENAME", "MODEL_URL", "MODEL_BYTES", "MODEL_SHA256"),
+              ("VOICES_FILENAME", "VOICES_URL", "VOICES_BYTES", "VOICES_SHA256"),
+              ("G2P_FILENAME", "G2P_URL", "G2P_BYTES", "G2P_SHA256"),
+              ("ORT_FILENAME", "ORT_URL", "ORT_BYTES", "ORT_SHA256"),
+          ]
+          for filename_key, url_key, bytes_key, sha_key in artifacts:
+              filename = os.environ[filename_key]
+              marker = f'filename: "{filename}",'
+              start = catalog.find(marker)
+              if start < 0:
+                  raise SystemExit(f"catalog is missing {filename}")
+              end = catalog.find("        },", start)
+              if end < 0:
+                  end = catalog.find("    },", start)
+              if end < 0:
+                  raise SystemExit(f"could not bound catalog entry for {filename}")
+              block = catalog[start:end]
+              expected = [
+                  f'source_url: "{os.environ[url_key]}",',
+                  f'expected_bytes: {int(os.environ[bytes_key]):_},',
+                  f'sha256: "{os.environ[sha_key]}",',
+              ]
+              missing = [item for item in expected if item not in block]
+              if missing:
+                  raise SystemExit(
+                      f"acceptance metadata drift for {filename}: missing {missing!r}"
+                  )
+          PY
+
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-ktt301-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-ktt301-cargo-
+
+      - name: Download and verify frozen KittenTTS artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/ktt301-artifacts"
+          mkdir -p "$artifact_dir"
+
+          fetch_verified() {
+            local url="$1"
+            local filename="$2"
+            local expected_bytes="$3"
+            local expected_sha="$4"
+            local output="$artifact_dir/$filename"
+
+            curl --fail --location --show-error --silent \
+              --retry 4 --retry-all-errors --retry-delay 2 \
+              --output "$output" "$url"
+
+            local actual_bytes
+            actual_bytes="$(stat -c '%s' "$output")"
+            if [[ "$actual_bytes" != "$expected_bytes" ]]; then
+              echo "size mismatch for $filename: expected $expected_bytes, got $actual_bytes" >&2
+              exit 1
+            fi
+            printf '%s  %s\n' "$expected_sha" "$output" | sha256sum --check --strict
+          }
+
+          fetch_verified "$MODEL_URL" "$MODEL_FILENAME" "$MODEL_BYTES" "$MODEL_SHA256"
+          fetch_verified "$VOICES_URL" "$VOICES_FILENAME" "$VOICES_BYTES" "$VOICES_SHA256"
+          fetch_verified "$G2P_URL" "$G2P_FILENAME" "$G2P_BYTES" "$G2P_SHA256"
+          fetch_verified "$ORT_URL" "$ORT_FILENAME" "$ORT_BYTES" "$ORT_SHA256"
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Run real Kitten Mini CPU acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KTT301_MODEL_PATH="$RUNNER_TEMP/ktt301-artifacts/$MODEL_FILENAME"
+          export KTT301_VOICES_PATH="$RUNNER_TEMP/ktt301-artifacts/$VOICES_FILENAME"
+          export KTT301_G2P_PATH="$RUNNER_TEMP/ktt301-artifacts/$G2P_FILENAME"
+          export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/ktt301-artifacts/$ORT_FILENAME"
+          cargo test \
+            --manifest-path src-tauri/Cargo.toml \
+            --locked \
+            --lib \
+            real_kitten_cpu_acceptance \
+            -- \
+            --ignored \
+            --nocapture \
+            --test-threads=1

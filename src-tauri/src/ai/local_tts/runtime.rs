@@ -7,6 +7,12 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+mod engine;
+mod npz;
+mod tokenize;
+
+use engine::KittenTtsRuntimeEngineFactory;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalTtsRuntimePhase {
@@ -26,6 +32,10 @@ pub enum LocalTtsRuntimeErrorKind {
     Verification,
     UnsupportedPlatform,
     RuntimeUnavailable,
+    InvalidInput,
+    InvalidVoice,
+    UnsupportedConfig,
+    Inference,
     ModelLoad,
     ModelDelete,
 }
@@ -76,10 +86,31 @@ impl LocalTtsRuntimeError {
         )
     }
 
-    fn runtime_unavailable() -> Self {
+    fn invalid_input() -> Self {
         Self::new(
-            LocalTtsRuntimeErrorKind::RuntimeUnavailable,
-            "The Local TTS inference engine is not integrated in this build yet.",
+            LocalTtsRuntimeErrorKind::InvalidInput,
+            "The Local TTS input is empty, too long, or unsupported.",
+        )
+    }
+
+    fn invalid_voice() -> Self {
+        Self::new(
+            LocalTtsRuntimeErrorKind::InvalidVoice,
+            "The selected Local TTS voice is unavailable.",
+        )
+    }
+
+    fn unsupported_config() -> Self {
+        Self::new(
+            LocalTtsRuntimeErrorKind::UnsupportedConfig,
+            "The selected Local TTS configuration is unsupported.",
+        )
+    }
+
+    fn inference() -> Self {
+        Self::new(
+            LocalTtsRuntimeErrorKind::Inference,
+            "Local TTS inference failed.",
         )
     }
 
@@ -106,6 +137,20 @@ impl std::fmt::Display for LocalTtsRuntimeError {
 
 impl std::error::Error for LocalTtsRuntimeError {}
 
+#[derive(Debug, Clone)]
+pub struct LocalTtsInferenceRequest {
+    pub text: String,
+    pub voice_id: String,
+    pub speaking_rate: f32,
+    pub pitch: Option<f32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LocalTtsInferenceOutput {
+    pub samples: Vec<f32>,
+    pub sample_rate_hz: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct LocalTtsRuntimeIdentity {
     pub(super) model_id: String,
@@ -123,19 +168,15 @@ pub(super) trait LocalTtsRuntimeEngine: Send {
         identity: &LocalTtsRuntimeIdentity,
         verified_artifact_paths: &[PathBuf],
     ) -> Result<(), LocalTtsRuntimeError>;
+    fn synthesize(
+        &mut self,
+        request: &LocalTtsInferenceRequest,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError>;
     fn unload(&mut self);
 }
 
 trait LocalTtsRuntimeEngineFactory: Send + Sync {
     fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError>;
-}
-
-struct PendingLocalTtsRuntimeEngineFactory;
-
-impl LocalTtsRuntimeEngineFactory for PendingLocalTtsRuntimeEngineFactory {
-    fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError> {
-        Err(LocalTtsRuntimeError::runtime_unavailable())
-    }
 }
 
 trait RuntimeArtifactVerifier: Send + Sync {
@@ -244,7 +285,7 @@ impl LocalTtsRuntimeManager {
     pub fn new() -> Self {
         Self::with_dependencies(
             Arc::new(GlobalRuntimeArtifactVerifier::default()),
-            Arc::new(PendingLocalTtsRuntimeEngineFactory),
+            Arc::new(KittenTtsRuntimeEngineFactory),
         )
     }
 
@@ -274,6 +315,15 @@ impl LocalTtsRuntimeManager {
 
     pub async fn ensure_loaded(&self, model_id: &str) -> Result<(), LocalTtsRuntimeError> {
         self.with_loaded_engine(model_id, |_| Ok(())).await
+    }
+
+    pub async fn synthesize_f32(
+        &self,
+        model_id: &str,
+        request: LocalTtsInferenceRequest,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        self.with_loaded_engine(model_id, move |engine| engine.synthesize(&request))
+            .await
     }
 
     /// Run one runtime operation against a verified, loaded model while holding the authoritative
