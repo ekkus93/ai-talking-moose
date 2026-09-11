@@ -14,7 +14,7 @@ fn invalid_audio_output() -> ProviderError {
 ///
 /// The runtime sample rate is preserved. Physical-device resampling, volume, queue limits,
 /// diagnostics, and mouth animation remain owned by `AudioPlayback` after this boundary.
-pub(crate) fn inference_output_to_audio_stream_data(
+pub fn inference_output_to_audio_stream_data(
     output: LocalTtsInferenceOutput,
 ) -> Result<AudioStreamData, ProviderError> {
     if output.sample_rate_hz == 0
