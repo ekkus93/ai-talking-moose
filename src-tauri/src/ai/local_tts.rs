@@ -4,11 +4,14 @@ pub mod runtime;
 pub mod runtime_verification;
 pub mod storage;
 
+mod audio;
+
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 
+pub(crate) use audio::inference_output_to_audio_stream_data;
 pub use runtime::{LocalTtsRuntimeManager, LocalTtsRuntimeStatus};
 
 pub const DEFAULT_LOCAL_TTS_MODEL_ID: &str = "KittenML/kitten-tts-mini-0.8";
