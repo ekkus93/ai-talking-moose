@@ -2,10 +2,13 @@ use super::installer::{LocalTtsInstallErrorKind, LocalTtsInstaller};
 use super::manifest::{local_tts_model_manifest, LocalTtsModelManifest, LocalTtsPlatform};
 use super::runtime_verification::{LocalTtsRuntimeVerificationErrorKind, LocalTtsRuntimeVerifier};
 use super::storage::{global_local_tts_storage, LocalTtsInstallState};
+use ort::session::RunOptions;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 mod engine;
 mod npz;
@@ -27,6 +30,7 @@ pub enum LocalTtsRuntimePhase {
 #[serde(rename_all = "snake_case")]
 pub enum LocalTtsRuntimeErrorKind {
     ShuttingDown,
+    Cancelled,
     UnknownModel,
     ModelNotInstalled,
     Verification,
@@ -55,6 +59,13 @@ impl LocalTtsRuntimeError {
         Self::new(
             LocalTtsRuntimeErrorKind::ShuttingDown,
             "The Local TTS runtime is shutting down.",
+        )
+    }
+
+    fn cancelled() -> Self {
+        Self::new(
+            LocalTtsRuntimeErrorKind::Cancelled,
+            "Local TTS synthesis was cancelled.",
         )
     }
 
@@ -151,6 +162,55 @@ pub struct LocalTtsInferenceOutput {
     pub sample_rate_hz: u32,
 }
 
+#[derive(Default)]
+struct LocalTtsRuntimeCancellationInner {
+    cancelled: AtomicBool,
+    run_options: Mutex<Option<Arc<RunOptions>>>,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct LocalTtsRuntimeCancellation {
+    inner: Arc<LocalTtsRuntimeCancellationInner>,
+}
+
+impl LocalTtsRuntimeCancellation {
+    fn cancel(&self) {
+        self.inner.cancelled.store(true, Ordering::SeqCst);
+        let run_options = self.inner.run_options.lock().clone();
+        if let Some(run_options) = run_options {
+            let _ = run_options.terminate();
+        }
+    }
+
+    pub(super) fn is_cancelled(&self) -> bool {
+        self.inner.cancelled.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn check_cancelled(&self) -> Result<(), LocalTtsRuntimeError> {
+        if self.is_cancelled() {
+            Err(LocalTtsRuntimeError::cancelled())
+        } else {
+            Ok(())
+        }
+    }
+
+    pub(super) fn install_run_options(&self, run_options: Arc<RunOptions>) {
+        *self.inner.run_options.lock() = Some(run_options.clone());
+        if self.is_cancelled() {
+            let _ = run_options.terminate();
+        }
+    }
+
+    pub(super) fn clear_run_options(&self) {
+        *self.inner.run_options.lock() = None;
+    }
+
+    #[cfg(test)]
+    pub(super) fn has_run_options(&self) -> bool {
+        self.inner.run_options.lock().is_some()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct LocalTtsRuntimeIdentity {
     pub(super) model_id: String,
@@ -172,6 +232,14 @@ pub(super) trait LocalTtsRuntimeEngine: Send {
         &mut self,
         request: &LocalTtsInferenceRequest,
     ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError>;
+    fn synthesize_cancellable(
+        &mut self,
+        request: &LocalTtsInferenceRequest,
+        cancellation: &LocalTtsRuntimeCancellation,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        cancellation.check_cancelled()?;
+        self.synthesize(request)
+    }
     fn unload(&mut self);
 }
 
@@ -268,6 +336,7 @@ struct LocalTtsRuntimeInner {
     state: Arc<Mutex<RuntimeState>>,
     phase: RwLock<LocalTtsRuntimePhase>,
     last_error: RwLock<Option<LocalTtsRuntimeErrorKind>>,
+    active_synthesis: Mutex<Option<LocalTtsRuntimeCancellation>>,
     verifier: Arc<dyn RuntimeArtifactVerifier>,
     factory: Arc<dyn LocalTtsRuntimeEngineFactory>,
 }
@@ -299,6 +368,7 @@ impl LocalTtsRuntimeManager {
                 state: Arc::new(Mutex::new(RuntimeState::new())),
                 phase: RwLock::new(LocalTtsRuntimePhase::Unloaded),
                 last_error: RwLock::new(None),
+                active_synthesis: Mutex::new(None),
                 verifier,
                 factory,
             }),
@@ -324,6 +394,59 @@ impl LocalTtsRuntimeManager {
     ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
         self.with_loaded_engine(model_id, move |engine| engine.synthesize(&request))
             .await
+    }
+
+    pub async fn synthesize_f32_cancellable(
+        &self,
+        model_id: &str,
+        request: LocalTtsInferenceRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        self.ensure_running()?;
+        if cancellation.is_cancelled() {
+            return Err(LocalTtsRuntimeError::cancelled());
+        }
+
+        let platform = current_platform()?;
+        let manifest =
+            local_tts_model_manifest(model_id).ok_or_else(LocalTtsRuntimeError::unknown_model)?;
+        let identity = runtime_identity(manifest, platform);
+        let operation_lock = self.inner.operation_lock.clone();
+        let _operation = tokio::select! {
+            () = cancellation.cancelled() => {
+                return Err(LocalTtsRuntimeError::cancelled());
+            }
+            operation = operation_lock.lock_owned() => operation,
+        };
+        self.ensure_running()?;
+        if cancellation.is_cancelled() {
+            return Err(LocalTtsRuntimeError::cancelled());
+        }
+
+        let runtime_cancellation = LocalTtsRuntimeCancellation::default();
+        *self.inner.active_synthesis.lock() = Some(runtime_cancellation.clone());
+        let watcher_cancellation = runtime_cancellation.clone();
+        let token = cancellation.clone();
+        let watcher = tokio::spawn(async move {
+            token.cancelled().await;
+            watcher_cancellation.cancel();
+        });
+
+        let worker_cancellation = runtime_cancellation.clone();
+        let result = self
+            .with_loaded_identity_locked(identity, move |engine| {
+                worker_cancellation.check_cancelled()?;
+                engine.synthesize_cancellable(&request, &worker_cancellation)
+            })
+            .await;
+
+        watcher.abort();
+        self.inner.active_synthesis.lock().take();
+        if cancellation.is_cancelled() {
+            *self.inner.last_error.write() = Some(LocalTtsRuntimeErrorKind::Cancelled);
+            return Err(LocalTtsRuntimeError::cancelled());
+        }
+        result
     }
 
     /// Run one runtime operation against a verified, loaded model while holding the authoritative
@@ -362,7 +485,20 @@ impl LocalTtsRuntimeManager {
         let operation_lock = self.inner.operation_lock.clone();
         let _operation = operation_lock.lock_owned().await;
         self.ensure_running()?;
+        self.with_loaded_identity_locked(identity, operation).await
+    }
 
+    async fn with_loaded_identity_locked<T, F>(
+        &self,
+        identity: LocalTtsRuntimeIdentity,
+        operation: F,
+    ) -> Result<T, LocalTtsRuntimeError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut dyn LocalTtsRuntimeEngine) -> Result<T, LocalTtsRuntimeError>
+            + Send
+            + 'static,
+    {
         let already_loaded = self.inner.state.lock().loaded.as_ref() == Some(&identity);
         if !already_loaded {
             *self.inner.phase.write() = LocalTtsRuntimePhase::Loading;
@@ -413,6 +549,14 @@ impl LocalTtsRuntimeManager {
             Ok(_) => {
                 *self.inner.phase.write() = LocalTtsRuntimePhase::Ready;
                 *self.inner.last_error.write() = None;
+            }
+            Err(error) if error.kind == LocalTtsRuntimeErrorKind::Cancelled => {
+                *self.inner.phase.write() = if self.inner.state.lock().loaded.is_some() {
+                    LocalTtsRuntimePhase::Ready
+                } else {
+                    LocalTtsRuntimePhase::Unloaded
+                };
+                *self.inner.last_error.write() = Some(LocalTtsRuntimeErrorKind::Cancelled);
             }
             Err(error) => {
                 *self.inner.phase.write() = LocalTtsRuntimePhase::Failed;
@@ -502,6 +646,9 @@ impl LocalTtsRuntimeManager {
 
     pub fn begin_shutdown(&self) {
         *self.inner.phase.write() = LocalTtsRuntimePhase::ShuttingDown;
+        if let Some(cancellation) = self.inner.active_synthesis.lock().as_ref() {
+            cancellation.cancel();
+        }
     }
 
     pub async fn shutdown(&self) -> Result<(), LocalTtsRuntimeError> {
