@@ -109,7 +109,7 @@ fn parse_npy(bytes: &[u8]) -> Result<NpyArray, LocalTtsRuntimeError> {
     let shape = parse_shape(
         extract_header_field(header, "shape").ok_or_else(LocalTtsRuntimeError::model_load)?,
     )?;
-    if shape.len() != 2 || shape.iter().any(|dimension| *dimension == 0) {
+    if shape.len() != 2 || shape.contains(&0) {
         return fail();
     }
     let count = shape.iter().try_fold(1usize, |count, dimension| {
@@ -128,14 +128,17 @@ fn parse_npy(bytes: &[u8]) -> Result<NpyArray, LocalTtsRuntimeError> {
     }
 
     let big_endian = dtype.starts_with('>');
-    let data = data_bytes[..byte_count]
-        .chunks_exact(4)
-        .map(|chunk| {
-            let raw = [chunk[0], chunk[1], chunk[2], chunk[3]];
+    let (chunks, remainder) = data_bytes[..byte_count].as_chunks::<4>();
+    if !remainder.is_empty() {
+        return fail();
+    }
+    let data = chunks
+        .iter()
+        .map(|raw| {
             if big_endian {
-                f32::from_be_bytes(raw)
+                f32::from_be_bytes(*raw)
             } else {
-                f32::from_le_bytes(raw)
+                f32::from_le_bytes(*raw)
             }
         })
         .collect();
@@ -145,7 +148,7 @@ fn parse_npy(bytes: &[u8]) -> Result<NpyArray, LocalTtsRuntimeError> {
 pub(super) fn load_npz(path: &Path) -> Result<HashMap<String, NpyArray>, LocalTtsRuntimeError> {
     let file = std::fs::File::open(path).map_err(|_| LocalTtsRuntimeError::model_load())?;
     let mut archive = ZipArchive::new(file).map_err(|_| LocalTtsRuntimeError::model_load())?;
-    if archive.len() == 0 || archive.len() > MAX_NPZ_ENTRIES {
+    if archive.is_empty() || archive.len() > MAX_NPZ_ENTRIES {
         return fail();
     }
 
