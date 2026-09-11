@@ -7,6 +7,7 @@ pub mod storage;
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
 use async_trait::async_trait;
+use tokio_util::sync::CancellationToken;
 
 pub use runtime::{LocalTtsRuntimeManager, LocalTtsRuntimeStatus};
 
@@ -49,6 +50,17 @@ impl SpeechSynthesizer for PendingLocalSpeechSynthesizer {
             retryable: false,
         })
     }
+
+    async fn synthesize_cancellable(
+        &self,
+        request: TtsRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<AudioStreamData, ProviderError> {
+        if cancellation.is_cancelled() {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Cancelled));
+        }
+        self.synthesize(request).await
+    }
 }
 
 #[cfg(test)]
@@ -65,6 +77,28 @@ mod tests {
     fn local_tts_catalog_rejects_unknown_values() {
         assert!(validate_local_tts_model("latest").is_err());
         assert!(validate_local_tts_voice("Fenrir").is_err());
+    }
+
+    #[tokio::test]
+    async fn pending_local_runtime_reports_provider_neutral_cancellation() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let error = PendingLocalSpeechSynthesizer
+            .synthesize_cancellable(
+                TtsRequest {
+                    text: "cancelled local text".to_string(),
+                    voice_name: Some(DEFAULT_LOCAL_TTS_VOICE.to_string()),
+                    speaking_rate: Some(1.0),
+                    pitch: None,
+                },
+                &cancellation,
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.kind, ProviderErrorKind::Cancelled);
+        assert!(!error.retryable);
+        assert!(!error.message.contains("cancelled local text"));
     }
 
     #[tokio::test]
