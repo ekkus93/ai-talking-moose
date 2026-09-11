@@ -14,6 +14,8 @@ import {
   LocalLlmDiagnostics,
   LocalModelDescriptor,
   LocalModelInstallProgress,
+  LocalTtsInstallProgress,
+  LocalTtsModelDescriptor,
   MemoryRecord,
   MicrophonePermissionState,
   MicrophoneTestResult,
@@ -24,9 +26,6 @@ import {
 } from "../types/moose";
 import { browserPreviewBridge } from "./browserPreviewBridge";
 
-// Tauri 2 exposes its low-level IPC function through this internal object.
-// Checking the function rather than mere object presence makes a malformed or
-// partially injected browser global fail closed instead of looking native.
 export const isTauri = () => {
   if (typeof window === "undefined") return false;
   const internals = (
@@ -82,6 +81,36 @@ export const nativeTauriBridge = {
   async getTtsCatalog(): Promise<TtsCatalog> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<TtsCatalog>("get_tts_catalog");
+  },
+
+  async getLocalTtsModels(): Promise<LocalTtsModelDescriptor[]> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalTtsModelDescriptor[]>("get_local_tts_models");
+  },
+
+  async installLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalTtsModelDescriptor>("install_local_tts_model", { modelId });
+  },
+
+  async cancelLocalTtsInstall(modelId: string): Promise<boolean> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("cancel_local_tts_install", { modelId });
+  },
+
+  async deleteLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalTtsModelDescriptor>("delete_local_tts_model", { modelId });
+  },
+
+  async onLocalTtsModelProgress(
+    callback: (progress: LocalTtsInstallProgress) => void,
+  ): Promise<() => void> {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<LocalTtsInstallProgress>(
+      "moose://local-tts/model-progress",
+      (event) => callback(event.payload),
+    );
   },
 
   async getAsrModels(): Promise<AsrModelDescriptor[]> {
@@ -320,10 +349,6 @@ export const selectTauriBridge = (
   );
 };
 
-// `import.meta.env.DEV` is replaced by Vite at build time. It is not a query
-// parameter, localStorage value, browser global, or user-configurable runtime
-// switch. A production bundle therefore cannot opt into fabricated preview
-// behavior when Tauri IPC is absent or malformed.
 const developmentPreviewAllowed = import.meta.env.DEV;
 
 export const tauriBridge = selectTauriBridge(
