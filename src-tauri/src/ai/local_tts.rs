@@ -14,9 +14,7 @@ use tokio_util::sync::CancellationToken;
 pub use audio::inference_output_to_audio_stream_data;
 pub use runtime::{LocalTtsRuntimeManager, LocalTtsRuntimeStatus};
 
-use runtime::{
-    LocalTtsInferenceRequest, LocalTtsRuntimeError, LocalTtsRuntimeErrorKind,
-};
+use runtime::{LocalTtsInferenceRequest, LocalTtsRuntimeError, LocalTtsRuntimeErrorKind};
 
 pub const DEFAULT_LOCAL_TTS_MODEL_ID: &str = "KittenML/kitten-tts-mini-0.8";
 pub const DEFAULT_LOCAL_TTS_VOICE: &str = "Bella";
