@@ -19,6 +19,7 @@ export type ProviderErrorKind =
   | "protocol"
   | "setup"
   | "model"
+  | "cancelled"
   | "closed"
   | "internal";
 

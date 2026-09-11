@@ -9,6 +9,7 @@ use base64::Engine;
 use reqwest::{Client, RequestBuilder, StatusCode};
 use serde_json::json;
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 const TTS_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
@@ -94,6 +95,18 @@ impl GoogleSpeechSynthesizer {
 #[async_trait]
 impl SpeechSynthesizer for GoogleSpeechSynthesizer {
     async fn synthesize(&self, request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
+        let cancellation = CancellationToken::new();
+        self.synthesize_cancellable(request, &cancellation).await
+    }
+
+    async fn synthesize_cancellable(
+        &self,
+        request: TtsRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<AudioStreamData, ProviderError> {
+        if cancellation.is_cancelled() {
+            return Err(Self::safe_error(ProviderErrorKind::Cancelled));
+        }
         if !self.auth.is_valid() {
             return Err(Self::safe_error(ProviderErrorKind::Auth));
         }
@@ -130,26 +143,38 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
             }
         });
 
-        let response = self
-            .generation_request(&body)
-            .timeout(TTS_REQUEST_TIMEOUT)
-            .send()
-            .await
-            .map_err(|_| {
-                let error = Self::safe_error(ProviderErrorKind::Network);
-                trace_google_provider_failure("tts", &error);
-                error
-            })?;
+        let response = tokio::select! {
+            () = cancellation.cancelled() => {
+                return Err(Self::safe_error(ProviderErrorKind::Cancelled));
+            }
+            response = self
+                .generation_request(&body)
+                .timeout(TTS_REQUEST_TIMEOUT)
+                .send() => {
+                response.map_err(|_| {
+                    let error = Self::safe_error(ProviderErrorKind::Network);
+                    trace_google_provider_failure("tts", &error);
+                    error
+                })?
+            }
+        };
         if !response.status().is_success() {
             let error = Self::classify_status(response.status());
             trace_google_provider_failure("tts", &error);
             return Err(error);
         }
 
-        let payload = response
-            .json::<serde_json::Value>()
-            .await
-            .map_err(|_| Self::safe_error(ProviderErrorKind::Protocol))?;
+        let payload = tokio::select! {
+            () = cancellation.cancelled() => {
+                return Err(Self::safe_error(ProviderErrorKind::Cancelled));
+            }
+            payload = response.json::<serde_json::Value>() => {
+                payload.map_err(|_| Self::safe_error(ProviderErrorKind::Protocol))?
+            }
+        };
+        if cancellation.is_cancelled() {
+            return Err(Self::safe_error(ProviderErrorKind::Cancelled));
+        }
         let parts = payload["candidates"][0]["content"]["parts"]
             .as_array()
             .ok_or_else(|| Self::safe_error(ProviderErrorKind::Protocol))?;
@@ -176,6 +201,30 @@ impl SpeechSynthesizer for GoogleSpeechSynthesizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn cancelled_tts_fails_before_http_send() {
+        let synthesizer = GoogleSpeechSynthesizer::new(
+            GoogleAuth::new("valid-test-key".to_string()),
+            crate::ai::google::config::DEFAULT_TTS_MODEL.to_string(),
+            "Fenrir".to_string(),
+        );
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let error = synthesizer
+            .synthesize_cancellable(
+                TtsRequest {
+                    text: "cancel before send".to_string(),
+                    voice_name: Some("Fenrir".to_string()),
+                    speaking_rate: Some(1.0),
+                    pitch: Some(0.0),
+                },
+                &cancellation,
+            )
+            .await
+            .expect_err("cancelled TTS must stop before HTTP I/O");
+        assert_eq!(error.kind, ProviderErrorKind::Cancelled);
+    }
 
     #[tokio::test]
     async fn network_denial_harness_blocks_tts_before_http_send() {

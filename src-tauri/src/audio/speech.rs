@@ -1,5 +1,5 @@
 use crate::ai::traits::SpeechSynthesizer;
-use crate::ai::types::TtsRequest;
+use crate::ai::types::{ProviderErrorKind, TtsRequest};
 use crate::audio::playback::{AudioPlayback, PlaybackEnqueueReport};
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -81,14 +81,16 @@ pub async fn synthesize_and_queue_cancellable(
     output_device: Option<String>,
     cancellation: &CancellationToken,
 ) -> Result<PlaybackEnqueueReport, String> {
-    let audio = tokio::select! {
-        () = cancellation.cancelled() => {
-            return Err(STANDALONE_SPEECH_CANCELLED.to_string());
-        }
-        result = synthesizer.synthesize(request) => {
-            result.map_err(|error| error.message)?
-        }
-    };
+    let audio = synthesizer
+        .synthesize_cancellable(request, cancellation)
+        .await
+        .map_err(|error| {
+            if error.kind == ProviderErrorKind::Cancelled || cancellation.is_cancelled() {
+                STANDALONE_SPEECH_CANCELLED.to_string()
+            } else {
+                error.message
+            }
+        })?;
 
     if cancellation.is_cancelled() {
         return Err(STANDALONE_SPEECH_CANCELLED.to_string());
@@ -172,7 +174,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn explicit_cancellation_aborts_in_flight_synthesis_and_flushes_playback() {
+    async fn explicit_cancellation_reaches_provider_contract_and_flushes_playback() {
         let synthesizer = NeverSynthesizer;
         let playback = AudioPlayback::new_mock();
         let controller = StandaloneSpeechController::new();
