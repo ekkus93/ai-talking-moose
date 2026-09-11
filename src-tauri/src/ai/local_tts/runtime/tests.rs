@@ -3,6 +3,7 @@ use crate::ai::local_tts::DEFAULT_LOCAL_TTS_MODEL_ID;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::Barrier;
+use tokio_util::sync::CancellationToken;
 
 struct FakeVerifier {
     calls: AtomicUsize,
@@ -82,6 +83,57 @@ impl LocalTtsRuntimeEngineFactory for FakeFactory {
     }
 }
 
+struct BlockingCancellationEngine {
+    entered: Arc<AtomicBool>,
+    exited: Arc<AtomicBool>,
+}
+
+impl LocalTtsRuntimeEngine for BlockingCancellationEngine {
+    fn load(
+        &mut self,
+        _identity: &LocalTtsRuntimeIdentity,
+        _paths: &[PathBuf],
+    ) -> Result<(), LocalTtsRuntimeError> {
+        Ok(())
+    }
+
+    fn synthesize(
+        &mut self,
+        _request: &LocalTtsInferenceRequest,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        Err(LocalTtsRuntimeError::inference())
+    }
+
+    fn synthesize_cancellable(
+        &mut self,
+        _request: &LocalTtsInferenceRequest,
+        cancellation: &LocalTtsRuntimeCancellation,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        self.entered.store(true, Ordering::SeqCst);
+        while !cancellation.is_cancelled() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        self.exited.store(true, Ordering::SeqCst);
+        Err(LocalTtsRuntimeError::cancelled())
+    }
+
+    fn unload(&mut self) {}
+}
+
+struct BlockingCancellationFactory {
+    entered: Arc<AtomicBool>,
+    exited: Arc<AtomicBool>,
+}
+
+impl LocalTtsRuntimeEngineFactory for BlockingCancellationFactory {
+    fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError> {
+        Ok(Box::new(BlockingCancellationEngine {
+            entered: self.entered.clone(),
+            exited: self.exited.clone(),
+        }))
+    }
+}
+
 fn manager() -> (
     LocalTtsRuntimeManager,
     Arc<FakeVerifier>,
@@ -96,6 +148,25 @@ fn manager() -> (
         }),
     );
     (manager, verifier, counters)
+}
+
+fn inference_request() -> LocalTtsInferenceRequest {
+    LocalTtsInferenceRequest {
+        text: "Cancellation probe".to_string(),
+        voice_id: "Jasper".to_string(),
+        speaking_rate: 1.0,
+        pitch: None,
+    }
+}
+
+async fn wait_until_true(flag: &AtomicBool) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !flag.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    })
+    .await
+    .expect("test condition should become true");
 }
 
 #[test]
@@ -197,6 +268,139 @@ async fn concurrent_runtime_operations_are_serialized_on_one_warm_engine() {
     assert_eq!(counters.creates.load(Ordering::SeqCst), 1);
     assert_eq!(counters.loads.load(Ordering::SeqCst), 1);
     assert_eq!(counters.unloads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancellation_while_waiting_for_runtime_slot_returns_promptly() {
+    let (manager, _verifier, _counters) = manager();
+    let manager = Arc::new(manager);
+    let blocker_entered = Arc::new(AtomicBool::new(false));
+    let blocker = {
+        let manager = manager.clone();
+        let blocker_entered = blocker_entered.clone();
+        tokio::spawn(async move {
+            manager
+                .with_loaded_engine(DEFAULT_LOCAL_TTS_MODEL_ID, move |_engine| {
+                    blocker_entered.store(true, Ordering::SeqCst);
+                    std::thread::sleep(Duration::from_millis(200));
+                    Ok(())
+                })
+                .await
+        })
+    };
+    wait_until_true(&blocker_entered).await;
+
+    let cancellation = CancellationToken::new();
+    let synthesis = {
+        let manager = manager.clone();
+        let token = cancellation.clone();
+        tokio::spawn(async move {
+            manager
+                .synthesize_f32_cancellable(
+                    DEFAULT_LOCAL_TTS_MODEL_ID,
+                    inference_request(),
+                    &token,
+                )
+                .await
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    cancellation.cancel();
+
+    let error = tokio::time::timeout(Duration::from_millis(75), synthesis)
+        .await
+        .expect("cancelled waiter must not wait for the busy runtime slot")
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(error.kind, LocalTtsRuntimeErrorKind::Cancelled);
+    blocker.await.unwrap().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn blocking_inference_cancels_without_starving_unrelated_tokio_work() {
+    let verifier = Arc::new(FakeVerifier::new());
+    let entered = Arc::new(AtomicBool::new(false));
+    let exited = Arc::new(AtomicBool::new(false));
+    let manager = Arc::new(LocalTtsRuntimeManager::with_dependencies(
+        verifier,
+        Arc::new(BlockingCancellationFactory {
+            entered: entered.clone(),
+            exited: exited.clone(),
+        }),
+    ));
+    let cancellation = CancellationToken::new();
+    let synthesis = {
+        let manager = manager.clone();
+        let token = cancellation.clone();
+        tokio::spawn(async move {
+            manager
+                .synthesize_f32_cancellable(
+                    DEFAULT_LOCAL_TTS_MODEL_ID,
+                    inference_request(),
+                    &token,
+                )
+                .await
+        })
+    };
+    wait_until_true(&entered).await;
+
+    let unrelated = tokio::spawn(async {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        42_u8
+    });
+    cancellation.cancel();
+
+    assert_eq!(
+        tokio::time::timeout(Duration::from_millis(100), unrelated)
+            .await
+            .expect("blocking inference must not starve Tokio")
+            .unwrap(),
+        42
+    );
+    let error = tokio::time::timeout(Duration::from_millis(250), synthesis)
+        .await
+        .expect("cancelled blocking inference must drain promptly")
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(error.kind, LocalTtsRuntimeErrorKind::Cancelled);
+    assert!(exited.load(Ordering::SeqCst));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn shutdown_cancels_active_synthesis_and_drains_worker() {
+    let verifier = Arc::new(FakeVerifier::new());
+    let entered = Arc::new(AtomicBool::new(false));
+    let exited = Arc::new(AtomicBool::new(false));
+    let manager = Arc::new(LocalTtsRuntimeManager::with_dependencies(
+        verifier,
+        Arc::new(BlockingCancellationFactory {
+            entered: entered.clone(),
+            exited: exited.clone(),
+        }),
+    ));
+    let token = CancellationToken::new();
+    let synthesis = {
+        let manager = manager.clone();
+        tokio::spawn(async move {
+            manager
+                .synthesize_f32_cancellable(
+                    DEFAULT_LOCAL_TTS_MODEL_ID,
+                    inference_request(),
+                    &token,
+                )
+                .await
+        })
+    };
+    wait_until_true(&entered).await;
+
+    manager.begin_shutdown();
+    tokio::time::timeout(Duration::from_millis(250), manager.shutdown())
+        .await
+        .expect("shutdown must drain a cancelled active worker")
+        .unwrap();
+    let error = synthesis.await.unwrap().unwrap_err();
+    assert_eq!(error.kind, LocalTtsRuntimeErrorKind::Cancelled);
+    assert!(exited.load(Ordering::SeqCst));
 }
 
 #[tokio::test]
