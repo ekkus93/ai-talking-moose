@@ -1,5 +1,7 @@
+use crate::ai::google::{GoogleAuth, GoogleSpeechSynthesizer};
+use crate::ai::local_tts::LocalSpeechSynthesizer;
 use crate::ai::traits::SpeechSynthesizer;
-use crate::ai::types::TtsRequest;
+use crate::ai::types::{TtsProvider, TtsRequest};
 use crate::app::state::AppState;
 use crate::audio::playback::AudioPlayback;
 use crate::audio::speech::{synthesize_and_queue_cancellable, StandaloneSpeechController};
@@ -37,21 +39,70 @@ impl StandaloneSpeechPlayback {
     }
 }
 
-fn tts_request(
-    state: &AppState,
-    text: &str,
-    voice_override: Option<String>,
-) -> (TtsRequest, Option<String>) {
-    let settings = state.settings.read();
-    (
+#[derive(Debug, Clone, PartialEq)]
+struct StandaloneTtsSettingsSnapshot {
+    provider: TtsProvider,
+    model_id: String,
+    voice_id: String,
+    speaking_rate: f32,
+    pitch: Option<f32>,
+    output_device: Option<String>,
+}
+
+impl StandaloneTtsSettingsSnapshot {
+    fn request(&self, text: &str) -> TtsRequest {
         TtsRequest {
             text: text.to_string(),
-            voice_name: Some(voice_override.unwrap_or_else(|| settings.google_tts_voice.clone())),
-            speaking_rate: Some(settings.speaking_rate),
+            voice_name: Some(self.voice_id.clone()),
+            speaking_rate: Some(self.speaking_rate),
+            pitch: self.pitch,
+        }
+    }
+}
+
+fn standalone_tts_snapshot(
+    state: &AppState,
+    voice_override: Option<String>,
+) -> StandaloneTtsSettingsSnapshot {
+    let settings = state.settings.read();
+    match settings.tts_provider {
+        TtsProvider::Google => StandaloneTtsSettingsSnapshot {
+            provider: TtsProvider::Google,
+            model_id: settings.google_tts_model.clone(),
+            voice_id: voice_override.unwrap_or_else(|| settings.google_tts_voice.clone()),
+            speaking_rate: settings.speaking_rate,
             pitch: Some(settings.pitch),
+            output_device: settings.output_device.clone(),
         },
-        settings.output_device.clone(),
-    )
+        TtsProvider::Local => StandaloneTtsSettingsSnapshot {
+            provider: TtsProvider::Local,
+            model_id: settings.local_tts_model.clone(),
+            voice_id: voice_override.unwrap_or_else(|| settings.local_tts_voice.clone()),
+            speaking_rate: settings.speaking_rate,
+            // Kitten Mini has no truthful model-level pitch control. Keep the persisted Google
+            // pitch preference untouched while omitting it from Local synthesis.
+            pitch: None,
+            output_device: settings.output_device.clone(),
+        },
+    }
+}
+
+fn synthesizer_for_snapshot(
+    state: &AppState,
+    snapshot: &StandaloneTtsSettingsSnapshot,
+) -> Box<dyn SpeechSynthesizer> {
+    match snapshot.provider {
+        TtsProvider::Google => Box::new(GoogleSpeechSynthesizer::new(
+            GoogleAuth::new(state.secrets.get_google_api_key().unwrap_or_default()),
+            snapshot.model_id.clone(),
+            snapshot.voice_id.clone(),
+        )),
+        TtsProvider::Local => Box::new(LocalSpeechSynthesizer::new(
+            state.local_tts_runtime.clone(),
+            snapshot.model_id.clone(),
+            snapshot.voice_id.clone(),
+        )),
+    }
 }
 
 async fn synthesize_standalone(
@@ -108,8 +159,12 @@ pub(crate) async fn invoke_standalone_speech<R: Runtime>(
     text: &str,
     voice_override: Option<String>,
 ) -> Result<StandaloneSpeechPlayback, String> {
-    let (request, output_device) = tts_request(state, text, voice_override);
-    let synthesizer = state.get_speech_synthesizer();
+    // Capture provider/model/voice/rate/pitch/output-device under one settings read. Any settings
+    // change racing this utterance applies to the next utterance instead of mixing providers.
+    let snapshot = standalone_tts_snapshot(state, voice_override);
+    let request = snapshot.request(text);
+    let output_device = snapshot.output_device.clone();
+    let synthesizer = synthesizer_for_snapshot(state, &snapshot);
     let playback = synthesize_standalone(
         synthesizer.as_ref(),
         state.audio_playback.as_ref(),
@@ -150,6 +205,7 @@ pub(crate) fn schedule_standalone_completion<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::local_tts::{DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE};
     use crate::ai::types::{AudioStreamData, ProviderError};
     use async_trait::async_trait;
 
@@ -163,6 +219,76 @@ mod tests {
                 sample_rate: 24_000,
             })
         }
+    }
+
+    #[test]
+    fn standalone_snapshot_uses_local_identity_and_never_applies_google_pitch() {
+        let state = AppState::new_for_tests().unwrap();
+        {
+            let mut settings = state.settings.write();
+            settings.tts_provider = TtsProvider::Local;
+            settings.google_tts_voice = "Puck".to_string();
+            settings.local_tts_model = DEFAULT_LOCAL_TTS_MODEL_ID.to_string();
+            settings.local_tts_voice = DEFAULT_LOCAL_TTS_VOICE.to_string();
+            settings.speaking_rate = 1.25;
+            settings.pitch = -7.0;
+            settings.output_device = Some("local-output".to_string());
+        }
+
+        let snapshot = standalone_tts_snapshot(&state, Some("Kiki".to_string()));
+        assert_eq!(snapshot.provider, TtsProvider::Local);
+        assert_eq!(snapshot.model_id, DEFAULT_LOCAL_TTS_MODEL_ID);
+        assert_eq!(snapshot.voice_id, "Kiki");
+        assert_eq!(snapshot.speaking_rate, 1.25);
+        assert_eq!(snapshot.pitch, None);
+        assert_eq!(snapshot.output_device.as_deref(), Some("local-output"));
+    }
+
+    #[test]
+    fn standalone_snapshot_is_immutable_across_racing_settings_changes() {
+        let state = AppState::new_for_tests().unwrap();
+        {
+            let mut settings = state.settings.write();
+            settings.tts_provider = TtsProvider::Local;
+            settings.local_tts_model = DEFAULT_LOCAL_TTS_MODEL_ID.to_string();
+            settings.local_tts_voice = "Luna".to_string();
+            settings.speaking_rate = 0.9;
+            settings.output_device = Some("before".to_string());
+        }
+        let snapshot = standalone_tts_snapshot(&state, None);
+
+        {
+            let mut settings = state.settings.write();
+            settings.tts_provider = TtsProvider::Google;
+            settings.google_tts_model = "changed-google-model".to_string();
+            settings.google_tts_voice = "Puck".to_string();
+            settings.local_tts_voice = "Leo".to_string();
+            settings.speaking_rate = 1.8;
+            settings.output_device = Some("after".to_string());
+        }
+
+        assert_eq!(snapshot.provider, TtsProvider::Local);
+        assert_eq!(snapshot.model_id, DEFAULT_LOCAL_TTS_MODEL_ID);
+        assert_eq!(snapshot.voice_id, "Luna");
+        assert_eq!(snapshot.speaking_rate, 0.9);
+        assert_eq!(snapshot.output_device.as_deref(), Some("before"));
+    }
+
+    #[test]
+    fn google_snapshot_preserves_google_pitch_and_does_not_read_local_voice() {
+        let state = AppState::new_for_tests().unwrap();
+        {
+            let mut settings = state.settings.write();
+            settings.tts_provider = TtsProvider::Google;
+            settings.google_tts_voice = "Puck".to_string();
+            settings.local_tts_voice = "Luna".to_string();
+            settings.pitch = -2.5;
+        }
+
+        let snapshot = standalone_tts_snapshot(&state, None);
+        assert_eq!(snapshot.provider, TtsProvider::Google);
+        assert_eq!(snapshot.voice_id, "Puck");
+        assert_eq!(snapshot.pitch, Some(-2.5));
     }
 
     #[tokio::test]
