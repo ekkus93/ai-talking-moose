@@ -86,13 +86,6 @@ impl LocalTtsRuntimeError {
         )
     }
 
-    fn runtime_unavailable() -> Self {
-        Self::new(
-            LocalTtsRuntimeErrorKind::RuntimeUnavailable,
-            "The Local TTS inference engine is not integrated in this build yet.",
-        )
-    }
-
     fn invalid_input() -> Self {
         Self::new(
             LocalTtsRuntimeErrorKind::InvalidInput,
@@ -184,14 +177,6 @@ pub(super) trait LocalTtsRuntimeEngine: Send {
 
 trait LocalTtsRuntimeEngineFactory: Send + Sync {
     fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError>;
-}
-
-struct PendingLocalTtsRuntimeEngineFactory;
-
-impl LocalTtsRuntimeEngineFactory for PendingLocalTtsRuntimeEngineFactory {
-    fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError> {
-        Err(LocalTtsRuntimeError::runtime_unavailable())
-    }
 }
 
 trait RuntimeArtifactVerifier: Send + Sync {
