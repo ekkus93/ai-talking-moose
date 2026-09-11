@@ -134,6 +134,35 @@ impl LocalTtsRuntimeEngineFactory for BlockingCancellationFactory {
     }
 }
 
+struct FailingLoadEngine;
+
+impl LocalTtsRuntimeEngine for FailingLoadEngine {
+    fn load(
+        &mut self,
+        _identity: &LocalTtsRuntimeIdentity,
+        _paths: &[PathBuf],
+    ) -> Result<(), LocalTtsRuntimeError> {
+        Err(LocalTtsRuntimeError::model_load())
+    }
+
+    fn synthesize(
+        &mut self,
+        _request: &LocalTtsInferenceRequest,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        panic!("inference must not run when model load fails")
+    }
+
+    fn unload(&mut self) {}
+}
+
+struct FailingLoadFactory;
+
+impl LocalTtsRuntimeEngineFactory for FailingLoadFactory {
+    fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError> {
+        Ok(Box::new(FailingLoadEngine))
+    }
+}
+
 fn manager() -> (
     LocalTtsRuntimeManager,
     Arc<FakeVerifier>,
@@ -435,6 +464,45 @@ async fn invalidation_unloads_and_verification_failure_cannot_reload() {
         .unwrap_err();
     assert_eq!(error.kind, LocalTtsRuntimeErrorKind::Verification);
     assert_eq!(counters.loads.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string()).phase,
+        LocalTtsRuntimePhase::Failed
+    );
+}
+
+#[tokio::test]
+async fn model_load_failure_is_typed_and_blocks_inference() {
+    let manager = LocalTtsRuntimeManager::with_dependencies(
+        Arc::new(FakeVerifier::new()),
+        Arc::new(FailingLoadFactory),
+    );
+    let error = manager
+        .synthesize_f32(DEFAULT_LOCAL_TTS_MODEL_ID, inference_request())
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.kind, LocalTtsRuntimeErrorKind::ModelLoad);
+    assert_eq!(
+        manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string()).phase,
+        LocalTtsRuntimePhase::Failed
+    );
+}
+
+#[tokio::test]
+async fn inference_failure_is_typed_and_leaves_runtime_failed() {
+    let manager = LocalTtsRuntimeManager::with_dependencies(
+        Arc::new(FakeVerifier::new()),
+        Arc::new(BlockingCancellationFactory {
+            entered: Arc::new(AtomicBool::new(false)),
+            exited: Arc::new(AtomicBool::new(false)),
+        }),
+    );
+    let error = manager
+        .synthesize_f32(DEFAULT_LOCAL_TTS_MODEL_ID, inference_request())
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.kind, LocalTtsRuntimeErrorKind::Inference);
     assert_eq!(
         manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string()).phase,
         LocalTtsRuntimePhase::Failed
