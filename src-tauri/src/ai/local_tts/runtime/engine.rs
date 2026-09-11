@@ -1,19 +1,24 @@
 use super::{
-    LocalTtsInferenceOutput, LocalTtsInferenceRequest, LocalTtsRuntimeEngine,
-    LocalTtsRuntimeEngineFactory, LocalTtsRuntimeError, LocalTtsRuntimeIdentity,
+    LocalTtsInferenceOutput, LocalTtsInferenceRequest, LocalTtsRuntimeCancellation,
+    LocalTtsRuntimeEngine, LocalTtsRuntimeEngineFactory, LocalTtsRuntimeError,
+    LocalTtsRuntimeIdentity,
 };
 use crate::ai::local_tts::manifest::{
     local_tts_model_manifest, LocalTtsModelManifest, LocalTtsPlatform,
 };
 use flate2::read::GzDecoder;
-use ort::{ep, session::Session, value::Tensor};
+use ort::{
+    ep,
+    session::{RunOptions, Session},
+    value::Tensor,
+};
 use parking_lot::Mutex;
 use piper_plus_g2p::{english::EnglishPhonemizer, Phonemizer};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use tempfile::{Builder as TempFileBuilder, NamedTempFile};
 
 mod normalize;
@@ -91,12 +96,15 @@ impl KittenTtsRuntimeEngine {
     fn synthesize_impl(
         &mut self,
         request: &LocalTtsInferenceRequest,
+        cancellation: &LocalTtsRuntimeCancellation,
     ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        cancellation.check_cancelled()?;
         let manifest = self.manifest()?;
         let normalized = normalize_text(&request.text)?;
         let voice_key = resolve_voice_key(manifest, &request.voice_id)?;
         validate_speed(request.speaking_rate)?;
         validate_pitch(request.pitch)?;
+        cancellation.check_cancelled()?;
 
         let phonemizer = self
             .phonemizer
@@ -110,6 +118,7 @@ impl KittenTtsRuntimeEngine {
         if ipa.trim().is_empty() || ids.len() <= 3 || ids.len() > MAX_MODEL_TOKENS {
             return Err(LocalTtsRuntimeError::invalid_input());
         }
+        cancellation.check_cancelled()?;
 
         let voice = self
             .voices
@@ -124,14 +133,30 @@ impl KittenTtsRuntimeEngine {
             .map_err(|_| LocalTtsRuntimeError::inference())?;
         let speed_tensor = Tensor::<f32>::from_array(([1usize], vec![request.speaking_rate]))
             .map_err(|_| LocalTtsRuntimeError::inference())?;
+        cancellation.check_cancelled()?;
 
+        let run_options = Arc::new(
+            RunOptions::new().map_err(|_| LocalTtsRuntimeError::inference())?,
+        );
+        cancellation.install_run_options(run_options.clone());
         let session = self
             .session
             .as_mut()
             .ok_or_else(LocalTtsRuntimeError::model_load)?;
-        let outputs = session
-            .run(ort::inputs![input_ids, style_tensor, speed_tensor])
-            .map_err(|_| LocalTtsRuntimeError::inference())?;
+        let run_result = session.run_with_options(
+            ort::inputs![input_ids, style_tensor, speed_tensor],
+            run_options.as_ref(),
+        );
+        cancellation.clear_run_options();
+        let outputs = match run_result {
+            Ok(outputs) => outputs,
+            Err(_) if cancellation.is_cancelled() => {
+                return Err(LocalTtsRuntimeError::cancelled());
+            }
+            Err(_) => return Err(LocalTtsRuntimeError::inference()),
+        };
+        cancellation.check_cancelled()?;
+
         let (_shape, samples) = outputs[0]
             .try_extract_tensor::<f32>()
             .map_err(|_| LocalTtsRuntimeError::inference())?;
@@ -139,6 +164,7 @@ impl KittenTtsRuntimeEngine {
         if samples.is_empty() || samples.iter().any(|sample| !sample.is_finite()) {
             return Err(LocalTtsRuntimeError::inference());
         }
+        cancellation.check_cancelled()?;
 
         Ok(LocalTtsInferenceOutput {
             samples,
@@ -212,7 +238,15 @@ impl LocalTtsRuntimeEngine for KittenTtsRuntimeEngine {
         &mut self,
         request: &LocalTtsInferenceRequest,
     ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
-        self.synthesize_impl(request)
+        self.synthesize_impl(request, &LocalTtsRuntimeCancellation::default())
+    }
+
+    fn synthesize_cancellable(
+        &mut self,
+        request: &LocalTtsInferenceRequest,
+        cancellation: &LocalTtsRuntimeCancellation,
+    ) -> Result<LocalTtsInferenceOutput, LocalTtsRuntimeError> {
+        self.synthesize_impl(request, cancellation)
     }
 
     fn unload(&mut self) {
@@ -423,6 +457,7 @@ mod tests {
     use super::super::LocalTtsRuntimeErrorKind;
     use super::*;
     use crate::ai::local_tts::{DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn request_validation_rejects_unsupported_values() {
@@ -538,5 +573,33 @@ mod tests {
             invalid_pitch.kind,
             LocalTtsRuntimeErrorKind::UnsupportedConfig
         );
+
+        let cancellation = LocalTtsRuntimeCancellation::default();
+        let canceller = cancellation.clone();
+        let cancel_thread = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !canceller.has_run_options() {
+                assert!(
+                    Instant::now() < deadline,
+                    "real Kitten inference never registered cancellable ORT run options"
+                );
+                std::thread::yield_now();
+            }
+            canceller.cancel();
+        });
+        let cancelled = engine
+            .synthesize_cancellable(
+                &LocalTtsInferenceRequest {
+                    text: "Cancel this real Kitten Mini CPU inference while ONNX Runtime is executing."
+                        .to_string(),
+                    voice_id: "Jasper".to_string(),
+                    speaking_rate: 1.0,
+                    pitch: None,
+                },
+                &cancellation,
+            )
+            .unwrap_err();
+        cancel_thread.join().unwrap();
+        assert_eq!(cancelled.kind, LocalTtsRuntimeErrorKind::Cancelled);
     }
 }
