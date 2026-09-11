@@ -8,16 +8,23 @@ on:
       - ".github/workflows/kittentts-production-cpu-acceptance.yml"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/local_tts.rs"
       - "src-tauri/src/ai/local_tts/**"
+      - "src-tauri/src/app/state.rs"
+      - "src-tauri/src/audio/speech.rs"
+      - "src-tauri/src/commands/speech.rs"
   push:
     branches:
       - master
-      - ralph/ktt-301-kitten-mini-cpu-inference
     paths:
       - ".github/workflows/kittentts-production-cpu-acceptance.yml"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/local_tts.rs"
       - "src-tauri/src/ai/local_tts/**"
+      - "src-tauri/src/app/state.rs"
+      - "src-tauri/src/audio/speech.rs"
+      - "src-tauri/src/commands/speech.rs"
   workflow_dispatch:
 
 permissions:
@@ -119,15 +126,15 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-ktt301-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: ${{ runner.os }}-kittentts-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-ktt301-cargo-
+            ${{ runner.os }}-kittentts-cargo-
 
       - name: Download and verify frozen KittenTTS artifacts
         shell: bash
         run: |
           set -euo pipefail
-          artifact_dir="$RUNNER_TEMP/ktt301-artifacts"
+          artifact_dir="$RUNNER_TEMP/kittentts-artifacts"
           mkdir -p "$artifact_dir"
 
           fetch_verified() {
@@ -162,10 +169,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export KTT301_MODEL_PATH="$RUNNER_TEMP/ktt301-artifacts/$MODEL_FILENAME"
-          export KTT301_VOICES_PATH="$RUNNER_TEMP/ktt301-artifacts/$VOICES_FILENAME"
-          export KTT301_G2P_PATH="$RUNNER_TEMP/ktt301-artifacts/$G2P_FILENAME"
-          export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/ktt301-artifacts/$ORT_FILENAME"
+          export KTT301_MODEL_PATH="$RUNNER_TEMP/kittentts-artifacts/$MODEL_FILENAME"
+          export KTT301_VOICES_PATH="$RUNNER_TEMP/kittentts-artifacts/$VOICES_FILENAME"
+          export KTT301_G2P_PATH="$RUNNER_TEMP/kittentts-artifacts/$G2P_FILENAME"
+          export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/kittentts-artifacts/$ORT_FILENAME"
           cargo test \
             --manifest-path src-tauri/Cargo.toml \
             --locked \

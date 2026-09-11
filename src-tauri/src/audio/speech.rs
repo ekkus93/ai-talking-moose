@@ -119,11 +119,17 @@ mod tests {
     use super::*;
     use crate::ai::types::{AudioStreamData, ProviderError};
     use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
     struct NeverSynthesizer;
 
     struct OversizedSynthesizer;
+
+    struct ErrorSynthesizer {
+        kind: ProviderErrorKind,
+        calls: Arc<AtomicUsize>,
+    }
 
     #[async_trait]
     impl SpeechSynthesizer for OversizedSynthesizer {
@@ -140,6 +146,14 @@ mod tests {
     impl SpeechSynthesizer for NeverSynthesizer {
         async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
             std::future::pending().await
+        }
+    }
+
+    #[async_trait]
+    impl SpeechSynthesizer for ErrorSynthesizer {
+        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Err(ProviderError::from_kind(self.kind))
         }
     }
 
@@ -171,6 +185,44 @@ mod tests {
         StandaloneSpeechController::new().cancel(&playback);
         assert_eq!(playback.queue_length(), 0);
         assert!(!playback.is_playing());
+    }
+
+    #[tokio::test]
+    async fn provider_failures_propagate_once_without_fallback_or_audio() {
+        for kind in [
+            ProviderErrorKind::Setup,
+            ProviderErrorKind::Model,
+            ProviderErrorKind::Internal,
+            ProviderErrorKind::Auth,
+            ProviderErrorKind::Network,
+            ProviderErrorKind::Protocol,
+        ] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let synthesizer = ErrorSynthesizer {
+                kind,
+                calls: calls.clone(),
+            };
+            let playback = AudioPlayback::new_mock();
+            let expected = ProviderError::from_kind(kind).message;
+            let error = synthesize_and_queue(
+                &synthesizer,
+                &playback,
+                TtsRequest {
+                    text: "provider failure must never fallback".to_string(),
+                    voice_name: None,
+                    speaking_rate: Some(1.0),
+                    pitch: None,
+                },
+                None,
+            )
+            .await
+            .expect_err("provider failure must propagate instead of trying another provider");
+
+            assert_eq!(error, expected, "{kind:?}");
+            assert_eq!(calls.load(Ordering::SeqCst), 1, "{kind:?}");
+            assert!(!playback.is_playing(), "{kind:?}");
+            assert_eq!(playback.queue_length(), 0, "{kind:?}");
+        }
     }
 
     #[tokio::test]

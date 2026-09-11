@@ -160,6 +160,9 @@ impl SpeechSynthesizer for PendingLocalSpeechSynthesizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::local_tts::manifest::{local_tts_model_manifest, LocalTtsPlatform};
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn local_tts_defaults_are_valid_catalog_values() {
@@ -279,5 +282,143 @@ mod tests {
         assert_eq!(error.kind, ProviderErrorKind::Setup);
         assert!(!error.retryable);
         assert!(!error.message.contains("this text must stay local"));
+    }
+
+    fn stage_real_acceptance_install() -> tempfile::TempDir {
+        let temp = tempfile::tempdir().unwrap();
+        let storage_root = temp.path().join("models").join("tts");
+        let storage = storage::initialize_global_local_tts_storage(storage_root).unwrap();
+        let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap();
+        let platform = LocalTtsPlatform::LinuxX86_64;
+        let artifacts = storage::expected_artifacts(manifest, platform).unwrap();
+        let revision_dir = storage
+            .model_revision_dir(DEFAULT_LOCAL_TTS_MODEL_ID)
+            .unwrap();
+        fs::create_dir_all(&revision_dir).unwrap();
+
+        let source_paths = [
+            (
+                "kitten_tts_mini_v0_8.onnx",
+                PathBuf::from(std::env::var("KTT301_MODEL_PATH").unwrap()),
+            ),
+            (
+                "voices.npz",
+                PathBuf::from(std::env::var("KTT301_VOICES_PATH").unwrap()),
+            ),
+            (
+                "cmudict_data.json",
+                PathBuf::from(std::env::var("KTT301_G2P_PATH").unwrap()),
+            ),
+            (
+                "onnxruntime-linux-x64-1.23.2.tgz",
+                PathBuf::from(std::env::var("KTT301_ORT_ARCHIVE_PATH").unwrap()),
+            ),
+        ];
+
+        for artifact in &artifacts {
+            let source = source_paths
+                .iter()
+                .find_map(|(filename, path)| (*filename == artifact.filename).then_some(path))
+                .unwrap();
+            let destination = revision_dir.join(artifact.filename);
+            fs::copy(source, &destination).unwrap();
+            assert_eq!(
+                fs::metadata(destination).unwrap().len(),
+                artifact.expected_bytes
+            );
+        }
+
+        let marker = storage::install_marker(manifest, platform, &artifacts);
+        fs::write(
+            revision_dir.join(storage::INSTALL_MARKER),
+            serde_json::to_vec_pretty(&marker).unwrap(),
+        )
+        .unwrap();
+        assert!(storage.marker_shape_is_valid(manifest, platform));
+        temp
+    }
+
+    #[test]
+    #[ignore = "requires exact pinned Kitten/CMUdict/ONNX Runtime acceptance artifacts"]
+    fn real_kitten_cpu_acceptance_production_provider_offline_privacy() {
+        const SUCCESS_SENTINEL: &str = "KTT404_SUCCESS_SENTINEL_9F6E3C2D";
+        const FAILURE_SENTINEL: &str = "KTT404_FAILURE_SENTINEL_6A17B8E4";
+        const CANCEL_SENTINEL: &str = "KTT404_CANCEL_SENTINEL_D52C1A90";
+
+        let _install = stage_real_acceptance_install();
+        let runtime = Arc::new(LocalTtsRuntimeManager::new());
+        let synthesizer = LocalSpeechSynthesizer::new(
+            runtime.clone(),
+            DEFAULT_LOCAL_TTS_MODEL_ID.to_string(),
+            "Jasper".to_string(),
+        );
+
+        let ((audio, failure_kind, cancellation_kind, status_json), logs) =
+            crate::test_support::capture_logs(|| {
+                let _network_guard = crate::test_support::deny_network_for_scope();
+                assert!(crate::test_support::network_denied());
+                let async_runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                async_runtime.block_on(async {
+                    let audio = synthesizer
+                        .synthesize(TtsRequest {
+                            text: SUCCESS_SENTINEL.to_string(),
+                            voice_name: Some("Jasper".to_string()),
+                            speaking_rate: Some(1.0),
+                            pitch: None,
+                        })
+                        .await
+                        .expect("real Local provider must synthesize while network is denied");
+
+                    let failure = synthesizer
+                        .synthesize(TtsRequest {
+                            text: FAILURE_SENTINEL.to_string(),
+                            voice_name: Some("not-a-kitten-voice".to_string()),
+                            speaking_rate: Some(1.0),
+                            pitch: None,
+                        })
+                        .await
+                        .expect_err("invalid Local voice must fail closed");
+
+                    let cancellation = CancellationToken::new();
+                    cancellation.cancel();
+                    let cancelled = synthesizer
+                        .synthesize_cancellable(
+                            TtsRequest {
+                                text: CANCEL_SENTINEL.to_string(),
+                                voice_name: Some("Jasper".to_string()),
+                                speaking_rate: Some(1.0),
+                                pitch: None,
+                            },
+                            &cancellation,
+                        )
+                        .await
+                        .expect_err("cancelled Local provider request must fail closed");
+
+                    let status = runtime.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string());
+                    (
+                        audio,
+                        failure.kind,
+                        cancelled.kind,
+                        serde_json::to_string(&status).unwrap(),
+                    )
+                })
+            });
+
+        assert_eq!(audio.sample_rate, 24_000);
+        assert!(!audio.pcm_bytes.is_empty());
+        assert_eq!(failure_kind, ProviderErrorKind::Setup);
+        assert_eq!(cancellation_kind, ProviderErrorKind::Cancelled);
+        assert!(status_json.contains(DEFAULT_LOCAL_TTS_MODEL_ID));
+        assert!(status_json.contains("\"phase\":\"ready\""));
+        assert!(!status_json.contains("pcm_bytes"));
+        assert!(!status_json.contains("audio_bytes"));
+
+        for sentinel in [SUCCESS_SENTINEL, FAILURE_SENTINEL, CANCEL_SENTINEL] {
+            assert!(!logs.contains(sentinel));
+            assert!(!status_json.contains(sentinel));
+        }
     }
 }
