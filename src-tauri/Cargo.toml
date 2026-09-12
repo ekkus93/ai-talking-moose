@@ -16,6 +16,11 @@ path = "src/bin/export_frontend_contract.rs"
 required-features = ["frontend-contract-export"]
 
 [[bin]]
+name = "export_local_tts_frontend_contract"
+path = "src/bin/export_local_tts_frontend_contract.rs"
+required-features = ["frontend-contract-export"]
+
+[[bin]]
 name = "local_llm_acceptance"
 path = "src/bin/local_llm_acceptance.rs"
 required-features = ["local-llm-acceptance"]
