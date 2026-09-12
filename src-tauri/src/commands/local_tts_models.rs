@@ -131,7 +131,8 @@ pub fn get_local_tts_diagnostics(
         .status(&selected_model_id, platform)
         .map_err(|error| error.to_string())?;
     let recorded_error = installer.error_for_model(&selected_model_id);
-    let (installer_error_category, installer_error_retryable) = if let Some(error) = recorded_error {
+    let (installer_error_category, installer_error_retryable) = if let Some(error) = recorded_error
+    {
         (Some(error.kind), Some(error.retryable))
     } else if let Some(error) = status.error.as_ref() {
         // Storage-level corruption can exist without a recorded install operation. Keep that
