@@ -343,7 +343,9 @@ export const browserPreviewBridge = {
     return previewLocalTtsModels();
   },
 
-  async installLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+  async installLocalTtsModel(
+    modelId: string,
+  ): Promise<LocalTtsModelDescriptor> {
     const model = previewLocalTtsModel(modelId);
     return {
       ...model,
