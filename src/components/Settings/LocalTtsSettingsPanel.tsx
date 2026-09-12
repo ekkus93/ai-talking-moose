@@ -49,7 +49,9 @@ export const LocalTtsSettingsPanel: React.FC<LocalTtsSettingsPanelProps> = ({
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
-  const [progress, setProgress] = useState<LocalTtsInstallProgress | null>(null);
+  const [progress, setProgress] = useState<LocalTtsInstallProgress | null>(
+    null,
+  );
   const [selectionPending, setSelectionPending] = useState(false);
   const [installPending, setInstallPending] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
@@ -151,7 +153,9 @@ export const LocalTtsSettingsPanel: React.FC<LocalTtsSettingsPanelProps> = ({
     setInstallPending(true);
     setResult(null);
     try {
-      const installed = await tauriBridge.installLocalTtsModel(selectedModel.id);
+      const installed = await tauriBridge.installLocalTtsModel(
+        selectedModel.id,
+      );
       setModels((current) => replaceDescriptor(current, installed));
       setProgress(null);
       setResult({
@@ -170,7 +174,9 @@ export const LocalTtsSettingsPanel: React.FC<LocalTtsSettingsPanelProps> = ({
   const handleCancel = async () => {
     if (!selectedModel) return;
     try {
-      const accepted = await tauriBridge.cancelLocalTtsInstall(selectedModel.id);
+      const accepted = await tauriBridge.cancelLocalTtsInstall(
+        selectedModel.id,
+      );
       setResult(
         accepted
           ? {
@@ -246,7 +252,8 @@ export const LocalTtsSettingsPanel: React.FC<LocalTtsSettingsPanelProps> = ({
               )}
               {models.map((model) => (
                 <option key={model.id} value={model.id}>
-                  {model.display_name} v{model.version} — {formatModelSize(model.expected_bytes)}
+                  {model.display_name} v{model.version} —{" "}
+                  {formatModelSize(model.expected_bytes)}
                 </option>
               ))}
             </>
@@ -266,7 +273,8 @@ export const LocalTtsSettingsPanel: React.FC<LocalTtsSettingsPanelProps> = ({
                 {selectedModel.display_name} v{selectedModel.version}
               </div>
               <div className="text-[10px] text-gray-700">
-                {formatModelSize(selectedModel.expected_bytes)} download • {selectedModel.license}
+                {formatModelSize(selectedModel.expected_bytes)} download •{" "}
+                {selectedModel.license}
               </div>
             </div>
             <span className="text-[10px] font-bold border border-black rounded px-2 py-0.5 bg-white">
