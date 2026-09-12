@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
-import type { GoogleModelDescriptor } from "../../types/moose";
+import type { GoogleModelDescriptor, TtsCatalog } from "../../types/moose";
 import { GeneralTab } from "./GeneralTab";
 import { BehaviorTab } from "./BehaviorTab";
 import { VoiceTab } from "./VoiceTab";
@@ -32,7 +32,6 @@ export const SettingsModal: React.FC = () => {
     settings,
     loadMemories,
     loadDevices,
-    loadGoogleTtsVoices,
   } = useMooseStore();
 
   const [activeTab, setActiveTab] = useState<
@@ -49,6 +48,10 @@ export const SettingsModal: React.FC = () => {
 
   const [googleModels, setGoogleModels] = useState<GoogleModelDescriptor[]>([]);
   const [googleModelsStatus, setGoogleModelsStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [ttsCatalog, setTtsCatalog] = useState<TtsCatalog | null>(null);
+  const [ttsCatalogStatus, setTtsCatalogStatus] = useState<
     "loading" | "ready" | "error"
   >("loading");
 
@@ -72,9 +75,9 @@ export const SettingsModal: React.FC = () => {
   useEffect(() => {
     if (isSettingsOpen) {
       loadDevices();
-      loadGoogleTtsVoices();
       loadMemories();
       setGoogleModelsStatus("loading");
+      setTtsCatalogStatus("loading");
       void tauriBridge
         .getGoogleModels()
         .then((models) => {
@@ -85,8 +88,18 @@ export const SettingsModal: React.FC = () => {
           setGoogleModels([]);
           setGoogleModelsStatus("error");
         });
+      void tauriBridge
+        .getTtsCatalog()
+        .then((catalog) => {
+          setTtsCatalog(catalog);
+          setTtsCatalogStatus("ready");
+        })
+        .catch(() => {
+          setTtsCatalog(null);
+          setTtsCatalogStatus("error");
+        });
     }
-  }, [isSettingsOpen, loadDevices, loadGoogleTtsVoices, loadMemories]);
+  }, [isSettingsOpen, loadDevices, loadMemories]);
 
   if (!isSettingsOpen || !settings) {
     return null;
@@ -169,6 +182,8 @@ export const SettingsModal: React.FC = () => {
             <VoiceTab
               isAuditioning={isAuditioning}
               setIsAuditioning={setIsAuditioning}
+              ttsCatalog={ttsCatalog}
+              ttsCatalogStatus={ttsCatalogStatus}
             />
           )}
           {activeTab === "speech" && <AsrSettingsPanel />}
