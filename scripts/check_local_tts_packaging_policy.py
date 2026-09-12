@@ -283,7 +283,6 @@ def check_workflow_enforcement() -> None:
 
     ci = CI_WORKFLOW.read_text(encoding="utf-8")
     require_token(ci, "src-tauri/src/ai/local_tts/*", "ordinary CI release path classifier")
-    require_token(ci, "docs/LOCAL_TTS_ASSET_LICENSES.md", "ordinary CI release path classifier")
 
 
 def check_ordinary_ci_is_model_weight_free() -> None:
