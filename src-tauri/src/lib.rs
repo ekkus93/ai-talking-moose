@@ -216,6 +216,7 @@ pub fn run() {
             install_local_tts_model,
             cancel_local_tts_install,
             delete_local_tts_model,
+            audition_tts_voice,
             set_google_api_key,
             clear_google_api_key,
             has_google_api_key,
