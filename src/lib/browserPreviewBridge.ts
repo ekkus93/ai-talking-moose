@@ -24,6 +24,7 @@ import type {
   TtsProvider,
 } from "../types/moose";
 import type {
+  LocalTtsDiagnostics,
   LocalTtsInstallProgress,
   LocalTtsModelDescriptor,
 } from "../types/localTts";
@@ -201,6 +202,35 @@ const previewLocalTtsModel = (modelId: string): LocalTtsModelDescriptor => {
   return model;
 };
 
+const previewLocalTtsDiagnostics = (): LocalTtsDiagnostics => {
+  const settings = frontendDefaultSettings();
+  const model = previewLocalTtsModel(settings.local_tts_model);
+  return {
+    provider: settings.tts_provider,
+    selected_model_id: settings.local_tts_model,
+    selected_voice_id: settings.local_tts_voice,
+    install_state: model.install_state,
+    expected_bytes: model.expected_bytes,
+    installed_bytes: model.installed_bytes,
+    installer_error_category: null,
+    installer_error_retryable: null,
+    runtime: {
+      selected_model_id: settings.local_tts_model,
+      loaded_model_id: null,
+      loaded_revision: null,
+      runtime_compatibility_version: null,
+      phase: "unloaded",
+      sample_rate_hz: 24_000,
+      inference_thread_count: 2,
+      last_model_load_duration_ms: null,
+      last_synthesis_duration_ms: null,
+      last_generated_audio_duration_ms: null,
+      last_real_time_factor: null,
+      last_error_category: null,
+    },
+  };
+};
+
 /**
  * Development-only frontend preview adapter.
  *
@@ -341,6 +371,10 @@ export const browserPreviewBridge = {
 
   async getLocalTtsModels(): Promise<LocalTtsModelDescriptor[]> {
     return previewLocalTtsModels();
+  },
+
+  async getLocalTtsDiagnostics(): Promise<LocalTtsDiagnostics> {
+    return previewLocalTtsDiagnostics();
   },
 
   async installLocalTtsModel(

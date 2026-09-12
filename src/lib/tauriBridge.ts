@@ -24,6 +24,7 @@ import {
   TtsProvider,
 } from "../types/moose";
 import type {
+  LocalTtsDiagnostics,
   LocalTtsInstallProgress,
   LocalTtsModelDescriptor,
 } from "../types/localTts";
@@ -168,6 +169,11 @@ export const nativeTauriBridge = {
   async getLocalTtsModels(): Promise<LocalTtsModelDescriptor[]> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<LocalTtsModelDescriptor[]>("get_local_tts_models");
+  },
+
+  async getLocalTtsDiagnostics(): Promise<LocalTtsDiagnostics> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalTtsDiagnostics>("get_local_tts_diagnostics");
   },
 
   async installLocalTtsModel(
