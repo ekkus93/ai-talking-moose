@@ -170,7 +170,9 @@ export const nativeTauriBridge = {
     return invoke<LocalTtsModelDescriptor[]>("get_local_tts_models");
   },
 
-  async installLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+  async installLocalTtsModel(
+    modelId: string,
+  ): Promise<LocalTtsModelDescriptor> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<LocalTtsModelDescriptor>("install_local_tts_model", {
       modelId,
@@ -184,7 +186,9 @@ export const nativeTauriBridge = {
 
   async deleteLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<LocalTtsModelDescriptor>("delete_local_tts_model", { modelId });
+    return invoke<LocalTtsModelDescriptor>("delete_local_tts_model", {
+      modelId,
+    });
   },
 
   async onLocalTtsModelProgress(
