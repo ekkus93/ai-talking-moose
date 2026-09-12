@@ -69,10 +69,12 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
       ? settings.google_tts_voice
       : settings.local_tts_voice;
   const selectedVoiceAvailable =
-    selectedProvider?.voices.some((voice) => voice.id === selectedVoice) ?? false;
-  const liveVoiceAvailable =
-    catalog?.gemini_live.voices.some((voice) => voice.id === settings.live_voice) ??
+    selectedProvider?.voices.some((voice) => voice.id === selectedVoice) ??
     false;
+  const liveVoiceAvailable =
+    catalog?.gemini_live.voices.some(
+      (voice) => voice.id === settings.live_voice,
+    ) ?? false;
   const auditionBlockedReason =
     settings.tts_provider === "local" && !localModelInstalled
       ? "Download and verify the Local KittenTTS model before auditioning a Local voice."
@@ -91,7 +93,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
       }
       await updateSettingsPatch({ tts_provider: provider });
     } catch (error) {
-      setVoiceError(`Could not switch standalone speech provider: ${String(error)}`);
+      setVoiceError(
+        `Could not switch standalone speech provider: ${String(error)}`,
+      );
     }
   };
 
@@ -101,7 +105,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
       try {
         await tauriBridge.cancelStandaloneSpeech();
       } catch (error) {
-        setVoiceError(`Could not preempt the previous standalone voice: ${String(error)}`);
+        setVoiceError(
+          `Could not preempt the previous standalone voice: ${String(error)}`,
+        );
         return;
       }
     }
@@ -193,8 +199,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             Standalone Speech
           </h4>
           <p className="text-[10px] text-gray-700">
-            This provider speaks typed replies, ambient remarks, canned reactions,
-            and voice auditions. It does not change Gemini Live conversations.
+            This provider speaks typed replies, ambient remarks, canned
+            reactions, and voice auditions. It does not change Gemini Live
+            conversations.
           </p>
         </div>
 
@@ -243,7 +250,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             <select
               id="settings-standalone-voice"
               value={selectedVoice}
-              onChange={(event) => void selectStandaloneVoice(event.target.value)}
+              onChange={(event) =>
+                void selectStandaloneVoice(event.target.value)
+              }
               className="w-full p-1.5 border border-black rounded bg-white font-bold"
             >
               {!selectedVoiceAvailable && (
@@ -275,7 +284,10 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         )}
 
         <div>
-          <label htmlFor="settings-speaking-rate" className="block mb-1 font-bold">
+          <label
+            htmlFor="settings-speaking-rate"
+            className="block mb-1 font-bold"
+          >
             Speaking Rate: {settings.speaking_rate.toFixed(2)}×
           </label>
           <input
@@ -327,8 +339,8 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         ) : (
           <div className="p-2 border border-gray-400 rounded bg-gray-50 text-[10px] text-gray-700">
             KittenTTS Mini does not expose a truthful pitch control. Your saved
-            Google pitch preference ({settings.pitch.toFixed(1)}) is preserved and
-            will be used again if you switch back to Google.
+            Google pitch preference ({settings.pitch.toFixed(1)}) is preserved
+            and will be used again if you switch back to Google.
           </div>
         )}
 
@@ -349,7 +361,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         <button
           type="button"
           onClick={() => void auditionSelectedVoice()}
-          disabled={isAuditioning || Boolean(auditionBlockedReason) || !selectedProvider}
+          disabled={
+            isAuditioning || Boolean(auditionBlockedReason) || !selectedProvider
+          }
           className="px-3 py-1.5 bg-white border-2 border-black rounded font-bold hover:bg-gray-100 flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 disabled:opacity-60"
         >
           <Volume2 className="w-3.5 h-3.5" />
