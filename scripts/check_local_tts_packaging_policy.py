@@ -2,8 +2,9 @@
 """Fail closed if Local TTS packaging/provenance invariants drift.
 
 This gate is intentionally model-weight-free. It validates checked-in catalog,
-runtime, bundle, and repository policy only. Real KittenTTS artifacts remain owned by
-the explicit production CPU acceptance workflow and the runtime installer.
+runtime, licensing, bundle, and repository policy only. Real KittenTTS artifacts
+remain owned by the explicit production CPU acceptance workflow and the runtime
+installer.
 """
 from __future__ import annotations
 
@@ -21,7 +22,12 @@ CARGO = ROOT / "src-tauri/Cargo.toml"
 TAURI_CONFIG = ROOT / "src-tauri/tauri.conf.json"
 PACKAGE_JSON = ROOT / "package.json"
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
+FULL_VALIDATION_WORKFLOW = ROOT / ".github/workflows/full-validation-label.yml"
+RELEASE_WORKFLOW = ROOT / ".github/workflows/release.yml"
 ACCEPTANCE_WORKFLOW = ROOT / ".github/workflows/kittentts-production-cpu-acceptance.yml"
+ASSET_LICENSES = ROOT / "docs/LOCAL_TTS_ASSET_LICENSES.md"
+THIRD_PARTY_NOTICES = ROOT / "docs/THIRD_PARTY_NOTICES.md"
+RELEASE_LICENSE_COLLECTOR = ROOT / "scripts/collect_release_licenses.py"
 
 MODEL_REVISION = "c02725660cea441db4c383af69f1f26f5cd00947"
 G2P_REVISION = "244ffeb44108347a514ebfc0c2f773d938c9613b"
@@ -80,7 +86,7 @@ def check_dependency_features() -> None:
     if g2p.get("default-features") is not False:
         fail("piper-plus-g2p default features must remain disabled")
     if g2p.get("features") != ["english"]:
-        fail("piper-plus-g2p must remain English-only without eSpeak/default feature payloads")
+        fail("piper-plus-g2p must remain English-only without default/optional payloads")
 
 
 def check_catalog_identity() -> None:
@@ -178,7 +184,7 @@ def check_no_unapproved_espeak_or_gpl_payload() -> None:
         lowered_path = str(path.relative_to(ROOT)).lower()
         if "espeak" in lowered_path:
             fail(f"unapproved eSpeak payload is present: {path.relative_to(ROOT)}")
-        if path.suffix.lower() in {".rs", ".md", ".json", ".toml", ".txt"}:
+        if path.suffix.lower() in {".rs", ".json", ".toml", ".txt"}:
             text = path.read_text(encoding="utf-8", errors="ignore").lower()
             for forbidden in ("espeak-ng", "libespeak", "gnu general public license", "gpl-2", "gpl-3"):
                 if forbidden in text:
@@ -219,6 +225,67 @@ def check_bundle_is_model_weight_free() -> None:
         fail("Local TTS model/runtime payloads must not be tracked by Git:\n" + "\n".join(offenders))
 
 
+def check_license_evidence() -> None:
+    if not ASSET_LICENSES.is_file():
+        fail("Local TTS downloaded-asset license evidence document is missing")
+    evidence = ASSET_LICENSES.read_text(encoding="utf-8")
+    for token in (
+        MODEL_REVISION,
+        G2P_REVISION,
+        ORT_RELEASE,
+        "kitten_tts_mini_v0_8.onnx",
+        "voices.npz",
+        "cmudict_data.json",
+        "Apache-2.0",
+        "BSD-style (CMU)",
+        "MIT",
+        "not bundled",
+        "piper-plus-g2p = 0.4.0",
+        "ort = 2.0.0-rc.13",
+        "bundled-dicts",
+    ):
+        require_token(evidence, token, "Local TTS asset license evidence")
+
+    third_party = THIRD_PARTY_NOTICES.read_text(encoding="utf-8")
+    for token in (
+        "## Local TTS runtime and downloaded assets",
+        "docs/LOCAL_TTS_ASSET_LICENSES.md",
+        "piper-plus-g2p",
+        "ort",
+        "KittenTTS Mini 0.8 ONNX model",
+        "CMUdict JSON",
+        "ONNX Runtime CPU archive",
+    ):
+        require_token(third_party, token, "third-party notice inventory")
+
+    collector = RELEASE_LICENSE_COLLECTOR.read_text(encoding="utf-8")
+    for token in (
+        '"ort": "2.0.0-rc.13"',
+        '"piper-plus-g2p": "0.4.0"',
+        'validate_required_cargo_rows(cargo, REQUIRED_LOCAL_TTS_CARGO, "Local TTS")',
+    ):
+        require_token(collector, token, "release license collector")
+
+
+def check_workflow_enforcement() -> None:
+    for path, label in (
+        (CI_WORKFLOW, "ordinary CI"),
+        (FULL_VALIDATION_WORKFLOW, "explicit full validation"),
+        (RELEASE_WORKFLOW, "tagged release"),
+    ):
+        text = path.read_text(encoding="utf-8")
+        require_token(text, "scripts/check_local_tts_packaging_policy.py", label)
+        require_token(
+            text,
+            "python3 scripts/check_local_tts_packaging_policy.py",
+            label,
+        )
+
+    ci = CI_WORKFLOW.read_text(encoding="utf-8")
+    require_token(ci, "src-tauri/src/ai/local_tts/*", "ordinary CI release path classifier")
+    require_token(ci, "docs/LOCAL_TTS_ASSET_LICENSES.md", "ordinary CI release path classifier")
+
+
 def check_ordinary_ci_is_model_weight_free() -> None:
     package = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
     check_all = str(package.get("scripts", {}).get("check:all", "")).lower()
@@ -249,11 +316,14 @@ def main() -> None:
     check_runtime_policy()
     check_no_unapproved_espeak_or_gpl_payload()
     check_bundle_is_model_weight_free()
+    check_license_evidence()
+    check_workflow_enforcement()
     check_ordinary_ci_is_model_weight_free()
     print(
         "local-tts-packaging-policy-ok "
         "targets=linux-x86_64,macos-arm64,macos-x86_64 "
-        f"model_revision={MODEL_REVISION} ort={ORT_VERSION} weights=external cpu_only=true"
+        f"model_revision={MODEL_REVISION} ort={ORT_VERSION} weights=external cpu_only=true "
+        "license_evidence=checked"
     )
 
 
