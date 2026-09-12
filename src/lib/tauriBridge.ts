@@ -325,7 +325,10 @@ export const nativeTauriBridge = {
     return invoke<boolean>("delete_memory", { id });
   },
 
-  async forgetEverything(): Promise<void> {},
+  async forgetEverything(): Promise<void> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("forget_everything");
+  },
 
   async getTranscripts(limit = 50): Promise<TranscriptRecord[]> {
     const { invoke } = await import("@tauri-apps/api/core");
