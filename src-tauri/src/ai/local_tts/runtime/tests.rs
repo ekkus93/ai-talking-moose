@@ -293,7 +293,9 @@ async fn diagnostics_observe_loading_ready_generating_ready_without_utterance_le
     wait_until_true(&verify_entered).await;
     let loading = manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string());
     assert_eq!(loading.phase, LocalTtsRuntimePhase::Loading);
-    assert!(serde_json::to_string(&loading).unwrap().contains(DEFAULT_LOCAL_TTS_MODEL_ID));
+    assert!(serde_json::to_string(&loading)
+        .unwrap()
+        .contains(DEFAULT_LOCAL_TTS_MODEL_ID));
 
     verify_release.store(true, Ordering::SeqCst);
     load.await.unwrap().unwrap();
