@@ -64,7 +64,9 @@ try {
 
   for (const relativePath of [
     "src/types/moose.ts",
+    "src/types/localTts.ts",
     "src/generated/backendContract.json",
+    "src/generated/localTtsBackendContract.json",
     "src/lib/tauriBridge.ts",
     "src-tauri/src/lib.rs",
   ]) {
