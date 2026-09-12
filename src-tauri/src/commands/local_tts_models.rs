@@ -59,20 +59,13 @@ fn descriptor(
     let status = installer
         .status(model_id, platform)
         .map_err(|error| error.to_string())?;
-    let error = installer
-        .error_for_model(model_id)
-        .map(|error| LocalTtsModelError {
-            kind: error.kind,
-            message: error.message,
-            retryable: error.retryable,
-        })
-        .or_else(|| {
-            status.error.as_ref().map(|error| LocalTtsModelError {
-                kind: LocalTtsInstallErrorKind::CorruptInstall,
-                message: error.message.clone(),
-                retryable: error.retryable,
-            })
-        });
+    let error = status.error.as_ref().map(|error| LocalTtsModelError {
+        // Status-level failures are deliberately collapsed to the safe corrupt-install
+        // category here. KTT-600 diagnostics owns richer installer/runtime error composition.
+        kind: LocalTtsInstallErrorKind::CorruptInstall,
+        message: error.message.clone(),
+        retryable: error.retryable,
+    });
 
     Ok(LocalTtsModelDescriptor {
         id: manifest.provider_model_id.to_string(),
