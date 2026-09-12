@@ -148,7 +148,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
               ))
             ) : (
               <option value={settings.tts_provider}>
-                {catalogError ? "Speech catalog unavailable" : "Loading speech catalog…"}
+                {catalogError
+                  ? "Speech catalog unavailable"
+                  : "Loading speech catalog…"}
               </option>
             )}
           </select>
@@ -162,7 +164,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         {selectedProvider && (
           <div className="text-[11px] border-l-2 border-black pl-2 space-y-0.5">
             <p className="font-bold">
-              {selectedProvider.is_local ? "Local / on-device" : "Cloud service"}
+              {selectedProvider.is_local
+                ? "Local / on-device"
+                : "Cloud service"}
             </p>
             <p>
               {selectedProvider.is_local
@@ -170,7 +174,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
                 : "Standalone speech text is sent to Google Gemini TTS for synthesis."}
             </p>
             {selectedProvider.install_required && (
-              <p>Local model installation is required before synthesis can run.</p>
+              <p>
+                Local model installation is required before synthesis can run.
+              </p>
             )}
           </div>
         )}
@@ -215,7 +221,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           <div className="space-y-1">
             <div className="flex justify-between">
               <label htmlFor="settings-speaking-rate">Speaking Rate</label>
-              <span className="font-bold">{settings.speaking_rate.toFixed(2)}×</span>
+              <span className="font-bold">
+                {settings.speaking_rate.toFixed(2)}×
+              </span>
             </div>
             <input
               id="settings-speaking-rate"
@@ -302,7 +310,10 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
 
       <section className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2">
         <div>
-          <label htmlFor="settings-live-voice" className="block mb-1 font-bold">
+          <label
+            htmlFor="settings-live-voice"
+            className="block mb-1 font-bold"
+          >
             Gemini Live Conversation Voice
           </label>
           <select
