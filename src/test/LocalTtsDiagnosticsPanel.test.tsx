@@ -5,6 +5,7 @@ import { tauriBridge } from "../lib/tauriBridge";
 import type { LocalTtsDiagnostics } from "../types/localTts";
 
 const MODEL_ID = "KittenML/kitten-tts-mini-0.8";
+const LOADED_MODEL_ID = "KittenML/kitten-tts-mini-0.8-loaded";
 const VOICE_ID = "Jasper";
 const SENTINEL = "KCR-130-UTTERANCE-SENTINEL-DO-NOT-EXPOSE";
 
@@ -19,7 +20,7 @@ const diagnostics: LocalTtsDiagnostics = {
   installer_error_retryable: null,
   runtime: {
     selected_model_id: MODEL_ID,
-    loaded_model_id: MODEL_ID,
+    loaded_model_id: LOADED_MODEL_ID,
     loaded_revision: "revision",
     runtime_compatibility_version: 1,
     phase: "ready",
@@ -46,6 +47,7 @@ describe("Local TTS diagnostics surface", () => {
     render(<LocalTtsDiagnosticsPanel />);
 
     expect(await screen.findByText(MODEL_ID)).toBeInTheDocument();
+    expect(screen.getByText(LOADED_MODEL_ID)).toBeInTheDocument();
     expect(screen.getByText(VOICE_ID)).toBeInTheDocument();
     expect(screen.getByText("ready")).toBeInTheDocument();
     expect(screen.getByText("24000 Hz")).toBeInTheDocument();

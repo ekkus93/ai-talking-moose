@@ -67,7 +67,7 @@ export interface LocalTtsInstallProgress {
   artifact_filename: string | null;
   install_state: Extract<
     LocalTtsInstallState,
-    "downloading" | "verifying" | "promoting"
+    "downloading" | "verifying" | "promoting",
   >;
   downloaded_bytes: number;
   total_bytes: number;
