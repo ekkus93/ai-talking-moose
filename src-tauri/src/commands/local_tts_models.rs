@@ -53,14 +53,12 @@ fn current_platform() -> Result<LocalTtsPlatform, String> {
     Err("Local TTS is not supported on this platform.".to_string())
 }
 
-fn descriptor(
-    model_id: &str,
-    selected_model_id: &str,
-) -> Result<LocalTtsModelDescriptor, String> {
+fn descriptor(model_id: &str, selected_model_id: &str) -> Result<LocalTtsModelDescriptor, String> {
     let platform = current_platform()?;
     let installer = global_local_tts_installer().map_err(|error| error.to_string())?;
-    let manifest = local_tts_model_manifest(model_id)
-        .ok_or_else(|| "The selected Local TTS model is not in the supported catalog.".to_string())?;
+    let manifest = local_tts_model_manifest(model_id).ok_or_else(|| {
+        "The selected Local TTS model is not in the supported catalog.".to_string()
+    })?;
     let status = installer
         .status(model_id, platform)
         .map_err(|error| error.to_string())?;
