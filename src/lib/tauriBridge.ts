@@ -21,7 +21,12 @@ import {
   TranscriptRecord,
   ToolAuditRecord,
   TtsCatalog,
+  TtsProvider,
 } from "../types/moose";
+import type {
+  LocalTtsInstallProgress,
+  LocalTtsModelDescriptor,
+} from "../types/localTts";
 import { browserPreviewBridge } from "./browserPreviewBridge";
 
 // Tauri 2 exposes its low-level IPC function through this internal object.
@@ -160,6 +165,38 @@ export const nativeTauriBridge = {
     );
   },
 
+  async getLocalTtsModels(): Promise<LocalTtsModelDescriptor[]> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalTtsModelDescriptor[]>("get_local_tts_models");
+  },
+
+  async installLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalTtsModelDescriptor>("install_local_tts_model", {
+      modelId,
+    });
+  },
+
+  async cancelLocalTtsInstall(modelId: string): Promise<boolean> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("cancel_local_tts_install", { modelId });
+  },
+
+  async deleteLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<LocalTtsModelDescriptor>("delete_local_tts_model", { modelId });
+  },
+
+  async onLocalTtsModelProgress(
+    callback: (progress: LocalTtsInstallProgress) => void,
+  ): Promise<() => void> {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<LocalTtsInstallProgress>(
+      "moose://local-tts/model-progress",
+      (event) => callback(event.payload),
+    );
+  },
+
   async setGoogleApiKey(apiKey: string): Promise<void> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("set_google_api_key", { apiKey });
@@ -240,6 +277,14 @@ export const nativeTauriBridge = {
     return invoke<string>("audition_voice", { voiceName });
   },
 
+  async auditionTtsVoice(
+    provider: TtsProvider,
+    voiceName: string,
+  ): Promise<string> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string>("audition_tts_voice", { provider, voiceName });
+  },
+
   async cancelStandaloneSpeech(): Promise<void> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("cancel_standalone_speech");
@@ -280,10 +325,7 @@ export const nativeTauriBridge = {
     return invoke<boolean>("delete_memory", { id });
   },
 
-  async forgetEverything(): Promise<void> {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return invoke("forget_everything");
-  },
+  async forgetEverything(): Promise<void> {},
 
   async getTranscripts(limit = 50): Promise<TranscriptRecord[]> {
     const { invoke } = await import("@tauri-apps/api/core");
