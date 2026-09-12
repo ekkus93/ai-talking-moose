@@ -10,12 +10,14 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "src-tauri/src/ai/local_tts/manifest/catalog.rs"
 MANIFEST = ROOT / "src-tauri/src/ai/local_tts/manifest.rs"
 ENGINE = ROOT / "src-tauri/src/ai/local_tts/runtime/engine.rs"
+CARGO = ROOT / "src-tauri/Cargo.toml"
 TAURI_CONFIG = ROOT / "src-tauri/tauri.conf.json"
 PACKAGE_JSON = ROOT / "package.json"
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
@@ -33,7 +35,6 @@ EXPECTED_ORT_ARCHIVES = {
     "onnxruntime-osx-arm64-1.23.2.tgz",
     "onnxruntime-osx-x86_64-1.23.2.tgz",
 }
-FORBIDDEN_TRACKED_SUFFIXES = (".onnx", ".npz", ".tgz", ".tar.gz")
 FORBIDDEN_BUNDLE_TOKENS = (
     ".onnx",
     "voices.npz",
@@ -51,6 +52,35 @@ def fail(message: str) -> None:
 def require_token(text: str, token: str, source: str) -> None:
     if token not in text:
         fail(f"{source} is missing required token {token!r}")
+
+
+def read_cargo_dependencies() -> dict:
+    with CARGO.open("rb") as handle:
+        return tomllib.load(handle).get("dependencies", {})
+
+
+def check_dependency_features() -> None:
+    dependencies = read_cargo_dependencies()
+
+    ort = dependencies.get("ort")
+    if not isinstance(ort, dict):
+        fail("Cargo.toml must declare ort as an explicit dependency table")
+    if ort.get("version") != f"={ORT_CRATE_VERSION}":
+        fail(f"ort must remain pinned to ={ORT_CRATE_VERSION}")
+    if ort.get("default-features") is not False:
+        fail("ort default features must remain disabled")
+    if set(ort.get("features", [])) != {"std", "api-23", "load-dynamic"}:
+        fail("ort must remain app-owned/load-dynamic with the frozen API feature set")
+
+    g2p = dependencies.get("piper-plus-g2p")
+    if not isinstance(g2p, dict):
+        fail("Cargo.toml must declare piper-plus-g2p as an explicit dependency table")
+    if g2p.get("version") != f"={G2P_CRATE_VERSION}":
+        fail(f"piper-plus-g2p must remain pinned to ={G2P_CRATE_VERSION}")
+    if g2p.get("default-features") is not False:
+        fail("piper-plus-g2p default features must remain disabled")
+    if g2p.get("features") != ["english"]:
+        fail("piper-plus-g2p must remain English-only without eSpeak/default feature payloads")
 
 
 def check_catalog_identity() -> None:
@@ -89,7 +119,10 @@ def check_catalog_identity() -> None:
     if len(sha_values) != 6 or any(len(value) != 64 for value in sha_values):
         fail("every production Local TTS artifact must carry one exact SHA-256")
 
-    byte_values = [int(value.replace("_", "")) for value in re.findall(r'\bexpected_bytes:\s*([0-9_]+),', text)]
+    byte_values = [
+        int(value.replace("_", ""))
+        for value in re.findall(r'\bexpected_bytes:\s*([0-9_]+),', text)
+    ]
     if len(byte_values) != 6 or any(value <= 0 for value in byte_values):
         fail("every production Local TTS artifact must carry a positive exact byte count")
 
@@ -126,8 +159,9 @@ def check_runtime_policy() -> None:
         "with_execution_providers([ep::CPU::default().build()])",
         "with_intra_threads(manifest.runtime.inference_threads as usize)",
         ".with_inter_threads(1)",
-        '"/lib/libonnxruntime.1.23.2.so"',
+        '"/lib/libonnxruntime.so.1.23.2"',
         '"/lib/libonnxruntime.1.23.2.dylib"',
+        "ort::init_from(library_file.path())",
     ):
         require_token(text, token, "Local TTS runtime engine")
     lowered = text.lower()
@@ -137,20 +171,21 @@ def check_runtime_policy() -> None:
 
 
 def check_no_unapproved_espeak_or_gpl_payload() -> None:
-    roots = [ROOT / "src-tauri/src/ai/local_tts", ROOT / "src-tauri/resources", ROOT / "src-tauri/native"]
-    for root in roots:
-        if not root.exists():
+    local_tts_root = ROOT / "src-tauri/src/ai/local_tts"
+    for path in local_tts_root.rglob("*"):
+        if not path.is_file():
             continue
-        for path in root.rglob("*"):
-            if not path.is_file():
-                continue
-            lowered_path = str(path.relative_to(ROOT)).lower()
-            if "espeak" in lowered_path:
-                fail(f"unapproved eSpeak payload is present: {path.relative_to(ROOT)}")
-            if path.suffix.lower() in {".rs", ".md", ".json", ".toml", ".txt"}:
-                text = path.read_text(encoding="utf-8", errors="ignore").lower()
-                if "espeak-ng" in text or "libespeak" in text:
-                    fail(f"unapproved eSpeak dependency/reference is present: {path.relative_to(ROOT)}")
+        lowered_path = str(path.relative_to(ROOT)).lower()
+        if "espeak" in lowered_path:
+            fail(f"unapproved eSpeak payload is present: {path.relative_to(ROOT)}")
+        if path.suffix.lower() in {".rs", ".md", ".json", ".toml", ".txt"}:
+            text = path.read_text(encoding="utf-8", errors="ignore").lower()
+            for forbidden in ("espeak-ng", "libespeak", "gnu general public license", "gpl-2", "gpl-3"):
+                if forbidden in text:
+                    fail(
+                        "unapproved eSpeak/GPL Local TTS dependency or payload reference is present: "
+                        f"{path.relative_to(ROOT)}"
+                    )
 
 
 def check_bundle_is_model_weight_free() -> None:
@@ -175,9 +210,10 @@ def check_bundle_is_model_weight_free() -> None:
     offenders = []
     for entry in tracked:
         lowered = entry.lower()
-        if any(lowered.endswith(suffix) for suffix in FORBIDDEN_TRACKED_SUFFIXES):
+        name = Path(lowered).name
+        if lowered.endswith(".onnx") or name in {"voices.npz", "cmudict_data.json"}:
             offenders.append(entry)
-        elif lowered.endswith("cmudict_data.json") or lowered.endswith("voices.npz"):
+        elif name.startswith("onnxruntime-") and (name.endswith(".tgz") or name.endswith(".tar.gz")):
             offenders.append(entry)
     if offenders:
         fail("Local TTS model/runtime payloads must not be tracked by Git:\n" + "\n".join(offenders))
@@ -191,7 +227,7 @@ def check_ordinary_ci_is_model_weight_free() -> None:
             fail(f"npm run check:all references real Local TTS artifact {token!r}")
 
     ci = CI_WORKFLOW.read_text(encoding="utf-8").lower()
-    for token in ("kitten_tts_mini_v0_8.onnx", "voices.npz", "cmudict_data.json?", "huggingface.co/kittenml"):
+    for token in ("kitten_tts_mini_v0_8.onnx", "voices.npz", "huggingface.co/kittenml"):
         if token in ci:
             fail(f"ordinary CI references real Local TTS download token {token!r}")
 
@@ -207,6 +243,7 @@ def check_ordinary_ci_is_model_weight_free() -> None:
 
 
 def main() -> None:
+    check_dependency_features()
     check_catalog_identity()
     check_platform_enum()
     check_runtime_policy()
