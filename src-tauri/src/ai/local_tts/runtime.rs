@@ -694,7 +694,15 @@ impl LocalTtsRuntimeManager {
     }
 
     pub fn status(&self, selected_model_id: String) -> LocalTtsRuntimeStatus {
-        let loaded = self.inner.state.lock().loaded.clone();
+        // The engine-state mutex is intentionally held for the duration of blocking inference.
+        // Diagnostics must never wait on that mutex, or a caller trying to inspect `Generating`
+        // can block behind the very inference operation it needs to observe. If the engine is
+        // busy, retain the lifecycle/selected-model telemetry and omit transient loaded identity.
+        let loaded = self
+            .inner
+            .state
+            .try_lock()
+            .and_then(|state| state.loaded.clone());
         let manifest = loaded
             .as_ref()
             .and_then(|identity| local_tts_model_manifest(&identity.model_id))
