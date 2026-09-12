@@ -119,7 +119,7 @@ pub fn get_local_tts_diagnostics(
     let (provider, selected_model_id, selected_voice_id) = {
         let settings = state.settings.read();
         (
-            settings.tts_provider.clone(),
+            settings.tts_provider,
             settings.local_tts_model.clone(),
             settings.local_tts_voice.clone(),
         )
