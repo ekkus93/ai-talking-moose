@@ -329,7 +329,7 @@ describe("SettingsModal Component", () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Voice & Audio"));
 
-    const voiceSelect = screen.getByLabelText("Google Standalone Voice");
+    const voiceSelect = await screen.findByLabelText("Google Standalone Voice");
     await waitFor(() =>
       expect(voiceSelect.querySelectorAll("option")).toHaveLength(30),
     );
