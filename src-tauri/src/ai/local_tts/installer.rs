@@ -140,6 +140,15 @@ impl LocalTtsInstaller {
         self.error_state.lock().latest()
     }
 
+    /// Return the most recently recorded safe installer error for one model only.
+    ///
+    /// Diagnostics use this instead of `latest_error()` so a failure for another model can never
+    /// be attributed to the selected Local TTS model. The returned error is already reduced to the
+    /// typed/safe installer boundary and contains no response body, path, credential, or utterance.
+    pub fn error_for_model(&self, model_id: &str) -> Option<LocalTtsInstallError> {
+        self.error_state.lock().for_model(model_id)
+    }
+
     pub fn status(
         &self,
         model_id: &str,
