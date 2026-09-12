@@ -50,6 +50,7 @@ fn main() {
     };
     println!(
         "{}",
-        serde_json::to_string_pretty(&contract).expect("Local TTS frontend contract must serialize")
+        serde_json::to_string_pretty(&contract)
+            .expect("Local TTS frontend contract must serialize")
     );
 }
