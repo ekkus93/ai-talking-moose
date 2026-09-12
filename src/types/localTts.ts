@@ -22,12 +22,7 @@ export type LocalTtsInstallErrorKind =
   | "corrupt_install";
 
 export type LocalTtsRuntimePhase =
-  | "unloaded"
-  | "loading"
-  | "generating"
-  | "ready"
-  | "failed"
-  | "shutting_down";
+  "unloaded" | "loading" | "generating" | "ready" | "failed" | "shutting_down";
 
 export type LocalTtsRuntimeErrorKind =
   | "shutting_down"
