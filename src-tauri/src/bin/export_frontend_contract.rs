@@ -7,11 +7,16 @@ use talking_moose_lib::ai::local::{
     LocalModelInstallErrorKind, LocalModelInstallProgress, LocalModelInstallState,
     LocalRuntimeDiagnostics, LocalRuntimeErrorKind, LocalRuntimePhase,
 };
+use talking_moose_lib::ai::local_tts::installer::LocalTtsInstallErrorKind;
+use talking_moose_lib::ai::local_tts::runtime::{
+    LocalTtsRuntimeErrorKind, LocalTtsRuntimePhase, LocalTtsRuntimeStatus,
+};
+use talking_moose_lib::ai::local_tts::storage::LocalTtsInstallState;
 use talking_moose_lib::ai::tts_catalog::{
     tts_catalog, GeminiLiveVoiceCatalog, TtsCatalog, TtsModelDescriptor, TtsProviderDescriptor,
     TtsVoiceDescriptor,
 };
-use talking_moose_lib::ai::types::{ProviderError, ProviderErrorKind};
+use talking_moose_lib::ai::types::{ProviderError, ProviderErrorKind, TtsProvider};
 use talking_moose_lib::app::state::{AppSettings, OnboardingStatus};
 use talking_moose_lib::asr::{
     AsrDiagnostics, AsrError, AsrErrorKind, AsrMode, AsrModelDescriptor, AsrModelInstallState,
@@ -21,7 +26,8 @@ use talking_moose_lib::audio::devices::AudioDeviceInfo;
 use talking_moose_lib::audio::permissions::MicrophonePermissionState;
 use talking_moose_lib::audio::playback::AudioPlaybackDiagnostics;
 use talking_moose_lib::commands::{
-    AsrModelProgressEvent, AudioDiagnostics, ConnectionTestResult, MicrophoneTestResult,
+    AsrModelProgressEvent, AudioDiagnostics, ConnectionTestResult, LocalTtsDiagnostics,
+    MicrophoneTestResult,
 };
 use talking_moose_lib::persistence::sqlite::{MemoryRecord, TranscriptRecord};
 use talking_moose_lib::tools::policy::{
@@ -50,6 +56,7 @@ struct FrontendIpcShapes {
     local_model_diagnostics: LocalModelDiagnostics,
     local_runtime_diagnostics: LocalRuntimeDiagnostics,
     local_llm_diagnostics: LocalLlmDiagnostics,
+    local_tts_diagnostics: LocalTtsDiagnostics,
     local_model_install_progress: LocalModelInstallProgress,
     audio_device_info: AudioDeviceInfo,
     audio_capture_diagnostics: AudioCaptureDiagnostics,
@@ -122,6 +129,34 @@ fn representative_local_install_error() -> LocalModelInstallError {
         kind: LocalModelInstallErrorKind::Network,
         message: "contract local model error".to_string(),
         retryable: true,
+    }
+}
+
+fn representative_local_tts_diagnostics() -> LocalTtsDiagnostics {
+    let model_id = "KittenML/kitten-tts-mini-0.8".to_string();
+    LocalTtsDiagnostics {
+        provider: TtsProvider::Local,
+        selected_model_id: model_id.clone(),
+        selected_voice_id: "Jasper".to_string(),
+        install_state: LocalTtsInstallState::Installed,
+        expected_bytes: 256,
+        installed_bytes: Some(256),
+        installer_error_category: Some(LocalTtsInstallErrorKind::Network),
+        installer_error_retryable: Some(true),
+        runtime: LocalTtsRuntimeStatus {
+            selected_model_id: model_id.clone(),
+            loaded_model_id: Some(model_id),
+            loaded_revision: Some("contract-local-tts-revision".to_string()),
+            runtime_compatibility_version: Some(1),
+            phase: LocalTtsRuntimePhase::Ready,
+            sample_rate_hz: Some(24_000),
+            inference_thread_count: Some(2),
+            last_model_load_duration_ms: Some(125),
+            last_synthesis_duration_ms: Some(50),
+            last_generated_audio_duration_ms: Some(500.0),
+            last_real_time_factor: Some(0.1),
+            last_error_category: Some(LocalTtsRuntimeErrorKind::Inference),
+        },
     }
 }
 
@@ -236,6 +271,7 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
             selected_install_state: Some(LocalModelInstallState::Verifying),
             runtime: local_runtime_diagnostics,
         },
+        local_tts_diagnostics: representative_local_tts_diagnostics(),
         local_model_install_progress: LocalModelInstallProgress {
             model_id: "contract-local-model".to_string(),
             install_state: LocalModelInstallState::Verifying,

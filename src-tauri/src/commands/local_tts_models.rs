@@ -37,7 +37,7 @@ pub struct LocalTtsModelDescriptor {
     pub error: Option<LocalTtsModelError>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct LocalTtsDiagnostics {
     pub provider: TtsProvider,
     pub selected_model_id: String,
@@ -143,9 +143,7 @@ pub fn get_local_tts_diagnostics(
     } else {
         (None, None)
     };
-    let runtime = state
-        .local_tts_runtime
-        .status(selected_model_id.clone());
+    let runtime = state.local_tts_runtime.status(selected_model_id.clone());
 
     Ok(LocalTtsDiagnostics {
         provider,

@@ -213,6 +213,7 @@ pub fn run() {
             delete_local_llm_model,
             test_local_llm_model,
             get_local_tts_models,
+            get_local_tts_diagnostics,
             install_local_tts_model,
             cancel_local_tts_install,
             delete_local_tts_model,
