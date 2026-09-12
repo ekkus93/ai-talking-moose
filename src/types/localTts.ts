@@ -65,10 +65,7 @@ export interface LocalTtsModelDescriptor {
 export interface LocalTtsInstallProgress {
   model_id: string;
   artifact_filename: string | null;
-  install_state: Extract<
-    LocalTtsInstallState,
-    "downloading" | "verifying" | "promoting",
-  >;
+  install_state: "downloading" | "verifying" | "promoting";
   downloaded_bytes: number;
   total_bytes: number;
 }
