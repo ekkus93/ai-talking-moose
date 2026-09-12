@@ -21,7 +21,12 @@ import type {
   TranscriptRecord,
   ToolAuditRecord,
   TtsCatalog,
+  TtsProvider,
 } from "../types/moose";
+import type {
+  LocalTtsInstallProgress,
+  LocalTtsModelDescriptor,
+} from "../types/localTts";
 import {
   frontendDefaultSettings,
   frontendGoogleModels,
@@ -166,6 +171,36 @@ const previewLocalLlmModel = (modelId: string): LocalModelDescriptor => {
   return model;
 };
 
+const previewLocalTtsModels = (): LocalTtsModelDescriptor[] => {
+  const settings = frontendDefaultSettings();
+  const localProvider = frontendTtsCatalog().providers.find(
+    (provider) => provider.id === "local",
+  );
+  const model = localProvider?.models[0];
+  if (!model) return [];
+  return [
+    {
+      id: model.id,
+      display_name: model.display_name,
+      version: "0.8",
+      expected_bytes: 93_604_191,
+      installed_bytes: null,
+      license: "Apache-2.0",
+      install_state: "not_installed",
+      active: settings.local_tts_model === model.id,
+      error: null,
+    },
+  ];
+};
+
+const previewLocalTtsModel = (modelId: string): LocalTtsModelDescriptor => {
+  const model = previewLocalTtsModels().find(
+    (candidate) => candidate.id === modelId,
+  );
+  if (!model) throw new Error("Unknown Local TTS model");
+  return model;
+};
+
 /**
  * Development-only frontend preview adapter.
  *
@@ -304,6 +339,33 @@ export const browserPreviewBridge = {
     return () => undefined;
   },
 
+  async getLocalTtsModels(): Promise<LocalTtsModelDescriptor[]> {
+    return previewLocalTtsModels();
+  },
+
+  async installLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+    const model = previewLocalTtsModel(modelId);
+    return {
+      ...model,
+      install_state: "installed",
+      installed_bytes: model.expected_bytes,
+    };
+  },
+
+  async cancelLocalTtsInstall(_modelId: string): Promise<boolean> {
+    return false;
+  },
+
+  async deleteLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+    return previewLocalTtsModel(modelId);
+  },
+
+  async onLocalTtsModelProgress(
+    _callback: (progress: LocalTtsInstallProgress) => void,
+  ): Promise<() => void> {
+    return () => undefined;
+  },
+
   async setGoogleApiKey(_apiKey: string): Promise<void> {},
 
   async clearGoogleApiKey(): Promise<void> {},
@@ -360,6 +422,13 @@ export const browserPreviewBridge = {
 
   async auditionVoice(voiceName: string): Promise<string> {
     return `Auditioning ${voiceName}`;
+  },
+
+  async auditionTtsVoice(
+    provider: TtsProvider,
+    voiceName: string,
+  ): Promise<string> {
+    return `Auditioning ${provider} voice ${voiceName}`;
   },
 
   async cancelStandaloneSpeech(): Promise<void> {},
