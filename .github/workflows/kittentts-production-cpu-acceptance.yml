@@ -56,23 +56,78 @@ env:
   G2P_URL: "https://raw.githubusercontent.com/ayutaz/piper-plus/244ffeb44108347a514ebfc0c2f773d938c9613b/src/rust/piper-plus-g2p/data/cmudict_data.json"
   G2P_BYTES: "3748042"
   G2P_SHA256: "f78ed3bfa40146b70b9de78a7c67ef3be6b6c11671bb2a050442f232252a3f01"
-  ORT_FILENAME: onnxruntime-linux-x64-1.23.2.tgz
-  ORT_URL: "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz"
-  ORT_BYTES: "8309231"
-  ORT_SHA256: "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b"
 
 jobs:
+  guard:
+    name: Verify exact acceptance head
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      expected_sha: ${{ steps.guard.outputs.expected_sha }}
+    steps:
+      - name: Resolve and verify exact head
+        id: guard
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA_VALUE: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          expected_sha="$GITHUB_SHA_VALUE"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            expected_sha="$PR_HEAD_SHA"
+            ref_json="$(curl --fail-with-body --silent --show-error \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$REPOSITORY/git/ref/heads/$PR_HEAD_REF")"
+            actual_sha="$(printf '%s' "$ref_json" | jq -r '.object.sha')"
+            test "$actual_sha" = "$expected_sha"
+          fi
+          test -n "$expected_sha"
+          echo "expected_sha=$expected_sha" >> "$GITHUB_OUTPUT"
+          echo "Exact acceptance SHA: \`$expected_sha\`" >> "$GITHUB_STEP_SUMMARY"
+
   cpu-acceptance:
-    name: Real Kitten Mini CPU inference
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    name: Real Kitten Mini CPU inference (${{ matrix.label }})
+    needs: guard
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-24.04
+            ort_filename: onnxruntime-linux-x64-1.23.2.tgz
+            ort_url: "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz"
+            ort_bytes: "8309231"
+            ort_sha256: "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b"
+          - label: macos-arm64
+            runner: macos-15
+            ort_filename: onnxruntime-osx-arm64-1.23.2.tgz
+            ort_url: "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-arm64-1.23.2.tgz"
+            ort_bytes: "9999931"
+            ort_sha256: "b4d513ab2b26f088c66891dbbc1408166708773d7cc4163de7bdca0e9bbb7856"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
     env:
       CUDA_VISIBLE_DEVICES: ""
       HIP_VISIBLE_DEVICES: ""
       ROCR_VISIBLE_DEVICES: ""
+      ORT_FILENAME: ${{ matrix.ort_filename }}
+      ORT_URL: ${{ matrix.ort_url }}
+      ORT_BYTES: ${{ matrix.ort_bytes }}
+      ORT_SHA256: ${{ matrix.ort_sha256 }}
+      ACCEPTANCE_LABEL: ${{ matrix.label }}
+      EXPECTED_SHA: ${{ needs.guard.outputs.expected_sha }}
     steps:
-      - name: Check out repository
+      - name: Check out exact acceptance head
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.expected_sha }}
 
       - name: Verify acceptance metadata matches the production catalog
         shell: bash
@@ -113,7 +168,27 @@ jobs:
                   )
           PY
 
+      - name: Record runner CPU identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          identity="$RUNNER_TEMP/kittentts-runner.txt"
+          {
+            echo "label=$ACCEPTANCE_LABEL"
+            echo "sha=$EXPECTED_SHA"
+            uname -a
+            if [[ "$RUNNER_OS" == "Linux" ]]; then
+              lscpu
+            else
+              sysctl -n machdep.cpu.brand_string || true
+              sysctl -n hw.model || true
+              sysctl -n hw.ncpu || true
+              sysctl -n hw.memsize || true
+            fi
+          } | tee "$identity"
+
       - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -132,46 +207,78 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-kittentts-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.label }}-kittentts-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-kittentts-cargo-
             ${{ runner.os }}-kittentts-cargo-
 
-      - name: Download and verify frozen KittenTTS artifacts
+      - name: Restore pinned KittenTTS artifact cache
+        id: artifact-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/kittentts-artifacts
+          key: kittentts-${{ matrix.label }}-${{ env.MODEL_SHA256 }}-${{ env.VOICES_SHA256 }}-${{ env.G2P_SHA256 }}-${{ matrix.ort_sha256 }}
+
+      - name: Acquire and verify frozen KittenTTS artifacts
         shell: bash
         run: |
           set -euo pipefail
-          artifact_dir="$RUNNER_TEMP/kittentts-artifacts"
-          mkdir -p "$artifact_dir"
+          export ARTIFACT_DIR="$RUNNER_TEMP/kittentts-artifacts"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import urllib.request
+          from pathlib import Path
 
-          fetch_verified() {
-            local url="$1"
-            local filename="$2"
-            local expected_bytes="$3"
-            local expected_sha="$4"
-            local output="$artifact_dir/$filename"
+          artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+          artifact_dir.mkdir(parents=True, exist_ok=True)
+          specs = [
+              ("MODEL_FILENAME", "MODEL_URL", "MODEL_BYTES", "MODEL_SHA256"),
+              ("VOICES_FILENAME", "VOICES_URL", "VOICES_BYTES", "VOICES_SHA256"),
+              ("G2P_FILENAME", "G2P_URL", "G2P_BYTES", "G2P_SHA256"),
+              ("ORT_FILENAME", "ORT_URL", "ORT_BYTES", "ORT_SHA256"),
+          ]
 
-            curl --fail --location --show-error --silent \
-              --retry 4 --retry-all-errors --retry-delay 2 \
-              --output "$output" "$url"
+          for filename_key, url_key, bytes_key, sha_key in specs:
+              filename = os.environ[filename_key]
+              path = artifact_dir / filename
+              expected_bytes = int(os.environ[bytes_key])
+              expected_sha = os.environ[sha_key]
+              if not path.exists():
+                  temporary = path.with_suffix(path.suffix + ".download")
+                  with urllib.request.urlopen(os.environ[url_key], timeout=120) as response:
+                      with temporary.open("wb") as output:
+                          while chunk := response.read(1024 * 1024):
+                              output.write(chunk)
+                  temporary.replace(path)
+              actual_bytes = path.stat().st_size
+              if actual_bytes != expected_bytes:
+                  raise SystemExit(
+                      f"size mismatch for {filename}: expected {expected_bytes}, got {actual_bytes}"
+                  )
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  while chunk := handle.read(1024 * 1024):
+                      digest.update(chunk)
+              actual_sha = digest.hexdigest()
+              if actual_sha != expected_sha:
+                  raise SystemExit(
+                      f"SHA-256 mismatch for {filename}: expected {expected_sha}, got {actual_sha}"
+                  )
+              print(f"verified {filename} bytes={actual_bytes} sha256={actual_sha}")
+          PY
 
-            local actual_bytes
-            actual_bytes="$(stat -c '%s' "$output")"
-            if [[ "$actual_bytes" != "$expected_bytes" ]]; then
-              echo "size mismatch for $filename: expected $expected_bytes, got $actual_bytes" >&2
-              exit 1
-            fi
-            printf '%s  %s\n' "$expected_sha" "$output" | sha256sum --check --strict
-          }
-
-          fetch_verified "$MODEL_URL" "$MODEL_FILENAME" "$MODEL_BYTES" "$MODEL_SHA256"
-          fetch_verified "$VOICES_URL" "$VOICES_FILENAME" "$VOICES_BYTES" "$VOICES_SHA256"
-          fetch_verified "$G2P_URL" "$G2P_FILENAME" "$G2P_BYTES" "$G2P_SHA256"
-          fetch_verified "$ORT_URL" "$ORT_FILENAME" "$ORT_BYTES" "$ORT_SHA256"
+      - name: Save verified KittenTTS artifact cache
+        if: steps.artifact-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/kittentts-artifacts
+          key: kittentts-${{ matrix.label }}-${{ env.MODEL_SHA256 }}-${{ env.VOICES_SHA256 }}-${{ env.G2P_SHA256 }}-${{ matrix.ort_sha256 }}
 
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
 
-      - name: Run real Kitten Mini CPU acceptance
+      - name: Run hardened real Kitten Mini CPU acceptance
         shell: bash
         run: |
           set -euo pipefail
@@ -183,8 +290,66 @@ jobs:
             --manifest-path src-tauri/Cargo.toml \
             --locked \
             --lib \
-            real_kitten_cpu_acceptance \
+            'ai::local_tts::tests::real_kitten_cpu_acceptance_production_provider_offline_privacy' \
             -- \
             --ignored \
+            --exact \
             --nocapture \
-            --test-threads=1
+            --test-threads=1 \
+            2>&1 | tee "$RUNNER_TEMP/kittentts-test.log"
+
+      - name: Publish performance and privacy evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TEST_LOG="$RUNNER_TEMP/kittentts-test.log"
+          export EVIDENCE_JSON="$RUNNER_TEMP/kittentts-acceptance-$ACCEPTANCE_LABEL.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          prefix = "KITTENTTS_ACCEPTANCE_JSON="
+          lines = Path(os.environ["TEST_LOG"]).read_text(encoding="utf-8").splitlines()
+          payloads = [line[len(prefix):] for line in lines if line.startswith(prefix)]
+          if len(payloads) != 1:
+              raise SystemExit(f"expected one acceptance evidence line, found {len(payloads)}")
+          evidence = json.loads(payloads[0])
+          evidence["qualified_sha"] = os.environ["EXPECTED_SHA"]
+          evidence["runner_label"] = os.environ["ACCEPTANCE_LABEL"]
+          evidence_path = Path(os.environ["EVIDENCE_JSON"])
+          evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
+
+          if not evidence.get("network_denied"):
+              raise SystemExit("network-denial proof was not active")
+          if not evidence.get("cancellation_observed"):
+              raise SystemExit("real cancellation was not observed")
+          rtfs = evidence.get("warm_real_time_factors", [])
+          if len(rtfs) != 8 or not all(0 < value < 1.0 for value in rtfs):
+              raise SystemExit(f"warm RTF hard gate failed: {rtfs!r}")
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as handle:
+              handle.write(f"## KittenTTS CPU acceptance — {evidence['platform']}\n\n")
+              handle.write(f"- Qualified SHA: `{evidence['qualified_sha']}`\n")
+              handle.write(f"- Model-load duration: `{evidence['model_load_duration_ms']} ms`\n")
+              handle.write(f"- Cold end-to-end first synthesis: `{evidence['cold_end_to_end_ms']} ms`\n")
+              handle.write(f"- Warm median RTF: `{evidence['median_warm_rtf']:.4f}`\n")
+              handle.write(f"- Warm p95 RTF: `{evidence['p95_warm_rtf']:.4f}`\n")
+              handle.write(f"- Warm RTF hard gate `< 1.0`: `PASS`\n")
+              handle.write(f"- Voices exercised: `{', '.join(evidence['voices_exercised'])}`\n")
+              handle.write(f"- Inference threads: `{evidence['inference_threads']}`\n")
+              handle.write(f"- Max RSS bytes: `{evidence.get('max_rss_bytes')}`\n")
+              handle.write("- In-process network-denial synthesis: `PASS`\n")
+              handle.write("- In-flight cancellation/preemption: `PASS`\n")
+          PY
+
+      - name: Upload machine-readable acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: kittentts-cpu-acceptance-${{ matrix.label }}-${{ needs.guard.outputs.expected_sha }}
+          path: |
+            ${{ runner.temp }}/kittentts-acceptance-${{ matrix.label }}.json
+            ${{ runner.temp }}/kittentts-runner.txt
+          if-no-files-found: error
+          retention-days: 14
