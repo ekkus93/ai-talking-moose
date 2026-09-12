@@ -274,9 +274,10 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </div>
         ) : selectedProvider ? (
           <div className="border border-black/40 rounded bg-white p-2 text-[11px] text-gray-700">
-            Local KittenTTS does not expose a truthful pitch control. Your stored
-            Google pitch preference ({settings.pitch.toFixed(1)}) is preserved and
-            will be used again if you switch back to Google standalone speech.
+            Local KittenTTS does not expose a truthful pitch control. Your
+            stored Google pitch preference ({settings.pitch.toFixed(1)}) is
+            preserved and will be used again if you switch back to Google
+            standalone speech.
           </div>
         ) : null}
 
@@ -303,17 +304,15 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         ) : (
           <p className="text-[11px] text-gray-700">
             Local voice audition is enabled only after the Local model lifecycle
-            path can verify that the selected Kitten model is installed and ready.
+            path can verify that the selected Kitten model is installed and
+            ready.
           </p>
         )}
       </section>
 
       <section className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2">
         <div>
-          <label
-            htmlFor="settings-live-voice"
-            className="block mb-1 font-bold"
-          >
+          <label htmlFor="settings-live-voice" className="block mb-1 font-bold">
             Gemini Live Conversation Voice
           </label>
           <select
@@ -342,7 +341,8 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         </div>
         <p className="text-[11px] text-gray-700">
           Gemini Live is a separate Google cloud conversation path. Changing the
-          standalone provider or Local KittenTTS voice does not change this voice.
+          standalone provider or Local KittenTTS voice does not change this
+          voice.
         </p>
       </section>
     </div>
