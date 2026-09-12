@@ -87,6 +87,17 @@ fn standalone_tts_snapshot(
     }
 }
 
+fn ensure_snapshot_provider(
+    snapshot: &StandaloneTtsSettingsSnapshot,
+    required_provider: TtsProvider,
+) -> Result<(), String> {
+    if snapshot.provider == required_provider {
+        Ok(())
+    } else {
+        Err("The standalone speech provider changed; retry the voice audition.".to_string())
+    }
+}
+
 fn synthesizer_for_snapshot(
     state: &AppState,
     snapshot: &StandaloneTtsSettingsSnapshot,
@@ -149,19 +160,12 @@ async fn synthesize_standalone(
     })
 }
 
-/// Authoritative standalone speech invocation for ambient remarks, character
-/// reactions/auditions, and text-mode replies. Speech is not surfaced as Talking
-/// until synthesis has produced playable audio and the bounded playback queue has
-/// accepted the entire utterance.
-pub(crate) async fn invoke_standalone_speech<R: Runtime>(
+async fn invoke_standalone_speech_snapshot<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
     text: &str,
-    voice_override: Option<String>,
+    snapshot: StandaloneTtsSettingsSnapshot,
 ) -> Result<StandaloneSpeechPlayback, String> {
-    // Capture provider/model/voice/rate/pitch/output-device under one settings read. Any settings
-    // change racing this utterance applies to the next utterance instead of mixing providers.
-    let snapshot = standalone_tts_snapshot(state, voice_override);
     let request = snapshot.request(text);
     let output_device = snapshot.output_device.clone();
     let synthesizer = synthesizer_for_snapshot(state, &snapshot);
@@ -182,6 +186,38 @@ pub(crate) async fn invoke_standalone_speech<R: Runtime>(
     }
     let _ = app.emit("moose://speech-bubble", text);
     Ok(playback)
+}
+
+/// Authoritative standalone speech invocation for ambient remarks, character
+/// reactions/auditions, and text-mode replies. Speech is not surfaced as Talking
+/// until synthesis has produced playable audio and the bounded playback queue has
+/// accepted the entire utterance.
+pub(crate) async fn invoke_standalone_speech<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+    voice_override: Option<String>,
+) -> Result<StandaloneSpeechPlayback, String> {
+    // Capture provider/model/voice/rate/pitch/output-device under one settings read. Any settings
+    // change racing this utterance applies to the next utterance instead of mixing providers.
+    let snapshot = standalone_tts_snapshot(state, voice_override);
+    invoke_standalone_speech_snapshot(state, app, text, snapshot).await
+}
+
+/// Provider-guarded standalone invocation used by voice audition. The provider is not an override:
+/// it must still match the one captured from authoritative settings. If settings change while the
+/// UI request is in flight, the audition fails closed instead of speaking through a different
+/// provider than the label the user clicked.
+pub(crate) async fn invoke_standalone_speech_for_provider<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+    provider: TtsProvider,
+    voice_override: Option<String>,
+) -> Result<StandaloneSpeechPlayback, String> {
+    let snapshot = standalone_tts_snapshot(state, voice_override);
+    ensure_snapshot_provider(&snapshot, provider)?;
+    invoke_standalone_speech_snapshot(state, app, text, snapshot).await
 }
 
 pub(crate) fn schedule_standalone_completion<R: Runtime>(
@@ -272,6 +308,18 @@ mod tests {
         assert_eq!(snapshot.voice_id, "Luna");
         assert_eq!(snapshot.speaking_rate, 0.9);
         assert_eq!(snapshot.output_device.as_deref(), Some("before"));
+    }
+
+    #[test]
+    fn provider_guard_fails_closed_when_audition_races_provider_switch() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().tts_provider = TtsProvider::Local;
+        let snapshot = standalone_tts_snapshot(&state, Some("Bella".to_string()));
+
+        let error = ensure_snapshot_provider(&snapshot, TtsProvider::Google)
+            .expect_err("Google-labelled audition must not run through Local");
+        assert!(error.contains("provider changed"));
+        assert!(ensure_snapshot_provider(&snapshot, TtsProvider::Local).is_ok());
     }
 
     #[test]
