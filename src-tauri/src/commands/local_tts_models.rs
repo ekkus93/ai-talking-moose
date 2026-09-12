@@ -235,3 +235,49 @@ pub async fn audition_tts_voice<R: Runtime>(
     schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
     Ok(VOICE_AUDITION_SCRIPT.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai::local_tts::runtime::{LocalTtsRuntimePhase, LocalTtsRuntimeStatus};
+
+    #[test]
+    fn diagnostics_serialization_exposes_safe_identity_without_sensitive_payload_slots() {
+        const SENTINEL: &str = "KCR130_COMMAND_SENTINEL_2C14F7A9";
+        let model_id = "KittenML/kitten-tts-mini-0.8".to_string();
+        let diagnostics = LocalTtsDiagnostics {
+            provider: TtsProvider::Local,
+            selected_model_id: model_id.clone(),
+            selected_voice_id: "Jasper".to_string(),
+            install_state: LocalTtsInstallState::Installed,
+            expected_bytes: 256,
+            installed_bytes: Some(256),
+            installer_error_category: None,
+            installer_error_retryable: None,
+            runtime: LocalTtsRuntimeStatus {
+                selected_model_id: model_id.clone(),
+                loaded_model_id: Some(model_id.clone()),
+                loaded_revision: Some("test-revision".to_string()),
+                runtime_compatibility_version: Some(1),
+                phase: LocalTtsRuntimePhase::Ready,
+                sample_rate_hz: Some(24_000),
+                inference_thread_count: Some(2),
+                last_model_load_duration_ms: Some(10),
+                last_synthesis_duration_ms: Some(20),
+                last_generated_audio_duration_ms: Some(100.0),
+                last_real_time_factor: Some(0.2),
+                last_error_category: None,
+            },
+        };
+
+        let json = serde_json::to_string(&diagnostics).unwrap();
+        assert!(json.contains(&model_id));
+        assert!(json.contains("Jasper"));
+        assert!(json.contains("\"phase\":\"ready\""));
+        assert!(!json.contains(SENTINEL));
+        assert!(!json.contains("utterance"));
+        assert!(!json.contains("pcm"));
+        assert!(!json.contains("credential"));
+        assert!(!json.contains("path"));
+    }
+}
