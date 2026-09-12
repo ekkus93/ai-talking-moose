@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SettingsModal } from "../components/Settings/SettingsModal";
 import { useMooseStore } from "../stores/mooseStore";
@@ -334,10 +340,10 @@ describe("SettingsModal Component", () => {
       expect(voiceSelect.querySelectorAll("option")).toHaveLength(30),
     );
     expect(
-      screen.getByRole("option", { name: /Fenrir \(Excitable\)/i }),
+      within(voiceSelect).getByRole("option", { name: /Fenrir \(Excitable\)/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /Sulafat \(Warm\)/i }),
+      within(voiceSelect).getByRole("option", { name: /Sulafat \(Warm\)/i }),
     ).toBeInTheDocument();
   });
 
