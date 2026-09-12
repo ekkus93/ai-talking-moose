@@ -340,10 +340,14 @@ describe("SettingsModal Component", () => {
       expect(voiceSelect.querySelectorAll("option")).toHaveLength(30),
     );
     expect(
-      within(voiceSelect).getByRole("option", { name: /Fenrir \(Excitable\)/i }),
+      within(voiceSelect).getByRole("option", {
+        name: /Fenrir \(Excitable\)/i,
+      }),
     ).toBeInTheDocument();
     expect(
-      within(voiceSelect).getByRole("option", { name: /Sulafat \(Warm\)/i }),
+      within(voiceSelect).getByRole("option", {
+        name: /Sulafat \(Warm\)/i,
+      }),
     ).toBeInTheDocument();
   });
 
