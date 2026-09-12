@@ -1,6 +1,6 @@
 # Local TTS Runtime and Downloaded-Asset License Evidence
 
-Status: **KCR release-policy evidence**  
+Status: **KCR release-policy evidence**
 Recorded: 2026-09-12
 
 Talking Moose does **not** bundle KittenTTS model weights, voice embeddings, CMUdict data, or ONNX Runtime archives in the ordinary application bundle. These artifacts are downloaded from their pinned upstream locations by the Local TTS installer after explicit user action. This document records the license evidence for those externally acquired artifacts separately from the generated license inventory for dependencies that are actually linked or bundled into the application.
