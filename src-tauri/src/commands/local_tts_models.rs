@@ -3,8 +3,13 @@ use crate::ai::local_tts::installer::{
 };
 use crate::ai::local_tts::manifest::{local_tts_model_manifest, LocalTtsPlatform};
 use crate::ai::local_tts::storage::LocalTtsInstallState;
-use crate::ai::local_tts::LOCAL_TTS_MODEL_IDS;
+use crate::ai::local_tts::{validate_local_tts_voice, LOCAL_TTS_MODEL_IDS};
+use crate::ai::types::TtsProvider;
 use crate::app::state::AppState;
+use crate::commands::character::VOICE_AUDITION_SCRIPT;
+use crate::commands::speech::{
+    invoke_standalone_speech_for_provider, schedule_standalone_completion,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{Emitter, Runtime, State};
@@ -132,4 +137,38 @@ pub async fn delete_local_tts_model(
 
     let selected_model_id = state.settings.read().local_tts_model.clone();
     descriptor(&model_id, &selected_model_id)
+}
+
+#[tauri::command]
+pub async fn audition_tts_voice<R: Runtime>(
+    provider: TtsProvider,
+    voice_name: String,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<String, String> {
+    match provider {
+        TtsProvider::Google => crate::ai::google::validate_tts_voice(&voice_name)?,
+        TtsProvider::Local => {
+            validate_local_tts_voice(&voice_name)?;
+            let model_id = state.settings.read().local_tts_model.clone();
+            // Local audition is a real runtime readiness check, not just a catalog label check.
+            // The runtime performs the KTT-204 install verification before loading.
+            state
+                .local_tts_runtime
+                .ensure_loaded(&model_id)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    let playback = invoke_standalone_speech_for_provider(
+        state.inner(),
+        &app,
+        VOICE_AUDITION_SCRIPT,
+        provider,
+        Some(voice_name),
+    )
+    .await?;
+    schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
+    Ok(VOICE_AUDITION_SCRIPT.to_string())
 }
