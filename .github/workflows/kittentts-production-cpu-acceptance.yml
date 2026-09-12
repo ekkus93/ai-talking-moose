@@ -212,6 +212,33 @@ jobs:
             ${{ runner.os }}-${{ matrix.label }}-kittentts-cargo-
             ${{ runner.os }}-kittentts-cargo-
 
+      - name: Cache pinned Moonshine native runtime
+        if: runner.os == 'macOS'
+        id: moonshine-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/native/macos/libmoonshine.dylib
+            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+            src-tauri/native/macos/notices/MoonshineRuntime
+            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
+            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
+          key: moonshine-macos-arm64-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
+
+      - name: Prepare pinned Moonshine native runtime
+        if: runner.os == 'macOS' && steps.moonshine-cache.outputs.cache-hit != 'true'
+        run: bash scripts/prepare_moonshine_macos.sh arm64
+
+      - name: Verify prepared Moonshine runtime architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s src-tauri/native/macos/libmoonshine.dylib
+          test -s src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+          lipo -archs src-tauri/native/macos/libmoonshine.dylib | tr ' ' '\n' | grep -Fx arm64
+          lipo -archs src-tauri/native/macos/libonnxruntime.1.23.2.dylib | tr ' ' '\n' | grep -Fx arm64
+
       - name: Restore pinned KittenTTS artifact cache
         id: artifact-cache
         uses: actions/cache/restore@v4
@@ -311,7 +338,7 @@ jobs:
 
           prefix = "KITTENTTS_ACCEPTANCE_JSON="
           lines = Path(os.environ["TEST_LOG"]).read_text(encoding="utf-8").splitlines()
-          payloads = [line[len(prefix):] for line in lines if line.startswith(prefix)]
+          payloads = [line.split(prefix, 1)[1] for line in lines if prefix in line]
           if len(payloads) != 1:
               raise SystemExit(f"expected one acceptance evidence line, found {len(payloads)}")
           evidence = json.loads(payloads[0])
