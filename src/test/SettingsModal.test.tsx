@@ -325,16 +325,16 @@ describe("SettingsModal Component", () => {
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toBeInTheDocument();
   });
 
-  it("uses the backend-derived voice catalog in the primary voice selector", async () => {
+  it("uses the backend-derived Google catalog in the standalone voice selector", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Voice & Audio"));
 
-    const voiceSelect = screen.getByLabelText("Moose Voice Preset");
+    const voiceSelect = screen.getByLabelText("Google Standalone Voice");
     await waitFor(() =>
       expect(voiceSelect.querySelectorAll("option")).toHaveLength(30),
     );
     expect(
-      screen.getByRole("option", { name: /Fenrir \(Excitable\).*Default/i }),
+      screen.getByRole("option", { name: /Fenrir \(Excitable\)/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("option", { name: /Sulafat \(Warm\)/i }),
