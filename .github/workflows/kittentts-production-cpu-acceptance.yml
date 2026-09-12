@@ -12,7 +12,10 @@ on:
       - "src-tauri/src/ai/local_tts/**"
       - "src-tauri/src/app/state.rs"
       - "src-tauri/src/audio/speech.rs"
+      - "src-tauri/src/commands/character.rs"
+      - "src-tauri/src/commands/local_tts_models.rs"
       - "src-tauri/src/commands/speech.rs"
+      - "src-tauri/src/lib.rs"
   push:
     branches:
       - master
@@ -24,7 +27,10 @@ on:
       - "src-tauri/src/ai/local_tts/**"
       - "src-tauri/src/app/state.rs"
       - "src-tauri/src/audio/speech.rs"
+      - "src-tauri/src/commands/character.rs"
+      - "src-tauri/src/commands/local_tts_models.rs"
       - "src-tauri/src/commands/speech.rs"
+      - "src-tauri/src/lib.rs"
   workflow_dispatch:
 
 permissions:
