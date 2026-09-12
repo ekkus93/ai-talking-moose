@@ -325,20 +325,41 @@ describe("SettingsModal Component", () => {
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toBeInTheDocument();
   });
 
-  it("uses the backend-derived voice catalog in the primary voice selector", async () => {
+  it("keeps standalone provider voices and Gemini Live voice isolated", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Voice & Audio"));
 
-    const voiceSelect = screen.getByLabelText("Moose Voice Preset");
-    await waitFor(() =>
-      expect(voiceSelect.querySelectorAll("option")).toHaveLength(30),
-    );
+    const providerSelect = screen.getByLabelText("Standalone Speech Provider");
+    await waitFor(() => expect(providerSelect).not.toBeDisabled());
+    expect(providerSelect).toHaveValue("google");
+
+    const googleVoice = screen.getByLabelText("Google Standalone Voice");
+    expect(googleVoice.querySelectorAll("option")).toHaveLength(30);
     expect(
-      screen.getByRole("option", { name: /Fenrir \(Excitable\).*Default/i }),
+      screen.getByRole("option", { name: /Fenrir \(Excitable\)/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("option", { name: /Sulafat \(Warm\)/i }),
     ).toBeInTheDocument();
+    const liveVoice = screen.getByLabelText("Gemini Live Conversation Voice");
+    expect(liveVoice).toHaveValue("Fenrir");
+    expect(screen.getByLabelText("Google Pitch Steering")).toBeInTheDocument();
+
+    fireEvent.change(providerSelect, { target: { value: "local" } });
+    await waitFor(() =>
+      expect(useMooseStore.getState().settings?.tts_provider).toBe("local"),
+    );
+
+    const localVoice = screen.getByLabelText("Local KittenTTS Voice");
+    expect(localVoice.querySelectorAll("option")).toHaveLength(8);
+    expect(screen.getByRole("option", { name: "Bella" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Leo" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Google Pitch Steering")).not.toBeInTheDocument();
+    expect(screen.getByText(/stored Google pitch preference/i)).toBeInTheDocument();
+    expect(useMooseStore.getState().settings?.pitch).toBe(-1.5);
+    expect(screen.getByLabelText("Gemini Live Conversation Voice")).toHaveValue(
+      "Fenrir",
+    );
   });
 
   it("shows only current capability-filtered Gemini model options", async () => {
