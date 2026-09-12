@@ -286,20 +286,27 @@ mod tests {
         assert!(!error.message.contains("this text must stay local"));
     }
 
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     fn real_acceptance_platform() -> LocalTtsPlatform {
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        {
-            return LocalTtsPlatform::LinuxX86_64;
-        }
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        {
-            return LocalTtsPlatform::MacosArm64;
-        }
-        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-        {
-            return LocalTtsPlatform::MacosX86_64;
-        }
-        #[allow(unreachable_code)]
+        LocalTtsPlatform::LinuxX86_64
+    }
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    fn real_acceptance_platform() -> LocalTtsPlatform {
+        LocalTtsPlatform::MacosArm64
+    }
+
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    fn real_acceptance_platform() -> LocalTtsPlatform {
+        LocalTtsPlatform::MacosX86_64
+    }
+
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64")
+    )))]
+    fn real_acceptance_platform() -> LocalTtsPlatform {
         panic!("unsupported real Local TTS acceptance platform")
     }
 
