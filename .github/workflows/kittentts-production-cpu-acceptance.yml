@@ -313,6 +313,9 @@ jobs:
           export KTT301_VOICES_PATH="$RUNNER_TEMP/kittentts-artifacts/$VOICES_FILENAME"
           export KTT301_G2P_PATH="$RUNNER_TEMP/kittentts-artifacts/$G2P_FILENAME"
           export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/kittentts-artifacts/$ORT_FILENAME"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          fi
           cargo test \
             --manifest-path src-tauri/Cargo.toml \
             --locked \
