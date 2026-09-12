@@ -33,6 +33,25 @@ impl RuntimeArtifactVerifier for FakeVerifier {
     }
 }
 
+struct BlockingVerifier {
+    entered: Arc<AtomicBool>,
+    release: Arc<AtomicBool>,
+}
+
+impl RuntimeArtifactVerifier for BlockingVerifier {
+    fn verify(
+        &self,
+        _model_id: &str,
+        _platform: LocalTtsPlatform,
+    ) -> Result<Vec<PathBuf>, LocalTtsRuntimeError> {
+        self.entered.store(true, Ordering::SeqCst);
+        while !self.release.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        Ok(vec![PathBuf::from("/verified/model-set")])
+    }
+}
+
 #[derive(Default)]
 struct EngineCounters {
     creates: AtomicUsize,
@@ -241,6 +260,84 @@ async fn warm_runtime_is_reused_and_duplicate_loads_are_serialized() {
     assert_eq!(counters.creates.load(Ordering::SeqCst), 1);
     assert_eq!(counters.loads.load(Ordering::SeqCst), 1);
     assert_eq!(counters.unloads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn diagnostics_observe_loading_ready_generating_ready_without_utterance_leak() {
+    const SENTINEL: &str = "KCR130_RUNTIME_SENTINEL_8E5D31F2";
+
+    let verify_entered = Arc::new(AtomicBool::new(false));
+    let verify_release = Arc::new(AtomicBool::new(false));
+    let synthesis_entered = Arc::new(AtomicBool::new(false));
+    let synthesis_exited = Arc::new(AtomicBool::new(false));
+    let manager = Arc::new(LocalTtsRuntimeManager::with_dependencies(
+        Arc::new(BlockingVerifier {
+            entered: verify_entered.clone(),
+            release: verify_release.clone(),
+        }),
+        Arc::new(BlockingCancellationFactory {
+            entered: synthesis_entered.clone(),
+            exited: synthesis_exited.clone(),
+        }),
+    ));
+
+    assert_eq!(
+        manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string()).phase,
+        LocalTtsRuntimePhase::Unloaded
+    );
+
+    let load = {
+        let manager = manager.clone();
+        tokio::spawn(async move { manager.ensure_loaded(DEFAULT_LOCAL_TTS_MODEL_ID).await })
+    };
+    wait_until_true(&verify_entered).await;
+    let loading = manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string());
+    assert_eq!(loading.phase, LocalTtsRuntimePhase::Loading);
+    assert!(serde_json::to_string(&loading).unwrap().contains(DEFAULT_LOCAL_TTS_MODEL_ID));
+
+    verify_release.store(true, Ordering::SeqCst);
+    load.await.unwrap().unwrap();
+    assert_eq!(
+        manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string()).phase,
+        LocalTtsRuntimePhase::Ready
+    );
+
+    let cancellation = CancellationToken::new();
+    let synthesis = {
+        let manager = manager.clone();
+        let token = cancellation.clone();
+        tokio::spawn(async move {
+            manager
+                .synthesize_f32_cancellable(
+                    DEFAULT_LOCAL_TTS_MODEL_ID,
+                    LocalTtsInferenceRequest {
+                        text: SENTINEL.to_string(),
+                        voice_id: "Jasper".to_string(),
+                        speaking_rate: 1.0,
+                        pitch: None,
+                    },
+                    &token,
+                )
+                .await
+        })
+    };
+    wait_until_true(&synthesis_entered).await;
+
+    let generating = manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string());
+    assert_eq!(generating.phase, LocalTtsRuntimePhase::Generating);
+    let diagnostics_json = serde_json::to_string(&generating).unwrap();
+    assert!(diagnostics_json.contains(DEFAULT_LOCAL_TTS_MODEL_ID));
+    assert!(diagnostics_json.contains("\"phase\":\"generating\""));
+    assert!(!diagnostics_json.contains(SENTINEL));
+
+    cancellation.cancel();
+    let error = synthesis.await.unwrap().unwrap_err();
+    assert_eq!(error.kind, LocalTtsRuntimeErrorKind::Cancelled);
+    assert!(synthesis_exited.load(Ordering::SeqCst));
+
+    let ready = manager.status(DEFAULT_LOCAL_TTS_MODEL_ID.to_string());
+    assert_eq!(ready.phase, LocalTtsRuntimePhase::Ready);
+    assert!(!serde_json::to_string(&ready).unwrap().contains(SENTINEL));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
