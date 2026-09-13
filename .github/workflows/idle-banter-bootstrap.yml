@@ -1,0 +1,39 @@
+name: Idle Banter branch bootstrap
+
+on:
+  push:
+    branches:
+      - ralph/idle-banter-implementation
+    paths:
+      - .github/idle-banter-bootstrap/READY
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ralph/idle-banter-implementation
+          fetch-depth: 0
+
+      - name: Apply reviewed Idle Banter patch bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/idle-banter-bootstrap/bundle-*.patch > /tmp/idle-banter.patch
+          git apply --check /tmp/idle-banter.patch
+          git apply /tmp/idle-banter.patch
+          rm -rf .github/idle-banter-bootstrap
+          rm -f .github/workflows/idle-banter-bootstrap.yml
+          git add -A
+          git diff --cached --check
+          python3 -m json.tool src/generated/backendContract.json >/dev/null
+          node scripts/check_tauri_command_contract.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "IB: implement Idle Banter"
+          git push origin HEAD:ralph/idle-banter-implementation
