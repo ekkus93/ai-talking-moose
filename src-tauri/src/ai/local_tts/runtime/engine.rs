@@ -36,6 +36,9 @@ const MIN_SPEED: f32 = 0.25;
 const MAX_SPEED: f32 = 4.0;
 const MAX_RUNTIME_LIBRARY_BYTES: u64 = 256 * 1024 * 1024;
 const TAR_BLOCK_BYTES: u64 = 512;
+const EXPECTED_MODEL_OUTPUT_COUNT: usize = 2;
+const WAVEFORM_OUTPUT_NAME: &str = "waveform";
+const DURATION_OUTPUT_NAME: &str = "duration";
 
 struct Voice {
     rows: usize,
@@ -172,7 +175,11 @@ impl KittenTtsRuntimeEngine {
         };
         cancellation.check_cancelled()?;
 
-        let (_shape, samples) = outputs[0]
+        validate_model_output_contract(&outputs)?;
+        let waveform = outputs
+            .get(WAVEFORM_OUTPUT_NAME)
+            .ok_or_else(LocalTtsRuntimeError::inference)?;
+        let (_shape, samples) = waveform
             .try_extract_tensor::<f32>()
             .map_err(|_| LocalTtsRuntimeError::inference())?;
         let samples = samples.to_vec();
@@ -279,6 +286,28 @@ impl LocalTtsRuntimeEngine for KittenTtsRuntimeEngine {
         self.voices.clear();
         self.phonemizer = None;
         self.model_id = None;
+    }
+}
+
+fn model_output_contract_is_valid(
+    output_count: usize,
+    has_waveform: bool,
+    has_duration: bool,
+) -> bool {
+    output_count == EXPECTED_MODEL_OUTPUT_COUNT && has_waveform && has_duration
+}
+
+fn validate_model_output_contract(
+    outputs: &ort::session::SessionOutputs<'_>,
+) -> Result<(), LocalTtsRuntimeError> {
+    if model_output_contract_is_valid(
+        outputs.len(),
+        outputs.contains_key(WAVEFORM_OUTPUT_NAME),
+        outputs.contains_key(DURATION_OUTPUT_NAME),
+    ) {
+        Ok(())
+    } else {
+        Err(LocalTtsRuntimeError::inference())
     }
 }
 
@@ -513,6 +542,16 @@ mod tests {
     }
 
     #[test]
+    fn model_output_contract_requires_exact_named_outputs() {
+        assert!(model_output_contract_is_valid(2, true, true));
+        assert!(!model_output_contract_is_valid(0, false, false));
+        assert!(!model_output_contract_is_valid(1, true, false));
+        assert!(!model_output_contract_is_valid(2, false, true));
+        assert!(!model_output_contract_is_valid(2, true, false));
+        assert!(!model_output_contract_is_valid(3, true, true));
+    }
+
+    #[test]
     fn unknown_runtime_identity_fails_closed_before_artifact_use() {
         let mut engine = KittenTtsRuntimeEngine::new();
         let identity = LocalTtsRuntimeIdentity {
@@ -738,15 +777,8 @@ mod tests {
         ]
         .map(PathBuf::from);
         let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap();
-        let identity = LocalTtsRuntimeIdentity {
-            model_id: manifest.provider_model_id.to_string(),
-            model_revision: manifest.model_source_revision.to_string(),
-            runtime_compatibility_version: manifest.runtime.compatibility_version,
-            adapter_contract: manifest.runtime.adapter_contract.to_string(),
-            onnx_runtime_version: manifest.runtime.onnx_runtime_version.to_string(),
-            g2p_source_revision: manifest.runtime.g2p_source_revision.to_string(),
-            platform: LocalTtsPlatform::LinuxX86_64,
-        };
+        let platform = super::super::current_platform().unwrap();
+        let identity = super::super::runtime_identity(manifest, platform);
         let mut engine = KittenTtsRuntimeEngine::new();
         engine.load(&identity, &paths).unwrap();
         let output = engine
