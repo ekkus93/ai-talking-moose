@@ -4,8 +4,8 @@
 
 1. **Local-first and data minimization.** Screen contents, OCR, keystrokes, clipboard contents, browser history, and arbitrary files are not collected by V1.
 2. **Conservative fresh-profile defaults.** Active-application observation, cross-conversation memory, and transcript retention start **Off**. Users may explicitly enable each feature later.
-3. **No silent cloud escalation.** A selected local capability never authorizes an implicit cloud substitute. Moonshine ASR failures do not upload microphone audio to Google, and Local text failures do not fall back to Google or Fake text generation.
-4. **Explicit network actions.** Selecting a Local ASR/text model is configuration only. Missing model weights are downloaded only after an explicit user install action and integrity verification.
+3. **No silent cloud escalation.** A selected local capability never authorizes an implicit cloud substitute. Moonshine ASR failures do not upload microphone audio to Google, Local text failures do not fall back to Google or Fake text generation, and Local TTS failures do not fall back to Google TTS.
+4. **Explicit network actions.** Selecting a Local ASR/text/TTS model is configuration only. Missing model weights or Local TTS runtime artifacts are downloaded only after an explicit user install action and integrity verification.
 5. **Secure credentials.** On macOS, the Google API key is stored in the user's Keychain. It is not stored in SQLite, frontend state, or normal logs.
 6. **Complete private-data reset.** Users can inspect and delete saved memories and can use **Forget Everything** to purge persisted memory/transcript data and reset transient derived observation state. Ordinary preferences, separately installed model files, and the separately managed Keychain credential are preserved.
 7. **Microphone lifecycle is explicit.** The microphone is permitted only for a user-initiated conversation or an explicit diagnostics action. Mute, dismiss, stop, provider failure, and app shutdown must terminate capture; these lifecycle guarantees are release-blocking requirements.
@@ -46,7 +46,22 @@ Local text does **not** make the entire Moose offline:
 
 A Google AI Studio key is therefore optional for Local typed/ambient text generation but still required for Google text, Gemini Live voice, and Google TTS.
 
-## 4. Fresh-profile defaults
+## 4. Standalone speech-output privacy
+
+V1 has an independent standalone TTS provider for typed replies, ambient remarks, canned reactions, and voice auditions. This is separate from Gemini Live voice conversations.
+
+| Standalone speech provider | Text sent for synthesis | Model execution | Network during synthesis | Fallback behavior |
+| --- | --- | --- | --- | --- |
+| Local KittenTTS | Remains on the computer for synthesis | Pinned KittenTTS artifacts through the app-owned CPU ONNX Runtime path | None required after installation | Fails explicitly; does not call Google TTS |
+| Google Gemini TTS | Sent to Google as required for the selected Gemini TTS request | Google service | HTTPS request to Google | Fails explicitly; does not call Local TTS |
+
+Local KittenTTS has a separate installation network phase. **Download & Verify** fetches the pinned KittenTTS model/runtime artifacts, writes to staging, verifies expected byte counts and SHA-256, and promotes only verified assets. After installation, Local TTS synthesis does not require network I/O; the real KittenTTS CPU acceptance workflow proves synthesis with network denied.
+
+Local TTS diagnostics may expose operational metadata such as provider, selected model ID, selected voice ID, install state, expected/installed bytes, runtime phase, sample rate, inference thread count, sanitized error category, timings, and real-time factor. Diagnostics must not expose utterance text, raw PCM/audio bytes, credentials, credential-bearing URLs, arbitrary filesystem paths, or raw native/provider error payloads.
+
+Gemini Live remains cloud-native live audio in V1. Selecting Local KittenTTS affects standalone speech output only; it does not make live spoken conversations local.
+
+## 5. Fresh-profile defaults
 
 The V1 settings baseline for a newly created profile is:
 
@@ -62,7 +77,7 @@ The V1 settings baseline for a newly created profile is:
 
 An upgraded profile keeps explicit pre-existing choices where migration can do so safely. Profiles created before the text-provider selector migrate explicitly to Google text generation so an upgrade does not silently reinterpret their provider. Profiles created before the ASR selector preserve the former Gemini Live audio behavior until the user explicitly changes ASR mode.
 
-## 5. Logging policy
+## 6. Logging policy
 
 Normal application logs may contain operational metadata such as component names, model identifiers, revisions/quantization, byte counts, queue depths, durations, state transitions, token counts, throughput, and sanitized error categories. They must not contain:
 
@@ -79,7 +94,7 @@ Normal application logs may contain operational metadata such as component names
 
 Provider and Local-runtime failures cross application boundaries as structured/provider-neutral or otherwise fixed user-safe messages. Raw provider payloads, credential-bearing URLs, prompt/output text, local artifact paths, and native runtime error strings are not forwarded to the frontend or normal logs. Tool logging is limited to registered tool name and success/failure metadata rather than arguments, results, or raw error payloads.
 
-## 6. Local persistence and model files
+## 7. Local persistence and model files
 
 SQLite stores ordinary settings and, only when the user has opted in, semantic memory and transcript data. V1 desktop observations are transient and are never persisted; schema version 4 removes the legacy `observations` table. The generic settings repository rejects `google_api_key` so future callers cannot accidentally reintroduce plaintext credential persistence.
 
@@ -87,16 +102,16 @@ Local LLM weights are not stored in SQLite. They live under the application-data
 
 When upgrading an old database that contains a plaintext `google_api_key`, startup migrates the key into secure storage, verifies the secure read-back, and only then deletes the SQLite row. A failed secure-store write leaves the old row in place so migration does not destroy the user's only copy; the application treats the migration failure as an error rather than pretending it succeeded.
 
-## 7. Packaging and third-party model boundaries
+## 8. Packaging and third-party model boundaries
 
 GGUF model weights are user-initiated downloads and are not committed to Git or embedded in application bundles. Ordinary CI and release/package jobs remain model-weight-free. macOS bundle verification fails if a `.gguf` is embedded.
 
 The native llama.cpp/binding licenses are shipped as runtime/dependency notices. Downloadable model license/source metadata is recorded separately in `docs/LOCAL_LLM_MODEL_LICENSES.md` because those weights are not redistributed in the application bundle.
 
-## 8. User controls
+## 9. User controls
 
 The Settings privacy/AI surfaces must explain which features are local, which actions perform a download, which data can leave the device, and which persistence controls are Off by default. Onboarding must make the same boundaries clear before asking the user to enable observation, memory, transcript retention, cloud microphone processing, or Google-backed text/voice/TTS.
 
 Privacy-sensitive settings are runtime policy, not cosmetic preferences. A disabled setting or unavailable selected provider must cause the corresponding backend operation to fail closed.
 
-See `docs/LOCAL_LLM_ARCHITECTURE.md` for the Local text runtime/provider boundary and the explicitly deferred fully local voice seam.
+See `docs/LOCAL_LLM_ARCHITECTURE.md` for the Local text runtime/provider boundary and `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md` for Local KittenTTS acceptance evidence and the deliberately deferred human voice-audition gate.
