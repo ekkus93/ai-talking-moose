@@ -73,6 +73,7 @@ pub const V1_MIN_AMBIENT_COOLDOWN_SECONDS: u64 = 300;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BehaviorConfig {
     pub unsolicited_comments: bool,
+    pub idle_banter_enabled: bool,
     pub quiet_hours_enabled: bool,
     pub quiet_hours_start: u8, // e.g. 22 for 10 PM
     pub quiet_hours_end: u8,   // e.g. 8 for 8 AM
@@ -85,6 +86,7 @@ impl Default for BehaviorConfig {
         let settings = AppSettings::default();
         Self {
             unsolicited_comments: settings.unsolicited_comments,
+            idle_banter_enabled: settings.idle_banter_enabled,
             quiet_hours_enabled: settings.quiet_hours_enabled,
             quiet_hours_start: settings.quiet_hours_start,
             quiet_hours_end: settings.quiet_hours_end,
@@ -168,6 +170,10 @@ mod tests {
         assert_eq!(
             character.behavior.unsolicited_comments,
             settings.unsolicited_comments
+        );
+        assert_eq!(
+            character.behavior.idle_banter_enabled,
+            settings.idle_banter_enabled
         );
         assert_eq!(
             character.behavior.quiet_hours_enabled,
