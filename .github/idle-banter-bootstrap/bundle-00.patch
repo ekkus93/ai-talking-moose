@@ -1,0 +1,336 @@
+diff --git a/README.md b/README.md
+index 6c0e417b..ba225943 100644
+--- a/README.md
++++ b/README.md
+@@ -165,6 +165,20 @@ A Google AI Studio API key is **not required for Local text generation**. It is
+ 
+ Local generation does not silently fall back to Google or Fake. A missing, corrupt, incompatible, or failed Local model produces an explicit failure.
+ 
++### Idle Banter
++
++Idle Banter recreates the original Talking Moose habit of occasionally making a short snarky remark after you have ignored Moose for a while. It is enabled by default for new profiles, but remains subordinate to **Enable unsolicited ambient remarks** and the existing mute, conversation, quiet-hours, cooldown, annoyance, dismissal, and hourly-rate gates.
++
++- The first remark becomes eligible after **60 minutes** without a direct interaction with Moose.
++- If inactivity continues, later remarks become eligible **about every 30 minutes**, with bounded internal ±20% timing jitter.
++- Direct Moose interactions—such as conversation controls, typed messages, canned reactions, show/hide/dismiss, mute changes, voice auditions, and Settings updates—restart the full initial delay.
++- This timer is intentionally separate from OS keyboard/mouse idle observation: you may be actively working in another application and still count as having ignored Moose.
++- Settings → Behavior lets you enable/disable Idle Banter, change the initial/repeat timing, and add/edit/delete/restore the creative seed topics used for generation.
++- A seed topic is prompt input to the currently selected **text provider**. Local text generation keeps it local after model installation; Google text generation sends the prompt to Google.
++- Generated remarks use the currently selected **standalone TTS provider** through the normal speech/playback/mouth-animation path.
++- There is **no automatic text-provider or TTS-provider fallback**. A failed background occurrence is skipped until the next normal interval.
++- Recent delivered Idle Banter lines are retained only in memory for the current app session to reduce exact repetition. V1 does not automatically inject recent user transcript text merely to make an idle joke topical.
++
+ ---
+ 
+ ## Run the Application
+diff --git a/docs/PRIVACY.md b/docs/PRIVACY.md
+index 1c000d9b..7dd42532 100644
+--- a/docs/PRIVACY.md
++++ b/docs/PRIVACY.md
+@@ -46,6 +46,16 @@ Local text does **not** make the entire Moose offline:
+ 
+ A Google AI Studio key is therefore optional for Local typed/ambient text generation but still required for Google text, Gemini Live voice, and Google TTS.
+ 
++### Idle Banter prompt and provider privacy
++
++Idle Banter is unsolicited ambient text generation with an explicit user-configured schedule. It uses the currently selected text provider and never silently falls back to another provider. The built-in or user-edited Idle Banter seed topic selected for an occurrence is prompt input: with Local text generation it remains on the computer after model installation; with Google text generation it is sent to Google as part of that request.
++
++Idle Banter V1 does **not** automatically inject recent conversation transcript text merely to make remarks topical. If the shared ambient prompt path includes saved memory context, the existing `memory_enabled` setting remains authoritative; disabling memory prevents retained memories from entering the Idle Banter prompt. Idle Banter event metadata itself is limited to bounded Moose-interaction inactivity duration and the configured seed topic rather than window titles or application names.
++
++To reduce repetition, the runtime keeps at most the 12 most recent successfully delivered Idle Banter lines in memory for the current app session. That generated-text history is not persisted to SQLite and is cleared on restart. Normal logs must not contain Idle Banter prompt bodies, seed-topic contents, recent generated lines, user transcript text, or memory content.
++
++Idle Banter can be disabled independently in Behavior settings and is also disabled whenever the global unsolicited-comments master switch is off. Existing mute, active-conversation, quiet-hours, annoyance, dismissal, cooldown, and hourly-rate gates remain authoritative.
++
+ ## 4. Standalone speech-output privacy
+ 
+ V1 has an independent standalone TTS provider for typed replies, ambient remarks, canned reactions, and voice auditions. This is separate from Gemini Live voice conversations.
+diff --git a/scripts/check_local_llm_contract_negative_probes.mjs b/scripts/check_local_llm_contract_negative_probes.mjs
+index cab91307..32385b97 100644
+--- a/scripts/check_local_llm_contract_negative_probes.mjs
++++ b/scripts/check_local_llm_contract_negative_probes.mjs
+@@ -102,6 +102,26 @@ try {
+     ],
+   );
+ 
++  copyText("src/generated/backendContract.json");
++  const idleContract = JSON.parse(readFileSync(contractPath, "utf8"));
++  const settingsShape = idleContract.ipc_shapes?.AppSettings;
++  if (!settingsShape || !("idle_banter_seed_topics" in settingsShape)) {
++    throw new Error(
++      "AppSettings.idle_banter_seed_topics is missing from the generated IPC representative",
++    );
++  }
++  delete settingsShape.idle_banter_seed_topics;
++  writeFileSync(
++    contractPath,
++    `${JSON.stringify(idleContract, null, 2)}\n`,
++    "utf8",
++  );
++  requireFailureContaining(
++    "Idle Banter AppSettings field removal",
++    runChecker("scripts/check_frontend_contract_shapes.mjs", workspace),
++    ["AppSettings", "TypeScript-only keys: idle_banter_seed_topics"],
++  );
++
+   const rustLibPath = join(workspace, "src-tauri/src/lib.rs");
+   const rustLib = readFileSync(rustLibPath, "utf8");
+   const registration = "            get_local_llm_diagnostics,";
+@@ -129,7 +149,7 @@ try {
+   );
+ 
+   console.log(
+-    "Local LLM contract negative probes: diagnostics field drift and diagnostics command-name drift are rejected by the production checkers.",
++    "Local LLM/Idle Banter contract negative probes: diagnostics drift, Idle Banter AppSettings drift, and diagnostics command-name drift are rejected by the production checkers.",
+   );
+ } finally {
+   rmSync(workspace, { recursive: true, force: true });
+diff --git a/src-tauri/src/app/state.rs b/src-tauri/src/app/state.rs
+index db25c0bd..04d7d9ae 100644
+--- a/src-tauri/src/app/state.rs
++++ b/src-tauri/src/app/state.rs
+@@ -17,6 +17,9 @@ use crate::audio::playback::AudioPlayback;
+ use crate::audio::speech::StandaloneSpeechController;
+ use crate::character::ambient::AmbientScheduler;
+ use crate::character::behavior::BehaviorEngine;
++use crate::character::idle_banter::{
++    default_idle_banter_seed_topics, normalize_idle_banter_seed_topics, IdleBanterRuntime,
++};
+ use crate::character::personality::CharacterConfig;
+ use crate::character::state::CharacterState;
+ use crate::conversation::session::ConversationManager;
+@@ -54,6 +57,10 @@ pub struct AppSettings {
+     pub quiet_hours_end: u8,
+     pub max_comments_per_hour: u32,
+     pub hide_delay_seconds: u32,
++    pub idle_banter_enabled: bool,
++    pub idle_banter_initial_delay_minutes: u32,
++    pub idle_banter_repeat_interval_minutes: u32,
++    pub idle_banter_seed_topics: Vec<String>,
+ 
+     // Audio & Voice
+     pub input_device: Option<String>,
+@@ -89,7 +96,7 @@ pub struct AppSettings {
+     pub verbosity: f32,
+ }
+ 
+-pub const CURRENT_SETTINGS_VERSION: u32 = 4;
++pub const CURRENT_SETTINGS_VERSION: u32 = 5;
+ 
+ #[derive(Debug, Error)]
+ pub enum PersistedSettingsError {
+@@ -99,6 +106,8 @@ pub enum PersistedSettingsError {
+     FutureVersion { found: u64, current: u32 },
+     #[error("persisted settings JSON is invalid: {0}")]
+     Decode(#[from] serde_json::Error),
++    #[error("persisted settings are invalid: {0}")]
++    Invalid(String),
+ }
+ 
+ pub const CURRENT_ONBOARDING_VERSION: u32 = 1;
+@@ -129,6 +138,10 @@ impl Default for AppSettings {
+             quiet_hours_end: 8,
+             max_comments_per_hour: 4,
+             hide_delay_seconds: 6,
++            idle_banter_enabled: true,
++            idle_banter_initial_delay_minutes: 60,
++            idle_banter_repeat_interval_minutes: 30,
++            idle_banter_seed_topics: default_idle_banter_seed_topics(),
+ 
+             input_device: None,
+             output_device: None,
+@@ -188,6 +201,14 @@ impl AppSettings {
+             .get("settings_version")
+             .and_then(serde_json::Value::as_u64)
+             == Some(u64::from(CURRENT_SETTINGS_VERSION));
++        let had_idle_banter_enabled = value.get("idle_banter_enabled").is_some();
++        let had_idle_banter_initial_delay = value
++            .get("idle_banter_initial_delay_minutes")
++            .is_some();
++        let had_idle_banter_repeat_interval = value
++            .get("idle_banter_repeat_interval_minutes")
++            .is_some();
++        let had_idle_banter_seed_topics = value.get("idle_banter_seed_topics").is_some();
+         let had_enabled_window_title_observation = value
+             .get("window_title_observation")
+             .and_then(serde_json::Value::as_bool)
+@@ -219,6 +240,25 @@ impl AppSettings {
+         let had_legacy_tts_voice = legacy_tts_voice.is_some();
+ 
+         let mut settings: Self = serde_json::from_value(value)?;
++        let legacy_idle_banter = !had_current_version
++            || !had_idle_banter_enabled
++            || !had_idle_banter_initial_delay
++            || !had_idle_banter_repeat_interval
++            || !had_idle_banter_seed_topics;
++        let idle_banter_seed_repaired = match normalize_idle_banter_seed_topics(
++            &settings.idle_banter_seed_topics,
++        ) {
++            Ok(normalized) => {
++                let changed = normalized != settings.idle_banter_seed_topics;
++                settings.idle_banter_seed_topics = normalized;
++                changed
++            }
++            Err(_) if legacy_idle_banter => {
++                settings.idle_banter_seed_topics = default_idle_banter_seed_topics();
++                true
++            }
++            Err(error) => return Err(PersistedSettingsError::Invalid(error)),
++        };
+         if !had_asr_mode {
+             settings.asr_mode = AsrMode::GeminiLiveAudio;
+         }
+@@ -295,7 +335,9 @@ impl AppSettings {
+                 || had_legacy_tts_model
+                 || had_legacy_tts_voice
+                 || models_migrated
+-                || had_enabled_window_title_observation,
++                || had_enabled_window_title_observation
++                || legacy_idle_banter
++                || idle_banter_seed_repaired,
+         ))
+     }
+ 
+@@ -311,6 +353,7 @@ impl AppSettings {
+         config.personality.talkativeness = self.talkativeness;
+ 
+         config.behavior.unsolicited_comments = self.unsolicited_comments;
++        config.behavior.idle_banter_enabled = self.idle_banter_enabled;
+         config.behavior.quiet_hours_enabled = self.quiet_hours_enabled;
+         config.behavior.quiet_hours_start = self.quiet_hours_start;
+         config.behavior.quiet_hours_end = self.quiet_hours_end;
+@@ -326,6 +369,7 @@ pub struct AppState {
+     pub character_state: Arc<RwLock<CharacterState>>,
+     pub behavior_engine: Arc<Mutex<BehaviorEngine>>,
+     pub ambient_scheduler: AmbientScheduler,
++    pub idle_banter_runtime: Arc<Mutex<IdleBanterRuntime>>,
+     pub audio_capture: Arc<Mutex<AudioCapture>>,
+     pub audio_playback: Arc<AudioPlayback>,
+     pub standalone_speech: StandaloneSpeechController,
+@@ -462,6 +506,8 @@ impl AppState {
+             }
+         }
+ 
++        let idle_banter_runtime = Arc::new(Mutex::new(IdleBanterRuntime::new(&settings.read())));
++
+         let mut character_config = CharacterConfig::default();
+         settings
+             .read()
+@@ -493,6 +539,7 @@ impl AppState {
+             character_state: Arc::new(RwLock::new(CharacterState::Idle)),
+             behavior_engine,
+             ambient_scheduler: AmbientScheduler::new(),
++            idle_banter_runtime,
+             audio_capture,
+             audio_playback,
+             standalone_speech,
+@@ -506,6 +553,20 @@ impl AppState {
+         })
+     }
+ 
++    pub fn record_user_interaction(&self) {
++        self.ambient_scheduler.interrupt();
++        let settings = self.settings.read().clone();
++        self.idle_banter_runtime
++            .lock()
++            .record_user_interaction(&settings);
++    }
++
++    pub fn reset_idle_banter_after_wake(&self) {
++        self.ambient_scheduler.interrupt();
++        let settings = self.settings.read().clone();
++        self.idle_banter_runtime.lock().reset_after_wake(&settings);
++    }
++
+     pub fn get_text_model(&self) -> Box<dyn TextModel> {
+         let settings = self.settings_snapshot();
+         self.get_text_model_for(&settings)
+@@ -578,6 +639,23 @@ mod tests {
+         assert!(!settings.active_app_observation);
+         assert!(!settings.memory_enabled);
+         assert!(!settings.save_transcripts);
++        assert!(settings.idle_banter_enabled);
++        assert_eq!(settings.idle_banter_initial_delay_minutes, 60);
++        assert_eq!(settings.idle_banter_repeat_interval_minutes, 30);
++        assert!(!settings.idle_banter_seed_topics.is_empty());
++    }
++
++    #[test]
++    fn record_user_interaction_restarts_idle_banter_from_current_settings() {
++        let state = AppState::new_for_tests().unwrap();
++        state.settings.write().idle_banter_initial_delay_minutes = 5;
++        let before = state.idle_banter_runtime.lock().next_due_at();
++        std::thread::sleep(std::time::Duration::from_millis(2));
++
++        state.record_user_interaction();
++
++        let after = state.idle_banter_runtime.lock().next_due_at();
++        assert!(after > before);
+     }
+ 
+     #[test]
+@@ -805,6 +883,65 @@ mod tests {
+         assert_eq!(round_tripped.live_voice, "Puck");
+     }
+ 
++    #[test]
++    fn version_four_profiles_migrate_idle_banter_defaults_without_touching_existing_preferences() {
++        let mut value = serde_json::to_value(AppSettings::default()).unwrap();
++        let object = value.as_object_mut().unwrap();
++        object.insert("settings_version".to_string(), serde_json::json!(4));
++        object.remove("idle_banter_enabled");
++        object.remove("idle_banter_initial_delay_minutes");
++        object.remove("idle_banter_repeat_interval_minutes");
++        object.remove("idle_banter_seed_topics");
++        object.insert("talkativeness".to_string(), serde_json::json!(0.73));
++        object.insert("memory_enabled".to_string(), serde_json::json!(true));
++        object.insert("quiet_hours_start".to_string(), serde_json::json!(21));
++        object.insert("quiet_hours_end".to_string(), serde_json::json!(7));
++        object.insert("google_tts_voice".to_string(), serde_json::json!("Kore"));
++        object.insert("local_tts_voice".to_string(), serde_json::json!("Luna"));
++
++        let (settings, migrated) =
++            AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
++        assert!(migrated);
++        assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
++        assert!(settings.idle_banter_enabled);
++        assert_eq!(settings.idle_banter_initial_delay_minutes, 60);
++        assert_eq!(settings.idle_banter_repeat_interval_minutes, 30);
++        assert_eq!(settings.idle_banter_seed_topics, default_idle_banter_seed_topics());
++        assert_eq!(settings.talkativeness, 0.73);
++        assert!(settings.memory_enabled);
++        assert_eq!(settings.quiet_hours_start, 21);
++        assert_eq!(settings.quiet_hours_end, 7);
++        assert_eq!(settings.google_tts_voice, "Kore");
++        assert_eq!(settings.local_tts_voice, "Luna");
++
++        let (round_tripped, migrated_again) =
++            AppSettings::from_persisted_json(&serde_json::to_string(&settings).unwrap()).unwrap();
++        assert!(!migrated_again);
++        assert_eq!(round_tripped.idle_banter_seed_topics, settings.idle_banter_seed_topics);
++    }
++
++    #[test]
++    fn legacy_empty_idle_banter_seed_list_repairs_but_current_invalid_list_fails_closed() {
++        let mut legacy = serde_json::to_value(AppSettings::default()).unwrap();
++        let object = legacy.as_object_mut().unwrap();
++        object.insert("settings_version".to_string(), serde_json::json!(4));
++        object.insert("idle_banter_seed_topics".to_string(), serde_json::json!([]));
++        let (repaired, migrated) =
++            AppSettings::from_persisted_json(&serde_json::to_string(&legacy).unwrap()).unwrap();
++        assert!(migrated);
++        assert_eq!(repaired.idle_banter_seed_topics, default_idle_banter_seed_topics());
++
++        let mut current = serde_json::to_value(AppSettings::default()).unwrap();
++        current
++            .as_object_mut()
++            .unwrap()
++            .insert("idle_banter_seed_topics".to_string(), serde_json::json!([]));
++        assert!(matches!(
++            AppSettings::from_persisted_json(&serde_json::to_string(&current).unwrap()),
++            Err(PersistedSettingsError::Invalid(_))
++        ));
++    }
++
+     #[test]
+     fn split_tts_voice_settings_round_trip_independently() {
+         let original = AppSettings {
