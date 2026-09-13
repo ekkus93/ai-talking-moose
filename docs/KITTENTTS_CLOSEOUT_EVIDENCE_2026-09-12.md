@@ -5,12 +5,14 @@
 **Reviewed baseline:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`).
 **R3 final qualified PR head:** `5280b9246b4af78bc47020fb079120f1b935a188`.
 **R3 merged master SHA:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f`.
+**Closeout PR #101 final head:** `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
+**Closeout PR #101 merged master SHA:** `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
 
 This document records what was actually tested and what remains deliberately deferred. It must not be used to mark the owner-only human voice-quality decision complete.
 
 ---
 
-## Exact master CI evidence
+## Exact R3 master CI evidence
 
 The R3 merge to `master` was verified on exact merged master SHA `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f`.
 
@@ -133,14 +135,83 @@ This is automated intelligibility evidence only. It does not decide the default 
 
 ---
 
-## Deferred owner-only gate
+## Closeout PR #101 qualification evidence
 
-`KCR-330` / `KTT-805` remains open. The owner must audition the real Local Kitten voices and choose the default Local TTS voice. Automated ASR smoke cannot close this gate.
+PR #101 (`ralph/kcr-r4-r5-reconcile-closeout`) closed the finite post-review remediation queue. The final PR head was `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
+
+Exact PR-head validation completed before merge:
+
+- Ordinary CI run `34755503886`: success.
+- Production KittenTTS CPU acceptance run `34755503936`: success.
+- Production acceptance passed `Real Kitten Mini CPU inference (linux-x86_64)`.
+- Production acceptance passed `Real Kitten Mini CPU inference (macos-arm64)`.
+- Both real-model platform jobs passed hardened inference and measured the required 1/2/4-thread CPU policy.
+
+A temporary Linux ORT diagnostic workflow was used during investigation of an intermittent 1-thread Linux failure and was removed before the final PR head. No temporary diagnostic workflow was present in the merged tree.
 
 ---
 
-## Expensive workflow rerun decision for closeout branch
+## Guarded merge evidence
 
-The closeout branch fixes the stale direct `AppState::get_speech_synthesizer()` helper path, removes tracker/documentation drift, and adds source-level diagnostics composition coverage. It does not change the Local TTS runtime engine, native runtime loading, model manifests, ASR round-trip implementation, or real acceptance workflows.
+PR #101 was mergeable immediately before merge and was merged only with expected head `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
 
-Therefore the final closeout PR requires exact-head ordinary CI, Rust quality/tests, generated contract, static packaging/license gates, and final source audit. Re-running the expensive real-model KittenTTS and ASR workflows is not required unless later closeout commits touch runtime, synthesis engine, ASR, native artifact, or workflow code.
+Merge result:
+
+- Merged master SHA: `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
+- Merge title: `Merge PR #101: KCR-400–503 KittenTTS closeout evidence`.
+- Merge body recorded exact qualifying PR-head runs `34755503886` and `34755503936`.
+
+---
+
+## Exact merged-master verification
+
+The merged master SHA `79423e8cc0ad48e796e964dee7eb51c3a440ddc4` was verified after merge.
+
+### Ordinary CI
+
+Run `34755879197` completed successfully on exact merged master.
+
+Relevant successful jobs:
+
+- `Classify CI scope`
+- `Frontend quality`
+- `Generated backend contract`
+- `Rust quality`
+- `Rust tests`
+
+Path-scoped jobs that did not apply to this closeout merge were skipped by the repository classifier.
+
+### Real KittenTTS CPU acceptance
+
+Run `34755879210` completed successfully on exact merged master.
+
+Successful jobs:
+
+- `Verify exact acceptance head`
+- `Real Kitten Mini CPU inference (linux-x86_64)`
+- `Real Kitten Mini CPU inference (macos-arm64)`
+
+Both real-model platform jobs passed hardened inference, 1/2/4-thread CPU-policy measurement, performance/privacy evidence publication, and machine-readable evidence upload.
+
+### ASR rerun decision
+
+The closeout branch did not change the ASR round-trip implementation or KittenTTS-to-Moonshine workflow. The existing exact R3 merged-master ASR smoke run `34737621335` remains the applicable all-eight-voice automated intelligibility evidence. No additional ASR rerun was required for PR #101.
+
+---
+
+## Final closeout decision
+
+The technical KittenTTS closeout is complete on master at `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
+
+Closed technical areas:
+
+- stale `AppState::get_speech_synthesizer()` Local placeholder routing;
+- direct helper routing and no-fallback tests;
+- command-level Local TTS diagnostics composition tests;
+- README, voice-selection, and privacy documentation drift;
+- legacy TODO reconciliation;
+- exact PR-head CI and real-model acceptance;
+- guarded merge;
+- exact merged-master CI and real-model acceptance.
+
+`KCR-330` / `KTT-805` remains open and owner-only. The owner must audition the real Local Kitten voices and choose the default Local TTS voice; automated ASR and CI evidence cannot close that subjective voice-quality/default-selection gate.

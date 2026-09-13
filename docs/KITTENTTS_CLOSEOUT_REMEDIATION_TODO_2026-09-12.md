@@ -5,10 +5,12 @@
 **Evidence:** `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`
 **Legacy reconciliation:** `docs/KITTENTTS_LEGACY_TODO_RECONCILIATION_2026-09-12.md`
 **Baseline reviewed:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`)
-**Working branch:** `ralph/kcr-r4-r5-reconcile-closeout`
-**Status:** Closeout implementation in progress; final PR-head CI and merge still pending.
+**Closeout implementation PR:** `#101`
+**Closeout PR final head:** `7eb69d81a6709587769e57abd2a2cf567e9b31a4`
+**Closeout merged master SHA:** `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`
+**Status:** Technical closeout complete on master. Human voice audition/default selection remains owner-only and open.
 
-This TODO is the finite remediation queue for issues found during the post-KittenTTS code review. The core Local TTS implementation is already present; this queue closes stale helper routing, tracker/documentation drift, evidence recording, final audit, and exact-head validation.
+This TODO is the finite remediation queue for issues found during the post-KittenTTS code review. The core Local TTS implementation is present and the technical closeout has been implemented, CI-qualified, real-model-qualified, guarded-merged, and exact-master-verified.
 
 Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice audition/default selection remains owner-only.
 
@@ -83,7 +85,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 - [x] Supersede `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md` with this closeout TODO plus the evidence/reconciliation docs.
 - [x] Keep KCR-330 open and explicitly labeled human-only.
-- [ ] Mark final KCR-500/KCR-501/KCR-502/KCR-503 only after final source audit, exact-head CI, guarded merge, and exact-master verification complete.
+- [x] Mark final KCR-500/KCR-501/KCR-502/KCR-503 only after final source audit, exact-head CI, guarded merge, and exact-master verification complete.
 
 **Acceptance**
 
@@ -149,7 +151,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] Document post-install offline synthesis.
 - [x] Document no Local-to-Google fallback on Local error.
 - [x] Document no Google-to-Local fallback on Google error.
-- [x] Document diagnostics/logging exclusions for utterance text, raw audio, credentials, and unnecessary filesystem paths.
+- [x] Document diagnostics/logging exclusions for utterance text, audio bytes, credentials, and unnecessary filesystem paths.
 - [x] Document that Gemini Live remains cloud-native and separate from standalone Local TTS.
 - [x] Document the real network-denial acceptance evidence at a summary level.
 
@@ -172,6 +174,10 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] Summarize 1/2/4-thread evidence and production default decision.
 - [x] Record that macOS x86_64 is compile/package-boundary unless real inference was actually run.
 - [x] Record that KCR-330 / KTT-805 human audition remains open.
+- [x] Record closeout PR #101 final head `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
+- [x] Record closeout merged master SHA `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
+- [x] Record exact PR-head CI `34755503886` and production CPU acceptance `34755503936`.
+- [x] Record exact merged-master CI `34755879197` and production CPU acceptance `34755879210`.
 
 **Acceptance**
 
@@ -225,13 +231,13 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 ## KCR-C600 — Run local/static validation available in the implementation environment
 
 - [x] `git diff --check` passed locally against the uploaded master snapshot after closeout edits.
-- [ ] Rust formatting passes, or is delegated to exact-head CI if local Rust is unavailable.
-- [ ] Rust Clippy passes, or is delegated to exact-head CI if local Rust is unavailable.
-- [ ] Rust tests pass, or are delegated to exact-head CI if local Rust is unavailable.
-- [x] Generated backend contract / Tauri command registration validation passed locally via `node scripts/check_tauri_command_contract.mjs`.
-- [ ] Frontend format/lint/typecheck/tests pass, or are delegated to exact-head CI if dependencies are unavailable.
+- [x] Rust formatting passed in exact PR-head CI `34755503886` and exact merged-master CI `34755879197`.
+- [x] Rust Clippy passed in exact PR-head CI `34755503886` and exact merged-master CI `34755879197`.
+- [x] Rust tests passed in exact PR-head CI `34755503886` and exact merged-master CI `34755879197`.
+- [x] Generated backend contract / Tauri command registration validation passed locally via `node scripts/check_tauri_command_contract.mjs` and in exact CI.
+- [x] Frontend quality passed in exact PR-head CI `34755503886` and exact merged-master CI `34755879197`.
 - [x] Local TTS packaging policy passed locally via `python3 scripts/check_local_tts_packaging_policy.py`.
-- [ ] Dependency/license collection gate passes, or is delegated to exact-head CI.
+- [x] Dependency/license collection gate was not path-required for the final closeout merge; prior R3 license evidence remains applicable because the final closeout did not alter shipped third-party artifact/dependency scope.
 
 **Acceptance**
 
@@ -242,16 +248,16 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 ## KCR-C610 — Pass exact final PR-head CI
 
 - [x] Open or update the closeout PR against `master`.
-- [ ] Confirm the PR head is exactly the commit intended for merge.
-- [ ] Confirm ordinary CI passes on that exact PR head.
-- [ ] Confirm release/static/license gates pass on that exact PR head.
-- [ ] Confirm generated backend contract gate passes on that exact PR head.
-- [ ] If Rust source changed, confirm Rust fmt/Clippy/tests pass on that exact PR head.
-- [ ] If frontend source changed, confirm frontend quality gates pass on that exact PR head.
+- [x] Confirm the PR head is exactly the commit intended for merge: `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
+- [x] Confirm ordinary CI passes on that exact PR head: `34755503886`.
+- [x] Confirm release/static/license gates are either passed or truthfully path-skipped on that exact PR head; no shipped dependency/license scope changed after R3.
+- [x] Confirm generated backend contract gate passes on that exact PR head: `34755503886`.
+- [x] If Rust source changed, confirm Rust fmt/Clippy/tests pass on that exact PR head: `34755503886`.
+- [x] If frontend source changed, confirm frontend quality gates pass on that exact PR head; frontend quality passed even though the final closeout did not require frontend source changes.
 
 **Acceptance**
 
-- [ ] The final closeout PR is not merged from a stale or partially qualified head.
+- [x] The final closeout PR was not merged from a stale or partially qualified head.
 
 ---
 
@@ -259,7 +265,8 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 - [x] Decide whether final closeout source changes require explicit real-model KittenTTS acceptance rerun.
 - [x] Decide whether final closeout source changes require ASR intelligibility smoke rerun.
-- [x] Record decision: this branch does not change the Local TTS runtime engine, native runtime loading, model manifests, ASR round-trip implementation, or real acceptance workflows. Exact R3 merged-master real-model/ASR evidence remains applicable. Re-run only if a later commit touches runtime/synthesis/ASR/native/workflow code.
+- [x] Record decision: the closeout did not change the Local TTS runtime engine, native runtime loading, model manifests, ASR round-trip implementation, or real acceptance workflows. Exact R3 merged-master ASR evidence remains applicable.
+- [x] Record that production KittenTTS CPU acceptance did rerun on the final PR head and exact merged master because the temporary diagnostic workflow cleanup touched workflow scope; both reruns passed.
 - [x] Do not create evidence recursion solely to record evidence.
 
 **Acceptance**
@@ -270,17 +277,18 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 ## KCR-C700 — Guarded merge and exact master verification
 
-- [ ] Recheck PR mergeability immediately before merge.
-- [ ] Merge only with the expected final head.
-- [ ] Record exact merged master SHA.
-- [ ] Verify ordinary CI on the exact merged master SHA.
-- [ ] Verify any required explicit real-model/ASR post-merge workflows on the exact merged master SHA.
-- [ ] Update closeout evidence without creating an infinite evidence-update loop.
-- [ ] Delete/close obsolete closeout branch only after master verification is recorded, if branch cleanup is in scope.
+- [x] Recheck PR mergeability immediately before merge.
+- [x] Merge only with the expected final head: `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
+- [x] Record exact merged master SHA: `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
+- [x] Verify ordinary CI on the exact merged master SHA: `34755879197`.
+- [x] Verify required explicit real-model post-merge workflow on the exact merged master SHA: KittenTTS production CPU acceptance `34755879210`.
+- [x] Verify ASR post-merge rerun was not required for PR #101; exact R3 merged-master ASR smoke `34737621335` remains applicable.
+- [x] Update closeout evidence without creating an infinite evidence-update loop. This final record is bookkeeping-only and does not change production code or workflow behavior.
+- [x] Branch cleanup is not claimed as part of this technical closeout; obsolete-branch deletion can be handled separately if desired.
 
 **Acceptance**
 
-- [ ] Master contains the closeout work and exact post-merge verification evidence.
+- [x] Master contains the closeout work and exact post-merge verification evidence.
 
 ---
 
@@ -300,8 +308,12 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] 1/2/4-thread policy evidence recorded; production default remains justified.
 - [x] macOS x86_64 claim is truthful and limited to actual evidence.
 - [x] KCR-330/KTT-805 human audition/default selection remains open unless owner explicitly completes it.
-- [ ] Local/static validation completed or explicitly delegated through exact-head CI.
-- [ ] Exact final PR-head CI passed.
+- [x] Local/static validation completed or explicitly delegated through exact-head CI.
+- [x] Exact final PR-head CI passed.
 - [x] Final source audit found no mandatory unresolved issue except human-only audition.
-- [ ] Guarded merge completed.
-- [ ] Exact merged master verification completed.
+- [x] Guarded merge completed.
+- [x] Exact merged master verification completed.
+
+## Only remaining open item
+
+`KCR-330` / `KTT-805` is intentionally open and owner-only: audition real Local KittenTTS voices and choose the default Moose Local TTS voice. This is not a technical CI/code closeout blocker.
