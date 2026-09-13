@@ -3,7 +3,9 @@ use crate::ai::local_tts::installer::{
 };
 use crate::ai::local_tts::manifest::{local_tts_model_manifest, LocalTtsPlatform};
 use crate::ai::local_tts::runtime::LocalTtsRuntimeStatus;
-use crate::ai::local_tts::storage::LocalTtsInstallState;
+use crate::ai::local_tts::storage::{LocalTtsInstallState, LocalTtsModelStatus};
+#[cfg(test)]
+use crate::ai::local_tts::storage::LocalTtsStatusError;
 use crate::ai::local_tts::{validate_local_tts_voice, LOCAL_TTS_MODEL_IDS};
 use crate::ai::types::TtsProvider;
 use crate::app::state::AppState;
@@ -109,6 +111,41 @@ pub fn get_local_tts_models(
         .collect()
 }
 
+fn compose_local_tts_diagnostics(
+    provider: TtsProvider,
+    selected_model_id: String,
+    selected_voice_id: String,
+    status: LocalTtsModelStatus,
+    recorded_error: Option<(LocalTtsInstallErrorKind, bool)>,
+    runtime: LocalTtsRuntimeStatus,
+) -> LocalTtsDiagnostics {
+    let (installer_error_category, installer_error_retryable) = if let Some(error) = recorded_error
+    {
+        (Some(error.0), Some(error.1))
+    } else if let Some(error) = status.error.as_ref() {
+        // Storage-level corruption can exist without a recorded install operation. Keep that
+        // category conservative and typed instead of forwarding an arbitrary error string.
+        (
+            Some(LocalTtsInstallErrorKind::CorruptInstall),
+            Some(error.retryable),
+        )
+    } else {
+        (None, None)
+    };
+
+    LocalTtsDiagnostics {
+        provider,
+        selected_model_id,
+        selected_voice_id,
+        install_state: status.install_state,
+        expected_bytes: status.expected_bytes,
+        installed_bytes: status.installed_bytes,
+        installer_error_category,
+        installer_error_retryable,
+        runtime,
+    }
+}
+
 #[tauri::command]
 pub fn get_local_tts_diagnostics(
     state: State<'_, AppState>,
@@ -130,33 +167,19 @@ pub fn get_local_tts_diagnostics(
     let status = installer
         .status(&selected_model_id, platform)
         .map_err(|error| error.to_string())?;
-    let recorded_error = installer.error_for_model(&selected_model_id);
-    let (installer_error_category, installer_error_retryable) = if let Some(error) = recorded_error
-    {
-        (Some(error.kind), Some(error.retryable))
-    } else if let Some(error) = status.error.as_ref() {
-        // Storage-level corruption can exist without a recorded install operation. Keep that
-        // category conservative and typed instead of forwarding an arbitrary error string.
-        (
-            Some(LocalTtsInstallErrorKind::CorruptInstall),
-            Some(error.retryable),
-        )
-    } else {
-        (None, None)
-    };
+    let recorded_error = installer
+        .error_for_model(&selected_model_id)
+        .map(|error| (error.kind, error.retryable));
     let runtime = state.local_tts_runtime.status(selected_model_id.clone());
 
-    Ok(LocalTtsDiagnostics {
+    Ok(compose_local_tts_diagnostics(
         provider,
         selected_model_id,
         selected_voice_id,
-        install_state: status.install_state,
-        expected_bytes: status.expected_bytes,
-        installed_bytes: status.installed_bytes,
-        installer_error_category,
-        installer_error_retryable,
+        status,
+        recorded_error,
         runtime,
-    })
+    ))
 }
 
 #[tauri::command]
@@ -240,6 +263,163 @@ pub async fn audition_tts_voice<R: Runtime>(
 mod tests {
     use super::*;
     use crate::ai::local_tts::runtime::{LocalTtsRuntimePhase, LocalTtsRuntimeStatus};
+
+    fn test_status(
+        install_state: LocalTtsInstallState,
+        installed_bytes: Option<u64>,
+        error: Option<LocalTtsStatusError>,
+    ) -> LocalTtsModelStatus {
+        LocalTtsModelStatus {
+            model_id: "KittenML/kitten-tts-mini-0.8".to_string(),
+            storage_id: "kitten-tts-mini-0.8".to_string(),
+            revision: "25b708ea6fc77c1c7c9c2afd2563f1cd2f5a2a56".to_string(),
+            expected_bytes: 1234,
+            installed_bytes,
+            install_state,
+            error,
+        }
+    }
+
+    fn test_runtime(model_id: &str, phase: LocalTtsRuntimePhase) -> LocalTtsRuntimeStatus {
+        LocalTtsRuntimeStatus {
+            selected_model_id: model_id.to_string(),
+            loaded_model_id: if phase == LocalTtsRuntimePhase::Ready {
+                Some(model_id.to_string())
+            } else {
+                None
+            },
+            loaded_revision: if phase == LocalTtsRuntimePhase::Ready {
+                Some("25b708ea6fc77c1c7c9c2afd2563f1cd2f5a2a56".to_string())
+            } else {
+                None
+            },
+            runtime_compatibility_version: if phase == LocalTtsRuntimePhase::Ready {
+                Some(1)
+            } else {
+                None
+            },
+            phase,
+            sample_rate_hz: if phase == LocalTtsRuntimePhase::Ready {
+                Some(24_000)
+            } else {
+                None
+            },
+            inference_thread_count: if phase == LocalTtsRuntimePhase::Ready {
+                Some(2)
+            } else {
+                None
+            },
+            last_model_load_duration_ms: None,
+            last_synthesis_duration_ms: None,
+            last_generated_audio_duration_ms: None,
+            last_real_time_factor: None,
+            last_error_category: None,
+        }
+    }
+
+    #[test]
+    fn diagnostics_composition_reports_not_installed_without_sensitive_payloads() {
+        let model_id = "KittenML/kitten-tts-mini-0.8".to_string();
+        let diagnostics = compose_local_tts_diagnostics(
+            TtsProvider::Local,
+            model_id.clone(),
+            "Bella".to_string(),
+            test_status(LocalTtsInstallState::NotInstalled, None, None),
+            None,
+            test_runtime(&model_id, LocalTtsRuntimePhase::Unloaded),
+        );
+
+        assert_eq!(diagnostics.provider, TtsProvider::Local);
+        assert_eq!(diagnostics.selected_model_id, model_id);
+        assert_eq!(diagnostics.selected_voice_id, "Bella");
+        assert_eq!(diagnostics.install_state, LocalTtsInstallState::NotInstalled);
+        assert_eq!(diagnostics.installer_error_category, None);
+        assert_eq!(diagnostics.installer_error_retryable, None);
+        assert_eq!(diagnostics.runtime.phase, LocalTtsRuntimePhase::Unloaded);
+
+        let json = serde_json::to_string(&diagnostics).unwrap();
+        assert!(!json.contains("private utterance"));
+        assert!(!json.contains("pcm"));
+        assert!(!json.contains("credential"));
+        assert!(!json.contains("/tmp/"));
+    }
+
+    #[test]
+    fn diagnostics_composition_reports_installed_ready_state() {
+        let model_id = "KittenML/kitten-tts-mini-0.8".to_string();
+        let diagnostics = compose_local_tts_diagnostics(
+            TtsProvider::Local,
+            model_id.clone(),
+            "Jasper".to_string(),
+            test_status(LocalTtsInstallState::Installed, Some(1234), None),
+            None,
+            test_runtime(&model_id, LocalTtsRuntimePhase::Ready),
+        );
+
+        assert_eq!(diagnostics.install_state, LocalTtsInstallState::Installed);
+        assert_eq!(diagnostics.installed_bytes, Some(1234));
+        assert_eq!(diagnostics.runtime.loaded_model_id.as_deref(), Some(model_id.as_str()));
+        assert_eq!(diagnostics.runtime.sample_rate_hz, Some(24_000));
+        assert_eq!(diagnostics.runtime.inference_thread_count, Some(2));
+    }
+
+    #[test]
+    fn diagnostics_composition_prefers_recorded_installer_error_category() {
+        let model_id = "KittenML/kitten-tts-mini-0.8".to_string();
+        let diagnostics = compose_local_tts_diagnostics(
+            TtsProvider::Local,
+            model_id.clone(),
+            "Luna".to_string(),
+            test_status(
+                LocalTtsInstallState::Failed,
+                None,
+                Some(LocalTtsStatusError {
+                    message: "raw storage failure should not cross this boundary".to_string(),
+                    retryable: true,
+                }),
+            ),
+            Some((LocalTtsInstallErrorKind::Sha256Mismatch, true)),
+            test_runtime(&model_id, LocalTtsRuntimePhase::Failed),
+        );
+
+        assert_eq!(
+            diagnostics.installer_error_category,
+            Some(LocalTtsInstallErrorKind::Sha256Mismatch)
+        );
+        assert_eq!(diagnostics.installer_error_retryable, Some(true));
+
+        let json = serde_json::to_string(&diagnostics).unwrap();
+        assert!(!json.contains("raw storage failure"));
+    }
+
+    #[test]
+    fn diagnostics_composition_uses_conservative_corrupt_install_fallback() {
+        let model_id = "KittenML/kitten-tts-mini-0.8".to_string();
+        let diagnostics = compose_local_tts_diagnostics(
+            TtsProvider::Local,
+            model_id.clone(),
+            "Rosie".to_string(),
+            test_status(
+                LocalTtsInstallState::Failed,
+                None,
+                Some(LocalTtsStatusError {
+                    message: "private/path/detail".to_string(),
+                    retryable: false,
+                }),
+            ),
+            None,
+            test_runtime(&model_id, LocalTtsRuntimePhase::Failed),
+        );
+
+        assert_eq!(
+            diagnostics.installer_error_category,
+            Some(LocalTtsInstallErrorKind::CorruptInstall)
+        );
+        assert_eq!(diagnostics.installer_error_retryable, Some(false));
+
+        let json = serde_json::to_string(&diagnostics).unwrap();
+        assert!(!json.contains("private/path/detail"));
+    }
 
     #[test]
     fn diagnostics_serialization_exposes_safe_identity_without_sensitive_payload_slots() {
