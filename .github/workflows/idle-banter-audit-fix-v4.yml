@@ -1,0 +1,974 @@
+name: Idle Banter audit hardening robust
+
+on:
+  push:
+    branches:
+      - ralph/idle-banter-implementation
+    paths:
+      - .github/workflows/idle-banter-audit-fix-v4.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-audit-fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ralph/idle-banter-implementation
+          fetch-depth: 0
+
+      - name: Apply audited Idle Banter source fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one source match in {path}, found {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # --- Idle Banter seed selection ---
+          path = "src-tauri/src/character/idle_banter.rs"
+          old = (
+              "fn normalize_line_fingerprint(line: &str) -> String {\n"
+              "    line.split_whitespace()\n"
+              "        .collect::<Vec<_>>()\n"
+              "        .join(\" \")\n"
+              "        .trim()\n"
+              "        .to_lowercase()\n"
+              "}\n"
+          )
+          new = old + (
+              "\n"
+              "fn seed_index_avoiding_previous(\n"
+              "    topics: &[String],\n"
+              "    previous: Option<&str>,\n"
+              "    unit_sample: f64,\n"
+              ") -> usize {\n"
+              "    debug_assert!(!topics.is_empty());\n"
+              "    let previous_key = previous.map(str::to_lowercase);\n"
+              "    let previous_index = previous_key.as_ref().and_then(|key| {\n"
+              "        topics\n"
+              "            .iter()\n"
+              "            .position(|topic| topic.to_lowercase() == *key)\n"
+              "    });\n"
+              "    let excluded = usize::from(previous_index.is_some() && topics.len() > 1);\n"
+              "    let choice_count = topics.len() - excluded;\n"
+              "    let choice = ((unit_sample.clamp(0.0, 0.999_999) * choice_count as f64) as usize)\n"
+              "        .min(choice_count - 1);\n"
+              "\n"
+              "    match previous_index {\n"
+              "        Some(previous_index) if topics.len() > 1 && choice >= previous_index => choice + 1,\n"
+              "        _ => choice,\n"
+              "    }\n"
+              "}\n"
+          )
+          replace_once(path, old, new)
+
+          replace_once(
+              path,
+              "        self.next_due = now + minutes(settings.idle_banter_initial_delay_minutes);\n"
+              "        self.last_seed = None;\n",
+              "        self.next_due = now + minutes(settings.idle_banter_initial_delay_minutes);\n",
+          )
+
+          old = (
+              "    pub fn poll_due(&mut self, settings: &AppSettings) -> Option<IdleBanterDue> {\n"
+              "        self.poll_due_at(\n"
+              "            settings,\n"
+              "            Instant::now(),\n"
+              "            rand::thread_rng().gen_range(0.0..=1.0),\n"
+              "        )\n"
+              "    }\n"
+          )
+          new = (
+              "    pub fn poll_due(&mut self, settings: &AppSettings) -> Option<IdleBanterDue> {\n"
+              "        let mut rng = rand::thread_rng();\n"
+              "        self.poll_due_at_with_samples(\n"
+              "            settings,\n"
+              "            Instant::now(),\n"
+              "            rng.gen_range(0.0..=1.0),\n"
+              "            rng.gen_range(0.0..=1.0),\n"
+              "        )\n"
+              "    }\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "    fn poll_due_at(\n"
+              "        &mut self,\n"
+              "        settings: &AppSettings,\n"
+              "        now: Instant,\n"
+              "        unit_sample: f64,\n"
+              "    ) -> Option<IdleBanterDue> {\n"
+          )
+          new = old + (
+              "        self.poll_due_at_with_samples(settings, now, unit_sample, unit_sample)\n"
+              "    }\n"
+              "\n"
+              "    fn poll_due_at_with_samples(\n"
+              "        &mut self,\n"
+              "        settings: &AppSettings,\n"
+              "        now: Instant,\n"
+              "        seed_sample: f64,\n"
+              "        jitter_sample: f64,\n"
+              "    ) -> Option<IdleBanterDue> {\n"
+          )
+          # Remove the original function opening from the replacement prefix so the
+          # wrapper owns it and the existing body becomes the with-samples body.
+          new = (
+              "    fn poll_due_at(\n"
+              "        &mut self,\n"
+              "        settings: &AppSettings,\n"
+              "        now: Instant,\n"
+              "        unit_sample: f64,\n"
+              "    ) -> Option<IdleBanterDue> {\n"
+              "        self.poll_due_at_with_samples(settings, now, unit_sample, unit_sample)\n"
+              "    }\n"
+              "\n"
+              "    fn poll_due_at_with_samples(\n"
+              "        &mut self,\n"
+              "        settings: &AppSettings,\n"
+              "        now: Instant,\n"
+              "        seed_sample: f64,\n"
+              "        jitter_sample: f64,\n"
+              "    ) -> Option<IdleBanterDue> {\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "        let topics = normalize_idle_banter_seed_topics(&settings.idle_banter_seed_topics).ok()?;\n"
+              "        let mut index = ((unit_sample.clamp(0.0, 0.999_999) * topics.len() as f64) as usize)\n"
+              "            .min(topics.len() - 1);\n"
+              "        if topics.len() > 1\n"
+              "            && self\n"
+              "                .last_seed\n"
+              "                .as_ref()\n"
+              "                .is_some_and(|last| last.eq_ignore_ascii_case(&topics[index]))\n"
+              "        {\n"
+              "            index = (index + 1) % topics.len();\n"
+              "        }\n"
+              "        let seed_topic = topics[index].clone();\n"
+          )
+          new = (
+              "        let topics = normalize_idle_banter_seed_topics(&settings.idle_banter_seed_topics).ok()?;\n"
+              "        let index =\n"
+              "            seed_index_avoiding_previous(&topics, self.last_seed.as_deref(), seed_sample);\n"
+              "        let seed_topic = topics[index].clone();\n"
+          )
+          replace_once(path, old, new)
+
+          replace_once(
+              path,
+              "                settings.idle_banter_repeat_interval_minutes,\n"
+              "                unit_sample,\n"
+              "            );\n",
+              "                settings.idle_banter_repeat_interval_minutes,\n"
+              "                jitter_sample,\n"
+              "            );\n",
+          )
+
+          marker = "    #[test]\n    fn delivered_history_is_session_only_bounded_and_deduplicated() {\n"
+          tests = (
+              "    #[test]\n"
+              "    fn seed_selection_remains_non_repeating_across_interaction_resets() {\n"
+              "        let mut settings = settings();\n"
+              "        settings.idle_banter_initial_delay_minutes = 5;\n"
+              "        settings.idle_banter_repeat_interval_minutes = 5;\n"
+              "        settings.idle_banter_seed_topics = vec![\"one\".into(), \"two\".into(), \"three\".into()];\n"
+              "        let start = Instant::now();\n"
+              "        let mut runtime = IdleBanterRuntime::new_at(&settings, start);\n"
+              "        let first = runtime\n"
+              "            .poll_due_at_with_samples(\n"
+              "                &settings,\n"
+              "                start + Duration::from_secs(300),\n"
+              "                0.0,\n"
+              "                0.5,\n"
+              "            )\n"
+              "            .unwrap();\n"
+              "        assert_eq!(first.seed_topic, \"one\");\n"
+              "\n"
+              "        let interaction = start + Duration::from_secs(301);\n"
+              "        runtime.reset_at(&settings, interaction);\n"
+              "        let second = runtime\n"
+              "            .poll_due_at_with_samples(\n"
+              "                &settings,\n"
+              "                interaction + Duration::from_secs(300),\n"
+              "                0.0,\n"
+              "                0.5,\n"
+              "            )\n"
+              "            .unwrap();\n"
+              "        assert_eq!(second.seed_topic, \"two\");\n"
+              "        assert_ne!(first.seed_topic, second.seed_topic);\n"
+              "    }\n"
+              "\n"
+              "    #[test]\n"
+              "    fn seed_selection_maps_sample_range_across_all_non_previous_topics() {\n"
+              "        let topics = vec![\"one\".into(), \"two\".into(), \"three\".into()];\n"
+              "        assert_eq!(seed_index_avoiding_previous(&topics, Some(\"two\"), 0.0), 0);\n"
+              "        assert_eq!(\n"
+              "            seed_index_avoiding_previous(&topics, Some(\"two\"), 0.999_999),\n"
+              "            2\n"
+              "        );\n"
+              "        assert_ne!(seed_index_avoiding_previous(&topics, Some(\"two\"), 0.5), 1);\n"
+              "    }\n"
+              "\n"
+          )
+          replace_once(path, marker, tests + marker)
+
+          # --- Ambient request/presentation ownership ---
+          path = "src-tauri/src/character/ambient.rs"
+          replace_once(
+              path,
+              "const AMBIENT_SETTLE_DELAY: Duration = Duration::from_millis(250);\n",
+              "const AMBIENT_SETTLE_DELAY: Duration = Duration::from_millis(250);\n"
+              "const NO_ACTIVE_REQUEST_EPOCH: u64 = u64::MAX;\n",
+          )
+          replace_once(
+              path,
+              "    current_request: Mutex<Option<CancellationToken>>,\n"
+              "    epoch: AtomicU64,\n"
+              "    started: AtomicBool,\n",
+              "    current_request: Mutex<Option<CancellationToken>>,\n"
+              "    coordination: Mutex<()>,\n"
+              "    active_request_epoch: AtomicU64,\n"
+              "    epoch: AtomicU64,\n"
+              "    presentation_epoch: AtomicU64,\n"
+              "    started: AtomicBool,\n",
+          )
+          replace_once(
+              path,
+              "                current_request: Mutex::new(None),\n"
+              "                epoch: AtomicU64::new(0),\n"
+              "                started: AtomicBool::new(false),\n",
+              "                current_request: Mutex::new(None),\n"
+              "                coordination: Mutex::new(()),\n"
+              "                active_request_epoch: AtomicU64::new(NO_ACTIVE_REQUEST_EPOCH),\n"
+              "                epoch: AtomicU64::new(0),\n"
+              "                presentation_epoch: AtomicU64::new(0),\n"
+              "                started: AtomicBool::new(false),\n",
+          )
+          old = (
+              "                if request.epoch != inner.epoch.load(AtomicOrdering::SeqCst) {\n"
+              "                    let _ = request.response.send(Ok(None));\n"
+              "                    continue;\n"
+              "                }\n"
+              "\n"
+              "                let request_cancellation = CancellationToken::new();\n"
+          )
+          new = (
+              "                {\n"
+              "                    let _coordination = inner.coordination.lock();\n"
+              "                    if request.epoch != inner.epoch.load(AtomicOrdering::SeqCst) {\n"
+              "                        let _ = request.response.send(Ok(None));\n"
+              "                        continue;\n"
+              "                    }\n"
+              "                    inner\n"
+              "                        .active_request_epoch\n"
+              "                        .store(request.epoch, AtomicOrdering::SeqCst);\n"
+              "                }\n"
+              "\n"
+              "                let request_cancellation = CancellationToken::new();\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "                let result = tokio::select! {\n"
+              "                    _ = cancellation.cancelled() => None,\n"
+              "                    _ = request_cancellation.cancelled() => None,\n"
+              "                    result = handler(request.event) => Some(result),\n"
+              "                };\n"
+              "                *inner.current_request.lock() = None;\n"
+          )
+          new = (
+              "                let request_epoch = request.epoch;\n"
+              "                let result = tokio::select! {\n"
+              "                    _ = cancellation.cancelled() => None,\n"
+              "                    _ = request_cancellation.cancelled() => None,\n"
+              "                    result = handler(request.event) => Some(result),\n"
+              "                };\n"
+              "                {\n"
+              "                    let _coordination = inner.coordination.lock();\n"
+              "                    if inner.active_request_epoch.load(AtomicOrdering::SeqCst) == request_epoch {\n"
+              "                        inner\n"
+              "                            .active_request_epoch\n"
+              "                            .store(NO_ACTIVE_REQUEST_EPOCH, AtomicOrdering::SeqCst);\n"
+              "                    }\n"
+              "                }\n"
+              "                *inner.current_request.lock() = None;\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "    pub fn interrupt(&self) {\n"
+              "        self.inner.epoch.fetch_add(1, AtomicOrdering::SeqCst);\n"
+              "        if let Some(cancellation) = self.inner.current_request.lock().as_ref() {\n"
+              "            cancellation.cancel();\n"
+              "        }\n"
+              "    }\n"
+              "\n"
+          )
+          new = (
+              "    pub fn interrupt(&self) {\n"
+              "        let _coordination = self.inner.coordination.lock();\n"
+              "        self.inner.epoch.fetch_add(1, AtomicOrdering::SeqCst);\n"
+              "        if let Some(cancellation) = self.inner.current_request.lock().as_ref() {\n"
+              "            cancellation.cancel();\n"
+              "        }\n"
+              "    }\n"
+              "\n"
+              "    pub fn claim_foreground_presentation(&self) {\n"
+              "        let _coordination = self.inner.coordination.lock();\n"
+              "        self.inner\n"
+              "            .presentation_epoch\n"
+              "            .fetch_add(1, AtomicOrdering::SeqCst);\n"
+              "    }\n"
+              "\n"
+              "    pub fn begin_ambient_presentation<T>(\n"
+              "        &self,\n"
+              "        action: impl FnOnce() -> T,\n"
+              "    ) -> Option<(u64, T)> {\n"
+              "        let _coordination = self.inner.coordination.lock();\n"
+              "        if self.inner.cancellation.is_cancelled() {\n"
+              "            return None;\n"
+              "        }\n"
+              "        let active = self.inner.active_request_epoch.load(AtomicOrdering::SeqCst);\n"
+              "        let current = self.inner.epoch.load(AtomicOrdering::SeqCst);\n"
+              "        if active == NO_ACTIVE_REQUEST_EPOCH || active != current {\n"
+              "            return None;\n"
+              "        }\n"
+              "        let lease = self.inner.presentation_epoch.load(AtomicOrdering::SeqCst);\n"
+              "        Some((lease, action()))\n"
+              "    }\n"
+              "\n"
+              "    pub fn with_current_ambient_presentation<T>(\n"
+              "        &self,\n"
+              "        lease: u64,\n"
+              "        action: impl FnOnce() -> T,\n"
+              "    ) -> Option<T> {\n"
+              "        let _coordination = self.inner.coordination.lock();\n"
+              "        if self.inner.cancellation.is_cancelled()\n"
+              "            || self.inner.active_request_epoch.load(AtomicOrdering::SeqCst)\n"
+              "                != self.inner.epoch.load(AtomicOrdering::SeqCst)\n"
+              "            || self.inner.presentation_epoch.load(AtomicOrdering::SeqCst) != lease\n"
+              "        {\n"
+              "            return None;\n"
+              "        }\n"
+              "        Some(action())\n"
+              "    }\n"
+              "\n"
+              "    pub fn with_ambient_cleanup<T>(\n"
+              "        &self,\n"
+              "        lease: u64,\n"
+              "        action: impl FnOnce() -> T,\n"
+              "    ) -> Option<T> {\n"
+              "        let _coordination = self.inner.coordination.lock();\n"
+              "        if self.inner.presentation_epoch.load(AtomicOrdering::SeqCst) != lease {\n"
+              "            return None;\n"
+              "        }\n"
+              "        Some(action())\n"
+              "    }\n"
+              "\n"
+          )
+          replace_once(path, old, new)
+
+          marker = "    #[tokio::test]\n    async fn scheduler_interrupt_cancels_current_request_but_keeps_running() {\n"
+          tests = (
+              "    #[test]\n"
+              "    fn presentation_lease_allows_passive_cleanup_but_rejects_foreground_cleanup() {\n"
+              "        let scheduler = AmbientScheduler::new();\n"
+              "        scheduler\n"
+              "            .inner\n"
+              "            .active_request_epoch\n"
+              "            .store(0, AtomicOrdering::SeqCst);\n"
+              "        let (lease, value) = scheduler\n"
+              "            .begin_ambient_presentation(|| 7)\n"
+              "            .expect(\"current ambient request should acquire presentation ownership\");\n"
+              "        assert_eq!(value, 7);\n"
+              "\n"
+              "        scheduler.interrupt();\n"
+              "        assert!(scheduler\n"
+              "            .with_current_ambient_presentation(lease, || ())\n"
+              "            .is_none());\n"
+              "        assert_eq!(scheduler.with_ambient_cleanup(lease, || 9), Some(9));\n"
+              "\n"
+              "        scheduler.claim_foreground_presentation();\n"
+              "        assert!(scheduler.with_ambient_cleanup(lease, || ()).is_none());\n"
+              "    }\n"
+              "\n"
+              "    #[test]\n"
+              "    fn stale_ambient_request_cannot_begin_presentation_after_interrupt() {\n"
+              "        let scheduler = AmbientScheduler::new();\n"
+              "        scheduler\n"
+              "            .inner\n"
+              "            .active_request_epoch\n"
+              "            .store(0, AtomicOrdering::SeqCst);\n"
+              "        scheduler.interrupt();\n"
+              "        assert!(scheduler.begin_ambient_presentation(|| ()).is_none());\n"
+              "    }\n"
+              "\n"
+              "    #[tokio::test]\n"
+              "    async fn foreground_claim_cancels_pending_request_and_revokes_cleanup_ownership() {\n"
+              "        let scheduler = AmbientScheduler::new();\n"
+              "        let handler_started = Arc::new(tokio::sync::Notify::new());\n"
+              "        let lease_slot = Arc::new(Mutex::new(None));\n"
+              "        let scheduler_for_handler = scheduler.clone();\n"
+              "        let started_for_handler = handler_started.clone();\n"
+              "        let lease_for_handler = lease_slot.clone();\n"
+              "        scheduler\n"
+              "            .start(move |_event| {\n"
+              "                let scheduler = scheduler_for_handler.clone();\n"
+              "                let started = started_for_handler.clone();\n"
+              "                let lease_slot = lease_for_handler.clone();\n"
+              "                async move {\n"
+              "                    let (lease, ()) = scheduler\n"
+              "                        .begin_ambient_presentation(|| ())\n"
+              "                        .expect(\"handler should own current ambient presentation\");\n"
+              "                    *lease_slot.lock() = Some(lease);\n"
+              "                    started.notify_one();\n"
+              "                    tokio::time::sleep(Duration::from_secs(30)).await;\n"
+              "                    Ok(Some(\"unexpected\".to_string()))\n"
+              "                }\n"
+              "            })\n"
+              "            .unwrap();\n"
+              "\n"
+              "        let pending_scheduler = scheduler.clone();\n"
+              "        let pending = tokio::spawn(async move {\n"
+              "            pending_scheduler\n"
+              "                .submit(AmbientEvent::new(\"manual\", \"first\".to_string(), 1.0))\n"
+              "                .await\n"
+              "        });\n"
+              "        handler_started.notified().await;\n"
+              "        let lease = (*lease_slot.lock()).expect(\"handler should publish its lease\");\n"
+              "\n"
+              "        scheduler.interrupt();\n"
+              "        scheduler.claim_foreground_presentation();\n"
+              "\n"
+              "        assert!(pending.await.unwrap().unwrap().is_none());\n"
+              "        assert!(scheduler.with_ambient_cleanup(lease, || ()).is_none());\n"
+              "        scheduler.stop().await;\n"
+              "    }\n"
+              "\n"
+          )
+          replace_once(path, marker, tests + marker)
+
+          # --- Standalone speech: foreground vs ambient presentation ownership ---
+          path = "src-tauri/src/commands/speech.rs"
+          old = (
+              "    if let Err(error) = transition_and_emit(&state.character_state, app, CharacterState::Talking) {\n"
+              "        state\n"
+              "            .standalone_speech\n"
+              "            .cancel(state.audio_playback.as_ref());\n"
+              "        return Err(error);\n"
+              "    }\n"
+              "    let _ = app.emit(\"moose://speech-bubble\", text);\n"
+              "    Ok(playback)\n"
+          )
+          new = (
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    if let Err(error) = surface_standalone_playback(state, app, text) {\n"
+              "        playback.cancel_if_current(state.audio_playback.as_ref());\n"
+              "        return Err(error);\n"
+              "    }\n"
+              "    Ok(playback)\n"
+              "}\n"
+              "\n"
+              "fn surface_standalone_playback<R: Runtime>(\n"
+              "    state: &AppState,\n"
+              "    app: &tauri::AppHandle<R>,\n"
+              "    text: &str,\n"
+              ") -> Result<(), String> {\n"
+              "    transition_and_emit(&state.character_state, app, CharacterState::Talking)?;\n"
+              "    let _ = app.emit(\"moose://speech-bubble\", text);\n"
+              "    Ok(())\n"
+          )
+          replace_once(path, old, new)
+
+          marker = (
+              "/// Provider-guarded standalone invocation used by voice audition. The provider is not an override:\n"
+          )
+          ambient_fn = (
+              "pub(crate) async fn invoke_standalone_speech_for_ambient<R: Runtime>(\n"
+              "    state: &AppState,\n"
+              "    app: &tauri::AppHandle<R>,\n"
+              "    text: &str,\n"
+              "    presentation_lease: u64,\n"
+              ") -> Result<Option<StandaloneSpeechPlayback>, String> {\n"
+              "    let snapshot = standalone_tts_snapshot(state, None);\n"
+              "    let request = snapshot.request(text);\n"
+              "    let output_device = snapshot.output_device.clone();\n"
+              "    let synthesizer = synthesizer_for_snapshot(state, &snapshot);\n"
+              "    let playback = synthesize_standalone(\n"
+              "        synthesizer.as_ref(),\n"
+              "        state.audio_playback.as_ref(),\n"
+              "        &state.standalone_speech,\n"
+              "        request,\n"
+              "        output_device,\n"
+              "    )\n"
+              "    .await?;\n"
+              "\n"
+              "    let Some(presentation) = state\n"
+              "        .ambient_scheduler\n"
+              "        .with_current_ambient_presentation(presentation_lease, || {\n"
+              "            surface_standalone_playback(state, app, text)\n"
+              "        })\n"
+              "    else {\n"
+              "        playback.cancel_if_current(state.audio_playback.as_ref());\n"
+              "        return Ok(None);\n"
+              "    };\n"
+              "    if let Err(error) = presentation {\n"
+              "        playback.cancel_if_current(state.audio_playback.as_ref());\n"
+              "        return Err(error);\n"
+              "    }\n"
+              "    Ok(Some(playback))\n"
+              "}\n"
+              "\n"
+          )
+          replace_once(path, marker, ambient_fn + marker)
+
+          # --- Ambient command delivery and cleanup leases ---
+          path = "src-tauri/src/commands/ambient.rs"
+          replace_once(
+              path,
+              "use crate::commands::speech::{invoke_standalone_speech, StandaloneSpeechPlayback};\n",
+              "use crate::commands::speech::{\n"
+              "    invoke_standalone_speech_for_ambient, StandaloneSpeechPlayback,\n"
+              "};\n",
+          )
+          replace_once(
+              path,
+              "    appeared_for_ambient: bool,\n"
+              "    playback: Option<StandaloneSpeechPlayback>,\n",
+              "    appeared_for_ambient: bool,\n"
+              "    presentation_lease: u64,\n"
+              "    playback: Option<StandaloneSpeechPlayback>,\n",
+          )
+          old = (
+              "    fn new(state: &'a AppState, app: &'a tauri::AppHandle<R>, appeared_for_ambient: bool) -> Self {\n"
+              "        Self {\n"
+              "            state,\n"
+              "            app,\n"
+              "            appeared_for_ambient,\n"
+              "            playback: None,\n"
+          )
+          new = (
+              "    fn new(\n"
+              "        state: &'a AppState,\n"
+              "        app: &'a tauri::AppHandle<R>,\n"
+              "        appeared_for_ambient: bool,\n"
+              "        presentation_lease: u64,\n"
+              "    ) -> Self {\n"
+              "        Self {\n"
+              "            state,\n"
+              "            app,\n"
+              "            appeared_for_ambient,\n"
+              "            presentation_lease,\n"
+              "            playback: None,\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "        clear_speech_bubble(self.app);\n"
+              "        if matches!(\n"
+              "            *self.state.character_state.read(),\n"
+              "            CharacterState::Thinking | CharacterState::Talking\n"
+              "        ) {\n"
+              "            let _ =\n"
+              "                transition_and_emit(&self.state.character_state, self.app, CharacterState::Idle);\n"
+              "        }\n"
+              "        if self.appeared_for_ambient && *self.state.character_state.read() == CharacterState::Idle {\n"
+              "            let _ = transition_and_emit(\n"
+              "                &self.state.character_state,\n"
+              "                self.app,\n"
+              "                CharacterState::Hidden,\n"
+              "            );\n"
+              "        }\n"
+          )
+          new = (
+              "        let _ = self\n"
+              "            .state\n"
+              "            .ambient_scheduler\n"
+              "            .with_ambient_cleanup(self.presentation_lease, || {\n"
+              "                clear_speech_bubble(self.app);\n"
+              "                if matches!(\n"
+              "                    *self.state.character_state.read(),\n"
+              "                    CharacterState::Thinking | CharacterState::Talking\n"
+              "                ) {\n"
+              "                    let _ = transition_and_emit(\n"
+              "                        &self.state.character_state,\n"
+              "                        self.app,\n"
+              "                        CharacterState::Idle,\n"
+              "                    );\n"
+              "                }\n"
+              "                if self.appeared_for_ambient\n"
+              "                    && *self.state.character_state.read() == CharacterState::Idle\n"
+              "                {\n"
+              "                    let _ = transition_and_emit(\n"
+              "                        &self.state.character_state,\n"
+              "                        self.app,\n"
+              "                        CharacterState::Hidden,\n"
+              "                    );\n"
+              "                }\n"
+              "            });\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "fn restore_after_ambient_failure<R: Runtime>(\n"
+              "    state: &AppState,\n"
+              "    app: &tauri::AppHandle<R>,\n"
+              "    appeared_for_ambient: bool,\n"
+              ") -> Result<(), String> {\n"
+              "    if matches!(\n"
+              "        *state.character_state.read(),\n"
+              "        CharacterState::Thinking | CharacterState::Talking\n"
+              "    ) {\n"
+              "        transition_and_emit(&state.character_state, app, CharacterState::Idle)?;\n"
+              "    }\n"
+              "    clear_speech_bubble(app);\n"
+              "    if appeared_for_ambient && *state.character_state.read() == CharacterState::Idle {\n"
+              "        transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;\n"
+              "    }\n"
+              "    Ok(())\n"
+              "}\n"
+          )
+          new = (
+              "fn restore_after_ambient_failure<R: Runtime>(\n"
+              "    state: &AppState,\n"
+              "    app: &tauri::AppHandle<R>,\n"
+              "    appeared_for_ambient: bool,\n"
+              "    presentation_lease: u64,\n"
+              ") -> Result<(), String> {\n"
+              "    let Some(result) = state\n"
+              "        .ambient_scheduler\n"
+              "        .with_ambient_cleanup(presentation_lease, || {\n"
+              "            if matches!(\n"
+              "                *state.character_state.read(),\n"
+              "                CharacterState::Thinking | CharacterState::Talking\n"
+              "            ) {\n"
+              "                transition_and_emit(&state.character_state, app, CharacterState::Idle)?;\n"
+              "            }\n"
+              "            clear_speech_bubble(app);\n"
+              "            if appeared_for_ambient\n"
+              "                && *state.character_state.read() == CharacterState::Idle\n"
+              "            {\n"
+              "                transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;\n"
+              "            }\n"
+              "            Ok::<(), String>(())\n"
+              "        })\n"
+              "    else {\n"
+              "        return Ok(());\n"
+              "    };\n"
+              "    result\n"
+              "}\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "    playback: &StandaloneSpeechPlayback,\n"
+              "    appeared_for_ambient: bool,\n"
+              ") -> Result<bool, String> {\n"
+              "    if !playback.completed_without_cancellation().await {\n"
+              "        return Ok(false);\n"
+              "    }\n"
+              "    let Some(result) = playback.with_current(|| {\n"
+              "        if *state.character_state.read() == CharacterState::Talking {\n"
+              "            transition_and_emit(&state.character_state, app, CharacterState::Idle)?;\n"
+              "        }\n"
+              "        clear_speech_bubble(app);\n"
+              "        Ok::<(), String>(())\n"
+              "    }) else {\n"
+              "        return Ok(true);\n"
+              "    };\n"
+              "    result?;\n"
+          )
+          new = (
+              "    playback: &StandaloneSpeechPlayback,\n"
+              "    appeared_for_ambient: bool,\n"
+              "    presentation_lease: u64,\n"
+              ") -> Result<bool, String> {\n"
+              "    if !playback.completed_without_cancellation().await {\n"
+              "        return Ok(false);\n"
+              "    }\n"
+              "    let Some(playback_result) = state\n"
+              "        .ambient_scheduler\n"
+              "        .with_current_ambient_presentation(presentation_lease, || {\n"
+              "            playback.with_current(|| {\n"
+              "                if *state.character_state.read() == CharacterState::Talking {\n"
+              "                    transition_and_emit(&state.character_state, app, CharacterState::Idle)?;\n"
+              "                }\n"
+              "                clear_speech_bubble(app);\n"
+              "                Ok::<(), String>(())\n"
+              "            })\n"
+              "        })\n"
+              "    else {\n"
+              "        return Ok(false);\n"
+              "    };\n"
+              "    let Some(result) = playback_result else {\n"
+              "        return Ok(false);\n"
+              "    };\n"
+              "    result?;\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "        if let Some(result) = playback.with_current(|| {\n"
+              "            if *state.character_state.read() == CharacterState::Idle {\n"
+              "                transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;\n"
+              "            }\n"
+              "            Ok::<(), String>(())\n"
+              "        }) {\n"
+              "            result?;\n"
+              "        }\n"
+          )
+          new = (
+              "        if let Some(playback_result) = state\n"
+              "            .ambient_scheduler\n"
+              "            .with_current_ambient_presentation(presentation_lease, || {\n"
+              "                playback.with_current(|| {\n"
+              "                    if *state.character_state.read() == CharacterState::Idle {\n"
+              "                        transition_and_emit(\n"
+              "                            &state.character_state,\n"
+              "                            app,\n"
+              "                            CharacterState::Hidden,\n"
+              "                        )?;\n"
+              "                    }\n"
+              "                    Ok::<(), String>(())\n"
+              "                })\n"
+              "            })\n"
+              "        {\n"
+              "            if let Some(result) = playback_result {\n"
+              "                result?;\n"
+              "            }\n"
+              "        }\n"
+          )
+          replace_once(path, old, new)
+
+          old = (
+              "    let initial_state = *state.character_state.read();\n"
+              "    if !matches!(\n"
+              "        initial_state,\n"
+              "        CharacterState::Hidden | CharacterState::Dismissed | CharacterState::Idle\n"
+              "    ) {\n"
+              "        return Ok(None);\n"
+              "    }\n"
+              "    let appeared_for_ambient = matches!(\n"
+              "        initial_state,\n"
+              "        CharacterState::Hidden | CharacterState::Dismissed\n"
+              "    );\n"
+              "    if appeared_for_ambient {\n"
+              "        show_character(&state.character_state, app)?;\n"
+              "    }\n"
+              "    transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;\n"
+              "    let mut cancellation_guard = AmbientCancellationGuard::new(state, app, appeared_for_ambient);\n"
+          )
+          new = (
+              "    let Some((presentation_lease, appearance_result)) = state\n"
+              "        .ambient_scheduler\n"
+              "        .begin_ambient_presentation(|| {\n"
+              "            let initial_state = *state.character_state.read();\n"
+              "            if !matches!(\n"
+              "                initial_state,\n"
+              "                CharacterState::Hidden | CharacterState::Dismissed | CharacterState::Idle\n"
+              "            ) {\n"
+              "                return Ok(None);\n"
+              "            }\n"
+              "            let appeared_for_ambient = matches!(\n"
+              "                initial_state,\n"
+              "                CharacterState::Hidden | CharacterState::Dismissed\n"
+              "            );\n"
+              "            if appeared_for_ambient {\n"
+              "                show_character(&state.character_state, app)?;\n"
+              "            }\n"
+              "            transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;\n"
+              "            Ok::<Option<bool>, String>(Some(appeared_for_ambient))\n"
+              "        })\n"
+              "    else {\n"
+              "        return Ok(None);\n"
+              "    };\n"
+              "    let Some(appeared_for_ambient) = appearance_result? else {\n"
+              "        return Ok(None);\n"
+              "    };\n"
+              "    let mut cancellation_guard = AmbientCancellationGuard::new(\n"
+              "        state,\n"
+              "        app,\n"
+              "        appeared_for_ambient,\n"
+              "        presentation_lease,\n"
+              "    );\n"
+          )
+          replace_once(path, old, new)
+
+          p = Path(path)
+          text = p.read_text()
+          old_call = "restore_after_ambient_failure(state, app, appeared_for_ambient)?;"
+          if text.count(old_call) != 4:
+              raise SystemExit(f"expected 4 ambient restore call sites, found {text.count(old_call)}")
+          p.write_text(text.replace(
+              old_call,
+              "restore_after_ambient_failure(state, app, appeared_for_ambient, presentation_lease)?;",
+          ))
+
+          old = (
+              "    let playback = match invoke_standalone_speech(state, app, &text, None).await {\n"
+              "        Ok(playback) => playback,\n"
+              "        Err(error_value) => {\n"
+              "            restore_after_ambient_failure(state, app, appeared_for_ambient, presentation_lease)?;\n"
+              "            cancellation_guard.disarm();\n"
+              "            return Err(error_value);\n"
+              "        }\n"
+              "    };\n"
+          )
+          new = (
+              "    let playback = match invoke_standalone_speech_for_ambient(\n"
+              "        state,\n"
+              "        app,\n"
+              "        &text,\n"
+              "        presentation_lease,\n"
+              "    )\n"
+              "    .await\n"
+              "    {\n"
+              "        Ok(Some(playback)) => playback,\n"
+              "        Ok(None) => return Ok(None),\n"
+              "        Err(error_value) => {\n"
+              "            restore_after_ambient_failure(\n"
+              "                state,\n"
+              "                app,\n"
+              "                appeared_for_ambient,\n"
+              "                presentation_lease,\n"
+              "            )?;\n"
+              "            cancellation_guard.disarm();\n"
+              "            return Err(error_value);\n"
+              "        }\n"
+              "    };\n"
+          )
+          replace_once(path, old, new)
+
+          replace_once(
+              path,
+              "        appeared_for_ambient,\n"
+              "    )\n"
+              "    .await?;\n",
+              "        appeared_for_ambient,\n"
+              "        presentation_lease,\n"
+              "    )\n"
+              "    .await?;\n",
+          )
+
+          # --- Foreground presentation call sites ---
+          path = "src-tauri/src/commands/conversation/core.rs"
+          replace_once(
+              path,
+              "    let settings = state.settings.read().clone();\n"
+              "    prepare_character_for_conversation(state.inner(), &app)?;\n",
+              "    let settings = state.settings.read().clone();\n"
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    prepare_character_for_conversation(state.inner(), &app)?;\n",
+          )
+          replace_once(
+              path,
+              "        .stop_session(state.audio_capture.clone(), state.audio_playback.clone())\n"
+              "        .await;\n"
+              "\n"
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Idle)\n",
+              "        .stop_session(state.audio_capture.clone(), state.audio_playback.clone())\n"
+              "        .await;\n"
+              "\n"
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Idle)\n",
+          )
+          replace_once(
+              path,
+              "    if *state.character_state.read() == CharacterState::Talking {\n"
+              "        let target = if conversation_active {\n",
+              "    if *state.character_state.read() == CharacterState::Talking {\n"
+              "        state.ambient_scheduler.claim_foreground_presentation();\n"
+              "        let target = if conversation_active {\n",
+          )
+          replace_once(
+              path,
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Thinking)?;\n"
+              "\n"
+              "    let text_res = match generate_typed_text_with_snapshot(\n",
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Thinking)?;\n"
+              "\n"
+              "    let text_res = match generate_typed_text_with_snapshot(\n",
+          )
+
+          path = "src-tauri/src/commands/character.rs"
+          replace_once(
+              path,
+              "    transition_and_emit(&state.character_state, &app, new_state)\n",
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    transition_and_emit(&state.character_state, &app, new_state)\n",
+          )
+          replace_once(
+              path,
+              "    state.record_user_interaction();\n"
+              "    show_character(&state.character_state, &app)\n",
+              "    state.record_user_interaction();\n"
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    show_character(&state.character_state, &app)\n",
+          )
+          replace_once(
+              path,
+              "    state.record_user_interaction();\n"
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Hidden)\n",
+              "    state.record_user_interaction();\n"
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Hidden)\n",
+          )
+          replace_once(
+              path,
+              "        .stop_session(state.audio_capture.clone(), state.audio_playback.clone())\n"
+              "        .await;\n"
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Dismissed)?;\n",
+              "        .stop_session(state.audio_capture.clone(), state.audio_playback.clone())\n"
+              "        .await;\n"
+              "    state.ambient_scheduler.claim_foreground_presentation();\n"
+              "    transition_and_emit(&state.character_state, &app, CharacterState::Dismissed)?;\n",
+          )
+          replace_once(
+              path,
+              "        ) {\n"
+              "            transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;\n"
+              "        }\n"
+              "        Ok(())\n"
+              "    } else {\n",
+              "        ) {\n"
+              "            state.ambient_scheduler.claim_foreground_presentation();\n"
+              "            transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;\n"
+              "        }\n"
+              "        Ok(())\n"
+              "    } else {\n",
+          )
+          PY
+
+      - name: Format and validate patch shape
+        shell: bash
+        run: |
+          rustup component add rustfmt
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          git diff --check
+          git status --short
+
+      - name: Commit fixes and remove all temporary patch workflows
+        shell: bash
+        run: |
+          rm .github/workflows/idle-banter-audit-fix.yml
+          rm .github/workflows/idle-banter-audit-fix-v2.yml
+          rm .github/workflows/idle-banter-audit-fix-v3.yml
+          rm .github/workflows/idle-banter-audit-fix-v4.yml
+          git config user.name "Phillip Chin"
+          git config user.email "ekkus93@gmail.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: harden Idle Banter scheduling ownership"
+          git push origin HEAD:ralph/idle-banter-implementation
