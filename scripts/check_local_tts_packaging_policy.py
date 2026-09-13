@@ -304,7 +304,7 @@ def check_ordinary_ci_is_model_weight_free() -> None:
         "Download and verify frozen KittenTTS artifacts",
         "ai::local_tts::tests::real_kitten_cpu_acceptance_production_provider_offline_privacy",
         "ai::local_tts::runtime::engine::tests::real_kittentts_cpu_thread_sweep",
-        "timeout-minutes: 20",
+        "timeout-minutes: 25",
     ):
         require_token(acceptance, token, "explicit KittenTTS acceptance workflow")
 
