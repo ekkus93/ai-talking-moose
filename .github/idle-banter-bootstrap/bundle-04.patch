@@ -1,0 +1,245 @@
+diff --git a/src/generated/backendContract.json b/src/generated/backendContract.json
+index b54fb703..805dc281 100644
+--- a/src/generated/backendContract.json
++++ b/src/generated/backendContract.json
+@@ -1,6 +1,6 @@
+ {
+   "settings": {
+-    "settings_version": 4,
++    "settings_version": 5,
+     "asr_mode": "moonshine_tiny_streaming",
+     "launch_at_login": false,
+     "show_in_menu_bar": true,
+@@ -13,6 +13,26 @@
+     "quiet_hours_end": 8,
+     "max_comments_per_hour": 4,
+     "hide_delay_seconds": 6,
++    "idle_banter_enabled": true,
++    "idle_banter_initial_delay_minutes": 60,
++    "idle_banter_repeat_interval_minutes": 30,
++    "idle_banter_seed_topics": [
++      "being ignored",
++      "stuck on the wall",
++      "questioning career choices",
++      "user procrastinating",
++      "awkward silence",
++      "computer problems",
++      "existential moose thoughts",
++      "jealousy of other apps",
++      "pretending to have important plans",
++      "dramatic abandonment",
++      "boredom",
++      "making fun of modern technology",
++      "suspiciously observing the room",
++      "complaining about inactivity",
++      "absurd fake announcements"
++    ],
+     "input_device": null,
+     "output_device": null,
+     "volume": 1.0,
+@@ -814,7 +834,7 @@
+       "needs_acknowledgement": false
+     },
+     "AppSettings": {
+-      "settings_version": 4,
++      "settings_version": 5,
+       "asr_mode": "moonshine_tiny_streaming",
+       "launch_at_login": false,
+       "show_in_menu_bar": true,
+@@ -827,6 +847,26 @@
+       "quiet_hours_end": 8,
+       "max_comments_per_hour": 4,
+       "hide_delay_seconds": 6,
++      "idle_banter_enabled": true,
++      "idle_banter_initial_delay_minutes": 60,
++      "idle_banter_repeat_interval_minutes": 30,
++      "idle_banter_seed_topics": [
++        "being ignored",
++        "stuck on the wall",
++        "questioning career choices",
++        "user procrastinating",
++        "awkward silence",
++        "computer problems",
++        "existential moose thoughts",
++        "jealousy of other apps",
++        "pretending to have important plans",
++        "dramatic abandonment",
++        "boredom",
++        "making fun of modern technology",
++        "suspiciously observing the room",
++        "complaining about inactivity",
++        "absurd fake announcements"
++      ],
+       "input_device": "Contract input device",
+       "output_device": "Contract output device",
+       "volume": 1.0,
+diff --git a/src/test/IdleBanterSettings.test.tsx b/src/test/IdleBanterSettings.test.tsx
+new file mode 100644
+index 00000000..0ac24c81
+--- /dev/null
++++ b/src/test/IdleBanterSettings.test.tsx
+@@ -0,0 +1,149 @@
++import { fireEvent, render, screen, waitFor } from "@testing-library/react";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { BehaviorTab } from "../components/Settings/BehaviorTab";
++import { frontendDefaultSettings } from "../lib/backendContract";
++import { tauriBridge } from "../lib/tauriBridge";
++import {
++  resetSettingsPersistenceForTests,
++  useMooseStore,
++} from "../stores/mooseStore";
++
++describe("Idle Banter behavior settings", () => {
++  beforeEach(() => {
++    resetSettingsPersistenceForTests();
++    vi.spyOn(tauriBridge, "updateSettings").mockResolvedValue(undefined);
++    useMooseStore.setState({ settings: frontendDefaultSettings() });
++  });
++
++  afterEach(() => {
++    resetSettingsPersistenceForTests();
++    vi.restoreAllMocks();
++  });
++
++  it("renders authoritative defaults and persists timing controls", async () => {
++    render(<BehaviorTab />);
++    expect(screen.getByRole("checkbox", { name: "Idle Banter" })).toBeChecked();
++    expect(
++      screen.getByLabelText("Idle Banter initial delay in minutes"),
++    ).toHaveValue(60);
++    expect(
++      screen.getByLabelText("Idle Banter repeat interval in minutes"),
++    ).toHaveValue(30);
++
++    fireEvent.click(screen.getByRole("checkbox", { name: "Idle Banter" }));
++    await waitFor(() =>
++      expect(useMooseStore.getState().settings?.idle_banter_enabled).toBe(false),
++    );
++    fireEvent.click(screen.getByRole("checkbox", { name: "Idle Banter" }));
++
++    fireEvent.change(
++      screen.getByLabelText("Idle Banter initial delay in minutes"),
++      { target: { value: "90" } },
++    );
++    fireEvent.change(
++      screen.getByLabelText("Idle Banter repeat interval in minutes"),
++      { target: { value: "45" } },
++    );
++    await waitFor(() => {
++      expect(
++        useMooseStore.getState().settings?.idle_banter_initial_delay_minutes,
++      ).toBe(90);
++      expect(
++        useMooseStore.getState().settings?.idle_banter_repeat_interval_minutes,
++      ).toBe(45);
++    });
++  });
++
++  it("supports add edit delete and restore-default seed actions", async () => {
++    render(<BehaviorTab />);
++    const initial = frontendDefaultSettings().idle_banter_seed_topics;
++
++    fireEvent.change(screen.getByLabelText("New Idle Banter seed topic"), {
++      target: { value: "printer grudges" },
++    });
++    fireEvent.click(screen.getByRole("button", { name: "Add" }));
++    fireEvent.click(screen.getByRole("button", { name: "Save Topics" }));
++    await waitFor(() =>
++      expect(
++        useMooseStore.getState().settings?.idle_banter_seed_topics,
++      ).toContain("printer grudges"),
++    );
++
++    const first = screen.getByLabelText("Idle Banter seed topic 1");
++    fireEvent.change(first, { target: { value: "being dramatically ignored" } });
++    fireEvent.click(screen.getByRole("button", { name: "Save Topics" }));
++    await waitFor(() =>
++      expect(
++        useMooseStore.getState().settings?.idle_banter_seed_topics[0],
++      ).toBe("being dramatically ignored"),
++    );
++
++    fireEvent.click(
++      screen.getByLabelText("Delete Idle Banter seed topic 1"),
++    );
++    fireEvent.click(screen.getByRole("button", { name: "Save Topics" }));
++    await waitFor(() =>
++      expect(useMooseStore.getState().settings?.idle_banter_seed_topics).not.toContain(
++        "being dramatically ignored",
++      ),
++    );
++
++    fireEvent.click(
++      screen.getByRole("button", { name: "Restore Defaults" }),
++    );
++    await waitFor(() =>
++      expect(useMooseStore.getState().settings?.idle_banter_seed_topics).toEqual(initial),
++    );
++  });
++
++  it("rejects duplicate topics accessibly and prevents deleting the final topic", () => {
++    const defaults = frontendDefaultSettings();
++    useMooseStore.setState({
++      settings: { ...defaults, idle_banter_seed_topics: ["boredom"] },
++    });
++    render(<BehaviorTab />);
++
++    expect(
++      screen.getByLabelText("Delete Idle Banter seed topic 1"),
++    ).toBeDisabled();
++    fireEvent.change(screen.getByLabelText("New Idle Banter seed topic"), {
++      target: { value: "  BOREDOM " },
++    });
++    fireEvent.click(screen.getByRole("button", { name: "Add" }));
++    expect(screen.getByRole("alert")).toHaveTextContent(/duplicated/i);
++  });
++
++  it("rejects oversized seed topics before persistence", () => {
++    const defaults = frontendDefaultSettings();
++    useMooseStore.setState({
++      settings: { ...defaults, idle_banter_seed_topics: ["boredom"] },
++    });
++    render(<BehaviorTab />);
++
++    fireEvent.change(screen.getByLabelText("Idle Banter seed topic 1"), {
++      target: { value: "x".repeat(121) },
++    });
++    fireEvent.click(screen.getByRole("button", { name: "Save Topics" }));
++    expect(screen.getByRole("alert")).toHaveTextContent(/120 characters/i);
++    expect(useMooseStore.getState().settings?.idle_banter_seed_topics).toEqual([
++      "boredom",
++    ]);
++  });
++
++  it("explains the global ambient master gate and disables dependent controls", () => {
++    const defaults = frontendDefaultSettings();
++    useMooseStore.setState({
++      settings: {
++        ...defaults,
++        unsolicited_comments: false,
++        idle_banter_enabled: false,
++      },
++    });
++    render(<BehaviorTab />);
++    expect(screen.getByRole("status")).toHaveTextContent(/paused/i);
++    expect(
++      screen.getByLabelText("Idle Banter initial delay in minutes"),
++    ).toBeDisabled();
++    expect(screen.getByLabelText("New Idle Banter seed topic")).toBeDisabled();
++  });
++});
+diff --git a/src/types/moose.ts b/src/types/moose.ts
+index b4645172..dd0956de 100644
+--- a/src/types/moose.ts
++++ b/src/types/moose.ts
+@@ -308,6 +308,10 @@ export interface AppSettings {
+   quiet_hours_end: number;
+   max_comments_per_hour: number;
+   hide_delay_seconds: number;
++  idle_banter_enabled: boolean;
++  idle_banter_initial_delay_minutes: number;
++  idle_banter_repeat_interval_minutes: number;
++  idle_banter_seed_topics: string[];
+ 
+   input_device: string | null;
+   output_device: string | null;
