@@ -1,5 +1,7 @@
 use super::*;
-use crate::ai::local_tts::manifest::{local_tts_model_manifest, LocalTtsPlatform};
+use crate::ai::local_tts::manifest::{
+    local_tts_model_manifest, local_tts_platform_artifact, LocalTtsPlatform,
+};
 use crate::ai::local_tts::storage;
 use crate::ai::local_tts::{
     LocalSpeechSynthesizer, LocalTtsRuntimeManager, DEFAULT_LOCAL_TTS_MODEL_ID, LOCAL_TTS_VOICE_IDS,
@@ -235,6 +237,14 @@ fn roundtrip_tts_platform() -> LocalTtsPlatform {
     LocalTtsPlatform::MacosX86_64
 }
 
+fn roundtrip_platform_label(platform: LocalTtsPlatform) -> &'static str {
+    match platform {
+        LocalTtsPlatform::LinuxX86_64 => "linux-x86_64",
+        LocalTtsPlatform::MacosArm64 => "macos-arm64",
+        LocalTtsPlatform::MacosX86_64 => "macos-x86_64",
+    }
+}
+
 fn roundtrip_ort_filename(platform: LocalTtsPlatform) -> &'static str {
     match platform {
         LocalTtsPlatform::MacosArm64 => "onnxruntime-osx-arm64-1.23.2.tgz",
@@ -253,8 +263,11 @@ fn stage_roundtrip_tts_install() -> (tempfile::TempDir, LocalTtsPlatform) {
     let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID)
         .expect("default Local TTS manifest must exist");
     let platform = roundtrip_tts_platform();
-    let artifacts = storage::expected_artifacts(manifest, platform)
-        .expect("round-trip platform must be supported");
+    let mut artifacts = manifest.common_artifacts.iter().collect::<Vec<_>>();
+    artifacts.push(
+        local_tts_platform_artifact(manifest, platform)
+            .expect("round-trip platform must have a pinned ONNX Runtime artifact"),
+    );
     let revision_dir = storage
         .model_revision_dir(DEFAULT_LOCAL_TTS_MODEL_ID)
         .expect("default Local TTS model ID must be path-safe");
@@ -307,13 +320,34 @@ fn stage_roundtrip_tts_install() -> (tempfile::TempDir, LocalTtsPlatform) {
         );
     }
 
-    let marker = storage::install_marker(manifest, platform, &artifacts);
+    let marker_artifacts = artifacts
+        .iter()
+        .map(|artifact| {
+            serde_json::json!({
+                "filename": artifact.filename,
+                "expected_bytes": artifact.expected_bytes,
+                "sha256": artifact.sha256,
+            })
+        })
+        .collect::<Vec<_>>();
+    let marker = serde_json::json!({
+        "schema_version": 1,
+        "storage_id": manifest.id,
+        "provider_model_id": manifest.provider_model_id,
+        "model_source_revision": manifest.model_source_revision,
+        "runtime_compatibility_version": manifest.runtime.compatibility_version,
+        "platform": roundtrip_platform_label(platform),
+        "artifacts": marker_artifacts,
+    });
     fs::write(
-        revision_dir.join(storage::INSTALL_MARKER),
+        revision_dir.join(".talking-moose-local-tts.json"),
         serde_json::to_vec_pretty(&marker).unwrap(),
     )
     .expect("failed to write Local TTS round-trip install marker");
-    assert!(storage.marker_shape_is_valid(manifest, platform));
+    let status = storage
+        .status(DEFAULT_LOCAL_TTS_MODEL_ID, platform)
+        .expect("round-trip staged Local TTS status must be readable");
+    assert_eq!(status.install_state, storage::LocalTtsInstallState::Installed);
     (temp, platform)
 }
 
@@ -476,10 +510,11 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
         LOCAL_TTS_VOICE_IDS[0].to_string(),
     );
     let engine_installer = asr_installer.clone();
-    let mut asr_engine = tokio::task::spawn_blocking(move || MoonshineTinyEngine::open(&engine_installer))
-        .await
-        .expect("Moonshine Tiny open worker panicked")
-        .expect("failed to open pinned Moonshine Tiny");
+    let mut asr_engine =
+        tokio::task::spawn_blocking(move || MoonshineTinyEngine::open(&engine_installer))
+            .await
+            .expect("Moonshine Tiny open worker panicked")
+            .expect("failed to open pinned Moonshine Tiny");
     let expected_words = normalized_words(PHRASE);
     let mut voice_results = Vec::with_capacity(LOCAL_TTS_VOICE_IDS.len());
 
@@ -519,11 +554,7 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
     let asr_manifest = model_manifest_info(MoonshineModelArchitecture::TinyStreaming);
     let all_passed = voice_results.iter().all(|voice| voice.passed);
     let evidence = RoundTripEvidence {
-        platform: match platform {
-            LocalTtsPlatform::MacosArm64 => "macos-arm64",
-            LocalTtsPlatform::MacosX86_64 => "macos-x86_64",
-            LocalTtsPlatform::LinuxX86_64 => unreachable!(),
-        },
+        platform: roundtrip_platform_label(platform),
         tts_model_id: DEFAULT_LOCAL_TTS_MODEL_ID,
         asr_model_id: asr_manifest.id,
         asr_model_revision: asr_manifest.revision,
