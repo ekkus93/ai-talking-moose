@@ -138,7 +138,11 @@ impl IdleBanterRuntime {
     }
 
     pub fn poll_due(&mut self, settings: &AppSettings) -> Option<IdleBanterDue> {
-        self.poll_due_at(settings, Instant::now(), rand::thread_rng().gen_range(0.0..=1.0))
+        self.poll_due_at(
+            settings,
+            Instant::now(),
+            rand::thread_rng().gen_range(0.0..=1.0),
+        )
     }
 
     fn poll_due_at(
@@ -248,25 +252,26 @@ mod tests {
             normalize_idle_banter_seed_topics(&topics).unwrap(),
             vec!["Café thoughts".to_string(), "wall duty".to_string()]
         );
-        assert!(normalize_idle_banter_seed_topics(&[
-            "Moose".to_string(),
-            "  mOoSe ".to_string()
-        ])
-        .is_err());
+        assert!(
+            normalize_idle_banter_seed_topics(&["Moose".to_string(), "  mOoSe ".to_string()])
+                .is_err()
+        );
     }
 
     #[test]
     fn normalization_rejects_every_configured_boundary_violation() {
         assert!(normalize_idle_banter_seed_topics(&[]).is_err());
         assert!(normalize_idle_banter_seed_topics(
-            &(0..=IDLE_BANTER_MAX_SEEDS).map(|i| format!("topic-{i}")).collect::<Vec<_>>()
+            &(0..=IDLE_BANTER_MAX_SEEDS)
+                .map(|i| format!("topic-{i}"))
+                .collect::<Vec<_>>()
         )
         .is_err());
         assert!(normalize_idle_banter_seed_topics(&["   ".to_string()]).is_err());
-        assert!(normalize_idle_banter_seed_topics(&[
-            "x".repeat(IDLE_BANTER_MAX_SEED_CHARS + 1)
-        ])
-        .is_err());
+        assert!(
+            normalize_idle_banter_seed_topics(&["x".repeat(IDLE_BANTER_MAX_SEED_CHARS + 1)])
+                .is_err()
+        );
 
         let long = "x".repeat(IDLE_BANTER_MAX_SEED_CHARS);
         let topics = (0..IDLE_BANTER_MAX_SEEDS)

@@ -34,7 +34,10 @@ fn build_ambient_model_prompt_for(
         return PromptBuilder::build_idle_banter_prompt(
             &snapshot.character_config,
             event.idle_banter_inactivity_minutes.unwrap_or_default(),
-            event.idle_banter_seed_topic.as_deref().unwrap_or("idle absurdity"),
+            event
+                .idle_banter_seed_topic
+                .as_deref()
+                .unwrap_or("idle absurdity"),
             &recent,
             &memories,
         );
@@ -133,11 +136,7 @@ struct AmbientCancellationGuard<'a, R: Runtime> {
 }
 
 impl<'a, R: Runtime> AmbientCancellationGuard<'a, R> {
-    fn new(
-        state: &'a AppState,
-        app: &'a tauri::AppHandle<R>,
-        appeared_for_ambient: bool,
-    ) -> Self {
+    fn new(state: &'a AppState, app: &'a tauri::AppHandle<R>, appeared_for_ambient: bool) -> Self {
         Self {
             state,
             app,
@@ -180,15 +179,10 @@ impl<R: Runtime> Drop for AmbientCancellationGuard<'_, R> {
             *self.state.character_state.read(),
             CharacterState::Thinking | CharacterState::Talking
         ) {
-            let _ = transition_and_emit(
-                &self.state.character_state,
-                self.app,
-                CharacterState::Idle,
-            );
+            let _ =
+                transition_and_emit(&self.state.character_state, self.app, CharacterState::Idle);
         }
-        if self.appeared_for_ambient
-            && *self.state.character_state.read() == CharacterState::Idle
-        {
+        if self.appeared_for_ambient && *self.state.character_state.read() == CharacterState::Idle {
             let _ = transition_and_emit(
                 &self.state.character_state,
                 self.app,
@@ -534,8 +528,11 @@ mod tests {
             request_resume.wait().await;
             let privacy_allowed =
                 ambient_privacy_allowed_for(&snapshot.settings, AmbientEventCategory::Application);
-            let prompt =
-                build_ambient_model_prompt_for(&request_state, &snapshot, &AmbientEvent::new("application", "application changed".to_string(), 1.0));
+            let prompt = build_ambient_model_prompt_for(
+                &request_state,
+                &snapshot,
+                &AmbientEvent::new("application", "application changed".to_string(), 1.0),
+            );
             let error =
                 generate_ambient_text_for(&request_state, &snapshot.settings, prompt.clone())
                     .await
@@ -580,8 +577,11 @@ mod tests {
             next_snapshot.character_config.personality.talkativeness,
             0.0
         );
-        let next_prompt =
-            build_ambient_model_prompt_for(&state, &next_snapshot, &AmbientEvent::new("application", "application changed".to_string(), 1.0));
+        let next_prompt = build_ambient_model_prompt_for(
+            &state,
+            &next_snapshot,
+            &AmbientEvent::new("application", "application changed".to_string(), 1.0),
+        );
         assert!(!next_prompt.contains(PRIVATE_MEMORY));
         let next_error = generate_ambient_text_for(&state, &next_snapshot.settings, next_prompt)
             .await

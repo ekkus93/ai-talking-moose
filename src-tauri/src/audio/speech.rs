@@ -40,11 +40,7 @@ impl StandaloneSpeechController {
     /// Cancel one utterance only if `token` still owns the standalone slot.
     /// This is used by ambient cancellation so stale cleanup can never cancel a
     /// newer foreground utterance that took ownership after the ambient request.
-    pub fn cancel_if_current(
-        &self,
-        playback: &AudioPlayback,
-        token: &CancellationToken,
-    ) -> bool {
+    pub fn cancel_if_current(&self, playback: &AudioPlayback, token: &CancellationToken) -> bool {
         let current = self.current.lock();
         if current.is_cancelled() || &*current != token {
             return false;

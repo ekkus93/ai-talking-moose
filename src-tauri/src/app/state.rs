@@ -202,12 +202,10 @@ impl AppSettings {
             .and_then(serde_json::Value::as_u64)
             == Some(u64::from(CURRENT_SETTINGS_VERSION));
         let had_idle_banter_enabled = value.get("idle_banter_enabled").is_some();
-        let had_idle_banter_initial_delay = value
-            .get("idle_banter_initial_delay_minutes")
-            .is_some();
-        let had_idle_banter_repeat_interval = value
-            .get("idle_banter_repeat_interval_minutes")
-            .is_some();
+        let had_idle_banter_initial_delay =
+            value.get("idle_banter_initial_delay_minutes").is_some();
+        let had_idle_banter_repeat_interval =
+            value.get("idle_banter_repeat_interval_minutes").is_some();
         let had_idle_banter_seed_topics = value.get("idle_banter_seed_topics").is_some();
         let had_enabled_window_title_observation = value
             .get("window_title_observation")
@@ -245,20 +243,19 @@ impl AppSettings {
             || !had_idle_banter_initial_delay
             || !had_idle_banter_repeat_interval
             || !had_idle_banter_seed_topics;
-        let idle_banter_seed_repaired = match normalize_idle_banter_seed_topics(
-            &settings.idle_banter_seed_topics,
-        ) {
-            Ok(normalized) => {
-                let changed = normalized != settings.idle_banter_seed_topics;
-                settings.idle_banter_seed_topics = normalized;
-                changed
-            }
-            Err(_) if legacy_idle_banter => {
-                settings.idle_banter_seed_topics = default_idle_banter_seed_topics();
-                true
-            }
-            Err(error) => return Err(PersistedSettingsError::Invalid(error)),
-        };
+        let idle_banter_seed_repaired =
+            match normalize_idle_banter_seed_topics(&settings.idle_banter_seed_topics) {
+                Ok(normalized) => {
+                    let changed = normalized != settings.idle_banter_seed_topics;
+                    settings.idle_banter_seed_topics = normalized;
+                    changed
+                }
+                Err(_) if legacy_idle_banter => {
+                    settings.idle_banter_seed_topics = default_idle_banter_seed_topics();
+                    true
+                }
+                Err(error) => return Err(PersistedSettingsError::Invalid(error)),
+            };
         if !had_asr_mode {
             settings.asr_mode = AsrMode::GeminiLiveAudio;
         }
@@ -906,7 +903,10 @@ mod tests {
         assert!(settings.idle_banter_enabled);
         assert_eq!(settings.idle_banter_initial_delay_minutes, 60);
         assert_eq!(settings.idle_banter_repeat_interval_minutes, 30);
-        assert_eq!(settings.idle_banter_seed_topics, default_idle_banter_seed_topics());
+        assert_eq!(
+            settings.idle_banter_seed_topics,
+            default_idle_banter_seed_topics()
+        );
         assert_eq!(settings.talkativeness, 0.73);
         assert!(settings.memory_enabled);
         assert_eq!(settings.quiet_hours_start, 21);
@@ -917,7 +917,10 @@ mod tests {
         let (round_tripped, migrated_again) =
             AppSettings::from_persisted_json(&serde_json::to_string(&settings).unwrap()).unwrap();
         assert!(!migrated_again);
-        assert_eq!(round_tripped.idle_banter_seed_topics, settings.idle_banter_seed_topics);
+        assert_eq!(
+            round_tripped.idle_banter_seed_topics,
+            settings.idle_banter_seed_topics
+        );
     }
 
     #[test]
@@ -929,7 +932,10 @@ mod tests {
         let (repaired, migrated) =
             AppSettings::from_persisted_json(&serde_json::to_string(&legacy).unwrap()).unwrap();
         assert!(migrated);
-        assert_eq!(repaired.idle_banter_seed_topics, default_idle_banter_seed_topics());
+        assert_eq!(
+            repaired.idle_banter_seed_topics,
+            default_idle_banter_seed_topics()
+        );
 
         let mut current = serde_json::to_value(AppSettings::default()).unwrap();
         current

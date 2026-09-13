@@ -278,13 +278,8 @@ mod tests {
     fn idle_banter_prompt_is_bounded_specific_and_transcript_free() {
         let cfg = CharacterConfig::default();
         let recent = vec!["I already made this joke.".to_string()];
-        let prompt = PromptBuilder::build_idle_banter_prompt(
-            &cfg,
-            90,
-            "stuck on the wall",
-            &recent,
-            &[],
-        );
+        let prompt =
+            PromptBuilder::build_idle_banter_prompt(&cfg, 90, "stuck on the wall", &recent, &[]);
         assert!(prompt.contains("IDLE BANTER MODE"));
         assert!(prompt.contains("90 minutes"));
         assert!(prompt.contains("stuck on the wall"));
@@ -293,5 +288,4 @@ mod tests {
         assert!(!prompt.contains("PRIVATE_TRANSCRIPT_SENTINEL"));
         assert!(prompt.chars().count() <= MAX_AMBIENT_PROMPT_CHARS);
     }
-
 }

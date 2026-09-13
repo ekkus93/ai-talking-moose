@@ -425,7 +425,9 @@ mod tests {
         config.behavior.unsolicited_comments = false;
         let mut engine = BehaviorEngine::new(config);
         assert_eq!(
-            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .reason,
             AmbientDecisionReason::UnsolicitedDisabled
         );
 
@@ -435,7 +437,10 @@ mod tests {
                 .evaluate_ambient_event_at(
                     now,
                     &event,
-                    AmbientPolicyContext { muted: true, ..permissive_context() },
+                    AmbientPolicyContext {
+                        muted: true,
+                        ..permissive_context()
+                    },
                 )
                 .reason,
             AmbientDecisionReason::Muted
@@ -445,7 +450,10 @@ mod tests {
                 .evaluate_ambient_event_at(
                     now,
                     &event,
-                    AmbientPolicyContext { conversation_active: true, ..permissive_context() },
+                    AmbientPolicyContext {
+                        conversation_active: true,
+                        ..permissive_context()
+                    },
                 )
                 .reason,
             AmbientDecisionReason::ConversationActive
@@ -458,7 +466,9 @@ mod tests {
         quiet.behavior.quiet_hours_end = (local_hour + 1) % 24;
         let mut engine = BehaviorEngine::new(quiet);
         assert_eq!(
-            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .reason,
             AmbientDecisionReason::QuietHours
         );
 
@@ -467,14 +477,18 @@ mod tests {
         engine.cooldowns.annoyance_budget.threshold = 60.0;
         engine.cooldowns.annoyance_budget.last_decay_check = now;
         assert_eq!(
-            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .reason,
             AmbientDecisionReason::AnnoyanceBudget
         );
 
         let mut engine = BehaviorEngine::new(permissive_config());
         engine.cooldowns.record_dismissal(now);
         assert_eq!(
-            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .reason,
             AmbientDecisionReason::DismissalCooldown
         );
 
@@ -484,7 +498,9 @@ mod tests {
         engine.cooldowns.last_speech_time = Some(now);
         engine.cooldowns.annoyance_budget.threshold = 101.0;
         assert_eq!(
-            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .reason,
             AmbientDecisionReason::Cooldown
         );
 
@@ -494,7 +510,9 @@ mod tests {
         engine.cooldowns.annoyance_budget.threshold = 101.0;
         engine.cooldowns.speech_timestamps.push(now);
         assert_eq!(
-            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            engine
+                .evaluate_ambient_event_at(now, &event, permissive_context())
+                .reason,
             AmbientDecisionReason::HourlyLimit
         );
 
@@ -535,5 +553,4 @@ mod tests {
             AmbientDecisionReason::BelowImportanceThreshold
         );
     }
-
 }
