@@ -1,0 +1,68 @@
+name: Idle Banter audit hardening complete
+
+on:
+  push:
+    branches:
+      - ralph/idle-banter-implementation
+    paths:
+      - .github/workflows/idle-banter-audit-fix-v5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-audit-fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ralph/idle-banter-implementation
+          fetch-depth: 0
+
+      - name: Execute corrected robust source patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/idle-banter-audit-fix-v4.yml')
+          text = path.read_text()
+          old = 'if text.count(old_call) != 4:'
+          new = 'if text.count(old_call) != 5:'
+          if text.count(old) != 1:
+              raise SystemExit('expected one restore-count assertion in v4 driver')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              'raise SystemExit(f"expected 4 ambient restore call sites, found {text.count(old_call)}")',
+              'raise SystemExit(f"expected 5 ambient restore call sites, found {text.count(old_call)}")',
+              1,
+          )
+          path.write_text(text)
+          PY
+
+          awk 'BEGIN { capture=0 } /python3 - <<'\''PY'\''/ { capture=1; next } capture && /^          PY$/ { exit } capture { sub(/^          /, ""); print }' \
+            .github/workflows/idle-banter-audit-fix-v4.yml > /tmp/apply_idle_banter_audit.py
+          python3 /tmp/apply_idle_banter_audit.py
+
+      - name: Format and validate patch shape
+        shell: bash
+        run: |
+          rustup component add rustfmt
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          git diff --check
+          git status --short
+
+      - name: Commit fixes and remove all temporary patch workflows
+        shell: bash
+        run: |
+          rm .github/workflows/idle-banter-audit-fix.yml
+          rm .github/workflows/idle-banter-audit-fix-v2.yml
+          rm .github/workflows/idle-banter-audit-fix-v3.yml
+          rm .github/workflows/idle-banter-audit-fix-v4.yml
+          rm .github/workflows/idle-banter-audit-fix-v5.yml
+          git config user.name "Phillip Chin"
+          git config user.email "ekkus93@gmail.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: harden Idle Banter scheduling ownership"
+          git push origin HEAD:ralph/idle-banter-implementation
