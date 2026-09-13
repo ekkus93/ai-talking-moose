@@ -5,7 +5,6 @@
 //! KittenTTS inference to the explicit heavyweight acceptance workflow.
 
 use talking_moose_lib::ai::local_tts::{DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE};
-use talking_moose_lib::ai::traits::SpeechSynthesizer;
 use talking_moose_lib::ai::types::{ProviderErrorKind, TtsProvider, TtsRequest};
 use talking_moose_lib::app::state::AppState;
 use tokio_util::sync::CancellationToken;
