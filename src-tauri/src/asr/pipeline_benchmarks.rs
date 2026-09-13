@@ -347,7 +347,10 @@ fn stage_roundtrip_tts_install() -> (tempfile::TempDir, LocalTtsPlatform) {
     let status = storage
         .status(DEFAULT_LOCAL_TTS_MODEL_ID, platform)
         .expect("round-trip staged Local TTS status must be readable");
-    assert_eq!(status.install_state, storage::LocalTtsInstallState::Installed);
+    assert_eq!(
+        status.install_state,
+        storage::LocalTtsInstallState::Installed
+    );
     (temp, platform)
 }
 
