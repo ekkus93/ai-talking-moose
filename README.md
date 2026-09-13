@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml/badge.svg)](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml)
 
-> A modern reimagining of the classic 1986 Macintosh desktop character, built with Tauri 2, React, TypeScript, Rust, local Moonshine ASR, local llama.cpp text generation, and Google Gemini.
+> A modern reimagining of the classic 1986 Macintosh desktop character, built with Tauri 2, React, TypeScript, Rust, local Moonshine ASR, local llama.cpp text generation, Local KittenTTS standalone speech, and Google Gemini.
 
 ---
 
@@ -14,9 +14,10 @@
 - **Local or cloud speech recognition:** Moonshine Tiny/Small provide local ASR; Gemini Live provides an explicitly selected cloud-audio mode.
 - **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
 - **Local-first text generation:** New profiles use the Local text provider by default. SmolLM2 360M is selected but is never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains an optional text provider.
+- **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS or Local KittenTTS. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification.
 - **Ambient reactions:** When explicitly enabled, the Moose can react to permitted local computer events.
 - **Retro visuals:** Low-resolution integer-scaled pixel art with amplitude-driven mouth animation.
-- **Local control and privacy:** Settings, optional memories, and optional transcripts are stored locally. Privacy-sensitive features default conservatively and local ASR does not silently fall back to cloud microphone upload.
+- **Local control and privacy:** Settings, optional memories, and optional transcripts are stored locally. Privacy-sensitive features default conservatively. Local ASR, Local text, and Local TTS do not silently fall back to cloud providers.
 
 ---
 
@@ -26,11 +27,11 @@
 - **Desktop shell/backend:** Tauri 2, Rust, Tokio, CPAL, Rusqlite, Tokio-Tungstenite
 - **Speech recognition:** Local Moonshine streaming ASR plus optional Gemini Live cloud audio
 - **Text generation:** Provider-neutral `TextModel` routing; Local uses pinned llama.cpp/ggml through Rust, while Google Gemini remains selectable through the REST API
-- **Voice conversation:** Google Gemini Live over WebSockets; Local text selection does not replace the V1 voice provider
-- **Speech output:** Rust-owned TTS/audio playback pipeline
+- **Voice conversation:** Google Gemini Live over WebSockets; Local text and Local standalone TTS selection do not replace the V1 live conversation provider
+- **Standalone speech output:** Provider-neutral Google Gemini TTS or Local KittenTTS routing for typed replies, ambient remarks, canned reactions, and auditions. Local KittenTTS uses the Rust-owned CPU runtime and adapts 24 kHz PCM into the existing audio playback/mouth-animation path.
 - **Persistence:** SQLite for local application data and the platform secure credential store for the Google API key
 
-Google model IDs and capabilities are centralized in the Rust Google configuration layer rather than duplicated throughout the frontend. Local GGUF identities, revisions, hashes, sizes, licenses, template hints, and runtime bounds are centralized in `src-tauri/src/ai/local/catalog.rs`. See `docs/LOCAL_LLM_ARCHITECTURE.md` and `docs/LOCAL_LLM_CATALOG.md`.
+Google model IDs and capabilities are centralized in the Rust Google configuration layer rather than duplicated throughout the frontend. Local GGUF identities, revisions, hashes, sizes, licenses, template hints, and runtime bounds are centralized in `src-tauri/src/ai/local/catalog.rs`. Local KittenTTS model/runtime artifact identities, hashes, sizes, licenses, platform manifests, and CPU-thread policy are centralized under `src-tauri/src/ai/local_tts/`. See `docs/LOCAL_LLM_ARCHITECTURE.md`, `docs/LOCAL_LLM_CATALOG.md`, `docs/VOICE_SELECTION.md`, and `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`.
 
 ---
 
@@ -122,6 +123,23 @@ npm ci
 Cargo dependencies are resolved automatically by Cargo when running the Rust build/test commands.
 
 ---
+
+## Local KittenTTS Quick Start
+
+Local KittenTTS is the V1 on-device standalone speech provider. It is separate from Gemini Live voice conversations. Gemini Live remains cloud-native live audio even when standalone speech is set to Local.
+
+Local KittenTTS behavior:
+
+- **Provider scope:** typed replies, ambient remarks, canned reactions, and voice auditions.
+- **Runtime:** CPU-only ONNX Runtime path; no GPU is required or exposed.
+- **Language:** English-only in V1.
+- **Install model:** selecting Local TTS does not download artifacts. Use **Download & Verify** in Settings to fetch the pinned KittenTTS model/runtime artifacts and verify exact bytes/SHA-256 before promotion.
+- **Offline synthesis:** after verified installation, synthesis runs without network access. The real acceptance workflow proves synthesis with network denied.
+- **No fallback:** Local TTS errors remain Local TTS errors. They do not call Google TTS. Google TTS errors likewise do not call Local TTS.
+- **Playback:** once Local KittenTTS produces PCM, the existing playback and amplitude-driven mouth-animation path is reused.
+- **Voice:** Local KittenTTS has its own voice setting (`local_tts_voice`) and eight provider-owned voice IDs: `Bella`, `Jasper`, `Luna`, `Bruno`, `Rosie`, `Hugo`, `Kiki`, and `Leo`.
+
+The automated KittenTTS-to-Moonshine ASR smoke passed for all eight voices, but it does not select the final Moose default voice. Human audition remains tracked separately as KCR-330 / KTT-805.
 
 ## Local Text Quick Start
 
