@@ -1,0 +1,60 @@
+name: Idle Banter audit hardening retry
+
+on:
+  push:
+    branches:
+      - ralph/idle-banter-implementation
+    paths:
+      - .github/workflows/idle-banter-audit-fix-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-audit-fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ralph/idle-banter-implementation
+          fetch-depth: 0
+
+      - name: Repair patch driver and apply audited fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/idle-banter-audit-fix.yml')
+          text = path.read_text()
+          old = "\n                unit_sample,\n            );'''"
+          if old in text:
+              raise SystemExit('patch driver already contains corrected jitter context unexpectedly')
+          wrong = "\n            unit_sample,\n        );'''"
+          if wrong not in text:
+              raise SystemExit('could not locate failed jitter replacement context in patch driver')
+          path.write_text(text.replace(wrong, old, 1))
+          PY
+
+          awk 'BEGIN { capture=0 } /python3 - <<'\''PY'\''/ { capture=1; next } capture && /^          PY$/ { exit } capture { sub(/^          /, ""); print }' \
+            .github/workflows/idle-banter-audit-fix.yml > /tmp/apply_idle_banter_audit.py
+          python3 /tmp/apply_idle_banter_audit.py
+
+      - name: Format and validate patch shape
+        shell: bash
+        run: |
+          rustup component add rustfmt
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          git diff --check
+
+      - name: Commit fixes and remove patch workflows
+        shell: bash
+        run: |
+          rm .github/workflows/idle-banter-audit-fix.yml
+          rm .github/workflows/idle-banter-audit-fix-v2.yml
+          git config user.name "Phillip Chin"
+          git config user.email "ekkus93@gmail.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: harden Idle Banter scheduling ownership"
+          git push origin HEAD:ralph/idle-banter-implementation
