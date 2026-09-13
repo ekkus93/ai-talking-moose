@@ -1,0 +1,327 @@
+name: KittenTTS ASR intelligibility smoke
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/kittentts-asr-roundtrip.yml"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/local_tts.rs"
+      - "src-tauri/src/ai/local_tts/**"
+      - "src-tauri/src/asr/moonshine/**"
+      - "src-tauri/src/asr/pipeline.rs"
+      - "src-tauri/src/asr/pipeline_benchmarks.rs"
+      - "src-tauri/src/audio/resample.rs"
+      - "scripts/prepare_moonshine_macos.sh"
+      - "src-tauri/native/moonshine-runtime.json"
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/kittentts-asr-roundtrip.yml"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/local_tts.rs"
+      - "src-tauri/src/ai/local_tts/**"
+      - "src-tauri/src/asr/moonshine/**"
+      - "src-tauri/src/asr/pipeline.rs"
+      - "src-tauri/src/asr/pipeline_benchmarks.rs"
+      - "src-tauri/src/audio/resample.rs"
+      - "scripts/prepare_moonshine_macos.sh"
+      - "src-tauri/native/moonshine-runtime.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kittentts-asr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+  MODEL_FILENAME: kitten_tts_mini_v0_8.onnx
+  MODEL_URL: "https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/c02725660cea441db4c383af69f1f26f5cd00947/kitten_tts_mini_v0_8.onnx?download=true"
+  MODEL_BYTES: "78268016"
+  MODEL_SHA256: "0f5bbae4fc4800c98dbc544a87ecfa79510de2fb8222db30d12e5bfe9177df91"
+  VOICES_FILENAME: voices.npz
+  VOICES_URL: "https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/c02725660cea441db4c383af69f1f26f5cd00947/voices.npz?download=true"
+  VOICES_BYTES: "3278902"
+  VOICES_SHA256: "40ad2638952b77b7b2f30127e2608e169fc69dd256b53bd8aaa3409a33193c42"
+  G2P_FILENAME: cmudict_data.json
+  G2P_URL: "https://raw.githubusercontent.com/ayutaz/piper-plus/244ffeb44108347a514ebfc0c2f773d938c9613b/src/rust/piper-plus-g2p/data/cmudict_data.json"
+  G2P_BYTES: "3748042"
+  G2P_SHA256: "f78ed3bfa40146b70b9de78a7c67ef3be6b6c11671bb2a050442f232252a3f01"
+  ORT_FILENAME: onnxruntime-osx-arm64-1.23.2.tgz
+  ORT_URL: "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-arm64-1.23.2.tgz"
+  ORT_BYTES: "9999931"
+  ORT_SHA256: "b4d513ab2b26f088c66891dbbc1408166708773d7cc4163de7bdca0e9bbb7856"
+
+jobs:
+  guard:
+    name: Verify exact round-trip head
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      expected_sha: ${{ steps.guard.outputs.expected_sha }}
+    steps:
+      - name: Resolve and verify exact head
+        id: guard
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA_VALUE: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          expected_sha="$GITHUB_SHA_VALUE"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            expected_sha="$PR_HEAD_SHA"
+            ref_json="$(curl --fail-with-body --silent --show-error \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$REPOSITORY/git/ref/heads/$PR_HEAD_REF")"
+            actual_sha="$(printf '%s' "$ref_json" | jq -r '.object.sha')"
+            test "$actual_sha" = "$expected_sha"
+          fi
+          test -n "$expected_sha"
+          echo "expected_sha=$expected_sha" >> "$GITHUB_OUTPUT"
+          echo "Exact round-trip SHA: \`$expected_sha\`" >> "$GITHUB_STEP_SUMMARY"
+
+  roundtrip:
+    name: KittenTTS → Moonshine Tiny (macos-arm64)
+    needs: guard
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      EXPECTED_SHA: ${{ needs.guard.outputs.expected_sha }}
+      CUDA_VISIBLE_DEVICES: ""
+      HIP_VISIBLE_DEVICES: ""
+      ROCR_VISIBLE_DEVICES: ""
+    steps:
+      - name: Check out exact round-trip head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.expected_sha }}
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: macos-arm64-kittentts-asr-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            macos-arm64-kittentts-asr-cargo-
+            macos-arm64-kittentts-cargo-
+
+      - name: Cache pinned Moonshine native runtime
+        id: moonshine-runtime-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/native/macos/libmoonshine.dylib
+            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+            src-tauri/native/macos/notices/MoonshineRuntime
+            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
+            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
+          key: moonshine-macos-arm64-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
+
+      - name: Prepare pinned Moonshine native runtime
+        if: steps.moonshine-runtime-cache.outputs.cache-hit != 'true'
+        run: bash scripts/prepare_moonshine_macos.sh arm64
+
+      - name: Verify Moonshine native runtime architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s src-tauri/native/macos/libmoonshine.dylib
+          test -s src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+          lipo -archs src-tauri/native/macos/libmoonshine.dylib | tr ' ' '\n' | grep -Fx arm64
+          lipo -archs src-tauri/native/macos/libonnxruntime.1.23.2.dylib | tr ' ' '\n' | grep -Fx arm64
+
+      - name: Restore pinned KittenTTS artifact cache
+        id: kitten-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/kittentts-artifacts
+          key: kittentts-macos-arm64-${{ env.MODEL_SHA256 }}-${{ env.VOICES_SHA256 }}-${{ env.G2P_SHA256 }}-${{ env.ORT_SHA256 }}
+
+      - name: Acquire and verify frozen KittenTTS artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARTIFACT_DIR="$RUNNER_TEMP/kittentts-artifacts"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+          artifact_dir.mkdir(parents=True, exist_ok=True)
+          specs = [
+              ("MODEL_FILENAME", "MODEL_URL", "MODEL_BYTES", "MODEL_SHA256"),
+              ("VOICES_FILENAME", "VOICES_URL", "VOICES_BYTES", "VOICES_SHA256"),
+              ("G2P_FILENAME", "G2P_URL", "G2P_BYTES", "G2P_SHA256"),
+              ("ORT_FILENAME", "ORT_URL", "ORT_BYTES", "ORT_SHA256"),
+          ]
+          for filename_key, url_key, bytes_key, sha_key in specs:
+              filename = os.environ[filename_key]
+              path = artifact_dir / filename
+              expected_bytes = int(os.environ[bytes_key])
+              expected_sha = os.environ[sha_key]
+              if not path.exists():
+                  temporary = path.with_suffix(path.suffix + ".download")
+                  with urllib.request.urlopen(os.environ[url_key], timeout=120) as response:
+                      with temporary.open("wb") as output:
+                          while chunk := response.read(1024 * 1024):
+                              output.write(chunk)
+                  temporary.replace(path)
+              actual_bytes = path.stat().st_size
+              if actual_bytes != expected_bytes:
+                  raise SystemExit(
+                      f"size mismatch for {filename}: expected {expected_bytes}, got {actual_bytes}"
+                  )
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  while chunk := handle.read(1024 * 1024):
+                      digest.update(chunk)
+              actual_sha = digest.hexdigest()
+              if actual_sha != expected_sha:
+                  raise SystemExit(
+                      f"SHA-256 mismatch for {filename}: expected {expected_sha}, got {actual_sha}"
+                  )
+              print(f"verified {filename} bytes={actual_bytes} sha256={actual_sha}")
+          PY
+
+      - name: Save verified KittenTTS artifact cache
+        if: steps.kitten-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/kittentts-artifacts
+          key: kittentts-macos-arm64-${{ env.MODEL_SHA256 }}-${{ env.VOICES_SHA256 }}-${{ env.G2P_SHA256 }}-${{ env.ORT_SHA256 }}
+
+      - name: Restore Moonshine Tiny model cache
+        id: moonshine-model-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/kittentts-roundtrip-moonshine
+          key: kittentts-roundtrip-moonshine-tiny-${{ hashFiles('src-tauri/src/asr/moonshine/manifest.rs') }}
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Run all-voice TTS-to-ASR intelligibility smoke
+        id: smoke
+        shell: bash
+        run: |
+          set -uo pipefail
+          export KTT301_MODEL_PATH="$RUNNER_TEMP/kittentts-artifacts/$MODEL_FILENAME"
+          export KTT301_VOICES_PATH="$RUNNER_TEMP/kittentts-artifacts/$VOICES_FILENAME"
+          export KTT301_G2P_PATH="$RUNNER_TEMP/kittentts-artifacts/$G2P_FILENAME"
+          export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/kittentts-artifacts/$ORT_FILENAME"
+          export KITTENTTS_ASR_MODEL_ROOT="$RUNNER_TEMP/kittentts-roundtrip-moonshine"
+          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
+          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          export CARGO_INCREMENTAL=0
+          set +e
+          cargo test \
+            --locked \
+            --release \
+            --manifest-path src-tauri/Cargo.toml \
+            --lib \
+            'asr::pipeline::benchmarks::kittentts_all_voices_round_trip_through_moonshine_tiny' \
+            -- \
+            --ignored \
+            --exact \
+            --nocapture \
+            --test-threads=1 \
+            2>&1 | tee "$RUNNER_TEMP/kittentts-asr-roundtrip.log"
+          cargo_status=${PIPESTATUS[0]}
+          set -e
+          echo "cargo_status=$cargo_status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Save verified Moonshine Tiny model cache
+        if: steps.moonshine-model-cache.outputs.cache-hit != 'true' && steps.smoke.outputs.cargo_status == '0'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/kittentts-roundtrip-moonshine
+          key: kittentts-roundtrip-moonshine-tiny-${{ hashFiles('src-tauri/src/asr/moonshine/manifest.rs') }}
+
+      - name: Publish round-trip intelligibility evidence
+        if: always()
+        shell: bash
+        env:
+          CARGO_STATUS: ${{ steps.smoke.outputs.cargo_status }}
+        run: |
+          set -euo pipefail
+          export TEST_LOG="$RUNNER_TEMP/kittentts-asr-roundtrip.log"
+          export EVIDENCE_JSON="$RUNNER_TEMP/kittentts-asr-roundtrip.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          log_path = Path(os.environ["TEST_LOG"])
+          if not log_path.exists():
+              raise SystemExit("round-trip test log is missing")
+          prefix = "KITTENTTS_ASR_ROUNDTRIP_JSON="
+          lines = log_path.read_text(encoding="utf-8").splitlines()
+          payloads = [line.split(prefix, 1)[1] for line in lines if prefix in line]
+          if len(payloads) != 1:
+              raise SystemExit(f"expected one round-trip evidence line, found {len(payloads)}")
+          evidence = json.loads(payloads[0])
+          evidence["qualified_sha"] = os.environ["EXPECTED_SHA"]
+          Path(os.environ["EVIDENCE_JSON"]).write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as handle:
+              handle.write("## KittenTTS → Moonshine Tiny intelligibility smoke\n\n")
+              handle.write(f"Qualified SHA: `{evidence['qualified_sha']}`\n\n")
+              handle.write("| Voice | WER | Content recall | Result | Transcript |\n")
+              handle.write("| --- | ---: | ---: | :---: | --- |\n")
+              for voice in evidence["voices"]:
+                  transcript = voice["transcript"].replace("|", "\\|")
+                  result = "PASS" if voice["passed"] else "FAIL"
+                  handle.write(
+                      f"| {voice['voice']} | {voice['word_error_rate']:.3f} | "
+                      f"{voice['content_word_recall']:.3f} | {result} | {transcript} |\n"
+                  )
+              handle.write("\nThis is an automated intelligibility smoke, not the deferred human KCR-330 voice-quality/default-voice decision.\n")
+
+          if os.environ.get("CARGO_STATUS") != "0":
+              raise SystemExit(f"round-trip cargo test failed with status {os.environ.get('CARGO_STATUS')}")
+          if not evidence.get("network_denied_during_round_trip"):
+              raise SystemExit("round-trip synthesis/ASR was not proven offline")
+          if len(evidence.get("voices", [])) != 8:
+              raise SystemExit("round-trip did not exercise all eight Kitten voices")
+          if not evidence.get("all_passed"):
+              raise SystemExit("one or more voices failed the intelligibility smoke")
+          PY
+
+      - name: Upload round-trip evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kittentts-asr-roundtrip-${{ needs.guard.outputs.expected_sha }}
+          path: |
+            ${{ runner.temp }}/kittentts-asr-roundtrip.json
+            ${{ runner.temp }}/kittentts-asr-roundtrip.log
+          if-no-files-found: warn
+          retention-days: 14

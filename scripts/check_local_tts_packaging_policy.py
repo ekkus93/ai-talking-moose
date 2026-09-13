@@ -302,8 +302,9 @@ def check_ordinary_ci_is_model_weight_free() -> None:
         "KittenTTS production CPU acceptance",
         "Verify acceptance metadata matches the production catalog",
         "Download and verify frozen KittenTTS artifacts",
-        "Run real Kitten Mini CPU acceptance",
-        "timeout-minutes: 20",
+        "ai::local_tts::tests::real_kitten_cpu_acceptance_production_provider_offline_privacy",
+        "ai::local_tts::runtime::engine::tests::real_kittentts_cpu_thread_sweep",
+        "timeout-minutes: 25",
     ):
         require_token(acceptance, token, "explicit KittenTTS acceptance workflow")
 
