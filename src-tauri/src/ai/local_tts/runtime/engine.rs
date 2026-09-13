@@ -638,8 +638,11 @@ mod tests {
             let mut engine = KittenTtsRuntimeEngine::new_with_inference_threads(inference_threads);
             let load_started = Instant::now();
             engine.load(&identity, &paths).unwrap();
-            let model_load_duration_ms =
-                load_started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+            let model_load_duration_ms = load_started
+                .elapsed()
+                .as_millis()
+                .try_into()
+                .unwrap_or(u64::MAX);
 
             let first_started = Instant::now();
             let first = engine.synthesize(&request).unwrap();
@@ -675,8 +678,7 @@ mod tests {
                         "production 2-thread Local TTS policy must remain faster than real time"
                     );
                 }
-                warm_synthesis_duration_ms
-                    .push(elapsed.as_millis().try_into().unwrap_or(u64::MAX));
+                warm_synthesis_duration_ms.push(elapsed.as_millis().try_into().unwrap_or(u64::MAX));
                 warm_audio_duration_ms.push(audio_duration_ms);
                 warm_real_time_factors.push(rtf);
                 repeated_sample_counts.push(output.samples.len());

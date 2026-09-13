@@ -246,7 +246,7 @@ jobs:
           path: ${{ runner.temp }}/kittentts-artifacts
           key: kittentts-${{ matrix.label }}-${{ env.MODEL_SHA256 }}-${{ env.VOICES_SHA256 }}-${{ env.G2P_SHA256 }}-${{ matrix.ort_sha256 }}
 
-      - name: Acquire and verify frozen KittenTTS artifacts
+      - name: Download and verify frozen KittenTTS artifacts
         shell: bash
         run: |
           set -euo pipefail
