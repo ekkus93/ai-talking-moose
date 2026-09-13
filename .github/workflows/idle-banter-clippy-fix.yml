@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   fix:
-    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Check out branch
