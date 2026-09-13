@@ -119,18 +119,18 @@ fn compose_local_tts_diagnostics(
     recorded_error: Option<(LocalTtsInstallErrorKind, bool)>,
     runtime: LocalTtsRuntimeStatus,
 ) -> LocalTtsDiagnostics {
-    let (installer_error_category, installer_error_retryable) = if let Some(error) = recorded_error
-    {
-        (Some(error.0), Some(error.1))
-    } else if let Some(error) = status.error.as_ref() {
-        // Storage-level corruption can exist without a recorded install operation. Keep that
-        // category conservative and typed instead of forwarding an arbitrary error string.
-        (
-            Some(LocalTtsInstallErrorKind::CorruptInstall),
-            Some(error.retryable),
-        )
-    } else {
-        (None, None)
+    let (installer_error_category, installer_error_retryable) = match recorded_error {
+        Some((kind, retryable)) => (Some(kind), Some(retryable)),
+        None => status
+            .error
+            .as_ref()
+            .map(|error| {
+                // Storage-level corruption can exist without a recorded install operation. Keep
+                // that category conservative and typed instead of forwarding an arbitrary error
+                // string.
+                (Some(LocalTtsInstallErrorKind::CorruptInstall), Some(error.retryable))
+            })
+            .unwrap_or((None, None)),
     };
 
     LocalTtsDiagnostics {
