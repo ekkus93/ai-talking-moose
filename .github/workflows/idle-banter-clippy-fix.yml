@@ -1,0 +1,106 @@
+name: Idle Banter Clippy Fix
+
+on:
+  push:
+    branches:
+      - ralph/idle-banter-implementation
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: ralph/idle-banter-implementation
+          fetch-depth: 0
+
+      - name: Install Rust stable with rustfmt
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Apply exact Clippy corrections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          idle = Path("src-tauri/src/character/idle_banter.rs")
+          text = idle.read_text()
+          old = "    fn poll_due_at(\n"
+          new = "    #[cfg(test)]\n    fn poll_due_at(\n"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one poll_due_at definition, found {text.count(old)}")
+          text = text.replace(old, new, 1)
+          idle.write_text(text)
+
+          ambient = Path("src-tauri/src/commands/ambient.rs")
+          text = ambient.read_text()
+          old = '''        if let Some(playback_result) =
+            state
+                .ambient_scheduler
+                .with_current_ambient_presentation(presentation_lease, || {
+                    playback.with_current(|| {
+                        if *state.character_state.read() == CharacterState::Idle {
+                            transition_and_emit(
+                                &state.character_state,
+                                app,
+                                CharacterState::Hidden,
+                            )?;
+                        }
+                        Ok::<(), String>(())
+                    })
+                })
+        {
+            if let Some(result) = playback_result {
+                result?;
+            }
+        }
+'''
+          new = '''        if let Some(Some(result)) = state
+            .ambient_scheduler
+            .with_current_ambient_presentation(presentation_lease, || {
+                playback.with_current(|| {
+                    if *state.character_state.read() == CharacterState::Idle {
+                        transition_and_emit(
+                            &state.character_state,
+                            app,
+                            CharacterState::Hidden,
+                        )?;
+                    }
+                    Ok::<(), String>(())
+                })
+            })
+        {
+            result?;
+        }
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one collapsible ambient match, found {text.count(old)}")
+          text = text.replace(old, new, 1)
+          ambient.write_text(text)
+          PY
+
+      - name: Format and validate diff
+        shell: bash
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml
+          git diff --check
+          git diff -- src-tauri/src/character/idle_banter.rs src-tauri/src/commands/ambient.rs
+
+      - name: Commit source-only correction and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/idle-banter-clippy-fix.yml
+          git add src-tauri/src/character/idle_banter.rs src-tauri/src/commands/ambient.rs
+          git diff --cached --check
+          git diff --cached --quiet && { echo "expected source changes" >&2; exit 1; }
+          git commit -m "fix: satisfy clippy for idle banter hardening"
+          git push origin HEAD:ralph/idle-banter-implementation
