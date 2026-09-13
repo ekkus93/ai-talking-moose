@@ -1,6 +1,6 @@
 # Talking Moose V1 Voice Selection
 
-**Original Google voice decision:** 2026-08-22  
+**Original Google voice decision:** 2026-08-22
 **KittenTTS closeout update:** 2026-09-12
 
 Talking Moose V1 now has three separate voice ownership domains. Do not collapse them into one setting or one provider catalog.

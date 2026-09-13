@@ -1,10 +1,10 @@
 # AI Talking Moose — KittenTTS Closeout Remediation Specification
 
-**Date:** 2026-09-12  
-**Repository:** `ekkus93/ai-talking-moose`  
-**Baseline reviewed:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`)  
-**Working branch:** `ralph/kcr-r4-r5-reconcile-closeout`  
-**Primary tracker to close:** `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md`  
+**Date:** 2026-09-12
+**Repository:** `ekkus93/ai-talking-moose`
+**Baseline reviewed:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`)
+**Working branch:** `ralph/kcr-r4-r5-reconcile-closeout`
+**Primary tracker to close:** `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md`
 **Legacy tracker to reconcile:** `docs/TODO(20260909-120003).md`
 
 ---

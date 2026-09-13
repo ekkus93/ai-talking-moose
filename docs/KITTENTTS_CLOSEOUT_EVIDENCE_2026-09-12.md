@@ -1,9 +1,9 @@
 # AI Talking Moose — KittenTTS Closeout Evidence
 
-**Date:** 2026-09-12  
-**Scope:** evidence for the KittenTTS closeout remediation queue.  
-**Reviewed baseline:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`).  
-**R3 final qualified PR head:** `5280b9246b4af78bc47020fb079120f1b935a188`.  
+**Date:** 2026-09-12
+**Scope:** evidence for the KittenTTS closeout remediation queue.
+**Reviewed baseline:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`).
+**R3 final qualified PR head:** `5280b9246b4af78bc47020fb079120f1b935a188`.
 **R3 merged master SHA:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f`.
 
 This document records what was actually tested and what remains deliberately deferred. It must not be used to mark the owner-only human voice-quality decision complete.

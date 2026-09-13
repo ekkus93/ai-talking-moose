@@ -1,8 +1,8 @@
 # AI Talking Moose — Legacy KittenTTS TODO Reconciliation
 
-**Date:** 2026-09-12  
-**Legacy tracker:** `docs/TODO(20260909-120003).md`  
-**Closeout TODO:** `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`  
+**Date:** 2026-09-12
+**Legacy tracker:** `docs/TODO(20260909-120003).md`
+**Closeout TODO:** `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`
 **Reviewed master:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f`
 
 This document reconciles the older KTT tracker without rewriting its historical task log. Treat this document plus the closeout TODO as the authoritative status for KittenTTS closeout.

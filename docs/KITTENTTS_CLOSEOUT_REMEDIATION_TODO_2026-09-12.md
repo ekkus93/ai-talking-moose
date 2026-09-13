@@ -1,11 +1,11 @@
 # AI Talking Moose — KittenTTS Closeout Remediation TODO
 
-**Date:** 2026-09-12  
-**Companion spec:** `docs/KITTENTTS_CLOSEOUT_REMEDIATION_SPEC_2026-09-12.md`  
-**Evidence:** `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`  
-**Legacy reconciliation:** `docs/KITTENTTS_LEGACY_TODO_RECONCILIATION_2026-09-12.md`  
-**Baseline reviewed:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`)  
-**Working branch:** `ralph/kcr-r4-r5-reconcile-closeout`  
+**Date:** 2026-09-12
+**Companion spec:** `docs/KITTENTTS_CLOSEOUT_REMEDIATION_SPEC_2026-09-12.md`
+**Evidence:** `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`
+**Legacy reconciliation:** `docs/KITTENTTS_LEGACY_TODO_RECONCILIATION_2026-09-12.md`
+**Baseline reviewed:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f` (`master`)
+**Working branch:** `ralph/kcr-r4-r5-reconcile-closeout`
 **Status:** Closeout implementation in progress; final PR-head CI and merge still pending.
 
 This TODO is the finite remediation queue for issues found during the post-KittenTTS code review. The core Local TTS implementation is already present; this queue closes stale helper routing, tracker/documentation drift, evidence recording, final audit, and exact-head validation.
