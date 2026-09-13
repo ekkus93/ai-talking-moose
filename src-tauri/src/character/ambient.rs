@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 const AMBIENT_QUEUE_CAPACITY: usize = 32;
 const MAX_AMBIENT_EVENT_SUMMARY_CHARS: usize = 2_048;
 const AMBIENT_SETTLE_DELAY: Duration = Duration::from_millis(250);
+const NO_ACTIVE_REQUEST_EPOCH: u64 = u64::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -19,6 +20,7 @@ pub enum AmbientEventCategory {
     Application,
     WindowTitle,
     Idle,
+    IdleBanter,
     Power,
     Wake,
     System,
@@ -35,6 +37,8 @@ impl AmbientEventCategory {
             || normalized.contains("application")
         {
             Self::Application
+        } else if normalized.contains("idle_banter") || normalized.contains("idle-banter") {
+            Self::IdleBanter
         } else if normalized.contains("idle") {
             Self::Idle
         } else if normalized.contains("battery") || normalized.contains("power") {
@@ -56,6 +60,8 @@ pub struct AmbientEvent {
     pub category: AmbientEventCategory,
     pub summary: String,
     pub importance: f32,
+    pub idle_banter_seed_topic: Option<String>,
+    pub idle_banter_inactivity_minutes: Option<u32>,
 }
 
 impl AmbientEvent {
@@ -73,6 +79,21 @@ impl AmbientEvent {
             category: AmbientEventCategory::from_event_name(event_name),
             summary,
             importance,
+            idle_banter_seed_topic: None,
+            idle_banter_inactivity_minutes: None,
+        }
+    }
+
+    pub fn idle_banter(seed_topic: String, inactivity_minutes: u32) -> Self {
+        let bounded_seed: String = seed_topic.chars().take(120).collect();
+        Self {
+            category: AmbientEventCategory::IdleBanter,
+            summary: format!(
+                "Scheduled Moose idle banter after about {inactivity_minutes} minutes of direct-Moose inactivity"
+            ),
+            importance: 0.0,
+            idle_banter_seed_topic: Some(bounded_seed),
+            idle_banter_inactivity_minutes: Some(inactivity_minutes.min(10_080)),
         }
     }
 
@@ -133,7 +154,10 @@ struct AmbientSchedulerInner {
     receiver: Mutex<Option<mpsc::Receiver<AmbientRequest>>>,
     cancellation: CancellationToken,
     current_request: Mutex<Option<CancellationToken>>,
+    coordination: Mutex<()>,
+    active_request_epoch: AtomicU64,
     epoch: AtomicU64,
+    presentation_epoch: AtomicU64,
     started: AtomicBool,
     shutdown_complete: watch::Sender<bool>,
 }
@@ -167,7 +191,10 @@ impl AmbientScheduler {
                 receiver: Mutex::new(Some(receiver)),
                 cancellation: CancellationToken::new(),
                 current_request: Mutex::new(None),
+                coordination: Mutex::new(()),
+                active_request_epoch: AtomicU64::new(NO_ACTIVE_REQUEST_EPOCH),
                 epoch: AtomicU64::new(0),
+                presentation_epoch: AtomicU64::new(0),
                 started: AtomicBool::new(false),
                 shutdown_complete,
             }),
@@ -201,9 +228,15 @@ impl AmbientScheduler {
                     },
                 };
 
-                if request.epoch != inner.epoch.load(AtomicOrdering::SeqCst) {
-                    let _ = request.response.send(Ok(None));
-                    continue;
+                {
+                    let _coordination = inner.coordination.lock();
+                    if request.epoch != inner.epoch.load(AtomicOrdering::SeqCst) {
+                        let _ = request.response.send(Ok(None));
+                        continue;
+                    }
+                    inner
+                        .active_request_epoch
+                        .store(request.epoch, AtomicOrdering::SeqCst);
                 }
 
                 let request_cancellation = CancellationToken::new();
@@ -226,11 +259,20 @@ impl AmbientScheduler {
                     continue;
                 }
 
+                let request_epoch = request.epoch;
                 let result = tokio::select! {
                     _ = cancellation.cancelled() => None,
                     _ = request_cancellation.cancelled() => None,
                     result = handler(request.event) => Some(result),
                 };
+                {
+                    let _coordination = inner.coordination.lock();
+                    if inner.active_request_epoch.load(AtomicOrdering::SeqCst) == request_epoch {
+                        inner
+                            .active_request_epoch
+                            .store(NO_ACTIVE_REQUEST_EPOCH, AtomicOrdering::SeqCst);
+                    }
+                }
                 *inner.current_request.lock() = None;
                 match result {
                     Some(result) => {
@@ -254,10 +296,56 @@ impl AmbientScheduler {
     }
 
     pub fn interrupt(&self) {
+        let _coordination = self.inner.coordination.lock();
         self.inner.epoch.fetch_add(1, AtomicOrdering::SeqCst);
         if let Some(cancellation) = self.inner.current_request.lock().as_ref() {
             cancellation.cancel();
         }
+    }
+
+    pub fn claim_foreground_presentation(&self) {
+        let _coordination = self.inner.coordination.lock();
+        self.inner
+            .presentation_epoch
+            .fetch_add(1, AtomicOrdering::SeqCst);
+    }
+
+    pub fn begin_ambient_presentation<T>(&self, action: impl FnOnce() -> T) -> Option<(u64, T)> {
+        let _coordination = self.inner.coordination.lock();
+        if self.inner.cancellation.is_cancelled() {
+            return None;
+        }
+        let active = self.inner.active_request_epoch.load(AtomicOrdering::SeqCst);
+        let current = self.inner.epoch.load(AtomicOrdering::SeqCst);
+        if active == NO_ACTIVE_REQUEST_EPOCH || active != current {
+            return None;
+        }
+        let lease = self.inner.presentation_epoch.load(AtomicOrdering::SeqCst);
+        Some((lease, action()))
+    }
+
+    pub fn with_current_ambient_presentation<T>(
+        &self,
+        lease: u64,
+        action: impl FnOnce() -> T,
+    ) -> Option<T> {
+        let _coordination = self.inner.coordination.lock();
+        if self.inner.cancellation.is_cancelled()
+            || self.inner.active_request_epoch.load(AtomicOrdering::SeqCst)
+                != self.inner.epoch.load(AtomicOrdering::SeqCst)
+            || self.inner.presentation_epoch.load(AtomicOrdering::SeqCst) != lease
+        {
+            return None;
+        }
+        Some(action())
+    }
+
+    pub fn with_ambient_cleanup<T>(&self, lease: u64, action: impl FnOnce() -> T) -> Option<T> {
+        let _coordination = self.inner.coordination.lock();
+        if self.inner.presentation_epoch.load(AtomicOrdering::SeqCst) != lease {
+            return None;
+        }
+        Some(action())
     }
 
     pub fn try_submit_background(&self, event: AmbientEvent) -> Result<bool, String> {
@@ -364,6 +452,18 @@ mod tests {
 
         assert_eq!(first.category, AmbientEventCategory::Application);
         assert_eq!(second.category, AmbientEventCategory::Application);
+        assert_eq!(
+            AmbientEvent::new("idle_banter", "safe".to_string(), 0.0).category,
+            AmbientEventCategory::IdleBanter
+        );
+        assert_eq!(
+            AmbientEvent::new("idle", "safe".to_string(), 0.0).category,
+            AmbientEventCategory::Idle
+        );
+        assert_eq!(
+            serde_json::to_string(&AmbientEventCategory::IdleBanter).unwrap(),
+            "\"idle_banter\""
+        );
         assert_eq!(first.fingerprint(), second.fingerprint());
         assert!(!first.fingerprint().contains("readme"));
     }
@@ -404,6 +504,81 @@ mod tests {
             .expect("scheduler cancellation is not an error");
         assert!(result.is_none());
         assert_eq!(handler_finished.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn presentation_lease_allows_passive_cleanup_but_rejects_foreground_cleanup() {
+        let scheduler = AmbientScheduler::new();
+        scheduler
+            .inner
+            .active_request_epoch
+            .store(0, AtomicOrdering::SeqCst);
+        let (lease, value) = scheduler
+            .begin_ambient_presentation(|| 7)
+            .expect("current ambient request should acquire presentation ownership");
+        assert_eq!(value, 7);
+
+        scheduler.interrupt();
+        assert!(scheduler
+            .with_current_ambient_presentation(lease, || ())
+            .is_none());
+        assert_eq!(scheduler.with_ambient_cleanup(lease, || 9), Some(9));
+
+        scheduler.claim_foreground_presentation();
+        assert!(scheduler.with_ambient_cleanup(lease, || ()).is_none());
+    }
+
+    #[test]
+    fn stale_ambient_request_cannot_begin_presentation_after_interrupt() {
+        let scheduler = AmbientScheduler::new();
+        scheduler
+            .inner
+            .active_request_epoch
+            .store(0, AtomicOrdering::SeqCst);
+        scheduler.interrupt();
+        assert!(scheduler.begin_ambient_presentation(|| ()).is_none());
+    }
+
+    #[tokio::test]
+    async fn foreground_claim_cancels_pending_request_and_revokes_cleanup_ownership() {
+        let scheduler = AmbientScheduler::new();
+        let handler_started = Arc::new(tokio::sync::Notify::new());
+        let lease_slot = Arc::new(Mutex::new(None));
+        let scheduler_for_handler = scheduler.clone();
+        let started_for_handler = handler_started.clone();
+        let lease_for_handler = lease_slot.clone();
+        scheduler
+            .start(move |_event| {
+                let scheduler = scheduler_for_handler.clone();
+                let started = started_for_handler.clone();
+                let lease_slot = lease_for_handler.clone();
+                async move {
+                    let (lease, ()) = scheduler
+                        .begin_ambient_presentation(|| ())
+                        .expect("handler should own current ambient presentation");
+                    *lease_slot.lock() = Some(lease);
+                    started.notify_one();
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                    Ok(Some("unexpected".to_string()))
+                }
+            })
+            .unwrap();
+
+        let pending_scheduler = scheduler.clone();
+        let pending = tokio::spawn(async move {
+            pending_scheduler
+                .submit(AmbientEvent::new("manual", "first".to_string(), 1.0))
+                .await
+        });
+        handler_started.notified().await;
+        let lease = (*lease_slot.lock()).expect("handler should publish its lease");
+
+        scheduler.interrupt();
+        scheduler.claim_foreground_presentation();
+
+        assert!(pending.await.unwrap().unwrap().is_none());
+        assert!(scheduler.with_ambient_cleanup(lease, || ()).is_none());
+        scheduler.stop().await;
     }
 
     #[tokio::test]

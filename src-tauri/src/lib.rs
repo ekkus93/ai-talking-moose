@@ -120,8 +120,12 @@ pub fn run() {
                     }
                 })
                 .map_err(std::io::Error::other)?;
-            desktop::runtime::start(app_state.settings.clone(), ambient_scheduler)
-                .map_err(std::io::Error::other)?;
+            desktop::runtime::start(
+                app_state.settings.clone(),
+                ambient_scheduler,
+                app_state.idle_banter_runtime.clone(),
+            )
+            .map_err(std::io::Error::other)?;
 
             if app_state.settings.read().restore_position {
                 if let Some(window) = app.get_webview_window("main") {

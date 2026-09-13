@@ -1,9 +1,10 @@
 use crate::app::state::AppSettings;
-use crate::character::ambient::AmbientScheduler;
+use crate::character::ambient::{AmbientEvent, AmbientScheduler};
+use crate::character::idle_banter::IdleBanterRuntime;
 use crate::desktop::events::{DesktopEvent, DesktopEventSummarizer};
 use crate::desktop::macos::{SystemDesktopMonitor, SystemPowerObserver};
 use crate::desktop::observation::{ObserverKind, ObserverResult, PowerEvent};
-use parking_lot::RwLock;
+use parking_lot::{Mutex as ParkingMutex, RwLock};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
@@ -77,8 +78,14 @@ fn submit_event(scheduler: &AmbientScheduler, event: DesktopEvent) {
 fn handle_power_event(
     summarizer: &mut DesktopEventSummarizer,
     scheduler: &AmbientScheduler,
+    settings: &RwLock<AppSettings>,
+    idle_banter: &ParkingMutex<IdleBanterRuntime>,
     event: PowerEvent,
 ) {
+    if event == PowerEvent::Wake {
+        idle_banter.lock().reset_after_wake(&settings.read());
+        scheduler.interrupt();
+    }
     submit_event(scheduler, summarizer.record_power(event));
 }
 
@@ -89,6 +96,24 @@ where
     log_observer_result(kind, &result);
     if let Some(value) = result.into_available() {
         on_available(value);
+    }
+}
+
+fn poll_idle_banter(
+    settings: &RwLock<AppSettings>,
+    scheduler: &AmbientScheduler,
+    idle_banter: &ParkingMutex<IdleBanterRuntime>,
+) {
+    let settings = settings.read().clone();
+    let due = idle_banter.lock().poll_due(&settings);
+    let Some(due) = due else {
+        return;
+    };
+    let event = AmbientEvent::idle_banter(due.seed_topic, due.inactivity_minutes);
+    match scheduler.try_submit_background(event) {
+        Ok(true) => {}
+        Ok(false) => debug!("Ambient scheduler queue full; dropping due Idle Banter occurrence"),
+        Err(_) => debug!("Idle Banter occurrence could not be submitted to ambient scheduler"),
     }
 }
 
@@ -141,6 +166,7 @@ fn poll_observers(
 async fn run_observer_loop(
     settings: Arc<RwLock<AppSettings>>,
     scheduler: AmbientScheduler,
+    idle_banter: Arc<ParkingMutex<IdleBanterRuntime>>,
     cancellation: CancellationToken,
     shutdown_complete: watch::Sender<bool>,
     summarizer: Arc<Mutex<DesktopEventSummarizer>>,
@@ -160,7 +186,13 @@ async fn run_observer_loop(
                     let mut summarizer = summarizer
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    handle_power_event(&mut summarizer, &scheduler, power);
+                    handle_power_event(
+                        &mut summarizer,
+                        &scheduler,
+                        &settings,
+                        idle_banter.as_ref(),
+                        power,
+                    );
                 }
             }
             _ = interval.tick() => {
@@ -168,6 +200,8 @@ async fn run_observer_loop(
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 poll_observers(&settings, &scheduler, &mut summarizer, poll_tick);
+                drop(summarizer);
+                poll_idle_banter(&settings, &scheduler, idle_banter.as_ref());
                 poll_tick = poll_tick.wrapping_add(1);
             }
         }
@@ -177,6 +211,7 @@ async fn run_observer_loop(
 pub fn start(
     settings: Arc<RwLock<AppSettings>>,
     scheduler: AmbientScheduler,
+    idle_banter: Arc<ParkingMutex<IdleBanterRuntime>>,
 ) -> Result<(), String> {
     let mut state = runtime_state()
         .lock()
@@ -202,6 +237,7 @@ pub fn start(
     tauri::async_runtime::spawn(run_observer_loop(
         settings,
         scheduler,
+        idle_banter,
         task_cancellation,
         task_shutdown,
         task_summarizer,

@@ -46,6 +46,16 @@ Local text does **not** make the entire Moose offline:
 
 A Google AI Studio key is therefore optional for Local typed/ambient text generation but still required for Google text, Gemini Live voice, and Google TTS.
 
+### Idle Banter prompt and provider privacy
+
+Idle Banter is unsolicited ambient text generation with an explicit user-configured schedule. It uses the currently selected text provider and never silently falls back to another provider. The built-in or user-edited Idle Banter seed topic selected for an occurrence is prompt input: with Local text generation it remains on the computer after model installation; with Google text generation it is sent to Google as part of that request.
+
+Idle Banter V1 does **not** automatically inject recent conversation transcript text merely to make remarks topical. If the shared ambient prompt path includes saved memory context, the existing `memory_enabled` setting remains authoritative; disabling memory prevents retained memories from entering the Idle Banter prompt. Idle Banter event metadata itself is limited to bounded Moose-interaction inactivity duration and the configured seed topic rather than window titles or application names.
+
+To reduce repetition, the runtime keeps at most the 12 most recent successfully delivered Idle Banter lines in memory for the current app session. That generated-text history is not persisted to SQLite and is cleared on restart. Normal logs must not contain Idle Banter prompt bodies, seed-topic contents, recent generated lines, user transcript text, or memory content.
+
+Idle Banter can be disabled independently in Behavior settings and is also disabled whenever the global unsolicited-comments master switch is off. Existing mute, active-conversation, quiet-hours, annoyance, dismissal, cooldown, and hourly-rate gates remain authoritative.
+
 ## 4. Standalone speech-output privacy
 
 V1 has an independent standalone TTS provider for typed replies, ambient remarks, canned reactions, and voice auditions. This is separate from Gemini Live voice conversations.

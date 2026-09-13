@@ -165,6 +165,20 @@ A Google AI Studio API key is **not required for Local text generation**. It is 
 
 Local generation does not silently fall back to Google or Fake. A missing, corrupt, incompatible, or failed Local model produces an explicit failure.
 
+### Idle Banter
+
+Idle Banter recreates the original Talking Moose habit of occasionally making a short snarky remark after you have ignored Moose for a while. It is enabled by default for new profiles, but remains subordinate to **Enable unsolicited ambient remarks** and the existing mute, conversation, quiet-hours, cooldown, annoyance, dismissal, and hourly-rate gates.
+
+- The first remark becomes eligible after **60 minutes** without a direct interaction with Moose.
+- If inactivity continues, later remarks become eligible **about every 30 minutes**, with bounded internal ±20% timing jitter.
+- Direct Moose interactions—such as conversation controls, typed messages, canned reactions, show/hide/dismiss, mute changes, voice auditions, and Settings updates—restart the full initial delay.
+- This timer is intentionally separate from OS keyboard/mouse idle observation: you may be actively working in another application and still count as having ignored Moose.
+- Settings → Behavior lets you enable/disable Idle Banter, change the initial/repeat timing, and add/edit/delete/restore the creative seed topics used for generation.
+- A seed topic is prompt input to the currently selected **text provider**. Local text generation keeps it local after model installation; Google text generation sends the prompt to Google.
+- Generated remarks use the currently selected **standalone TTS provider** through the normal speech/playback/mouth-animation path.
+- There is **no automatic text-provider or TTS-provider fallback**. A failed background occurrence is skipped until the next normal interval.
+- Recent delivered Idle Banter lines are retained only in memory for the current app session to reduce exact repetition. V1 does not automatically inject recent user transcript text merely to make an idle joke topical.
+
 ---
 
 ## Run the Application

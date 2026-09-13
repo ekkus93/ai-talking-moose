@@ -17,6 +17,7 @@ use crate::audio::permissions::{
     microphone_permission_state, request_microphone_permission, MicrophonePermissionState,
 };
 use crate::audio::playback::AudioPlaybackDiagnostics;
+use crate::character::idle_banter::normalize_idle_banter_seed_topics;
 use crate::character::state::{transition_character_state, CharacterState};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -162,6 +163,8 @@ pub async fn update_settings<R: Runtime>(
     // Window-title observation remains unsupported in V1. Treat the serialized field
     // as compatibility metadata and never allow a settings write to enable it.
     new_settings.window_title_observation = false;
+    new_settings.idle_banter_seed_topics =
+        normalize_idle_banter_seed_topics(&new_settings.idle_banter_seed_topics)?;
     validate_app_settings(&new_settings)?;
 
     let previous = state.settings.read().clone();
@@ -189,6 +192,7 @@ pub async fn update_settings<R: Runtime>(
     // Apply gain only after the settings transaction commits so persistence failure
     // cannot leave live playback using a value the runtime settings rejected.
     state.audio_playback.set_volume(new_settings.volume);
+    state.record_user_interaction();
 
     if restart_required && state.conversation_mgr.is_active() {
         // Privacy-preserving restart policy: tear down the old graph and require a fresh explicit

@@ -112,7 +112,7 @@ pub async fn start_conversation<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
-    state.ambient_scheduler.interrupt();
+    state.record_user_interaction();
     state
         .standalone_speech
         .cancel(state.audio_playback.as_ref());
@@ -125,6 +125,7 @@ pub async fn start_conversation<R: Runtime>(
     // start request is still constructing or activating the old graph.
     let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
+    state.ambient_scheduler.claim_foreground_presentation();
     prepare_character_for_conversation(state.inner(), &app)?;
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
@@ -210,11 +211,13 @@ pub async fn stop_conversation(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    state.record_user_interaction();
     state
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
 
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Idle)
 }
 
@@ -223,7 +226,7 @@ pub async fn barge_in<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    state.ambient_scheduler.interrupt();
+    state.record_user_interaction();
     state
         .standalone_speech
         .cancel(state.audio_playback.as_ref());
@@ -236,6 +239,7 @@ pub async fn barge_in<R: Runtime>(
         .await?;
 
     if *state.character_state.read() == CharacterState::Talking {
+        state.ambient_scheduler.claim_foreground_presentation();
         let target = if conversation_active {
             CharacterState::Interrupted
         } else {
@@ -301,6 +305,7 @@ pub async fn send_text_message<R: Runtime>(
     let Some(msg_trimmed) = normalize_text_message(message)? else {
         return Ok(String::new());
     };
+    state.record_user_interaction();
     let request_snapshot = state.capture_text_request_settings();
     let settings = &request_snapshot.settings;
 
@@ -313,6 +318,7 @@ pub async fn send_text_message<R: Runtime>(
         &msg_trimmed,
     )?;
 
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Thinking)?;
 
     let text_res = match generate_typed_text_with_snapshot(
