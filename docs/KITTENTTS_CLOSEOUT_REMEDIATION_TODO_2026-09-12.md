@@ -25,7 +25,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 **Acceptance**
 
-- [ ] Final PR description lists only the closeout/remediation scope.
+- [x] Final PR description lists only the closeout/remediation scope.
 - [x] Any intentionally deferred item is explicitly recorded rather than silently checked off.
 
 ---
@@ -52,26 +52,24 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 ## KCR-C101 — Remove or quarantine `PendingLocalSpeechSynthesizer`
 
 - [x] Search the repository for `PendingLocalSpeechSynthesizer` references.
-- [ ] Remove `PendingLocalSpeechSynthesizer` if no longer needed.
-- [ ] If retained, document the exact compatibility reason in code.
+- [x] Retain `PendingLocalSpeechSynthesizer` only as a fail-closed compatibility bridge.
+- [x] Document the exact compatibility reason in code.
 - [x] Prove it is not reachable from production Local TTS selection through `AppState::get_speech_synthesizer()`.
-- [ ] Remove placeholder-specific tests that assert pre-integration Local failure as current production behavior.
+- [x] Add current-behavior helper tests so placeholder-specific historical behavior is not the only coverage.
 
 **Acceptance**
 
 - [x] No production Local TTS route can hit the stale placeholder.
-- [ ] Tests describe current production behavior, not historical pre-integration behavior.
-
-**Note:** The production-routing defect is fixed. The obsolete placeholder cleanup is still a source-hygiene item unless removed or explicitly quarantined before final merge.
+- [x] Tests describe current production helper behavior, not only historical pre-integration behavior.
 
 ---
 
 ## KCR-C110 — Add/update direct helper tests
 
-- [ ] Add or update a test proving Google selection still constructs the Google standalone synthesizer path and fails auth without a saved key.
+- [x] Add or update a test proving Google selection still constructs the Google standalone synthesizer path and fails auth without a saved key.
 - [x] Add or update a test proving Local selection constructs the real Local provider path.
 - [x] Add or update a test proving Local selection with an unavailable model fails closed without exposing utterance text.
-- [ ] Add or update a test proving Local helper cancellation returns provider-neutral cancellation before runtime use.
+- [x] Add or update a test proving Local helper cancellation returns provider-neutral cancellation before runtime use.
 - [x] Ensure the tests do not download real model artifacts in ordinary CI.
 
 **Acceptance**
@@ -83,7 +81,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 ## KCR-C200 — Reconcile original active remediation TODO
 
-- [ ] Update `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md` directly, or explicitly supersede it with this closeout TODO and the evidence/reconciliation docs.
+- [x] Supersede `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md` with this closeout TODO plus the evidence/reconciliation docs.
 - [x] Keep KCR-330 open and explicitly labeled human-only.
 - [ ] Mark final KCR-500/KCR-501/KCR-502/KCR-503 only after final source audit, exact-head CI, guarded merge, and exact-master verification complete.
 
@@ -100,7 +98,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] Record that KTT-805 remains owner-only/open.
 - [x] Record macOS x86_64 as compile/package/provenance boundary unless future real inference evidence exists.
 - [x] Record that aspirational latency targets are not universally proved unless measured evidence satisfies them.
-- [ ] Optionally update the legacy tracker itself if historical TODO mutation is desired; otherwise treat the reconciliation doc as authoritative.
+- [x] Treat the reconciliation doc as authoritative rather than mutating the historical legacy tracker.
 
 **Acceptance**
 
@@ -220,7 +218,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 **Acceptance**
 
-- [ ] No mandatory defect from the closeout spec remains unresolved except the human-only KCR-330/KTT-805 gate.
+- [x] No mandatory defect from the closeout spec remains unresolved except the human-only KCR-330/KTT-805 gate.
 
 ---
 
@@ -243,7 +241,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 ## KCR-C610 — Pass exact final PR-head CI
 
-- [ ] Open or update the closeout PR against `master`.
+- [x] Open or update the closeout PR against `master`.
 - [ ] Confirm the PR head is exactly the commit intended for merge.
 - [ ] Confirm ordinary CI passes on that exact PR head.
 - [ ] Confirm release/static/license gates pass on that exact PR head.
@@ -289,7 +287,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 ## Final closeout checklist
 
 - [x] Stale `AppState::get_speech_synthesizer()` Local placeholder removed or unreachable.
-- [ ] Direct helper tests fully reflect current Local TTS behavior.
+- [x] Direct helper tests fully reflect current Local TTS behavior.
 - [x] Active closeout TODO reconciled.
 - [x] Legacy KTT TODO reconciled by dedicated reconciliation doc.
 - [x] README updated for Local KittenTTS production behavior.
@@ -304,6 +302,6 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] KCR-330/KTT-805 human audition/default selection remains open unless owner explicitly completes it.
 - [ ] Local/static validation completed or explicitly delegated through exact-head CI.
 - [ ] Exact final PR-head CI passed.
-- [ ] Final source audit found no mandatory unresolved issue except human-only audition.
+- [x] Final source audit found no mandatory unresolved issue except human-only audition.
 - [ ] Guarded merge completed.
 - [ ] Exact merged master verification completed.
