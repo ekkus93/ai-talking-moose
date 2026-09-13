@@ -273,25 +273,22 @@ async fn complete_ambient_appearance<R: Runtime>(
         {
             return Ok(true);
         }
-        if let Some(playback_result) =
-            state
-                .ambient_scheduler
-                .with_current_ambient_presentation(presentation_lease, || {
-                    playback.with_current(|| {
-                        if *state.character_state.read() == CharacterState::Idle {
-                            transition_and_emit(
-                                &state.character_state,
-                                app,
-                                CharacterState::Hidden,
-                            )?;
-                        }
-                        Ok::<(), String>(())
-                    })
+        if let Some(Some(result)) = state
+            .ambient_scheduler
+            .with_current_ambient_presentation(presentation_lease, || {
+                playback.with_current(|| {
+                    if *state.character_state.read() == CharacterState::Idle {
+                        transition_and_emit(
+                            &state.character_state,
+                            app,
+                            CharacterState::Hidden,
+                        )?;
+                    }
+                    Ok::<(), String>(())
                 })
+            })
         {
-            if let Some(result) = playback_result {
-                result?;
-            }
+            result?;
         }
     }
     Ok(true)

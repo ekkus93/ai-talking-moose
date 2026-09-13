@@ -167,6 +167,7 @@ impl IdleBanterRuntime {
         )
     }
 
+    #[cfg(test)]
     fn poll_due_at(
         &mut self,
         settings: &AppSettings,
