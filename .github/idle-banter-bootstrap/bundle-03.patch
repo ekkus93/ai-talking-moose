@@ -1,0 +1,451 @@
+diff --git a/src-tauri/src/commands/settings.rs b/src-tauri/src/commands/settings.rs
+index cdb44919..83c82b24 100644
+--- a/src-tauri/src/commands/settings.rs
++++ b/src-tauri/src/commands/settings.rs
+@@ -17,6 +17,7 @@ use crate::audio::permissions::{
+     microphone_permission_state, request_microphone_permission, MicrophonePermissionState,
+ };
+ use crate::audio::playback::AudioPlaybackDiagnostics;
++use crate::character::idle_banter::normalize_idle_banter_seed_topics;
+ use crate::character::state::{transition_character_state, CharacterState};
+ use parking_lot::Mutex;
+ use serde::{Deserialize, Serialize};
+@@ -162,6 +163,8 @@ pub async fn update_settings<R: Runtime>(
+     // Window-title observation remains unsupported in V1. Treat the serialized field
+     // as compatibility metadata and never allow a settings write to enable it.
+     new_settings.window_title_observation = false;
++    new_settings.idle_banter_seed_topics =
++        normalize_idle_banter_seed_topics(&new_settings.idle_banter_seed_topics)?;
+     validate_app_settings(&new_settings)?;
+ 
+     let previous = state.settings.read().clone();
+@@ -189,6 +192,7 @@ pub async fn update_settings<R: Runtime>(
+     // Apply gain only after the settings transaction commits so persistence failure
+     // cannot leave live playback using a value the runtime settings rejected.
+     state.audio_playback.set_volume(new_settings.volume);
++    state.record_user_interaction();
+ 
+     if restart_required && state.conversation_mgr.is_active() {
+         // Privacy-preserving restart policy: tear down the old graph and require a fresh explicit
+diff --git a/src-tauri/src/commands/speech.rs b/src-tauri/src/commands/speech.rs
+index bcc85b9c..177a8d86 100644
+--- a/src-tauri/src/commands/speech.rs
++++ b/src-tauri/src/commands/speech.rs
+@@ -37,6 +37,15 @@ impl StandaloneSpeechPlayback {
+     pub(crate) fn with_current<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
+         self.controller.with_current(&self.cancellation, action)
+     }
++
++    pub(crate) fn is_current(&self) -> bool {
++        self.controller.is_current(&self.cancellation)
++    }
++
++    pub(crate) fn cancel_if_current(&self, playback: &AudioPlayback) -> bool {
++        self.controller
++            .cancel_if_current(playback, &self.cancellation)
++    }
+ }
+ 
+ #[derive(Debug, Clone, PartialEq)]
+diff --git a/src-tauri/src/desktop/events.rs b/src-tauri/src/desktop/events.rs
+index 87a8b27c..5d7ea937 100644
+--- a/src-tauri/src/desktop/events.rs
++++ b/src-tauri/src/desktop/events.rs
+@@ -204,6 +204,8 @@ impl DesktopEventSummarizer {
+             category,
+             summary,
+             importance,
++            idle_banter_seed_topic: None,
++            idle_banter_inactivity_minutes: None,
+         }
+     }
+ 
+diff --git a/src-tauri/src/desktop/runtime.rs b/src-tauri/src/desktop/runtime.rs
+index d92b3e5d..06407a10 100644
+--- a/src-tauri/src/desktop/runtime.rs
++++ b/src-tauri/src/desktop/runtime.rs
+@@ -1,9 +1,10 @@
+ use crate::app::state::AppSettings;
+-use crate::character::ambient::AmbientScheduler;
++use crate::character::ambient::{AmbientEvent, AmbientScheduler};
++use crate::character::idle_banter::IdleBanterRuntime;
+ use crate::desktop::events::{DesktopEvent, DesktopEventSummarizer};
+ use crate::desktop::macos::{SystemDesktopMonitor, SystemPowerObserver};
+ use crate::desktop::observation::{ObserverKind, ObserverResult, PowerEvent};
+-use parking_lot::RwLock;
++use parking_lot::{Mutex as ParkingMutex, RwLock};
+ use std::sync::{Arc, Mutex, OnceLock};
+ use std::time::Duration;
+ use tokio::sync::{mpsc, watch};
+@@ -77,8 +78,14 @@ fn submit_event(scheduler: &AmbientScheduler, event: DesktopEvent) {
+ fn handle_power_event(
+     summarizer: &mut DesktopEventSummarizer,
+     scheduler: &AmbientScheduler,
++    settings: &RwLock<AppSettings>,
++    idle_banter: &ParkingMutex<IdleBanterRuntime>,
+     event: PowerEvent,
+ ) {
++    if event == PowerEvent::Wake {
++        idle_banter.lock().reset_after_wake(&settings.read());
++        scheduler.interrupt();
++    }
+     submit_event(scheduler, summarizer.record_power(event));
+ }
+ 
+@@ -92,6 +99,24 @@ where
+     }
+ }
+ 
++fn poll_idle_banter(
++    settings: &RwLock<AppSettings>,
++    scheduler: &AmbientScheduler,
++    idle_banter: &ParkingMutex<IdleBanterRuntime>,
++) {
++    let settings = settings.read().clone();
++    let due = idle_banter.lock().poll_due(&settings);
++    let Some(due) = due else {
++        return;
++    };
++    let event = AmbientEvent::idle_banter(due.seed_topic, due.inactivity_minutes);
++    match scheduler.try_submit_background(event) {
++        Ok(true) => {}
++        Ok(false) => debug!("Ambient scheduler queue full; dropping due Idle Banter occurrence"),
++        Err(_) => debug!("Idle Banter occurrence could not be submitted to ambient scheduler"),
++    }
++}
++
+ fn poll_observers(
+     settings: &RwLock<AppSettings>,
+     scheduler: &AmbientScheduler,
+@@ -141,6 +166,7 @@ fn poll_observers(
+ async fn run_observer_loop(
+     settings: Arc<RwLock<AppSettings>>,
+     scheduler: AmbientScheduler,
++    idle_banter: Arc<ParkingMutex<IdleBanterRuntime>>,
+     cancellation: CancellationToken,
+     shutdown_complete: watch::Sender<bool>,
+     summarizer: Arc<Mutex<DesktopEventSummarizer>>,
+@@ -160,7 +186,13 @@ async fn run_observer_loop(
+                     let mut summarizer = summarizer
+                         .lock()
+                         .unwrap_or_else(|poisoned| poisoned.into_inner());
+-                    handle_power_event(&mut summarizer, &scheduler, power);
++                    handle_power_event(
++                        &mut summarizer,
++                        &scheduler,
++                        &settings,
++                        idle_banter.as_ref(),
++                        power,
++                    );
+                 }
+             }
+             _ = interval.tick() => {
+@@ -168,6 +200,8 @@ async fn run_observer_loop(
+                     .lock()
+                     .unwrap_or_else(|poisoned| poisoned.into_inner());
+                 poll_observers(&settings, &scheduler, &mut summarizer, poll_tick);
++                drop(summarizer);
++                poll_idle_banter(&settings, &scheduler, idle_banter.as_ref());
+                 poll_tick = poll_tick.wrapping_add(1);
+             }
+         }
+@@ -177,6 +211,7 @@ async fn run_observer_loop(
+ pub fn start(
+     settings: Arc<RwLock<AppSettings>>,
+     scheduler: AmbientScheduler,
++    idle_banter: Arc<ParkingMutex<IdleBanterRuntime>>,
+ ) -> Result<(), String> {
+     let mut state = runtime_state()
+         .lock()
+@@ -202,6 +237,7 @@ pub fn start(
+     tauri::async_runtime::spawn(run_observer_loop(
+         settings,
+         scheduler,
++        idle_banter,
+         task_cancellation,
+         task_shutdown,
+         task_summarizer,
+diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
+index d9eca097..7069e525 100644
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -120,8 +120,12 @@ pub fn run() {
+                     }
+                 })
+                 .map_err(std::io::Error::other)?;
+-            desktop::runtime::start(app_state.settings.clone(), ambient_scheduler)
+-                .map_err(std::io::Error::other)?;
++            desktop::runtime::start(
++                app_state.settings.clone(),
++                ambient_scheduler,
++                app_state.idle_banter_runtime.clone(),
++            )
++            .map_err(std::io::Error::other)?;
+ 
+             if app_state.settings.read().restore_position {
+                 if let Some(window) = app.get_webview_window("main") {
+diff --git a/src/components/Settings/BehaviorTab.tsx b/src/components/Settings/BehaviorTab.tsx
+index e29f63e7..ac24a1fb 100644
+--- a/src/components/Settings/BehaviorTab.tsx
++++ b/src/components/Settings/BehaviorTab.tsx
+@@ -1,12 +1,90 @@
+-import React from "react";
++import React, { useEffect, useMemo, useState } from "react";
++import { frontendDefaultSettings } from "../../lib/backendContract";
+ import { useMooseStore } from "../../stores/mooseStore";
+ import { formatLocalHour } from "./formatLocalHour";
+ 
++const MAX_SEED_TOPICS = 64;
++const MAX_SEED_CHARS = 120;
++const MAX_TOTAL_SEED_CHARS = 4096;
++
++const formatIdleBanterInterval = (minutes: number): string => {
++  if (!Number.isFinite(minutes) || minutes < 1) return "";
++  if (minutes % 60 === 0) {
++    const hours = minutes / 60;
++    return `${hours} ${hours === 1 ? "hour" : "hours"}`;
++  }
++  if (minutes >= 60) {
++    const hours = Math.floor(minutes / 60);
++    const remainder = minutes % 60;
++    return `${hours}h ${remainder}m`;
++  }
++  return `${minutes} minutes`;
++};
++
++const normalizeSeedTopics = (topics: string[]): string[] | null => {
++  if (topics.length < 1 || topics.length > MAX_SEED_TOPICS) return null;
++  const normalized = topics.map((topic) => topic.trim());
++  if (
++    normalized.some(
++      (topic) => topic.length === 0 || [...topic].length > MAX_SEED_CHARS,
++    )
++  )
++    return null;
++  if (normalized.reduce((total, topic) => total + [...topic].length, 0) > MAX_TOTAL_SEED_CHARS)
++    return null;
++  const keys = normalized.map((topic) => topic.toLowerCase());
++  if (new Set(keys).size !== keys.length) return null;
++  return normalized;
++};
++
+ export const BehaviorTab: React.FC = () => {
+   const { settings, updateSettingsPatch, updateSettingsContinuousPatch } =
+     useMooseStore();
++  const [seedDraft, setSeedDraft] = useState<string[]>([]);
++  const [newSeed, setNewSeed] = useState("");
++  const [seedError, setSeedError] = useState<string | null>(null);
++
++  const persistedSeeds = settings?.idle_banter_seed_topics;
++  useEffect(() => {
++    if (persistedSeeds) setSeedDraft([...persistedSeeds]);
++  }, [persistedSeeds]);
++
++  const defaultSeeds = useMemo(
++    () => frontendDefaultSettings().idle_banter_seed_topics,
++    [],
++  );
++
+   if (!settings) return null;
+ 
++  const saveSeedDraft = async (topics = seedDraft) => {
++    const normalized = normalizeSeedTopics(topics);
++    if (!normalized) {
++      setSeedError(
++        "Seed topics must be unique, non-empty, 120 characters or fewer, and stay within the list limits.",
++      );
++      return;
++    }
++    setSeedError(null);
++    setSeedDraft(normalized);
++    await updateSettingsPatch({ idle_banter_seed_topics: normalized });
++  };
++
++  const addSeed = () => {
++    const candidate = newSeed.trim();
++    const next = [...seedDraft, candidate];
++    if (!normalizeSeedTopics(next)) {
++      setSeedError(
++        "That topic is empty, duplicated, too long, or would exceed the seed-topic limits.",
++      );
++      return;
++    }
++    setSeedError(null);
++    setSeedDraft(next);
++    setNewSeed("");
++  };
++
++  const disabled = !settings.idle_banter_enabled;
++
+   return (
+     <div className="space-y-4">
+       <h3 className="font-bold text-sm border-b border-black pb-1">
+@@ -26,6 +104,158 @@ export const BehaviorTab: React.FC = () => {
+         <span className="font-bold">Enable unsolicited ambient remarks</span>
+       </label>
+ 
++      <div className="border border-black p-3 rounded bg-[#fbf9f5] space-y-3">
++        <label className="flex items-center gap-2 font-bold cursor-pointer">
++          <input
++            type="checkbox"
++            checked={settings.idle_banter_enabled}
++            onChange={(e) =>
++              updateSettingsPatch({ idle_banter_enabled: e.target.checked })
++            }
++            className="accent-black"
++          />
++          <span>Idle Banter</span>
++        </label>
++        {!settings.unsolicited_comments && (
++          <p className="text-[11px] text-gray-700" role="status">
++            Idle Banter is paused while unsolicited ambient remarks are disabled.
++          </p>
++        )}
++        <p className="text-[11px] text-gray-700">
++          After you ignore Moose for a while, he can occasionally make a short snarky remark.
++          Direct interaction with Moose restarts the timer.
++        </p>
++
++        <div className="grid grid-cols-2 gap-2">
++          <label className="space-y-1">
++            <span className="block font-bold text-[11px]">First remark after</span>
++            <div className="flex items-center gap-1">
++              <input
++                aria-label="Idle Banter initial delay in minutes"
++                type="number"
++                min={5}
++                max={1440}
++                value={settings.idle_banter_initial_delay_minutes}
++                disabled={disabled}
++                onChange={(e) =>
++                  updateSettingsPatch({
++                    idle_banter_initial_delay_minutes: Number(e.target.value),
++                  })
++                }
++                className="w-full p-1.5 border border-black rounded bg-white disabled:opacity-60"
++              />
++              <span className="text-[11px]">min</span>
++            </div>
++            <span className="block text-[10px] text-gray-600">
++              {formatIdleBanterInterval(settings.idle_banter_initial_delay_minutes)}
++            </span>
++          </label>
++          <label className="space-y-1">
++            <span className="block font-bold text-[11px]">About every</span>
++            <div className="flex items-center gap-1">
++              <input
++                aria-label="Idle Banter repeat interval in minutes"
++                type="number"
++                min={5}
++                max={1440}
++                value={settings.idle_banter_repeat_interval_minutes}
++                disabled={disabled}
++                onChange={(e) =>
++                  updateSettingsPatch({
++                    idle_banter_repeat_interval_minutes: Number(e.target.value),
++                  })
++                }
++                className="w-full p-1.5 border border-black rounded bg-white disabled:opacity-60"
++              />
++              <span className="text-[11px]">min</span>
++            </div>
++            <span className="block text-[10px] text-gray-600">
++              {formatIdleBanterInterval(settings.idle_banter_repeat_interval_minutes)}
++            </span>
++          </label>
++        </div>
++
++        <div className={`space-y-2 ${disabled ? "opacity-60" : ""}`}>
++          <div className="flex justify-between items-center gap-2">
++            <span className="font-bold text-[11px]">Creative seed topics</span>
++            <button
++              type="button"
++              disabled={disabled}
++              onClick={() => {
++                const restored = [...defaultSeeds];
++                setSeedDraft(restored);
++                setSeedError(null);
++                void updateSettingsPatch({ idle_banter_seed_topics: restored });
++              }}
++              className="px-2 py-1 border border-black rounded bg-white text-[11px] disabled:opacity-60"
++            >
++              Restore Defaults
++            </button>
++          </div>
++          {seedDraft.map((topic, index) => (
++            <div key={index} className="flex gap-2 items-center">
++              <input
++                aria-label={`Idle Banter seed topic ${index + 1}`}
++                value={topic}
++                disabled={disabled}
++                maxLength={MAX_SEED_CHARS}
++                onChange={(e) => {
++                  const next = [...seedDraft];
++                  next[index] = e.target.value;
++                  setSeedDraft(next);
++                  setSeedError(null);
++                }}
++                className="flex-1 p-1.5 border border-black rounded bg-white disabled:opacity-60"
++              />
++              <button
++                type="button"
++                aria-label={`Delete Idle Banter seed topic ${index + 1}`}
++                disabled={disabled || seedDraft.length === 1}
++                onClick={() => {
++                  setSeedDraft(seedDraft.filter((_, candidate) => candidate !== index));
++                  setSeedError(null);
++                }}
++                className="px-2 py-1 border border-black rounded bg-white text-[11px] disabled:opacity-40"
++              >
++                Delete
++              </button>
++            </div>
++          ))}
++          <div className="flex gap-2">
++            <input
++              aria-label="New Idle Banter seed topic"
++              value={newSeed}
++              disabled={disabled}
++              maxLength={MAX_SEED_CHARS}
++              onChange={(e) => setNewSeed(e.target.value)}
++              className="flex-1 p-1.5 border border-black rounded bg-white disabled:opacity-60"
++              placeholder="Add a creative direction"
++            />
++            <button
++              type="button"
++              disabled={disabled || seedDraft.length >= MAX_SEED_TOPICS}
++              onClick={addSeed}
++              className="px-2 py-1 border border-black rounded bg-white text-[11px] disabled:opacity-40"
++            >
++              Add
++            </button>
++            <button
++              type="button"
++              disabled={disabled}
++              onClick={() => void saveSeedDraft()}
++              className="px-2 py-1 border border-black rounded bg-white text-[11px] disabled:opacity-40"
++            >
++              Save Topics
++            </button>
++          </div>
++          {seedError && (
++            <p role="alert" className="text-[11px] font-bold">
++              {seedError}
++            </p>
++          )}
++        </div>
++      </div>
++
+       <div className="space-y-1">
+         <div className="flex justify-between">
+           <span>Talkativeness</span>
+@@ -50,7 +280,8 @@ export const BehaviorTab: React.FC = () => {
+         <p className="text-[11px] text-gray-700">
+           Lower values make Moose require more important events before speaking;
+           higher values make him more willing to comment. The hourly cap and
+-          quiet hours still apply.
++          quiet hours still apply. Due Idle Banter uses its configured schedule
++          instead of this importance threshold.
+         </p>
+       </div>
+ 
