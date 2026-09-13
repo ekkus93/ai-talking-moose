@@ -4,9 +4,7 @@
 //! selection, no-fallback behavior, and cancellation at the helper boundary while leaving real
 //! KittenTTS inference to the explicit heavyweight acceptance workflow.
 
-use talking_moose_lib::ai::local_tts::{
-    DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE,
-};
+use talking_moose_lib::ai::local_tts::{DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE};
 use talking_moose_lib::ai::traits::SpeechSynthesizer;
 use talking_moose_lib::ai::types::{ProviderErrorKind, TtsProvider, TtsRequest};
 use talking_moose_lib::app::state::AppState;
@@ -89,11 +87,16 @@ async fn app_state_local_tts_helper_reports_provider_neutral_cancellation() {
 
     let error = state
         .get_speech_synthesizer()
-        .synthesize_cancellable(request("private cancelled local helper text"), &cancellation)
+        .synthesize_cancellable(
+            request("private cancelled local helper text"),
+            &cancellation,
+        )
         .await
         .unwrap_err();
 
     assert_eq!(error.kind, ProviderErrorKind::Cancelled);
     assert!(!error.retryable);
-    assert!(!error.message.contains("private cancelled local helper text"));
+    assert!(!error
+        .message
+        .contains("private cancelled local helper text"));
 }
