@@ -328,6 +328,103 @@ jobs:
             --test-threads=1 \
             2>&1 | tee "$RUNNER_TEMP/kittentts-test.log"
 
+      - name: Measure 1/2/4-thread CPU policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KTT301_MODEL_PATH="$RUNNER_TEMP/kittentts-artifacts/$MODEL_FILENAME"
+          export KTT301_VOICES_PATH="$RUNNER_TEMP/kittentts-artifacts/$VOICES_FILENAME"
+          export KTT301_G2P_PATH="$RUNNER_TEMP/kittentts-artifacts/$G2P_FILENAME"
+          export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/kittentts-artifacts/$ORT_FILENAME"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          fi
+          cargo test \
+            --manifest-path src-tauri/Cargo.toml \
+            --locked \
+            --lib \
+            'ai::local_tts::runtime::engine::tests::real_kittentts_cpu_thread_sweep' \
+            -- \
+            --ignored \
+            --exact \
+            --nocapture \
+            --test-threads=1 \
+            2>&1 | tee "$RUNNER_TEMP/kittentts-thread-sweep.log"
+
+      - name: Publish measured thread-policy evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SWEEP_LOG="$RUNNER_TEMP/kittentts-thread-sweep.log"
+          export SWEEP_JSON="$RUNNER_TEMP/kittentts-thread-sweep-$ACCEPTANCE_LABEL.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          prefix = "KITTENTTS_THREAD_SWEEP_JSON="
+          lines = Path(os.environ["SWEEP_LOG"]).read_text(encoding="utf-8").splitlines()
+          payloads = [line.split(prefix, 1)[1] for line in lines if prefix in line]
+          if len(payloads) != 1:
+              raise SystemExit(f"expected one thread-sweep evidence line, found {len(payloads)}")
+          evidence = json.loads(payloads[0])
+          evidence["qualified_sha"] = os.environ["EXPECTED_SHA"]
+          evidence["runner_label"] = os.environ["ACCEPTANCE_LABEL"]
+          Path(os.environ["SWEEP_JSON"]).write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          configurations = evidence.get("configurations", [])
+          thread_counts = [item.get("inference_threads") for item in configurations]
+          if thread_counts != [1, 2, 4]:
+              raise SystemExit(f"unexpected thread sweep: {thread_counts!r}")
+          if evidence.get("production_default_threads") != 2:
+              raise SystemExit("production Local TTS thread default drifted from 2")
+          if evidence.get("bounded_n_threads") != 4:
+              raise SystemExit("bounded-N acceptance configuration drifted from 4")
+          if not evidence.get("network_denied"):
+              raise SystemExit("thread-sweep inference did not run under network denial")
+          if not all(item.get("repeated_utterance_stable") for item in configurations):
+              raise SystemExit("repeated-utterance stability failed in the thread sweep")
+
+          production = next(
+              item for item in configurations if item["inference_threads"] == 2
+          )
+          production_rtfs = production.get("warm_real_time_factors", [])
+          if len(production_rtfs) != 5 or not all(
+              0 < value < 1.0 for value in production_rtfs
+          ):
+              raise SystemExit(
+                  f"production 2-thread hard RTF gate failed: {production_rtfs!r}"
+              )
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as handle:
+              handle.write(
+                  f"\n## KittenTTS measured thread policy — {evidence['platform']}\n\n"
+              )
+              handle.write(
+                  "| Threads | Model load ms | First synthesis ms | "
+                  "Median warm RTF | p95 warm RTF | Max RSS bytes | Stable repeats |\n"
+              )
+              handle.write("| ---: | ---: | ---: | ---: | ---: | ---: | :---: |\n")
+              for item in configurations:
+                  handle.write(
+                      f"| {item['inference_threads']} "
+                      f"| {item['model_load_duration_ms']} "
+                      f"| {item['first_synthesis_duration_ms']} "
+                      f"| {item['median_warm_rtf']:.4f} "
+                      f"| {item['p95_warm_rtf']:.4f} "
+                      f"| {item.get('max_rss_bytes')} "
+                      f"| {'PASS' if item['repeated_utterance_stable'] else 'FAIL'} |\n"
+                  )
+              handle.write(
+                  "\nProduction default remains `2` threads pending cross-platform "
+                  "comparison of this exact-head evidence.\n"
+              )
+          PY
+
       - name: Publish performance and privacy evidence
         shell: bash
         run: |
@@ -380,6 +477,7 @@ jobs:
           name: kittentts-cpu-acceptance-${{ matrix.label }}-${{ needs.guard.outputs.expected_sha }}
           path: |
             ${{ runner.temp }}/kittentts-acceptance-${{ matrix.label }}.json
+            ${{ runner.temp }}/kittentts-thread-sweep-${{ matrix.label }}.json
             ${{ runner.temp }}/kittentts-runner.txt
           if-no-files-found: error
           retention-days: 14
