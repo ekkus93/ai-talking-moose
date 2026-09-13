@@ -6,7 +6,9 @@ must have either packaged license/notice text or an explicit declared license
 expression. Native Moonshine/ONNX notices are staged separately by
 prepare_moonshine_macos.sh. The statically linked llama.cpp runtime also has a
 checked-in native notice, while its Rust binding crates must remain present in
-this generated dependency inventory.
+this generated dependency inventory. Local TTS's linked Rust dependencies are
+likewise required here; installer-downloaded model/runtime assets are documented
+separately in docs/LOCAL_TTS_ASSET_LICENSES.md because they are not bundled.
 """
 from __future__ import annotations
 
@@ -24,6 +26,10 @@ MACOS_TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin")
 REQUIRED_LOCAL_LLM_CARGO = {
     "llama-cpp-2": "0.1.154",
     "llama-cpp-sys-2": "0.1.154",
+}
+REQUIRED_LOCAL_TTS_CARGO = {
+    "ort": "2.0.0-rc.13",
+    "piper-plus-g2p": "0.4.0",
 }
 
 
@@ -287,28 +293,30 @@ def cargo_rows() -> list[tuple[str, str, str, list[str], str]]:
     return rows
 
 
-def validate_required_local_llm_rows(
+def validate_required_cargo_rows(
     rows: list[tuple[str, str, str, list[str], str]],
+    required: dict[str, str],
+    component: str,
 ) -> None:
     by_name = {
         name: (version, evidence, method)
         for name, version, _license, evidence, method in rows
     }
-    for name, expected_version in REQUIRED_LOCAL_LLM_CARGO.items():
+    for name, expected_version in required.items():
         found = by_name.get(name)
         if found is None:
             raise SystemExit(
-                f"collect_release_licenses: shipped Local LLM dependency missing from inventory: {name}"
+                f"collect_release_licenses: shipped {component} dependency missing from inventory: {name}"
             )
         version, evidence, method = found
         if version != expected_version:
             raise SystemExit(
-                "collect_release_licenses: shipped Local LLM dependency version drift: "
+                f"collect_release_licenses: shipped {component} dependency version drift: "
                 f"{name} expected {expected_version}, found {version}"
             )
         if not evidence or method == "unresolved":
             raise SystemExit(
-                f"collect_release_licenses: shipped Local LLM dependency has no license evidence: {name}"
+                f"collect_release_licenses: shipped {component} dependency has no license evidence: {name}"
             )
 
 
@@ -319,7 +327,8 @@ def main() -> None:
 
     npm = npm_rows()
     cargo = cargo_rows()
-    validate_required_local_llm_rows(cargo)
+    validate_required_cargo_rows(cargo, REQUIRED_LOCAL_LLM_CARGO, "Local LLM")
+    validate_required_cargo_rows(cargo, REQUIRED_LOCAL_TTS_CARGO, "Local TTS")
     inventory = OUTPUT / "DEPENDENCY_LICENSES.md"
     lines = [
         "# Bundled dependency license inventory",
@@ -328,8 +337,10 @@ def main() -> None:
         "the non-dev Cargo dependency graphs filtered for both shipped macOS targets.",
         "",
         "Native Moonshine/ONNX and Local LLM native-runtime notices live beside "
-        "this directory. Entries marked "
-        "`declared license metadata` require final release review because the "
+        "this directory. Linked Local TTS Rust dependencies are included here; "
+        "installer-downloaded Local TTS model/runtime assets are documented in "
+        "docs/LOCAL_TTS_ASSET_LICENSES.md because they are not application-bundle resources. "
+        "Entries marked `declared license metadata` require final release review because the "
         "published package did not include standalone license/notice text.",
         "",
         "| Ecosystem | Package | Version | Declared license | Evidence method | Bundled evidence |",
@@ -370,7 +381,8 @@ def main() -> None:
         )
     print(
         "release-license-inventory-ok "
-        f"npm={len(npm)} cargo={len(cargo)} declaration_only={len(declaration_only)}"
+        f"npm={len(npm)} cargo={len(cargo)} declaration_only={len(declaration_only)} "
+        "required_local_llm=2 required_local_tts=2"
     )
 
 

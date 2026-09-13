@@ -574,6 +574,39 @@ fn latest_error_is_chronological_not_lexical() {
 }
 
 #[test]
+fn model_scoped_error_lookup_never_attributes_an_unrelated_model_error() {
+    let (_dir, installer, _transport) = installer();
+    installer.error_state.lock().record(
+        DEFAULT_LOCAL_TTS_MODEL_ID,
+        LocalTtsInstallError::new(LocalTtsInstallErrorKind::Network, "selected", true),
+    );
+    installer.error_state.lock().record(
+        "unrelated-model",
+        LocalTtsInstallError::new(LocalTtsInstallErrorKind::Io, "unrelated", false),
+    );
+
+    let selected = installer
+        .error_for_model(DEFAULT_LOCAL_TTS_MODEL_ID)
+        .expect("selected-model error should be available");
+    assert_eq!(selected.kind, LocalTtsInstallErrorKind::Network);
+    assert_eq!(selected.message, "selected");
+    assert!(selected.retryable);
+    assert!(installer.error_for_model("missing-model").is_none());
+
+    installer
+        .error_state
+        .lock()
+        .clear(DEFAULT_LOCAL_TTS_MODEL_ID);
+    assert!(installer
+        .error_for_model(DEFAULT_LOCAL_TTS_MODEL_ID)
+        .is_none());
+    let unrelated = installer.error_for_model("unrelated-model").unwrap();
+    assert_eq!(unrelated.kind, LocalTtsInstallErrorKind::Io);
+    assert_eq!(unrelated.message, "unrelated");
+    assert!(!unrelated.retryable);
+}
+
+#[test]
 fn delete_never_follows_model_directory_symlink() {
     #[cfg(unix)]
     {

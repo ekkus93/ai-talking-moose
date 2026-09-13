@@ -82,6 +82,7 @@ jobs:
             scripts/validate_release_metadata.py \
             scripts/collect_release_licenses.py \
             scripts/check_local_llm_packaging_policy.py \
+            scripts/check_local_tts_packaging_policy.py \
             scripts/measure_local_llm_bundle_impact.py
           bash -n scripts/prepare_moonshine_macos.sh
           bash -n scripts/verify_macos_bundle.sh
@@ -92,6 +93,9 @@ jobs:
 
       - name: Validate Local LLM packaging policy
         run: python3 scripts/check_local_llm_packaging_policy.py
+
+      - name: Validate Local TTS packaging policy
+        run: python3 scripts/check_local_tts_packaging_policy.py
 
       - name: Run frontend release gate
         run: npm run check:frontend
@@ -187,8 +191,10 @@ jobs:
             fi
           done
 
-      - name: Validate Moonshine runtime provenance
-        run: python3 scripts/validate_moonshine_runtime_manifest.py
+      - name: Validate Moonshine and Local TTS runtime provenance
+        run: |
+          python3 scripts/validate_moonshine_runtime_manifest.py
+          python3 scripts/check_local_tts_packaging_policy.py
 
       - name: Build pinned Moonshine native runtime
         run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"

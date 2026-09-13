@@ -21,7 +21,13 @@ import type {
   TranscriptRecord,
   ToolAuditRecord,
   TtsCatalog,
+  TtsProvider,
 } from "../types/moose";
+import type {
+  LocalTtsDiagnostics,
+  LocalTtsInstallProgress,
+  LocalTtsModelDescriptor,
+} from "../types/localTts";
 import {
   frontendDefaultSettings,
   frontendGoogleModels,
@@ -166,6 +172,65 @@ const previewLocalLlmModel = (modelId: string): LocalModelDescriptor => {
   return model;
 };
 
+const previewLocalTtsModels = (): LocalTtsModelDescriptor[] => {
+  const settings = frontendDefaultSettings();
+  const localProvider = frontendTtsCatalog().providers.find(
+    (provider) => provider.id === "local",
+  );
+  const model = localProvider?.models[0];
+  if (!model) return [];
+  return [
+    {
+      id: model.id,
+      display_name: model.display_name,
+      version: "0.8",
+      expected_bytes: 93_604_191,
+      installed_bytes: null,
+      license: "Apache-2.0",
+      install_state: "not_installed",
+      active: settings.local_tts_model === model.id,
+      error: null,
+    },
+  ];
+};
+
+const previewLocalTtsModel = (modelId: string): LocalTtsModelDescriptor => {
+  const model = previewLocalTtsModels().find(
+    (candidate) => candidate.id === modelId,
+  );
+  if (!model) throw new Error("Unknown Local TTS model");
+  return model;
+};
+
+const previewLocalTtsDiagnostics = (): LocalTtsDiagnostics => {
+  const settings = frontendDefaultSettings();
+  const model = previewLocalTtsModel(settings.local_tts_model);
+  return {
+    provider: settings.tts_provider,
+    selected_model_id: settings.local_tts_model,
+    selected_voice_id: settings.local_tts_voice,
+    install_state: model.install_state,
+    expected_bytes: model.expected_bytes,
+    installed_bytes: model.installed_bytes,
+    installer_error_category: null,
+    installer_error_retryable: null,
+    runtime: {
+      selected_model_id: settings.local_tts_model,
+      loaded_model_id: null,
+      loaded_revision: null,
+      runtime_compatibility_version: null,
+      phase: "unloaded",
+      sample_rate_hz: 24_000,
+      inference_thread_count: 2,
+      last_model_load_duration_ms: null,
+      last_synthesis_duration_ms: null,
+      last_generated_audio_duration_ms: null,
+      last_real_time_factor: null,
+      last_error_category: null,
+    },
+  };
+};
+
 /**
  * Development-only frontend preview adapter.
  *
@@ -304,6 +369,39 @@ export const browserPreviewBridge = {
     return () => undefined;
   },
 
+  async getLocalTtsModels(): Promise<LocalTtsModelDescriptor[]> {
+    return previewLocalTtsModels();
+  },
+
+  async getLocalTtsDiagnostics(): Promise<LocalTtsDiagnostics> {
+    return previewLocalTtsDiagnostics();
+  },
+
+  async installLocalTtsModel(
+    modelId: string,
+  ): Promise<LocalTtsModelDescriptor> {
+    const model = previewLocalTtsModel(modelId);
+    return {
+      ...model,
+      install_state: "installed",
+      installed_bytes: model.expected_bytes,
+    };
+  },
+
+  async cancelLocalTtsInstall(_modelId: string): Promise<boolean> {
+    return false;
+  },
+
+  async deleteLocalTtsModel(modelId: string): Promise<LocalTtsModelDescriptor> {
+    return previewLocalTtsModel(modelId);
+  },
+
+  async onLocalTtsModelProgress(
+    _callback: (progress: LocalTtsInstallProgress) => void,
+  ): Promise<() => void> {
+    return () => undefined;
+  },
+
   async setGoogleApiKey(_apiKey: string): Promise<void> {},
 
   async clearGoogleApiKey(): Promise<void> {},
@@ -360,6 +458,13 @@ export const browserPreviewBridge = {
 
   async auditionVoice(voiceName: string): Promise<string> {
     return `Auditioning ${voiceName}`;
+  },
+
+  async auditionTtsVoice(
+    provider: TtsProvider,
+    voiceName: string,
+  ): Promise<string> {
+    return `Auditioning ${provider} voice ${voiceName}`;
   },
 
   async cancelStandaloneSpeech(): Promise<void> {},

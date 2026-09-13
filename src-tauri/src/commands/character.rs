@@ -25,6 +25,7 @@ pub fn set_character_state<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, new_state)
 }
 
@@ -33,6 +34,8 @@ pub fn show_moose<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
+    state.record_user_interaction();
+    state.ambient_scheduler.claim_foreground_presentation();
     show_character(&state.character_state, &app)
 }
 
@@ -41,6 +44,8 @@ pub fn hide_moose<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
+    state.record_user_interaction();
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Hidden)
 }
 
@@ -49,7 +54,7 @@ pub async fn dismiss_moose<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    state.ambient_scheduler.interrupt();
+    state.record_user_interaction();
     cancel_standalone_audio(state.inner(), &app);
     let now = chrono::Utc::now();
     state.behavior_engine.lock().cooldowns.record_dismissal(now);
@@ -57,6 +62,7 @@ pub async fn dismiss_moose<R: Runtime>(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Dismissed)?;
     transition_and_emit(&state.character_state, &app, CharacterState::Hidden)
 }
@@ -67,8 +73,8 @@ pub async fn set_mute<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
+    state.record_user_interaction();
     if muted {
-        state.ambient_scheduler.interrupt();
         cancel_standalone_audio(state.inner(), &app);
         // Set the privacy gate before awaiting teardown so a racing start request sees
         // muted=true either before or inside the serialized manager startup lock.
@@ -88,6 +94,7 @@ pub async fn set_mute<R: Runtime>(
                 | CharacterState::Talking
                 | CharacterState::Interrupted
         ) {
+            state.ambient_scheduler.claim_foreground_presentation();
             transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
         }
         Ok(())
@@ -124,6 +131,7 @@ pub async fn audition_voice<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
     crate::ai::google::validate_tts_voice(&voice_name)?;
+    state.record_user_interaction();
     let playback =
         invoke_standalone_speech(state.inner(), &app, VOICE_AUDITION_SCRIPT, Some(voice_name))
             .await?;
@@ -137,6 +145,7 @@ pub async fn trigger_canned_reaction<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
+    state.record_user_interaction();
     if *state.is_muted.read() {
         return Ok(String::new());
     }

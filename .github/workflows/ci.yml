@@ -157,7 +157,7 @@ jobs:
                 esac
 
                 case "$path" in
-                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/icons/*|src-tauri/resources/*|src-tauri/native/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
+                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/src/ai/local_tts/*|src-tauri/icons/*|src-tauri/resources/*|src-tauri/native/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/check_local_tts_packaging_policy.py|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
                     release_needed=true
                     handled=true
                     ;;
@@ -500,6 +500,7 @@ jobs:
             scripts/validate_release_metadata.py \
             scripts/collect_release_licenses.py \
             scripts/check_local_llm_packaging_policy.py \
+            scripts/check_local_tts_packaging_policy.py \
             scripts/measure_local_llm_bundle_impact.py
           bash -n scripts/prepare_ubuntu_apt.sh
           bash -n scripts/prepare_moonshine_macos.sh
@@ -512,6 +513,8 @@ jobs:
           bash -n scripts/run_backend_stress_matrix.sh
       - name: Validate Local LLM packaging policy
         run: python3 scripts/check_local_llm_packaging_policy.py
+      - name: Validate Local TTS packaging policy
+        run: python3 scripts/check_local_tts_packaging_policy.py
       - name: Validate dependency license collection
         run: python3 scripts/collect_release_licenses.py
 

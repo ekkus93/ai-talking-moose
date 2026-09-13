@@ -64,7 +64,9 @@ try {
 
   for (const relativePath of [
     "src/types/moose.ts",
+    "src/types/localTts.ts",
     "src/generated/backendContract.json",
+    "src/generated/localTtsBackendContract.json",
     "src/lib/tauriBridge.ts",
     "src-tauri/src/lib.rs",
   ]) {
@@ -100,6 +102,26 @@ try {
     ],
   );
 
+  copyText("src/generated/backendContract.json");
+  const idleContract = JSON.parse(readFileSync(contractPath, "utf8"));
+  const settingsShape = idleContract.ipc_shapes?.AppSettings;
+  if (!settingsShape || !("idle_banter_seed_topics" in settingsShape)) {
+    throw new Error(
+      "AppSettings.idle_banter_seed_topics is missing from the generated IPC representative",
+    );
+  }
+  delete settingsShape.idle_banter_seed_topics;
+  writeFileSync(
+    contractPath,
+    `${JSON.stringify(idleContract, null, 2)}\n`,
+    "utf8",
+  );
+  requireFailureContaining(
+    "Idle Banter AppSettings field removal",
+    runChecker("scripts/check_frontend_contract_shapes.mjs", workspace),
+    ["AppSettings", "TypeScript-only keys: idle_banter_seed_topics"],
+  );
+
   const rustLibPath = join(workspace, "src-tauri/src/lib.rs");
   const rustLib = readFileSync(rustLibPath, "utf8");
   const registration = "            get_local_llm_diagnostics,";
@@ -127,7 +149,7 @@ try {
   );
 
   console.log(
-    "Local LLM contract negative probes: diagnostics field drift and diagnostics command-name drift are rejected by the production checkers.",
+    "Local LLM/Idle Banter contract negative probes: diagnostics drift, Idle Banter AppSettings drift, and diagnostics command-name drift are rejected by the production checkers.",
   );
 } finally {
   rmSync(workspace, { recursive: true, force: true });

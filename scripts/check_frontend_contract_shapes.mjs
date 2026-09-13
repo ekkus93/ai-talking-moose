@@ -1,31 +1,55 @@
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 
-const typesPath = "src/types/moose.ts";
-const contractPath = "src/generated/backendContract.json";
+const typePaths = ["src/types/moose.ts", "src/types/localTts.ts"];
+const backendContractPath = "src/generated/backendContract.json";
+const localTtsContractPath = "src/generated/localTtsBackendContract.json";
 
-const sourceText = readFileSync(typesPath, "utf8");
-const contract = JSON.parse(readFileSync(contractPath, "utf8"));
-const shapes = contract.ipc_shapes;
-if (!shapes || typeof shapes !== "object" || Array.isArray(shapes)) {
-  throw new Error(`${contractPath} does not contain an ipc_shapes object`);
-}
-
-const sourceFile = ts.createSourceFile(
-  typesPath,
-  sourceText,
-  ts.ScriptTarget.Latest,
-  true,
-  ts.ScriptKind.TS,
+const sourceFiles = typePaths.map((path) =>
+  ts.createSourceFile(
+    path,
+    readFileSync(path, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  ),
 );
+const backendContract = JSON.parse(readFileSync(backendContractPath, "utf8"));
+const backendShapes = backendContract.ipc_shapes;
+if (
+  !backendShapes ||
+  typeof backendShapes !== "object" ||
+  Array.isArray(backendShapes)
+) {
+  throw new Error(`${backendContractPath} does not contain an ipc_shapes object`);
+}
+const localTtsShapes = JSON.parse(readFileSync(localTtsContractPath, "utf8"));
+if (
+  !localTtsShapes ||
+  typeof localTtsShapes !== "object" ||
+  Array.isArray(localTtsShapes)
+) {
+  throw new Error(`${localTtsContractPath} does not contain a JSON object`);
+}
+const duplicateShapes = Object.keys(localTtsShapes).filter((name) =>
+  Object.hasOwn(backendShapes, name),
+);
+if (duplicateShapes.length > 0) {
+  throw new Error(
+    `duplicate IPC representatives across generated contracts: ${duplicateShapes.join(", ")}`,
+  );
+}
+const shapes = { ...backendShapes, ...localTtsShapes };
 
 const interfaces = new Map();
 const aliases = new Map();
-for (const statement of sourceFile.statements) {
-  if (ts.isInterfaceDeclaration(statement)) {
-    interfaces.set(statement.name.text, statement);
-  } else if (ts.isTypeAliasDeclaration(statement)) {
-    aliases.set(statement.name.text, statement.type);
+for (const sourceFile of sourceFiles) {
+  for (const statement of sourceFile.statements) {
+    if (ts.isInterfaceDeclaration(statement)) {
+      interfaces.set(statement.name.text, { declaration: statement, sourceFile });
+    } else if (ts.isTypeAliasDeclaration(statement)) {
+      aliases.set(statement.name.text, { type: statement.type, sourceFile });
+    }
   }
 }
 
@@ -37,7 +61,7 @@ const primitiveCategory = (kind) => {
   return null;
 };
 
-const categoryForType = (node, resolving = new Set()) => {
+const categoryForType = (node, sourceFile, resolving = new Set()) => {
   const primitive = primitiveCategory(node.kind);
   if (primitive) return primitive;
 
@@ -58,7 +82,7 @@ const categoryForType = (node, resolving = new Set()) => {
   if (ts.isUnionTypeNode(node)) {
     const categories = new Set(
       node.types
-        .map((part) => categoryForType(part, new Set(resolving)))
+        .map((part) => categoryForType(part, sourceFile, new Set(resolving)))
         .filter((category) => category !== "null"),
     );
     if (categories.size === 1) return [...categories][0];
@@ -75,7 +99,7 @@ const categoryForType = (node, resolving = new Set()) => {
     if (["Exclude", "Extract", "NonNullable"].includes(name)) {
       const [base] = node.typeArguments ?? [];
       if (!base) throw new Error(`${name} is missing its base type`);
-      return categoryForType(base, resolving);
+      return categoryForType(base, sourceFile, resolving);
     }
     if (interfaces.has(name)) return "object";
     if (aliases.has(name)) {
@@ -84,7 +108,8 @@ const categoryForType = (node, resolving = new Set()) => {
       }
       const next = new Set(resolving);
       next.add(name);
-      return categoryForType(aliases.get(name), next);
+      const alias = aliases.get(name);
+      return categoryForType(alias.type, alias.sourceFile, next);
     }
   }
 
@@ -101,13 +126,14 @@ const categoryForValue = (value) => {
 
 const failures = [];
 for (const [interfaceName, representative] of Object.entries(shapes)) {
-  const declaration = interfaces.get(interfaceName);
-  if (!declaration) {
+  const interfaceRecord = interfaces.get(interfaceName);
+  if (!interfaceRecord) {
     failures.push(
-      `${interfaceName}: no matching TypeScript interface in ${typesPath}`,
+      `${interfaceName}: no matching TypeScript interface in ${typePaths.join(" or ")}`,
     );
     continue;
   }
+  const { declaration, sourceFile } = interfaceRecord;
   if (
     representative === null ||
     typeof representative !== "object" ||
@@ -142,7 +168,7 @@ for (const [interfaceName, representative] of Object.entries(shapes)) {
 
   for (const key of rustKeys.filter((candidate) => properties.has(candidate))) {
     const rustCategory = categoryForValue(representative[key]);
-    const tsCategory = categoryForType(properties.get(key));
+    const tsCategory = categoryForType(properties.get(key), sourceFile);
     if (rustCategory !== tsCategory) {
       failures.push(
         `${interfaceName}.${key}: Rust JSON is ${rustCategory}, TypeScript expects ${tsCategory}`,

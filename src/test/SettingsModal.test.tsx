@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SettingsModal } from "../components/Settings/SettingsModal";
 import { useMooseStore } from "../stores/mooseStore";
@@ -337,9 +343,23 @@ describe("SettingsModal Component", () => {
     expect(googleVoice.querySelectorAll("option")).toHaveLength(30);
     expect(
       screen.getByRole("option", { name: /Fenrir \(Excitable\)/i }),
+  it("uses the backend-derived Google catalog in the standalone voice selector", async () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Voice & Audio"));
+
+    const voiceSelect = await screen.findByLabelText("Google Standalone Voice");
+    await waitFor(() =>
+      expect(voiceSelect.querySelectorAll("option")).toHaveLength(30),
+    );
+    expect(
+      within(voiceSelect).getByRole("option", {
+        name: /Fenrir \(Excitable\)/i,
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /Sulafat \(Warm\)/i }),
+      within(voiceSelect).getByRole("option", {
+        name: /Sulafat \(Warm\)/i,
+      }),
     ).toBeInTheDocument();
     const liveVoice = screen.getByLabelText("Gemini Live Conversation Voice");
     expect(liveVoice).toHaveValue("Fenrir");

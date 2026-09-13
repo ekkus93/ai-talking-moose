@@ -1,0 +1,40 @@
+{
+  "LocalTtsDiagnostics": {
+    "provider": "local",
+    "selected_model_id": "KittenML/kitten-tts-mini-0.8",
+    "selected_voice_id": "Jasper",
+    "install_state": "installed",
+    "expected_bytes": 256,
+    "installed_bytes": 256,
+    "installer_error_category": "network",
+    "installer_error_retryable": true,
+    "runtime": {
+      "selected_model_id": "KittenML/kitten-tts-mini-0.8",
+      "loaded_model_id": "KittenML/kitten-tts-mini-0.8",
+      "loaded_revision": "contract-local-tts-revision",
+      "runtime_compatibility_version": 1,
+      "phase": "ready",
+      "sample_rate_hz": 24000,
+      "inference_thread_count": 2,
+      "last_model_load_duration_ms": 125,
+      "last_synthesis_duration_ms": 50,
+      "last_generated_audio_duration_ms": 500.0,
+      "last_real_time_factor": 0.1,
+      "last_error_category": "inference"
+    }
+  },
+  "LocalTtsRuntimeStatus": {
+    "selected_model_id": "KittenML/kitten-tts-mini-0.8",
+    "loaded_model_id": "KittenML/kitten-tts-mini-0.8",
+    "loaded_revision": "contract-local-tts-revision",
+    "runtime_compatibility_version": 1,
+    "phase": "ready",
+    "sample_rate_hz": 24000,
+    "inference_thread_count": 2,
+    "last_model_load_duration_ms": 125,
+    "last_synthesis_duration_ms": 50,
+    "last_generated_audio_duration_ms": 500.0,
+    "last_real_time_factor": 0.1,
+    "last_error_category": "inference"
+  }
+}

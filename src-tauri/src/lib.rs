@@ -120,8 +120,12 @@ pub fn run() {
                     }
                 })
                 .map_err(std::io::Error::other)?;
-            desktop::runtime::start(app_state.settings.clone(), ambient_scheduler)
-                .map_err(std::io::Error::other)?;
+            desktop::runtime::start(
+                app_state.settings.clone(),
+                ambient_scheduler,
+                app_state.idle_banter_runtime.clone(),
+            )
+            .map_err(std::io::Error::other)?;
 
             if app_state.settings.read().restore_position {
                 if let Some(window) = app.get_webview_window("main") {
@@ -212,6 +216,12 @@ pub fn run() {
             cancel_local_llm_install,
             delete_local_llm_model,
             test_local_llm_model,
+            get_local_tts_models,
+            get_local_tts_diagnostics,
+            install_local_tts_model,
+            cancel_local_tts_install,
+            delete_local_tts_model,
+            audition_tts_voice,
             set_google_api_key,
             clear_google_api_key,
             has_google_api_key,

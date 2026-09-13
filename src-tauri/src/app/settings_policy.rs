@@ -6,6 +6,9 @@ use crate::ai::local_tts::{validate_local_tts_model, validate_local_tts_voice};
 use crate::app::state::AppSettings;
 use crate::audio::devices::AudioDeviceInfo;
 use crate::character::behavior::BehaviorEngine;
+use crate::character::idle_banter::{
+    normalize_idle_banter_seed_topics, IDLE_BANTER_MAX_MINUTES, IDLE_BANTER_MIN_MINUTES,
+};
 use crate::persistence::sqlite::Database;
 use parking_lot::{Mutex, RwLock};
 use std::sync::OnceLock;
@@ -86,6 +89,21 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
     if settings.hide_delay_seconds > 3_600 {
         return Err("hide delay must not exceed 3600 seconds".to_string());
     }
+    if !(IDLE_BANTER_MIN_MINUTES..=IDLE_BANTER_MAX_MINUTES)
+        .contains(&settings.idle_banter_initial_delay_minutes)
+    {
+        return Err(format!(
+            "Idle Banter initial delay must be between {IDLE_BANTER_MIN_MINUTES} and {IDLE_BANTER_MAX_MINUTES} minutes"
+        ));
+    }
+    if !(IDLE_BANTER_MIN_MINUTES..=IDLE_BANTER_MAX_MINUTES)
+        .contains(&settings.idle_banter_repeat_interval_minutes)
+    {
+        return Err(format!(
+            "Idle Banter repeat interval must be between {IDLE_BANTER_MIN_MINUTES} and {IDLE_BANTER_MAX_MINUTES} minutes"
+        ));
+    }
+    normalize_idle_banter_seed_topics(&settings.idle_banter_seed_topics)?;
 
     Ok(())
 }
@@ -207,6 +225,36 @@ mod tests {
             ..Default::default()
         };
         assert!(validate_app_settings(&settings).is_err());
+
+        let settings = AppSettings {
+            idle_banter_initial_delay_minutes: 4,
+            ..Default::default()
+        };
+        assert!(validate_app_settings(&settings).is_err());
+
+        let settings = AppSettings {
+            idle_banter_initial_delay_minutes: 1_441,
+            ..Default::default()
+        };
+        assert!(validate_app_settings(&settings).is_err());
+
+        let settings = AppSettings {
+            idle_banter_repeat_interval_minutes: 4,
+            ..Default::default()
+        };
+        assert!(validate_app_settings(&settings).is_err());
+
+        let settings = AppSettings {
+            idle_banter_repeat_interval_minutes: 1_441,
+            ..Default::default()
+        };
+        assert!(validate_app_settings(&settings).is_err());
+
+        let settings = AppSettings {
+            idle_banter_seed_topics: vec!["Moose".into(), "  moose ".into()],
+            ..Default::default()
+        };
+        assert!(validate_app_settings(&settings).is_err());
     }
 
     #[test]
@@ -302,6 +350,19 @@ mod tests {
             ("quiet_hours_end", "behavior engine ambient policy"),
             ("max_comments_per_hour", "behavior engine ambient budget"),
             ("hide_delay_seconds", "ambient post-speech hide delay"),
+            ("idle_banter_enabled", "Idle Banter dedicated feature gate"),
+            (
+                "idle_banter_initial_delay_minutes",
+                "Idle Banter initial inactivity scheduler",
+            ),
+            (
+                "idle_banter_repeat_interval_minutes",
+                "Idle Banter repeat scheduler",
+            ),
+            (
+                "idle_banter_seed_topics",
+                "Idle Banter creative-direction prompt selection",
+            ),
             ("input_device", "conversation capture and microphone test"),
             ("output_device", "conversation and standalone playback"),
             ("volume", "shared CPAL playback gain"),

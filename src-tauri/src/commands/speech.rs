@@ -37,6 +37,15 @@ impl StandaloneSpeechPlayback {
     pub(crate) fn with_current<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
         self.controller.with_current(&self.cancellation, action)
     }
+
+    pub(crate) fn is_current(&self) -> bool {
+        self.controller.is_current(&self.cancellation)
+    }
+
+    pub(crate) fn cancel_if_current(&self, playback: &AudioPlayback) -> bool {
+        self.controller
+            .cancel_if_current(playback, &self.cancellation)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -84,6 +93,17 @@ fn standalone_tts_snapshot(
             pitch: None,
             output_device: settings.output_device.clone(),
         },
+    }
+}
+
+fn ensure_snapshot_provider(
+    snapshot: &StandaloneTtsSettingsSnapshot,
+    required_provider: TtsProvider,
+) -> Result<(), String> {
+    if snapshot.provider == required_provider {
+        Ok(())
+    } else {
+        Err("The standalone speech provider changed; retry the voice audition.".to_string())
     }
 }
 
@@ -149,6 +169,42 @@ async fn synthesize_standalone(
     })
 }
 
+async fn invoke_standalone_speech_snapshot<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+    snapshot: StandaloneTtsSettingsSnapshot,
+) -> Result<StandaloneSpeechPlayback, String> {
+    let request = snapshot.request(text);
+    let output_device = snapshot.output_device.clone();
+    let synthesizer = synthesizer_for_snapshot(state, &snapshot);
+    let playback = synthesize_standalone(
+        synthesizer.as_ref(),
+        state.audio_playback.as_ref(),
+        &state.standalone_speech,
+        request,
+        output_device,
+    )
+    .await?;
+
+    state.ambient_scheduler.claim_foreground_presentation();
+    if let Err(error) = surface_standalone_playback(state, app, text) {
+        playback.cancel_if_current(state.audio_playback.as_ref());
+        return Err(error);
+    }
+    Ok(playback)
+}
+
+fn surface_standalone_playback<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+) -> Result<(), String> {
+    transition_and_emit(&state.character_state, app, CharacterState::Talking)?;
+    let _ = app.emit("moose://speech-bubble", text);
+    Ok(())
+}
+
 /// Authoritative standalone speech invocation for ambient remarks, character
 /// reactions/auditions, and text-mode replies. Speech is not surfaced as Talking
 /// until synthesis has produced playable audio and the bounded playback queue has
@@ -162,6 +218,16 @@ pub(crate) async fn invoke_standalone_speech<R: Runtime>(
     // Capture provider/model/voice/rate/pitch/output-device under one settings read. Any settings
     // change racing this utterance applies to the next utterance instead of mixing providers.
     let snapshot = standalone_tts_snapshot(state, voice_override);
+    invoke_standalone_speech_snapshot(state, app, text, snapshot).await
+}
+
+pub(crate) async fn invoke_standalone_speech_for_ambient<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+    presentation_lease: u64,
+) -> Result<Option<StandaloneSpeechPlayback>, String> {
+    let snapshot = standalone_tts_snapshot(state, None);
     let request = snapshot.request(text);
     let output_device = snapshot.output_device.clone();
     let synthesizer = synthesizer_for_snapshot(state, &snapshot);
@@ -174,14 +240,36 @@ pub(crate) async fn invoke_standalone_speech<R: Runtime>(
     )
     .await?;
 
-    if let Err(error) = transition_and_emit(&state.character_state, app, CharacterState::Talking) {
-        state
-            .standalone_speech
-            .cancel(state.audio_playback.as_ref());
+    let Some(presentation) = state
+        .ambient_scheduler
+        .with_current_ambient_presentation(presentation_lease, || {
+            surface_standalone_playback(state, app, text)
+        })
+    else {
+        playback.cancel_if_current(state.audio_playback.as_ref());
+        return Ok(None);
+    };
+    if let Err(error) = presentation {
+        playback.cancel_if_current(state.audio_playback.as_ref());
         return Err(error);
     }
-    let _ = app.emit("moose://speech-bubble", text);
-    Ok(playback)
+    Ok(Some(playback))
+}
+
+/// Provider-guarded standalone invocation used by voice audition. The provider is not an override:
+/// it must still match the one captured from authoritative settings. If settings change while the
+/// UI request is in flight, the audition fails closed instead of speaking through a different
+/// provider than the label the user clicked.
+pub(crate) async fn invoke_standalone_speech_for_provider<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+    provider: TtsProvider,
+    voice_override: Option<String>,
+) -> Result<StandaloneSpeechPlayback, String> {
+    let snapshot = standalone_tts_snapshot(state, voice_override);
+    ensure_snapshot_provider(&snapshot, provider)?;
+    invoke_standalone_speech_snapshot(state, app, text, snapshot).await
 }
 
 pub(crate) fn schedule_standalone_completion<R: Runtime>(
@@ -272,6 +360,18 @@ mod tests {
         assert_eq!(snapshot.voice_id, "Luna");
         assert_eq!(snapshot.speaking_rate, 0.9);
         assert_eq!(snapshot.output_device.as_deref(), Some("before"));
+    }
+
+    #[test]
+    fn provider_guard_fails_closed_when_audition_races_provider_switch() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().tts_provider = TtsProvider::Local;
+        let snapshot = standalone_tts_snapshot(&state, Some("Bella".to_string()));
+
+        let error = ensure_snapshot_provider(&snapshot, TtsProvider::Google)
+            .expect_err("Google-labelled audition must not run through Local");
+        assert!(error.contains("provider changed"));
+        assert!(ensure_snapshot_provider(&snapshot, TtsProvider::Local).is_ok());
     }
 
     #[test]

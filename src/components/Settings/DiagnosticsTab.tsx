@@ -1,6 +1,7 @@
 import React from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { AudioDiagnosticsPanel } from "./AudioDiagnosticsPanel";
+import { LocalTtsDiagnosticsPanel } from "./LocalTtsDiagnosticsPanel";
 import { ToolAuditDiagnosticsPanel } from "./ToolAuditDiagnosticsPanel";
 
 export const DiagnosticsTab: React.FC = () => {
@@ -13,6 +14,13 @@ export const DiagnosticsTab: React.FC = () => {
           Audio Diagnostics
         </h3>
         <AudioDiagnosticsPanel />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="font-bold text-sm border-b border-black pb-1">
+          Local TTS Diagnostics
+        </h3>
+        <LocalTtsDiagnosticsPanel />
       </section>
 
       <section className="space-y-3">
