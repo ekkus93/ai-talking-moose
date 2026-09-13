@@ -1,3 +1,9 @@
+//! Integration coverage for the public `AppState::get_speech_synthesizer()` helper.
+//!
+//! These tests intentionally do not install real Local TTS artifacts. They prove provider
+//! selection, no-fallback behavior, and cancellation at the helper boundary while leaving real
+//! KittenTTS inference to the explicit heavyweight acceptance workflow.
+
 use talking_moose_lib::ai::local_tts::{
     DEFAULT_LOCAL_TTS_MODEL_ID, DEFAULT_LOCAL_TTS_VOICE,
 };
