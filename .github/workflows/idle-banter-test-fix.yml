@@ -1,0 +1,71 @@
+name: Idle Banter test fix
+
+on:
+  push:
+    branches:
+      - ralph/idle-banter-implementation
+    paths:
+      - .github/idle-banter-test-fix/READY
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: ralph/idle-banter-implementation
+          fetch-depth: 0
+
+      - name: Patch deterministic reset test and self-clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src-tauri/src/app/state.rs")
+          text = path.read_text()
+          old = '''    #[test]
+              fn record_user_interaction_restarts_idle_banter_from_current_settings() {
+                  let state = AppState::new_for_tests().unwrap();
+                  state.settings.write().idle_banter_initial_delay_minutes = 5;
+                  let before = state.idle_banter_runtime.lock().next_due_at();
+                  std::thread::sleep(std::time::Duration::from_millis(2));
+          
+                  state.record_user_interaction();
+          
+                  let after = state.idle_banter_runtime.lock().next_due_at();
+                  assert!(after > before);
+              }
+          '''
+          new = '''    #[test]
+              fn record_user_interaction_restarts_idle_banter_from_current_settings() {
+                  let state = AppState::new_for_tests().unwrap();
+                  state.settings.write().idle_banter_initial_delay_minutes = 5;
+                  let expected_delay = std::time::Duration::from_secs(5 * 60);
+                  let reset_started = std::time::Instant::now();
+          
+                  state.record_user_interaction();
+          
+                  let reset_finished = std::time::Instant::now();
+                  let after = state.idle_banter_runtime.lock().next_due_at();
+                  assert!(after >= reset_started + expected_delay);
+                  assert!(after <= reset_finished + expected_delay);
+              }
+          '''
+          if old not in text:
+              raise SystemExit("target test block not found exactly")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          rm -rf .github/idle-banter-test-fix
+          rm -f .github/workflows/idle-banter-test-fix.yml
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test: make Idle Banter reset assertion deterministic"
+          git push origin HEAD:ralph/idle-banter-implementation
