@@ -58,7 +58,15 @@ fn provider_error_for_runtime(error: LocalTtsRuntimeError) -> ProviderError {
             ProviderErrorKind::Internal
         }
     };
-    ProviderError::from_kind(kind)
+    let retryable = ProviderError::from_kind(kind).retryable;
+    ProviderError {
+        kind,
+        // Runtime errors are bounded static strings that intentionally exclude utterance text,
+        // audio, credentials, and filesystem paths. Preserve that Local-TTS-specific guidance
+        // instead of replacing it with the generic conversation-provider copy.
+        message: error.message.to_string(),
+        retryable,
+    }
 }
 
 /// Production standalone Local TTS provider backed by the one shared `LocalTtsRuntimeManager`.
@@ -176,6 +184,40 @@ mod tests {
     fn local_tts_catalog_rejects_unknown_values() {
         assert!(validate_local_tts_model("latest").is_err());
         assert!(validate_local_tts_voice("Fenrir").is_err());
+    }
+
+    #[test]
+    fn runtime_provider_errors_preserve_safe_local_tts_guidance_and_retry_policy() {
+        let not_installed = provider_error_for_runtime(LocalTtsRuntimeError {
+            kind: LocalTtsRuntimeErrorKind::ModelNotInstalled,
+            message: "The selected Local TTS model is not installed and verified.",
+        });
+        assert_eq!(not_installed.kind, ProviderErrorKind::Setup);
+        assert!(!not_installed.retryable);
+        assert_eq!(
+            not_installed.message,
+            "The selected Local TTS model is not installed and verified."
+        );
+        assert!(!not_installed.message.contains("conversation"));
+
+        let shutting_down = provider_error_for_runtime(LocalTtsRuntimeError {
+            kind: LocalTtsRuntimeErrorKind::ShuttingDown,
+            message: "The Local TTS runtime is shutting down.",
+        });
+        assert_eq!(shutting_down.kind, ProviderErrorKind::Closed);
+        assert!(shutting_down.retryable);
+        assert_eq!(
+            shutting_down.message,
+            "The Local TTS runtime is shutting down."
+        );
+
+        let inference = provider_error_for_runtime(LocalTtsRuntimeError {
+            kind: LocalTtsRuntimeErrorKind::Inference,
+            message: "Local TTS inference failed.",
+        });
+        assert_eq!(inference.kind, ProviderErrorKind::Internal);
+        assert!(!inference.retryable);
+        assert_eq!(inference.message, "Local TTS inference failed.");
     }
 
     #[tokio::test]
