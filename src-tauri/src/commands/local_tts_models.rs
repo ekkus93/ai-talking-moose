@@ -3,9 +3,9 @@ use crate::ai::local_tts::installer::{
 };
 use crate::ai::local_tts::manifest::{local_tts_model_manifest, LocalTtsPlatform};
 use crate::ai::local_tts::runtime::LocalTtsRuntimeStatus;
-use crate::ai::local_tts::storage::{LocalTtsInstallState, LocalTtsModelStatus};
 #[cfg(test)]
 use crate::ai::local_tts::storage::LocalTtsStatusError;
+use crate::ai::local_tts::storage::{LocalTtsInstallState, LocalTtsModelStatus};
 use crate::ai::local_tts::{validate_local_tts_voice, LOCAL_TTS_MODEL_IDS};
 use crate::ai::types::TtsProvider;
 use crate::app::state::AppState;
@@ -128,7 +128,10 @@ fn compose_local_tts_diagnostics(
                 // Storage-level corruption can exist without a recorded install operation. Keep
                 // that category conservative and typed instead of forwarding an arbitrary error
                 // string.
-                (Some(LocalTtsInstallErrorKind::CorruptInstall), Some(error.retryable))
+                (
+                    Some(LocalTtsInstallErrorKind::CorruptInstall),
+                    Some(error.retryable),
+                )
             })
             .unwrap_or((None, None)),
     };
@@ -332,7 +335,10 @@ mod tests {
         assert_eq!(diagnostics.provider, TtsProvider::Local);
         assert_eq!(diagnostics.selected_model_id, model_id);
         assert_eq!(diagnostics.selected_voice_id, "Bella");
-        assert_eq!(diagnostics.install_state, LocalTtsInstallState::NotInstalled);
+        assert_eq!(
+            diagnostics.install_state,
+            LocalTtsInstallState::NotInstalled
+        );
         assert_eq!(diagnostics.installer_error_category, None);
         assert_eq!(diagnostics.installer_error_retryable, None);
         assert_eq!(diagnostics.runtime.phase, LocalTtsRuntimePhase::Unloaded);
@@ -358,7 +364,10 @@ mod tests {
 
         assert_eq!(diagnostics.install_state, LocalTtsInstallState::Installed);
         assert_eq!(diagnostics.installed_bytes, Some(1234));
-        assert_eq!(diagnostics.runtime.loaded_model_id.as_deref(), Some(model_id.as_str()));
+        assert_eq!(
+            diagnostics.runtime.loaded_model_id.as_deref(),
+            Some(model_id.as_str())
+        );
         assert_eq!(diagnostics.runtime.sample_rate_hz, Some(24_000));
         assert_eq!(diagnostics.runtime.inference_thread_count, Some(2));
     }
