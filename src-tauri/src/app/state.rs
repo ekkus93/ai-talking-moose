@@ -438,7 +438,7 @@ impl AppState {
                 Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
             };
 
-        let memory = Arc::new(MemoryManager::new(db.clone());
+        let memory = Arc::new(MemoryManager::new(db.clone()));
         let secrets = Arc::new(secret_store);
         migrate_legacy_google_api_key(&db, &secrets)?;
 
