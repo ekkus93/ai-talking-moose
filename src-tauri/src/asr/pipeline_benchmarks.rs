@@ -2,8 +2,7 @@ use super::*;
 use crate::ai::local_tts::manifest::{local_tts_model_manifest, LocalTtsPlatform};
 use crate::ai::local_tts::storage;
 use crate::ai::local_tts::{
-    LocalSpeechSynthesizer, LocalTtsRuntimeManager, DEFAULT_LOCAL_TTS_MODEL_ID,
-    LOCAL_TTS_VOICE_IDS,
+    LocalSpeechSynthesizer, LocalTtsRuntimeManager, DEFAULT_LOCAL_TTS_MODEL_ID, LOCAL_TTS_VOICE_IDS,
 };
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::TtsRequest;
@@ -371,10 +370,7 @@ fn resample_kitten_audio_for_moonshine(audio: &crate::ai::types::AudioStreamData
     )
 }
 
-fn moonshine_transcribe_generated_audio(
-    engine: &mut MoonshineTinyEngine,
-    pcm: &[f32],
-) -> String {
+fn moonshine_transcribe_generated_audio(engine: &mut MoonshineTinyEngine, pcm: &[f32]) -> String {
     let chunk_samples = usize::try_from(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ / 10).unwrap();
     let mut updates = Vec::new();
     for chunk in pcm.chunks(chunk_samples) {
@@ -457,8 +453,10 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
         std::env::var("KITTENTTS_ASR_MODEL_ROOT")
             .expect("KITTENTTS_ASR_MODEL_ROOT must point at the Moonshine installer cache"),
     );
-    let asr_installer = MoonshineModelInstaller::new(asr_model_root)
-        .expect("failed to initialize Moonshine installer for round-trip smoke");
+    let asr_installer = Arc::new(
+        MoonshineModelInstaller::new(asr_model_root)
+            .expect("failed to initialize Moonshine installer for round-trip smoke"),
+    );
     let install_cancellation = MoonshineModelInstallCancellation::default();
     asr_installer
         .install(
@@ -477,8 +475,11 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
         DEFAULT_LOCAL_TTS_MODEL_ID.to_string(),
         LOCAL_TTS_VOICE_IDS[0].to_string(),
     );
-    let mut asr_engine =
-        MoonshineTinyEngine::open(&asr_installer).expect("failed to open pinned Moonshine Tiny");
+    let engine_installer = asr_installer.clone();
+    let mut asr_engine = tokio::task::spawn_blocking(move || MoonshineTinyEngine::open(&engine_installer))
+        .await
+        .expect("Moonshine Tiny open worker panicked")
+        .expect("failed to open pinned Moonshine Tiny");
     let expected_words = normalized_words(PHRASE);
     let mut voice_results = Vec::with_capacity(LOCAL_TTS_VOICE_IDS.len());
 
