@@ -14,6 +14,7 @@ pub enum AmbientDecisionReason {
     Muted,
     ConversationActive,
     UnsolicitedDisabled,
+    IdleBanterDisabled,
     QuietHours,
     AnnoyanceBudget,
     DismissalCooldown,
@@ -142,6 +143,14 @@ impl BehaviorEngine {
                 AmbientDecisionReason::UnsolicitedDisabled,
             );
         }
+        if event.category == AmbientEventCategory::IdleBanter
+            && !config.behavior.idle_banter_enabled
+        {
+            return AmbientDecision::denied(
+                event.category,
+                AmbientDecisionReason::IdleBanterDisabled,
+            );
+        }
 
         let fingerprint = event.fingerprint();
         let effective_hourly_limit = config
@@ -174,12 +183,14 @@ impl BehaviorEngine {
             return AmbientDecision::denied(event.category, reason);
         }
 
-        let threshold = 0.8 - (config.personality.talkativeness * 0.6);
-        if event.importance < threshold {
-            return AmbientDecision::denied(
-                event.category,
-                AmbientDecisionReason::BelowImportanceThreshold,
-            );
+        if event.category != AmbientEventCategory::IdleBanter {
+            let threshold = 0.8 - (config.personality.talkativeness * 0.6);
+            if event.importance < threshold {
+                return AmbientDecision::denied(
+                    event.category,
+                    AmbientDecisionReason::BelowImportanceThreshold,
+                );
+            }
         }
 
         AmbientDecision::allowed(event.category)
@@ -403,4 +414,126 @@ mod tests {
         );
         assert!(allowed.should_speak);
     }
+    #[test]
+    fn idle_banter_respects_all_hard_ambient_gates() {
+        use chrono::Timelike;
+
+        let event = AmbientEvent::idle_banter("boredom".to_string(), 60);
+        let now = Utc::now();
+
+        let mut config = permissive_config();
+        config.behavior.unsolicited_comments = false;
+        let mut engine = BehaviorEngine::new(config);
+        assert_eq!(
+            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            AmbientDecisionReason::UnsolicitedDisabled
+        );
+
+        let mut engine = BehaviorEngine::new(permissive_config());
+        assert_eq!(
+            engine
+                .evaluate_ambient_event_at(
+                    now,
+                    &event,
+                    AmbientPolicyContext { muted: true, ..permissive_context() },
+                )
+                .reason,
+            AmbientDecisionReason::Muted
+        );
+        assert_eq!(
+            engine
+                .evaluate_ambient_event_at(
+                    now,
+                    &event,
+                    AmbientPolicyContext { conversation_active: true, ..permissive_context() },
+                )
+                .reason,
+            AmbientDecisionReason::ConversationActive
+        );
+
+        let mut quiet = permissive_config();
+        let local_hour = now.with_timezone(&chrono::Local).hour() as u8;
+        quiet.behavior.quiet_hours_enabled = true;
+        quiet.behavior.quiet_hours_start = local_hour;
+        quiet.behavior.quiet_hours_end = (local_hour + 1) % 24;
+        let mut engine = BehaviorEngine::new(quiet);
+        assert_eq!(
+            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            AmbientDecisionReason::QuietHours
+        );
+
+        let mut engine = BehaviorEngine::new(permissive_config());
+        engine.cooldowns.annoyance_budget.score = 100.0;
+        engine.cooldowns.annoyance_budget.threshold = 60.0;
+        engine.cooldowns.annoyance_budget.last_decay_check = now;
+        assert_eq!(
+            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            AmbientDecisionReason::AnnoyanceBudget
+        );
+
+        let mut engine = BehaviorEngine::new(permissive_config());
+        engine.cooldowns.record_dismissal(now);
+        assert_eq!(
+            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            AmbientDecisionReason::DismissalCooldown
+        );
+
+        let mut cooldown = permissive_config();
+        cooldown.behavior.min_cooldown_seconds = 60;
+        let mut engine = BehaviorEngine::new(cooldown);
+        engine.cooldowns.last_speech_time = Some(now);
+        engine.cooldowns.annoyance_budget.threshold = 101.0;
+        assert_eq!(
+            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            AmbientDecisionReason::Cooldown
+        );
+
+        let mut hourly = permissive_config();
+        hourly.behavior.max_comments_per_hour = 1;
+        let mut engine = BehaviorEngine::new(hourly);
+        engine.cooldowns.annoyance_budget.threshold = 101.0;
+        engine.cooldowns.speech_timestamps.push(now);
+        assert_eq!(
+            engine.evaluate_ambient_event_at(now, &event, permissive_context()).reason,
+            AmbientDecisionReason::HourlyLimit
+        );
+
+        let mut engine = BehaviorEngine::new(permissive_config());
+        engine.cooldowns.annoyance_budget.threshold = 101.0;
+        engine.record_ambient_delivery_at(now, &event);
+        assert_eq!(
+            engine
+                .evaluate_ambient_event_at(
+                    now + Duration::seconds(1),
+                    &event,
+                    permissive_context(),
+                )
+                .reason,
+            AmbientDecisionReason::DuplicateEvent
+        );
+    }
+
+    #[test]
+    fn idle_banter_requires_dedicated_enablement_but_skips_importance_threshold() {
+        let mut config = permissive_config();
+        config.personality.talkativeness = 0.0;
+        config.behavior.idle_banter_enabled = false;
+        let mut engine = BehaviorEngine::new(config.clone());
+        let event = AmbientEvent::idle_banter("boredom".to_string(), 60);
+        let denied = engine.evaluate_ambient_event(&event, permissive_context());
+        assert_eq!(denied.reason, AmbientDecisionReason::IdleBanterDisabled);
+
+        config.behavior.idle_banter_enabled = true;
+        let mut engine = BehaviorEngine::new(config);
+        let allowed = engine.evaluate_ambient_event(&event, permissive_context());
+        assert!(allowed.should_speak);
+
+        let ordinary = AmbientEvent::new("system", "low importance".to_string(), 0.0);
+        let ordinary_decision = engine.evaluate_ambient_event(&ordinary, permissive_context());
+        assert_eq!(
+            ordinary_decision.reason,
+            AmbientDecisionReason::BelowImportanceThreshold
+        );
+    }
+
 }

@@ -37,6 +37,15 @@ impl StandaloneSpeechPlayback {
     pub(crate) fn with_current<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
         self.controller.with_current(&self.cancellation, action)
     }
+
+    pub(crate) fn is_current(&self) -> bool {
+        self.controller.is_current(&self.cancellation)
+    }
+
+    pub(crate) fn cancel_if_current(&self, playback: &AudioPlayback) -> bool {
+        self.controller
+            .cancel_if_current(playback, &self.cancellation)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

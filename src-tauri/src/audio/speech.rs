@@ -37,6 +37,28 @@ impl StandaloneSpeechController {
         playback.flush();
     }
 
+    /// Cancel one utterance only if `token` still owns the standalone slot.
+    /// This is used by ambient cancellation so stale cleanup can never cancel a
+    /// newer foreground utterance that took ownership after the ambient request.
+    pub fn cancel_if_current(
+        &self,
+        playback: &AudioPlayback,
+        token: &CancellationToken,
+    ) -> bool {
+        let current = self.current.lock();
+        if current.is_cancelled() || &*current != token {
+            return false;
+        }
+        current.cancel();
+        playback.flush();
+        true
+    }
+
+    pub fn is_current(&self, token: &CancellationToken) -> bool {
+        let current = self.current.lock();
+        !current.is_cancelled() && &*current == token
+    }
+
     /// Run a synchronous completion action only while `token` still owns the
     /// authoritative standalone utterance slot. Holding the slot lock across the
     /// action makes the ownership check atomic with respect to `begin`/`cancel`,
@@ -223,6 +245,21 @@ mod tests {
             assert!(!playback.is_playing(), "{kind:?}");
             assert_eq!(playback.queue_length(), 0, "{kind:?}");
         }
+    }
+
+    #[test]
+    fn ownership_aware_cancellation_never_cancels_newer_foreground_speech() {
+        let playback = AudioPlayback::new_mock();
+        let controller = StandaloneSpeechController::new();
+        let ambient = controller.begin(&playback);
+        let foreground = controller.begin(&playback);
+
+        assert!(!controller.cancel_if_current(&playback, &ambient));
+        assert!(controller.is_current(&foreground));
+        assert!(!foreground.is_cancelled());
+
+        assert!(controller.cancel_if_current(&playback, &foreground));
+        assert!(foreground.is_cancelled());
     }
 
     #[tokio::test]

@@ -235,6 +235,9 @@ pub async fn audition_tts_voice<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
+    // Voice audition is direct user activity. Reset Idle Banter before any Local
+    // model readiness work so a long load cannot race a stale background remark.
+    state.record_user_interaction();
     match provider {
         TtsProvider::Google => crate::ai::google::validate_tts_voice(&voice_name)?,
         TtsProvider::Local => {

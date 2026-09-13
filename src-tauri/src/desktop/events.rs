@@ -204,6 +204,8 @@ impl DesktopEventSummarizer {
             category,
             summary,
             importance,
+            idle_banter_seed_topic: None,
+            idle_banter_inactivity_minutes: None,
         }
     }
 

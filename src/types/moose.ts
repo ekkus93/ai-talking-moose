@@ -308,6 +308,10 @@ export interface AppSettings {
   quiet_hours_end: number;
   max_comments_per_hour: number;
   hide_delay_seconds: number;
+  idle_banter_enabled: boolean;
+  idle_banter_initial_delay_minutes: number;
+  idle_banter_repeat_interval_minutes: number;
+  idle_banter_seed_topics: string[];
 
   input_device: string | null;
   output_device: string | null;

@@ -19,6 +19,7 @@ pub enum AmbientEventCategory {
     Application,
     WindowTitle,
     Idle,
+    IdleBanter,
     Power,
     Wake,
     System,
@@ -35,6 +36,8 @@ impl AmbientEventCategory {
             || normalized.contains("application")
         {
             Self::Application
+        } else if normalized.contains("idle_banter") || normalized.contains("idle-banter") {
+            Self::IdleBanter
         } else if normalized.contains("idle") {
             Self::Idle
         } else if normalized.contains("battery") || normalized.contains("power") {
@@ -56,6 +59,8 @@ pub struct AmbientEvent {
     pub category: AmbientEventCategory,
     pub summary: String,
     pub importance: f32,
+    pub idle_banter_seed_topic: Option<String>,
+    pub idle_banter_inactivity_minutes: Option<u32>,
 }
 
 impl AmbientEvent {
@@ -73,6 +78,21 @@ impl AmbientEvent {
             category: AmbientEventCategory::from_event_name(event_name),
             summary,
             importance,
+            idle_banter_seed_topic: None,
+            idle_banter_inactivity_minutes: None,
+        }
+    }
+
+    pub fn idle_banter(seed_topic: String, inactivity_minutes: u32) -> Self {
+        let bounded_seed: String = seed_topic.chars().take(120).collect();
+        Self {
+            category: AmbientEventCategory::IdleBanter,
+            summary: format!(
+                "Scheduled Moose idle banter after about {inactivity_minutes} minutes of direct-Moose inactivity"
+            ),
+            importance: 0.0,
+            idle_banter_seed_topic: Some(bounded_seed),
+            idle_banter_inactivity_minutes: Some(inactivity_minutes.min(10_080)),
         }
     }
 
@@ -364,6 +384,18 @@ mod tests {
 
         assert_eq!(first.category, AmbientEventCategory::Application);
         assert_eq!(second.category, AmbientEventCategory::Application);
+        assert_eq!(
+            AmbientEvent::new("idle_banter", "safe".to_string(), 0.0).category,
+            AmbientEventCategory::IdleBanter
+        );
+        assert_eq!(
+            AmbientEvent::new("idle", "safe".to_string(), 0.0).category,
+            AmbientEventCategory::Idle
+        );
+        assert_eq!(
+            serde_json::to_string(&AmbientEventCategory::IdleBanter).unwrap(),
+            "\"idle_banter\""
+        );
         assert_eq!(first.fingerprint(), second.fingerprint());
         assert!(!first.fingerprint().contains("readme"));
     }

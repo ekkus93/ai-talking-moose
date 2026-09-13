@@ -112,7 +112,7 @@ pub async fn start_conversation<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<String, String> {
-    state.ambient_scheduler.interrupt();
+    state.record_user_interaction();
     state
         .standalone_speech
         .cancel(state.audio_playback.as_ref());
@@ -210,6 +210,7 @@ pub async fn stop_conversation(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    state.record_user_interaction();
     state
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
@@ -223,7 +224,7 @@ pub async fn barge_in<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    state.ambient_scheduler.interrupt();
+    state.record_user_interaction();
     state
         .standalone_speech
         .cancel(state.audio_playback.as_ref());
@@ -301,6 +302,7 @@ pub async fn send_text_message<R: Runtime>(
     let Some(msg_trimmed) = normalize_text_message(message)? else {
         return Ok(String::new());
     };
+    state.record_user_interaction();
     let request_snapshot = state.capture_text_request_settings();
     let settings = &request_snapshot.settings;
 

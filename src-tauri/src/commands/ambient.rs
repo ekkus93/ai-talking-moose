@@ -26,16 +26,27 @@ fn bound_ambient_output(text: &str) -> Option<String> {
 fn build_ambient_model_prompt_for(
     state: &AppState,
     snapshot: &TextRequestSettingsSnapshot,
-    event_summary: &str,
+    event: &AmbientEvent,
 ) -> String {
     let memories = model_prompt_memories(state, snapshot.settings.memory_enabled);
-    PromptBuilder::build_ambient_prompt(&snapshot.character_config, event_summary, &memories)
+    if event.category == AmbientEventCategory::IdleBanter {
+        let recent = state.idle_banter_runtime.lock().recent_lines();
+        return PromptBuilder::build_idle_banter_prompt(
+            &snapshot.character_config,
+            event.idle_banter_inactivity_minutes.unwrap_or_default(),
+            event.idle_banter_seed_topic.as_deref().unwrap_or("idle absurdity"),
+            &recent,
+            &memories,
+        );
+    }
+    PromptBuilder::build_ambient_prompt(&snapshot.character_config, &event.summary, &memories)
 }
 
 #[cfg(test)]
 fn build_ambient_model_prompt(state: &AppState, event_summary: &str) -> String {
     let snapshot = state.capture_text_request_settings();
-    build_ambient_model_prompt_for(state, &snapshot, event_summary)
+    let event = AmbientEvent::new("manual", event_summary.to_string(), 1.0);
+    build_ambient_model_prompt_for(state, &snapshot, &event)
 }
 
 fn ambient_text_request(prompt: String) -> TextRequest {
@@ -75,6 +86,7 @@ fn ambient_privacy_allowed_for(settings: &AppSettings, category: AmbientEventCat
         AmbientEventCategory::WindowTitle => false,
         AmbientEventCategory::Manual
         | AmbientEventCategory::Idle
+        | AmbientEventCategory::IdleBanter
         | AmbientEventCategory::Power
         | AmbientEventCategory::Wake
         | AmbientEventCategory::System => true,
@@ -112,6 +124,80 @@ fn configured_ambient_hide_delay(state: &AppState) -> Duration {
     Duration::from_secs(u64::from(state.settings.read().hide_delay_seconds))
 }
 
+struct AmbientCancellationGuard<'a, R: Runtime> {
+    state: &'a AppState,
+    app: &'a tauri::AppHandle<R>,
+    appeared_for_ambient: bool,
+    playback: Option<StandaloneSpeechPlayback>,
+    armed: bool,
+}
+
+impl<'a, R: Runtime> AmbientCancellationGuard<'a, R> {
+    fn new(
+        state: &'a AppState,
+        app: &'a tauri::AppHandle<R>,
+        appeared_for_ambient: bool,
+    ) -> Self {
+        Self {
+            state,
+            app,
+            appeared_for_ambient,
+            playback: None,
+            armed: true,
+        }
+    }
+
+    fn set_playback(&mut self, playback: StandaloneSpeechPlayback) {
+        self.playback = Some(playback);
+    }
+
+    fn playback(&self) -> Option<&StandaloneSpeechPlayback> {
+        self.playback.as_ref()
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl<R: Runtime> Drop for AmbientCancellationGuard<'_, R> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+
+        // If standalone playback has already been superseded by a foreground
+        // utterance, stale ambient cleanup must leave the newer owner alone.
+        if let Some(playback) = self.playback.as_ref() {
+            if !playback.is_current() {
+                return;
+            }
+            playback.cancel_if_current(self.state.audio_playback.as_ref());
+        }
+
+        clear_speech_bubble(self.app);
+        if matches!(
+            *self.state.character_state.read(),
+            CharacterState::Thinking | CharacterState::Talking
+        ) {
+            let _ = transition_and_emit(
+                &self.state.character_state,
+                self.app,
+                CharacterState::Idle,
+            );
+        }
+        if self.appeared_for_ambient
+            && *self.state.character_state.read() == CharacterState::Idle
+        {
+            let _ = transition_and_emit(
+                &self.state.character_state,
+                self.app,
+                CharacterState::Hidden,
+            );
+        }
+    }
+}
+
 fn restore_after_ambient_failure<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
@@ -135,9 +221,9 @@ async fn complete_ambient_appearance<R: Runtime>(
     app: &tauri::AppHandle<R>,
     playback: &StandaloneSpeechPlayback,
     appeared_for_ambient: bool,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if !playback.completed_without_cancellation().await {
-        return Ok(());
+        return Ok(false);
     }
     let Some(result) = playback.with_current(|| {
         if *state.character_state.read() == CharacterState::Talking {
@@ -146,7 +232,7 @@ async fn complete_ambient_appearance<R: Runtime>(
         clear_speech_bubble(app);
         Ok::<(), String>(())
     }) else {
-        return Ok(());
+        return Ok(true);
     };
     result?;
 
@@ -155,7 +241,7 @@ async fn complete_ambient_appearance<R: Runtime>(
             .wait_without_cancellation(configured_ambient_hide_delay(state))
             .await
         {
-            return Ok(());
+            return Ok(true);
         }
         if let Some(result) = playback.with_current(|| {
             if *state.character_state.read() == CharacterState::Idle {
@@ -166,7 +252,7 @@ async fn complete_ambient_appearance<R: Runtime>(
             result?;
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 pub(crate) async fn process_ambient_event<R: Runtime>(
@@ -200,20 +286,31 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
         show_character(&state.character_state, app)?;
     }
     transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;
+    let mut cancellation_guard = AmbientCancellationGuard::new(state, app, appeared_for_ambient);
 
-    let prompt = build_ambient_model_prompt_for(state, &request_snapshot, &event.summary);
+    let prompt = build_ambient_model_prompt_for(state, &request_snapshot, &event);
     let generated = match generate_ambient_text_for(state, &request_snapshot.settings, prompt).await
     {
         Ok(text) => text,
         Err(error_value) => {
             restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+            cancellation_guard.disarm();
             return Err(crate::ai::types::ProviderError::from_kind(error_value.kind).to_string());
         }
     };
     let Some(text) = bound_ambient_output(&generated) else {
         restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+        cancellation_guard.disarm();
         return Ok(None);
     };
+
+    if event.category == AmbientEventCategory::IdleBanter
+        && state.idle_banter_runtime.lock().is_recent_duplicate(&text)
+    {
+        restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+        cancellation_guard.disarm();
+        return Ok(None);
+    }
 
     // V1 deliberately has no model classifier. This second deterministic local gate
     // is authoritative and protects against settings/privacy changes during generation.
@@ -225,6 +322,7 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
     if !delivery_decision.should_speak {
         let _ = app.emit("moose://ambient/decision", &delivery_decision);
         restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+        cancellation_guard.disarm();
         return Ok(None);
     }
 
@@ -232,14 +330,31 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
         Ok(playback) => playback,
         Err(error_value) => {
             restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+            cancellation_guard.disarm();
             return Err(error_value);
         }
     };
+    cancellation_guard.set_playback(playback);
 
-    // The shared standalone-speech helper does not surface Talking/bubble state until
-    // synthesis produced playable audio and the bounded queue accepted the utterance.
+    // Count delivery only after playback actually completed. Foreground cancellation must not
+    // poison cooldown or recent-banter history with an utterance the user never heard.
+    let delivered = complete_ambient_appearance(
+        state,
+        app,
+        cancellation_guard
+            .playback()
+            .expect("ambient playback guard must own queued speech"),
+        appeared_for_ambient,
+    )
+    .await?;
+    if !delivered {
+        return Ok(None);
+    }
     state.behavior_engine.lock().record_ambient_delivery(&event);
-    complete_ambient_appearance(state, app, &playback, appeared_for_ambient).await?;
+    if event.category == AmbientEventCategory::IdleBanter {
+        state.idle_banter_runtime.lock().record_delivered(&text);
+    }
+    cancellation_guard.disarm();
     Ok(Some(text))
 }
 
@@ -275,6 +390,10 @@ mod tests {
             &state,
             AmbientEventCategory::Manual
         ));
+        assert!(ambient_privacy_allowed(
+            &state,
+            AmbientEventCategory::IdleBanter
+        ));
         assert!(!ambient_privacy_allowed(
             &state,
             AmbientEventCategory::Other
@@ -293,6 +412,36 @@ mod tests {
             &state,
             AmbientEventCategory::WindowTitle
         ));
+    }
+
+    #[test]
+    fn idle_banter_prompt_is_private_and_contains_only_bounded_creative_metadata() {
+        const PRIVATE_TRANSCRIPT: &str = "PRIVATE_TRANSCRIPT_SENTINEL_91d4";
+        const PRIVATE_MEMORY: &str = "PRIVATE_MEMORY_SENTINEL_6a2f";
+        let state = AppState::new_for_tests().unwrap();
+        state
+            .db
+            .add_transcript("idle-banter-test", "user", PRIVATE_TRANSCRIPT)
+            .unwrap();
+        state
+            .memory
+            .remember(PRIVATE_MEMORY, Some("idle-banter-test"))
+            .unwrap();
+        state.settings.write().memory_enabled = false;
+
+        let snapshot = state.capture_text_request_settings();
+        let event = AmbientEvent::idle_banter("existential moose thoughts".to_string(), 75);
+        let prompt = build_ambient_model_prompt_for(&state, &snapshot, &event);
+        assert!(prompt.contains("existential moose thoughts"));
+        assert!(prompt.contains("75 minutes"));
+        assert!(!prompt.contains(PRIVATE_TRANSCRIPT));
+        assert!(!prompt.contains(PRIVATE_MEMORY));
+
+        state.settings.write().memory_enabled = true;
+        let snapshot = state.capture_text_request_settings();
+        let prompt = build_ambient_model_prompt_for(&state, &snapshot, &event);
+        assert!(prompt.contains(PRIVATE_MEMORY));
+        assert!(!prompt.contains(PRIVATE_TRANSCRIPT));
     }
 
     #[test]
@@ -386,7 +535,7 @@ mod tests {
             let privacy_allowed =
                 ambient_privacy_allowed_for(&snapshot.settings, AmbientEventCategory::Application);
             let prompt =
-                build_ambient_model_prompt_for(&request_state, &snapshot, "application changed");
+                build_ambient_model_prompt_for(&request_state, &snapshot, &AmbientEvent::new("application", "application changed".to_string(), 1.0));
             let error =
                 generate_ambient_text_for(&request_state, &snapshot.settings, prompt.clone())
                     .await
@@ -432,7 +581,7 @@ mod tests {
             0.0
         );
         let next_prompt =
-            build_ambient_model_prompt_for(&state, &next_snapshot, "application changed");
+            build_ambient_model_prompt_for(&state, &next_snapshot, &AmbientEvent::new("application", "application changed".to_string(), 1.0));
         assert!(!next_prompt.contains(PRIVATE_MEMORY));
         let next_error = generate_ambient_text_for(&state, &next_snapshot.settings, next_prompt)
             .await
