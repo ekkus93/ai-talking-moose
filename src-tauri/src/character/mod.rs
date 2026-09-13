@@ -6,6 +6,9 @@ pub mod personality;
 pub mod prompt;
 pub mod state;
 
+#[cfg(test)]
+mod idle_banter_closeout_tests;
+
 pub use ambient::*;
 pub use behavior::*;
 pub use cooldown::*;
