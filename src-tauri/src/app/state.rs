@@ -646,13 +646,15 @@ mod tests {
     fn record_user_interaction_restarts_idle_banter_from_current_settings() {
         let state = AppState::new_for_tests().unwrap();
         state.settings.write().idle_banter_initial_delay_minutes = 5;
-        let before = state.idle_banter_runtime.lock().next_due_at();
-        std::thread::sleep(std::time::Duration::from_millis(2));
+        let expected_delay = std::time::Duration::from_secs(5 * 60);
+        let reset_started = std::time::Instant::now();
 
         state.record_user_interaction();
 
+        let reset_finished = std::time::Instant::now();
         let after = state.idle_banter_runtime.lock().next_due_at();
-        assert!(after > before);
+        assert!(after >= reset_started + expected_delay);
+        assert!(after <= reset_finished + expected_delay);
     }
 
     #[test]
