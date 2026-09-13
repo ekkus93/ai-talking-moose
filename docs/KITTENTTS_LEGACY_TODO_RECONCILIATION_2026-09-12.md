@@ -4,8 +4,9 @@
 **Legacy tracker:** `docs/TODO(20260909-120003).md`
 **Closeout TODO:** `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`
 **Reviewed master:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f`
+**Final closeout master:** `ddce257ce539806c83b41ed916a38b9d7adc7a41`
 
-This document reconciles the older KTT tracker without rewriting its historical task log. Treat this document plus the closeout TODO as the authoritative status for KittenTTS closeout.
+This document reconciles the older KTT tracker without rewriting its historical task log. Treat this document plus the closeout TODO and evidence record as the authoritative status for KittenTTS closeout. The technical closeout gates completed through PR #101 and the final documentation bookkeeping completed through PR #102; only the owner-only `KCR-330` / `KTT-805` human voice audition/default selection remains open.
 
 ---
 
@@ -39,9 +40,9 @@ This document reconciles the older KTT tracker without rewriting its historical 
 | KTT-803 | Partially complete | macOS x86_64 compile/package/provenance boundary is covered. Real macOS x86_64 Kitten inference is not recorded and must remain unchecked if the legacy item requires real inference. |
 | KTT-804 | Partially complete | Hard warm RTF `< 1.0` is proved on Linux x86_64 and macOS arm64; 2-thread production default is justified. Aspirational universal median `<= 0.5` and short-line `<= 1.5s` targets are not universally proved by the recorded macOS evidence. |
 | KTT-805 | Open / owner-only | Automated ASR smoke passed all eight voices, but human audition/default Local voice selection remains required. |
-| KTT-900 / KTT-901 | Complete for R3 | Exact R3 PR-head and merged-master ordinary CI, real-model CPU acceptance, and ASR smoke passed. Final closeout PR-head/master CI remains tracked in the closeout TODO. |
+| KTT-900 / KTT-901 | Complete | Exact R3 PR-head and merged-master ordinary CI, real-model CPU acceptance, and ASR smoke passed. Closeout PR #101 exact-head CI and exact merged-master verification also passed. |
 | KTT-902 / KTT-903 | Complete after docs/evidence commits | README, voice-selection docs, privacy docs, evidence docs, and this reconciliation doc record current behavior and limitations. |
-| KTT-1000 through KTT-1003 | Pending until closeout PR merge | These final gates should be checked only after exact final closeout PR-head CI passes, guarded merge completes, and exact merged master verification passes. |
+| KTT-1000 through KTT-1003 | Complete for technical closeout | Closeout PR #101 passed exact-head ordinary CI and production KittenTTS CPU acceptance, was guarded-merged at the expected head, then passed exact merged-master ordinary CI and production CPU acceptance. PR #102 recorded the final evidence and passed docs-only exact-head and post-merge CI. |
 
 ---
 
@@ -70,6 +71,8 @@ The evidence supports the hard warm RTF `< 1.0` gate. It does not prove every as
 
 ---
 
-## Final closeout dependency
+## Final closeout state
 
-This legacy reconciliation becomes final only after the closeout PR itself passes exact-head CI and is merged with exact-master verification. Until then, treat KTT-1000 through KTT-1003 as pending final gates.
+The closeout dependency is satisfied. PR #101 passed exact-head ordinary CI (`34755503886`) and production KittenTTS CPU acceptance (`34755503936`), was guarded-merged as `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`, and then passed exact merged-master ordinary CI (`34755879197`) plus production KittenTTS CPU acceptance (`34755879210`). PR #102 recorded the final bookkeeping on master `ddce257ce539806c83b41ed916a38b9d7adc7a41` and passed post-merge docs-only CI (`34757108163`).
+
+Treat KTT-1000 through KTT-1003 as complete for the technical closeout. Continue treating `KCR-330` / `KTT-805` as owner-only open work until human audition selects the final Local KittenTTS default voice.
