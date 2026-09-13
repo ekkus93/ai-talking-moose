@@ -25,6 +25,7 @@ pub fn set_character_state<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, new_state)
 }
 
@@ -34,6 +35,7 @@ pub fn show_moose<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     state.record_user_interaction();
+    state.ambient_scheduler.claim_foreground_presentation();
     show_character(&state.character_state, &app)
 }
 
@@ -43,6 +45,7 @@ pub fn hide_moose<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     state.record_user_interaction();
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Hidden)
 }
 
@@ -59,6 +62,7 @@ pub async fn dismiss_moose<R: Runtime>(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Dismissed)?;
     transition_and_emit(&state.character_state, &app, CharacterState::Hidden)
 }
@@ -90,6 +94,7 @@ pub async fn set_mute<R: Runtime>(
                 | CharacterState::Talking
                 | CharacterState::Interrupted
         ) {
+            state.ambient_scheduler.claim_foreground_presentation();
             transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
         }
         Ok(())

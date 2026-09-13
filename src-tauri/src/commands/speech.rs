@@ -187,14 +187,22 @@ async fn invoke_standalone_speech_snapshot<R: Runtime>(
     )
     .await?;
 
-    if let Err(error) = transition_and_emit(&state.character_state, app, CharacterState::Talking) {
-        state
-            .standalone_speech
-            .cancel(state.audio_playback.as_ref());
+    state.ambient_scheduler.claim_foreground_presentation();
+    if let Err(error) = surface_standalone_playback(state, app, text) {
+        playback.cancel_if_current(state.audio_playback.as_ref());
         return Err(error);
     }
-    let _ = app.emit("moose://speech-bubble", text);
     Ok(playback)
+}
+
+fn surface_standalone_playback<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+) -> Result<(), String> {
+    transition_and_emit(&state.character_state, app, CharacterState::Talking)?;
+    let _ = app.emit("moose://speech-bubble", text);
+    Ok(())
 }
 
 /// Authoritative standalone speech invocation for ambient remarks, character
@@ -211,6 +219,41 @@ pub(crate) async fn invoke_standalone_speech<R: Runtime>(
     // change racing this utterance applies to the next utterance instead of mixing providers.
     let snapshot = standalone_tts_snapshot(state, voice_override);
     invoke_standalone_speech_snapshot(state, app, text, snapshot).await
+}
+
+pub(crate) async fn invoke_standalone_speech_for_ambient<R: Runtime>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    text: &str,
+    presentation_lease: u64,
+) -> Result<Option<StandaloneSpeechPlayback>, String> {
+    let snapshot = standalone_tts_snapshot(state, None);
+    let request = snapshot.request(text);
+    let output_device = snapshot.output_device.clone();
+    let synthesizer = synthesizer_for_snapshot(state, &snapshot);
+    let playback = synthesize_standalone(
+        synthesizer.as_ref(),
+        state.audio_playback.as_ref(),
+        &state.standalone_speech,
+        request,
+        output_device,
+    )
+    .await?;
+
+    let Some(presentation) = state
+        .ambient_scheduler
+        .with_current_ambient_presentation(presentation_lease, || {
+            surface_standalone_playback(state, app, text)
+        })
+    else {
+        playback.cancel_if_current(state.audio_playback.as_ref());
+        return Ok(None);
+    };
+    if let Err(error) = presentation {
+        playback.cancel_if_current(state.audio_playback.as_ref());
+        return Err(error);
+    }
+    Ok(Some(playback))
 }
 
 /// Provider-guarded standalone invocation used by voice audition. The provider is not an override:

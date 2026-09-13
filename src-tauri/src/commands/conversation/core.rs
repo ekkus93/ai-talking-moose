@@ -125,6 +125,7 @@ pub async fn start_conversation<R: Runtime>(
     // start request is still constructing or activating the old graph.
     let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
+    state.ambient_scheduler.claim_foreground_presentation();
     prepare_character_for_conversation(state.inner(), &app)?;
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
@@ -216,6 +217,7 @@ pub async fn stop_conversation(
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
 
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Idle)
 }
 
@@ -237,6 +239,7 @@ pub async fn barge_in<R: Runtime>(
         .await?;
 
     if *state.character_state.read() == CharacterState::Talking {
+        state.ambient_scheduler.claim_foreground_presentation();
         let target = if conversation_active {
             CharacterState::Interrupted
         } else {
@@ -315,6 +318,7 @@ pub async fn send_text_message<R: Runtime>(
         &msg_trimmed,
     )?;
 
+    state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Thinking)?;
 
     let text_res = match generate_typed_text_with_snapshot(

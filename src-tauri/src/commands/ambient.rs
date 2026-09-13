@@ -9,7 +9,7 @@ use crate::character::prompt::PromptBuilder;
 use crate::character::state::CharacterState;
 use crate::commands::conversation::model_prompt_memories;
 use crate::commands::presentation::{clear_speech_bubble, show_character, transition_and_emit};
-use crate::commands::speech::{invoke_standalone_speech, StandaloneSpeechPlayback};
+use crate::commands::speech::{invoke_standalone_speech_for_ambient, StandaloneSpeechPlayback};
 use std::time::Duration;
 use tauri::{Emitter, Runtime, State};
 
@@ -131,16 +131,23 @@ struct AmbientCancellationGuard<'a, R: Runtime> {
     state: &'a AppState,
     app: &'a tauri::AppHandle<R>,
     appeared_for_ambient: bool,
+    presentation_lease: u64,
     playback: Option<StandaloneSpeechPlayback>,
     armed: bool,
 }
 
 impl<'a, R: Runtime> AmbientCancellationGuard<'a, R> {
-    fn new(state: &'a AppState, app: &'a tauri::AppHandle<R>, appeared_for_ambient: bool) -> Self {
+    fn new(
+        state: &'a AppState,
+        app: &'a tauri::AppHandle<R>,
+        appeared_for_ambient: bool,
+        presentation_lease: u64,
+    ) -> Self {
         Self {
             state,
             app,
             appeared_for_ambient,
+            presentation_lease,
             playback: None,
             armed: true,
         }
@@ -174,21 +181,31 @@ impl<R: Runtime> Drop for AmbientCancellationGuard<'_, R> {
             playback.cancel_if_current(self.state.audio_playback.as_ref());
         }
 
-        clear_speech_bubble(self.app);
-        if matches!(
-            *self.state.character_state.read(),
-            CharacterState::Thinking | CharacterState::Talking
-        ) {
-            let _ =
-                transition_and_emit(&self.state.character_state, self.app, CharacterState::Idle);
-        }
-        if self.appeared_for_ambient && *self.state.character_state.read() == CharacterState::Idle {
-            let _ = transition_and_emit(
-                &self.state.character_state,
-                self.app,
-                CharacterState::Hidden,
-            );
-        }
+        let _ = self
+            .state
+            .ambient_scheduler
+            .with_ambient_cleanup(self.presentation_lease, || {
+                clear_speech_bubble(self.app);
+                if matches!(
+                    *self.state.character_state.read(),
+                    CharacterState::Thinking | CharacterState::Talking
+                ) {
+                    let _ = transition_and_emit(
+                        &self.state.character_state,
+                        self.app,
+                        CharacterState::Idle,
+                    );
+                }
+                if self.appeared_for_ambient
+                    && *self.state.character_state.read() == CharacterState::Idle
+                {
+                    let _ = transition_and_emit(
+                        &self.state.character_state,
+                        self.app,
+                        CharacterState::Hidden,
+                    );
+                }
+            });
     }
 }
 
@@ -196,18 +213,27 @@ fn restore_after_ambient_failure<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
     appeared_for_ambient: bool,
+    presentation_lease: u64,
 ) -> Result<(), String> {
-    if matches!(
-        *state.character_state.read(),
-        CharacterState::Thinking | CharacterState::Talking
-    ) {
-        transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
-    }
-    clear_speech_bubble(app);
-    if appeared_for_ambient && *state.character_state.read() == CharacterState::Idle {
-        transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;
-    }
-    Ok(())
+    let Some(result) = state
+        .ambient_scheduler
+        .with_ambient_cleanup(presentation_lease, || {
+            if matches!(
+                *state.character_state.read(),
+                CharacterState::Thinking | CharacterState::Talking
+            ) {
+                transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
+            }
+            clear_speech_bubble(app);
+            if appeared_for_ambient && *state.character_state.read() == CharacterState::Idle {
+                transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;
+            }
+            Ok::<(), String>(())
+        })
+    else {
+        return Ok(());
+    };
+    result
 }
 
 async fn complete_ambient_appearance<R: Runtime>(
@@ -215,18 +241,28 @@ async fn complete_ambient_appearance<R: Runtime>(
     app: &tauri::AppHandle<R>,
     playback: &StandaloneSpeechPlayback,
     appeared_for_ambient: bool,
+    presentation_lease: u64,
 ) -> Result<bool, String> {
     if !playback.completed_without_cancellation().await {
         return Ok(false);
     }
-    let Some(result) = playback.with_current(|| {
-        if *state.character_state.read() == CharacterState::Talking {
-            transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
-        }
-        clear_speech_bubble(app);
-        Ok::<(), String>(())
-    }) else {
-        return Ok(true);
+    let Some(playback_result) =
+        state
+            .ambient_scheduler
+            .with_current_ambient_presentation(presentation_lease, || {
+                playback.with_current(|| {
+                    if *state.character_state.read() == CharacterState::Talking {
+                        transition_and_emit(&state.character_state, app, CharacterState::Idle)?;
+                    }
+                    clear_speech_bubble(app);
+                    Ok::<(), String>(())
+                })
+            })
+    else {
+        return Ok(false);
+    };
+    let Some(result) = playback_result else {
+        return Ok(false);
     };
     result?;
 
@@ -237,13 +273,25 @@ async fn complete_ambient_appearance<R: Runtime>(
         {
             return Ok(true);
         }
-        if let Some(result) = playback.with_current(|| {
-            if *state.character_state.read() == CharacterState::Idle {
-                transition_and_emit(&state.character_state, app, CharacterState::Hidden)?;
+        if let Some(playback_result) =
+            state
+                .ambient_scheduler
+                .with_current_ambient_presentation(presentation_lease, || {
+                    playback.with_current(|| {
+                        if *state.character_state.read() == CharacterState::Idle {
+                            transition_and_emit(
+                                &state.character_state,
+                                app,
+                                CharacterState::Hidden,
+                            )?;
+                        }
+                        Ok::<(), String>(())
+                    })
+                })
+        {
+            if let Some(result) = playback_result {
+                result?;
             }
-            Ok::<(), String>(())
-        }) {
-            result?;
         }
     }
     Ok(true)
@@ -265,35 +313,46 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
         return Ok(None);
     }
 
-    let initial_state = *state.character_state.read();
-    if !matches!(
-        initial_state,
-        CharacterState::Hidden | CharacterState::Dismissed | CharacterState::Idle
-    ) {
+    let Some((presentation_lease, appearance_result)) =
+        state.ambient_scheduler.begin_ambient_presentation(|| {
+            let initial_state = *state.character_state.read();
+            if !matches!(
+                initial_state,
+                CharacterState::Hidden | CharacterState::Dismissed | CharacterState::Idle
+            ) {
+                return Ok(None);
+            }
+            let appeared_for_ambient = matches!(
+                initial_state,
+                CharacterState::Hidden | CharacterState::Dismissed
+            );
+            if appeared_for_ambient {
+                show_character(&state.character_state, app)?;
+            }
+            transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;
+            Ok::<Option<bool>, String>(Some(appeared_for_ambient))
+        })
+    else {
         return Ok(None);
-    }
-    let appeared_for_ambient = matches!(
-        initial_state,
-        CharacterState::Hidden | CharacterState::Dismissed
-    );
-    if appeared_for_ambient {
-        show_character(&state.character_state, app)?;
-    }
-    transition_and_emit(&state.character_state, app, CharacterState::Thinking)?;
-    let mut cancellation_guard = AmbientCancellationGuard::new(state, app, appeared_for_ambient);
+    };
+    let Some(appeared_for_ambient) = appearance_result? else {
+        return Ok(None);
+    };
+    let mut cancellation_guard =
+        AmbientCancellationGuard::new(state, app, appeared_for_ambient, presentation_lease);
 
     let prompt = build_ambient_model_prompt_for(state, &request_snapshot, &event);
     let generated = match generate_ambient_text_for(state, &request_snapshot.settings, prompt).await
     {
         Ok(text) => text,
         Err(error_value) => {
-            restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+            restore_after_ambient_failure(state, app, appeared_for_ambient, presentation_lease)?;
             cancellation_guard.disarm();
             return Err(crate::ai::types::ProviderError::from_kind(error_value.kind).to_string());
         }
     };
     let Some(text) = bound_ambient_output(&generated) else {
-        restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+        restore_after_ambient_failure(state, app, appeared_for_ambient, presentation_lease)?;
         cancellation_guard.disarm();
         return Ok(None);
     };
@@ -301,7 +360,7 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
     if event.category == AmbientEventCategory::IdleBanter
         && state.idle_banter_runtime.lock().is_recent_duplicate(&text)
     {
-        restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+        restore_after_ambient_failure(state, app, appeared_for_ambient, presentation_lease)?;
         cancellation_guard.disarm();
         return Ok(None);
     }
@@ -315,15 +374,18 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
         .evaluate_ambient_event(&event, delivery_context);
     if !delivery_decision.should_speak {
         let _ = app.emit("moose://ambient/decision", &delivery_decision);
-        restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+        restore_after_ambient_failure(state, app, appeared_for_ambient, presentation_lease)?;
         cancellation_guard.disarm();
         return Ok(None);
     }
 
-    let playback = match invoke_standalone_speech(state, app, &text, None).await {
-        Ok(playback) => playback,
+    let playback = match invoke_standalone_speech_for_ambient(state, app, &text, presentation_lease)
+        .await
+    {
+        Ok(Some(playback)) => playback,
+        Ok(None) => return Ok(None),
         Err(error_value) => {
-            restore_after_ambient_failure(state, app, appeared_for_ambient)?;
+            restore_after_ambient_failure(state, app, appeared_for_ambient, presentation_lease)?;
             cancellation_guard.disarm();
             return Err(error_value);
         }
@@ -339,6 +401,7 @@ pub(crate) async fn process_ambient_event<R: Runtime>(
             .playback()
             .expect("ambient playback guard must own queued speech"),
         appeared_for_ambient,
+        presentation_lease,
     )
     .await?;
     if !delivered {

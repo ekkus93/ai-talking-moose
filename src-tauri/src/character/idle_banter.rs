@@ -92,6 +92,27 @@ fn normalize_line_fingerprint(line: &str) -> String {
         .to_lowercase()
 }
 
+fn seed_index_avoiding_previous(
+    topics: &[String],
+    previous: Option<&str>,
+    unit_sample: f64,
+) -> usize {
+    debug_assert!(!topics.is_empty());
+    let previous_key = previous.map(str::to_lowercase);
+    let previous_index = previous_key
+        .as_ref()
+        .and_then(|key| topics.iter().position(|topic| topic.to_lowercase() == *key));
+    let excluded = usize::from(previous_index.is_some() && topics.len() > 1);
+    let choice_count = topics.len() - excluded;
+    let choice =
+        ((unit_sample.clamp(0.0, 0.999_999) * choice_count as f64) as usize).min(choice_count - 1);
+
+    match previous_index {
+        Some(previous_index) if topics.len() > 1 && choice >= previous_index => choice + 1,
+        _ => choice,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdleBanterDue {
     pub inactivity_minutes: u32,
@@ -134,14 +155,15 @@ impl IdleBanterRuntime {
         self.enabled = settings.idle_banter_enabled;
         self.episode_started = now;
         self.next_due = now + minutes(settings.idle_banter_initial_delay_minutes);
-        self.last_seed = None;
     }
 
     pub fn poll_due(&mut self, settings: &AppSettings) -> Option<IdleBanterDue> {
-        self.poll_due_at(
+        let mut rng = rand::thread_rng();
+        self.poll_due_at_with_samples(
             settings,
             Instant::now(),
-            rand::thread_rng().gen_range(0.0..=1.0),
+            rng.gen_range(0.0..=1.0),
+            rng.gen_range(0.0..=1.0),
         )
     }
 
@@ -150,6 +172,16 @@ impl IdleBanterRuntime {
         settings: &AppSettings,
         now: Instant,
         unit_sample: f64,
+    ) -> Option<IdleBanterDue> {
+        self.poll_due_at_with_samples(settings, now, unit_sample, unit_sample)
+    }
+
+    fn poll_due_at_with_samples(
+        &mut self,
+        settings: &AppSettings,
+        now: Instant,
+        seed_sample: f64,
+        jitter_sample: f64,
     ) -> Option<IdleBanterDue> {
         if !settings.idle_banter_enabled {
             self.enabled = false;
@@ -164,16 +196,7 @@ impl IdleBanterRuntime {
         }
 
         let topics = normalize_idle_banter_seed_topics(&settings.idle_banter_seed_topics).ok()?;
-        let mut index = ((unit_sample.clamp(0.0, 0.999_999) * topics.len() as f64) as usize)
-            .min(topics.len() - 1);
-        if topics.len() > 1
-            && self
-                .last_seed
-                .as_ref()
-                .is_some_and(|last| last.eq_ignore_ascii_case(&topics[index]))
-        {
-            index = (index + 1) % topics.len();
-        }
+        let index = seed_index_avoiding_previous(&topics, self.last_seed.as_deref(), seed_sample);
         let seed_topic = topics[index].clone();
         self.last_seed = Some(seed_topic.clone());
 
@@ -188,7 +211,7 @@ impl IdleBanterRuntime {
         self.next_due = now
             + jittered_repeat_duration_with_unit_sample(
                 settings.idle_banter_repeat_interval_minutes,
-                unit_sample,
+                jitter_sample,
             );
 
         Some(IdleBanterDue {
@@ -393,6 +416,39 @@ mod tests {
         let second_time = runtime.next_due_at();
         let second = runtime.poll_due_at(&settings, second_time, 0.0).unwrap();
         assert_ne!(first.seed_topic, second.seed_topic);
+    }
+
+    #[test]
+    fn seed_selection_remains_non_repeating_across_interaction_resets() {
+        let mut settings = settings();
+        settings.idle_banter_initial_delay_minutes = 5;
+        settings.idle_banter_repeat_interval_minutes = 5;
+        settings.idle_banter_seed_topics = vec!["one".into(), "two".into(), "three".into()];
+        let start = Instant::now();
+        let mut runtime = IdleBanterRuntime::new_at(&settings, start);
+        let first = runtime
+            .poll_due_at_with_samples(&settings, start + Duration::from_secs(300), 0.0, 0.5)
+            .unwrap();
+        assert_eq!(first.seed_topic, "one");
+
+        let interaction = start + Duration::from_secs(301);
+        runtime.reset_at(&settings, interaction);
+        let second = runtime
+            .poll_due_at_with_samples(&settings, interaction + Duration::from_secs(300), 0.0, 0.5)
+            .unwrap();
+        assert_eq!(second.seed_topic, "two");
+        assert_ne!(first.seed_topic, second.seed_topic);
+    }
+
+    #[test]
+    fn seed_selection_maps_sample_range_across_all_non_previous_topics() {
+        let topics = vec!["one".into(), "two".into(), "three".into()];
+        assert_eq!(seed_index_avoiding_previous(&topics, Some("two"), 0.0), 0);
+        assert_eq!(
+            seed_index_avoiding_previous(&topics, Some("two"), 0.999_999),
+            2
+        );
+        assert_ne!(seed_index_avoiding_previous(&topics, Some("two"), 0.5), 1);
     }
 
     #[test]
