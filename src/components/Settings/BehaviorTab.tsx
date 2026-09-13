@@ -30,7 +30,10 @@ const normalizeSeedTopics = (topics: string[]): string[] | null => {
     )
   )
     return null;
-  if (normalized.reduce((total, topic) => total + [...topic].length, 0) > MAX_TOTAL_SEED_CHARS)
+  if (
+    normalized.reduce((total, topic) => total + [...topic].length, 0) >
+    MAX_TOTAL_SEED_CHARS
+  )
     return null;
   const keys = normalized.map((topic) => topic.toLowerCase());
   if (new Set(keys).size !== keys.length) return null;
@@ -118,17 +121,20 @@ export const BehaviorTab: React.FC = () => {
         </label>
         {!settings.unsolicited_comments && (
           <p className="text-[11px] text-gray-700" role="status">
-            Idle Banter is paused while unsolicited ambient remarks are disabled.
+            Idle Banter is paused while unsolicited ambient remarks are
+            disabled.
           </p>
         )}
         <p className="text-[11px] text-gray-700">
-          After you ignore Moose for a while, he can occasionally make a short snarky remark.
-          Direct interaction with Moose restarts the timer.
+          After you ignore Moose for a while, he can occasionally make a short
+          snarky remark. Direct interaction with Moose restarts the timer.
         </p>
 
         <div className="grid grid-cols-2 gap-2">
           <label className="space-y-1">
-            <span className="block font-bold text-[11px]">First remark after</span>
+            <span className="block font-bold text-[11px]">
+              First remark after
+            </span>
             <div className="flex items-center gap-1">
               <input
                 aria-label="Idle Banter initial delay in minutes"
@@ -147,7 +153,9 @@ export const BehaviorTab: React.FC = () => {
               <span className="text-[11px]">min</span>
             </div>
             <span className="block text-[10px] text-gray-600">
-              {formatIdleBanterInterval(settings.idle_banter_initial_delay_minutes)}
+              {formatIdleBanterInterval(
+                settings.idle_banter_initial_delay_minutes,
+              )}
             </span>
           </label>
           <label className="space-y-1">
@@ -170,7 +178,9 @@ export const BehaviorTab: React.FC = () => {
               <span className="text-[11px]">min</span>
             </div>
             <span className="block text-[10px] text-gray-600">
-              {formatIdleBanterInterval(settings.idle_banter_repeat_interval_minutes)}
+              {formatIdleBanterInterval(
+                settings.idle_banter_repeat_interval_minutes,
+              )}
             </span>
           </label>
         </div>
@@ -212,7 +222,9 @@ export const BehaviorTab: React.FC = () => {
                 aria-label={`Delete Idle Banter seed topic ${index + 1}`}
                 disabled={disabled || seedDraft.length === 1}
                 onClick={() => {
-                  setSeedDraft(seedDraft.filter((_, candidate) => candidate !== index));
+                  setSeedDraft(
+                    seedDraft.filter((_, candidate) => candidate !== index),
+                  );
                   setSeedError(null);
                 }}
                 className="px-2 py-1 border border-black rounded bg-white text-[11px] disabled:opacity-40"

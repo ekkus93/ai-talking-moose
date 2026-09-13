@@ -32,7 +32,9 @@ describe("Idle Banter behavior settings", () => {
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Idle Banter" }));
     await waitFor(() =>
-      expect(useMooseStore.getState().settings?.idle_banter_enabled).toBe(false),
+      expect(useMooseStore.getState().settings?.idle_banter_enabled).toBe(
+        false,
+      ),
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "Idle Banter" }));
 
@@ -70,7 +72,9 @@ describe("Idle Banter behavior settings", () => {
     );
 
     const first = screen.getByLabelText("Idle Banter seed topic 1");
-    fireEvent.change(first, { target: { value: "being dramatically ignored" } });
+    fireEvent.change(first, {
+      target: { value: "being dramatically ignored" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save Topics" }));
     await waitFor(() =>
       expect(
@@ -78,21 +82,19 @@ describe("Idle Banter behavior settings", () => {
       ).toBe("being dramatically ignored"),
     );
 
-    fireEvent.click(
-      screen.getByLabelText("Delete Idle Banter seed topic 1"),
-    );
+    fireEvent.click(screen.getByLabelText("Delete Idle Banter seed topic 1"));
     fireEvent.click(screen.getByRole("button", { name: "Save Topics" }));
     await waitFor(() =>
-      expect(useMooseStore.getState().settings?.idle_banter_seed_topics).not.toContain(
-        "being dramatically ignored",
-      ),
+      expect(
+        useMooseStore.getState().settings?.idle_banter_seed_topics,
+      ).not.toContain("being dramatically ignored"),
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Restore Defaults" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Restore Defaults" }));
     await waitFor(() =>
-      expect(useMooseStore.getState().settings?.idle_banter_seed_topics).toEqual(initial),
+      expect(
+        useMooseStore.getState().settings?.idle_banter_seed_topics,
+      ).toEqual(initial),
     );
   });
 
