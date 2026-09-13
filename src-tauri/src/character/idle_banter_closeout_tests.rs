@@ -25,11 +25,13 @@ fn idle_banter_prompt_private_inputs_do_not_enter_tracing() {
 
 #[test]
 fn single_topic_idle_banter_selection_never_invents_another_topic() {
-    let mut settings = AppSettings::default();
-    // Runtime-level test hook: zero makes the first poll immediately due without
-    // introducing a real-time sleep. Persisted settings validation still rejects zero.
-    settings.idle_banter_initial_delay_minutes = 0;
-    settings.idle_banter_seed_topics = vec!["only configured topic".to_string()];
+    let settings = AppSettings {
+        // Runtime-level test hook: zero makes the first poll immediately due without
+        // introducing a real-time sleep. Persisted settings validation still rejects zero.
+        idle_banter_initial_delay_minutes: 0,
+        idle_banter_seed_topics: vec!["only configured topic".to_string()],
+        ..AppSettings::default()
+    };
 
     let mut runtime = IdleBanterRuntime::new(&settings);
     let due = runtime
@@ -41,8 +43,10 @@ fn single_topic_idle_banter_selection_never_invents_another_topic() {
 
 #[test]
 fn wake_reset_uses_current_initial_delay_and_starts_a_fresh_episode() {
-    let mut settings = AppSettings::default();
-    settings.idle_banter_initial_delay_minutes = 5;
+    let mut settings = AppSettings {
+        idle_banter_initial_delay_minutes: 5,
+        ..AppSettings::default()
+    };
     let mut runtime = IdleBanterRuntime::new(&settings);
 
     settings.idle_banter_initial_delay_minutes = 9;
