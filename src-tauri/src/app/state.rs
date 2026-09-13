@@ -5,7 +5,7 @@ use crate::ai::google::{
 };
 use crate::ai::local::{LocalRuntimeManager, DEFAULT_LOCAL_TEXT_MODEL_ID};
 use crate::ai::local_tts::{
-    LocalTtsRuntimeManager, PendingLocalSpeechSynthesizer, DEFAULT_LOCAL_TTS_MODEL_ID,
+    LocalSpeechSynthesizer, LocalTtsRuntimeManager, DEFAULT_LOCAL_TTS_MODEL_ID,
     DEFAULT_LOCAL_TTS_VOICE,
 };
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
@@ -438,7 +438,7 @@ impl AppState {
                 Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
             };
 
-        let memory = Arc::new(MemoryManager::new(db.clone()));
+        let memory = Arc::new(MemoryManager::new(db.clone());
         let secrets = Arc::new(secret_store);
         migrate_legacy_google_api_key(&db, &secrets)?;
 
@@ -522,7 +522,11 @@ impl AppState {
                     settings.google_tts_voice.clone(),
                 ))
             }
-            TtsProvider::Local => Box::new(PendingLocalSpeechSynthesizer),
+            TtsProvider::Local => Box::new(LocalSpeechSynthesizer::new(
+                self.local_tts_runtime.clone(),
+                settings.local_tts_model.clone(),
+                settings.local_tts_voice.clone(),
+            )),
         }
     }
 
