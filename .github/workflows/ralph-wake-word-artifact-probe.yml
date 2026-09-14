@@ -66,7 +66,8 @@ jobs:
           tar tf "$macos" | head -120
 
           python3 -m pip install --disable-pip-version-check --no-input \
-            'sherpa-onnx==1.13.8' 'sherpa-onnx-bin==1.13.8' 'sentencepiece==0.2.1'
+            'sherpa-onnx==1.13.8' 'sherpa-onnx-bin==1.13.8' \
+            'sentencepiece==0.2.1' 'pypinyin==0.54.0'
 
           printf 'HEY MOOSE\n' > keywords_raw.txt
           sherpa-onnx-cli text2token \
@@ -77,16 +78,11 @@ jobs:
           echo '=== HEY MOOSE TOKENS ==='
           cat keywords.txt
 
-          printf 'HEY MOOSE @HEY_MOOSE\n' > keywords_labeled_raw.txt
-          set +e
-          sherpa-onnx-cli text2token \
-            --tokens "$root/tokens.txt" \
-            --tokens-type bpe \
-            --bpe-model "$root/bpe.model" \
-            keywords_labeled_raw.txt keywords_labeled.txt
-          labeled_rc=$?
-          set -e
-          echo "=== LABELED TOKENIZATION rc=$labeled_rc ==="
-          if [ -f keywords_labeled.txt ]; then cat keywords_labeled.txt; fi
+          echo '=== DIRECT SENTENCEPIECE ==='
+          python3 - <<'PY'
+          import sentencepiece as spm
+          sp = spm.SentencePieceProcessor(model_file='sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/bpe.model')
+          print(' '.join(sp.encode('HEY MOOSE', out_type=str)))
+          PY
 
           echo '=== COMPLETE ==='
