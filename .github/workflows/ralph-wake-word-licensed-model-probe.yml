@@ -45,7 +45,7 @@ jobs:
 
           python3 -m pip install --disable-pip-version-check --no-input \
             'sherpa-onnx==1.13.8' 'sherpa-onnx-bin==1.13.8' \
-            'pypinyin==0.54.0'
+            'sentencepiece==0.2.1' 'pypinyin==0.54.0'
 
           printf 'HEY MOOSE @HEY_MOOSE\n' > keywords_raw.txt
           sherpa-onnx-cli text2token \
