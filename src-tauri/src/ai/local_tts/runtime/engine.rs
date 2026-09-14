@@ -82,6 +82,8 @@ struct KittenTtsRuntimeEngine {
     model_id: Option<String>,
     #[cfg(test)]
     inference_threads_override: Option<usize>,
+    #[cfg(test)]
+    last_waveform_shape: Option<Vec<i64>>,
 }
 
 impl KittenTtsRuntimeEngine {
@@ -93,6 +95,8 @@ impl KittenTtsRuntimeEngine {
             model_id: None,
             #[cfg(test)]
             inference_threads_override: None,
+            #[cfg(test)]
+            last_waveform_shape: None,
         }
     }
 
@@ -105,7 +109,13 @@ impl KittenTtsRuntimeEngine {
             phonemizer: None,
             model_id: None,
             inference_threads_override: Some(inference_threads),
+            last_waveform_shape: None,
         }
+    }
+
+    #[cfg(test)]
+    fn last_waveform_shape(&self) -> Option<&[i64]> {
+        self.last_waveform_shape.as_deref()
     }
 
     fn manifest(&self) -> Result<&'static LocalTtsModelManifest, LocalTtsRuntimeError> {
@@ -182,11 +192,19 @@ impl KittenTtsRuntimeEngine {
         let waveform = outputs
             .get(WAVEFORM_OUTPUT_NAME)
             .ok_or_else(LocalTtsRuntimeError::inference)?;
-        let (_shape, samples) = waveform
+        let (shape, samples) = waveform
             .try_extract_tensor::<f32>()
             .map_err(|_| LocalTtsRuntimeError::inference())?;
+        let shape_values: &[i64] = &**shape;
+        if !waveform_shape_is_valid(shape_values, samples.len()) {
+            return Err(LocalTtsRuntimeError::inference());
+        }
+        #[cfg(test)]
+        {
+            self.last_waveform_shape = Some(shape_values.to_vec());
+        }
         let samples = samples.to_vec();
-        if samples.is_empty() || samples.iter().any(|sample| !sample.is_finite()) {
+        if samples.iter().any(|sample| !sample.is_finite()) {
             return Err(LocalTtsRuntimeError::inference());
         }
         cancellation.check_cancelled()?;
@@ -289,6 +307,22 @@ impl LocalTtsRuntimeEngine for KittenTtsRuntimeEngine {
         self.voices.clear();
         self.phonemizer = None;
         self.model_id = None;
+    }
+}
+
+fn waveform_shape_is_valid(shape: &[i64], sample_count: usize) -> bool {
+    if sample_count == 0 {
+        return false;
+    }
+
+    let samples_match = |dimension: i64| {
+        usize::try_from(dimension).ok() == Some(sample_count)
+    };
+
+    match shape {
+        [samples] => samples_match(*samples),
+        [batch, samples] => *batch == 1 && samples_match(*samples),
+        _ => false,
     }
 }
 
@@ -555,6 +589,17 @@ mod tests {
         assert!(!model_output_contract_is_valid(2, false, true));
         assert!(!model_output_contract_is_valid(2, true, false));
         assert!(!model_output_contract_is_valid(3, true, true));
+    }
+
+    #[test]
+    fn waveform_shape_requires_mono_vector_or_single_batch_vector() {
+        assert!(waveform_shape_is_valid(&[24_000], 24_000));
+        assert!(waveform_shape_is_valid(&[1, 24_000], 24_000));
+        assert!(!waveform_shape_is_valid(&[], 0));
+        assert!(!waveform_shape_is_valid(&[0], 0));
+        assert!(!waveform_shape_is_valid(&[2, 12_000], 24_000));
+        assert!(!waveform_shape_is_valid(&[1, 1, 24_000], 24_000));
+        assert!(!waveform_shape_is_valid(&[1, 23_999], 24_000));
     }
 
     #[test]
@@ -825,6 +870,11 @@ mod tests {
         assert_eq!(output.sample_rate_hz, 24_000);
         assert!(!output.samples.is_empty());
         assert!(output.samples.iter().all(|sample| sample.is_finite()));
+        let waveform_shape = engine
+            .last_waveform_shape()
+            .expect("real KittenTTS acceptance must record the runtime waveform shape");
+        assert!(waveform_shape_is_valid(waveform_shape, output.samples.len()));
+        println!("KITTENTTS_WAVEFORM_SHAPE={waveform_shape:?}");
 
         let faster = engine
             .synthesize(&LocalTtsInferenceRequest {

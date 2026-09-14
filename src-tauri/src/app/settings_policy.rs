@@ -302,7 +302,10 @@ mod tests {
         assert!(!conversation_restart_required(&previous, &next));
 
         let mut next = previous.clone();
-        next.local_tts_voice = "Luna".to_string();
+        next.local_tts_voice = "Leo".to_string();
+        assert!(validate_local_tts_voice(&previous.local_tts_voice).is_ok());
+        assert!(validate_local_tts_voice(&next.local_tts_voice).is_ok());
+        assert_ne!(previous.local_tts_voice, next.local_tts_voice);
         assert!(!conversation_restart_required(&previous, &next));
 
         let mut next = previous.clone();
