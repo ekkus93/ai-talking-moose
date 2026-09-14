@@ -55,6 +55,14 @@ jobs:
           p = Path('src-tauri/src/audio/wake_word/runtime.rs')
           text = p.read_text().replace('vec![1, 0; 1600]', 'vec![1, 0].repeat(1600)')
           p.write_text(text)
+
+          p = Path('src-tauri/src/commands/wake_word.rs')
+          text = p.read_text()
+          old = '''    if let Err(error) =\n        state\n            .audio_capture\n            .lock()\n            .start(settings.input_device, 16_000, pcm_tx, Some(level_tx))\n    {\n        let _ = state.wake_word_runtime.stop().await;\n'''
+          new = '''    let capture_start = {\n        let mut capture = state.audio_capture.lock();\n        capture.start(settings.input_device, 16_000, pcm_tx, Some(level_tx))\n    };\n    if let Err(error) = capture_start {\n        let _ = state.wake_word_runtime.stop().await;\n'''
+          if old not in text:
+              raise SystemExit('wake capture-start pattern not found')
+          p.write_text(text.replace(old, new, 1))
           PY
 
           cargo fmt --manifest-path src-tauri/Cargo.toml
