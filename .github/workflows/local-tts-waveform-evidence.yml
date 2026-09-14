@@ -219,17 +219,17 @@ jobs:
         run: |
           set -euo pipefail
           log="$RUNNER_TEMP/kittentts-waveform-evidence.log"
-          metadata_count="$(grep -c '^KITTENTTS_ONNX_OUTPUT_METADATA=' "$log")"
+          metadata_count="$(grep -o 'KITTENTTS_ONNX_OUTPUT_METADATA=' "$log" | wc -l | tr -d ' ')"
           test "$metadata_count" -eq 2
-          grep '^KITTENTTS_ONNX_OUTPUT_METADATA=waveform::' "$log"
-          grep '^KITTENTTS_ONNX_OUTPUT_METADATA=duration::' "$log"
-          shape_line="$(grep '^KITTENTTS_WAVEFORM_SHAPE=' "$log")"
+          grep 'KITTENTTS_ONNX_OUTPUT_METADATA=waveform::' "$log"
+          grep 'KITTENTTS_ONNX_OUTPUT_METADATA=duration::' "$log"
+          shape_line="$(grep 'KITTENTTS_WAVEFORM_SHAPE=' "$log" | sed 's/^.*KITTENTTS_WAVEFORM_SHAPE=/KITTENTTS_WAVEFORM_SHAPE=/' | tail -n 1)"
           test -n "$shape_line"
           {
             echo "## Local TTS waveform evidence — $EVIDENCE_LABEL"
             echo
             echo '```text'
-            grep '^KITTENTTS_ONNX_OUTPUT_METADATA=' "$log"
+            grep 'KITTENTTS_ONNX_OUTPUT_METADATA=' "$log" | sed 's/^.*KITTENTTS_ONNX_OUTPUT_METADATA=/KITTENTTS_ONNX_OUTPUT_METADATA=/'
             printf '%s\n' "$shape_line"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
