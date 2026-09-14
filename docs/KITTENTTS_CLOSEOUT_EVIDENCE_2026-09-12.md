@@ -7,8 +7,11 @@
 **R3 merged master SHA:** `32e4fb1dd0cae8d62ca191cca5821ce53e8f7f3f`.
 **Closeout PR #101 final head:** `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
 **Closeout PR #101 merged master SHA:** `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
+**ASR-proxy voice audition PR #114 merged master SHA:** `21fac6785f008b1d5ab7f46e9125c76ca4c087ad`.
+**Default voice closeout PR #115 merged master SHA:** `96ff21e17b02aa0e3b5d8d783bd09400297eaaa4`.
+**Selected V1 Local default:** `Luna`.
 
-This document records what was actually tested and what remains deliberately deferred. It must not be used to mark the owner-only human voice-quality decision complete.
+This document records what was actually tested and what remains deliberately caveated. It may be used to mark `KCR-330` / `KTT-805` complete for V1 only as an owner-approved ASR proxy decision, not as subjective human listening evidence.
 
 ---
 
@@ -131,7 +134,7 @@ The automated ASR smoke passed for all eight Kitten voices:
 
 Four voices transcribed essentially exactly. The other voices had small substitutions such as `moose` being decoded as a near word, but they still cleared the configured WER/content-word recall gates.
 
-This is automated intelligibility evidence only. It does not decide the default Local voice, naturalness, comedic fit, timbre, fatigue, or artifact acceptability.
+This was initially automated intelligibility evidence only. PR #114 later added a dedicated ASR voice-audition proxy, and PR #115 used the owner-approved proxy recommendation to select `Luna` as the V1 Local default. This still does not prove subjective naturalness, comedic fit, timbre, fatigue, or artifact acceptability.
 
 ---
 
@@ -199,6 +202,37 @@ The closeout branch did not change the ASR round-trip implementation or KittenTT
 
 ---
 
+## ASR-proxy default voice closeout evidence
+
+PR #114 added `.github/workflows/kittentts-asr-voice-audition.yml`, which converts the all-eight-voice KittenTTS-to-Moonshine Tiny round-trip into a deterministic objective recommendation. The workflow ranks passing voices by lowest WER, highest content-word recall, and Local KittenTTS catalog order as the final tie-breaker.
+
+Validated ASR voice-audition evidence:
+
+| Context | SHA | Workflow run | Result |
+| --- | --- | ---: | :---: |
+| PR #114 head | `037a0f0a61e13c76ddc0f9a16ef88adb2f38f141` | `34821757481` | PASS |
+| PR #114 post-merge master | `21fac6785f008b1d5ab7f46e9125c76ca4c087ad` | `34848251323` | PASS |
+
+`Luna`, `Bruno`, `Hugo`, and `Leo` tied with perfect WER and content recall in the PR-head evidence. `Luna` won by the documented catalog-order tie-breaker.
+
+PR #115 changed the shipped Local TTS default to `Luna` and synced the generated backend contract plus runtime test expectation. Exact PR-head validation passed on `4a8bf77e4803b7898c717a3cbe145f9df9600c75`:
+
+- CI `34853091162` — PASS.
+- KittenTTS production CPU acceptance `34853091150` — PASS.
+- KittenTTS ASR intelligibility smoke `34853091234` — PASS.
+- KittenTTS ASR voice audition `34853091230` — PASS.
+
+PR #115 was guarded-merged as `96ff21e17b02aa0e3b5d8d783bd09400297eaaa4`. Exact post-merge validation passed:
+
+- CI `34854193904` — PASS.
+- KittenTTS production CPU acceptance `34854193873` — PASS.
+- KittenTTS ASR intelligibility smoke `34854193869` — PASS.
+- KittenTTS ASR voice audition `34854193968` — PASS.
+
+This closes `KCR-330` / `KTT-805` for V1 by owner-approved ASR proxy evidence. It does not claim subjective human listening, best Moose comedic fit, timbre preference, fatigue tolerance, or real-speaker character fit.
+
+---
+
 ## Final closeout decision
 
 The technical KittenTTS closeout is complete on master at `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
@@ -214,4 +248,4 @@ Closed technical areas:
 - guarded merge;
 - exact merged-master CI and real-model acceptance.
 
-`KCR-330` / `KTT-805` remains open and owner-only. The owner must audition the real Local Kitten voices and choose the default Local TTS voice; automated ASR and CI evidence cannot close that subjective voice-quality/default-selection gate.
+`KCR-330` / `KTT-805` is now closed for V1 by owner-approved ASR proxy evidence from PR #114 and PR #115. The selected V1 Local KittenTTS default is `Luna`. This does not claim subjective human listening; a future real-device subjective pass can still override `Luna` if the owner prefers another catalog voice.
