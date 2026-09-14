@@ -15,7 +15,7 @@ This record captures the final implementation and validation state. The companio
 - **LTR-220:** reconciled additional current-looking KittenTTS closeout/remediation/handoff documents and added historical/superseded context where appropriate.
 - **LTR-300:** completed the previously unchecked PR #115 exact-head, guarded-merge, and merged-master evidence in the ASR-proxy default-voice closeout record.
 - **LTR-400:** froze the settings policy: `Luna` is the new/missing-field default; existing valid persisted Local voice selections such as `Bella` remain preserved. Regression tests cover both behaviors; no schema bump or forced Bella-to-Luna migration is introduced.
-- **LTR-500:** selected **Path A — strengthen**. Runtime waveform tensors are accepted only as mono `[N]` or single-batch mono `[1, N]`, with the dimension required to match the extracted sample count. Empty, multi-batch, higher-rank, and mismatched shapes fail closed as sanitized inference failures. Unit tests cover the predicate. Real KittenTTS CPU acceptance records `KITTENTTS_WAVEFORM_SHAPE` so the pinned production model supplies observed runtime-shape evidence.
+- **LTR-500:** selected **Path A — strengthen**. Runtime waveform tensors are accepted only as mono `[N]` or single-batch mono `[1, N]`, with the dimension required to match the extracted sample count. Empty, multi-batch, higher-rank, and mismatched shapes fail closed as sanitized inference failures. Unit tests cover the predicate. Dedicated waveform-contract evidence run `34876293975` records `KITTENTTS_WAVEFORM_SHAPE` on Linux x86_64 and macOS arm64 so the pinned production model supplies observed runtime-shape evidence without changing the permanent production CPU workflow.
 
 ## Preserved boundaries
 
