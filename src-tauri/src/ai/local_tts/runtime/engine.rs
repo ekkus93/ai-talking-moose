@@ -195,7 +195,7 @@ impl KittenTtsRuntimeEngine {
         let (shape, samples) = waveform
             .try_extract_tensor::<f32>()
             .map_err(|_| LocalTtsRuntimeError::inference())?;
-        let shape_values: &[i64] = &**shape;
+        let shape_values: &[i64] = shape;
         if !waveform_shape_is_valid(shape_values, samples.len()) {
             return Err(LocalTtsRuntimeError::inference());
         }
