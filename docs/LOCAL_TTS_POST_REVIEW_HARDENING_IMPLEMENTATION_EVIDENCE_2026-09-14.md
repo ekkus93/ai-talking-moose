@@ -32,7 +32,6 @@ Because Rust tests and the Local TTS runtime engine changed, the final exact PR 
 
 Rust formatting was applied after the first exact-head CI attempt reported only `cargo fmt --check` differences. Clippy then identified one explicit auto-deref in waveform-shape extraction; the implementation now relies on Rust auto-deref for that borrow. The final validation head must therefore re-run the complete required gate set rather than relying on any pre-format or pre-Clippy head.
 
-
 ## Final qualification and merge evidence
 
 - PR #118 exact tested head: `2e238385ff7f47bd0eff8982be0408773d7742f4`.
@@ -49,3 +48,5 @@ Rust formatting was applied after the first exact-head CI attempt reported only 
 ## LTR-500 pinned-model waveform evidence
 
 Dedicated evidence run `34876293975` on disposable branch head `7a776e88c585d700ffdcd6804df8e346726b5909` passed on Linux x86_64 and macOS arm64 while rooted at merged master `cfd32b06f106829a209a053891d155e822e58a10`. It observed the pinned ONNX model contract as `waveform: Float32 [-1]` with symbolic dimension `num_samples` and `duration: Int64 [-1]`. Runtime waveform tensors were one-dimensional (`[76200]` Linux, `[75600]` macOS), directly supporting the selected Path A validator.
+
+The final closeout branch is documentation-only; no production source, artifact pin, provider policy, or runtime behavior changes are introduced after PR #118 qualification.
