@@ -973,10 +973,7 @@ mod tests {
     fn missing_local_tts_voice_defaults_to_current_luna_without_forced_voice_migration() {
         assert_eq!(DEFAULT_LOCAL_TTS_VOICE, "Luna");
         let mut value = serde_json::to_value(AppSettings::default()).unwrap();
-        value
-            .as_object_mut()
-            .unwrap()
-            .remove("local_tts_voice");
+        value.as_object_mut().unwrap().remove("local_tts_voice");
 
         let (loaded, migrated) =
             AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();

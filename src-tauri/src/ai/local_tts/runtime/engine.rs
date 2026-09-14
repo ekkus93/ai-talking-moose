@@ -315,9 +315,7 @@ fn waveform_shape_is_valid(shape: &[i64], sample_count: usize) -> bool {
         return false;
     }
 
-    let samples_match = |dimension: i64| {
-        usize::try_from(dimension).ok() == Some(sample_count)
-    };
+    let samples_match = |dimension: i64| usize::try_from(dimension).ok() == Some(sample_count);
 
     match shape {
         [samples] => samples_match(*samples),
@@ -873,7 +871,10 @@ mod tests {
         let waveform_shape = engine
             .last_waveform_shape()
             .expect("real KittenTTS acceptance must record the runtime waveform shape");
-        assert!(waveform_shape_is_valid(waveform_shape, output.samples.len()));
+        assert!(waveform_shape_is_valid(
+            waveform_shape,
+            output.samples.len()
+        ));
         println!("KITTENTTS_WAVEFORM_SHAPE={waveform_shape:?}");
 
         let faster = engine
