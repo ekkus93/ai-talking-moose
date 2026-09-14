@@ -265,11 +265,8 @@ impl WakeWordRuntimeManager {
             WakeWordRuntimeState::Listening => {
                 if let Some(sender) = self.engine_sender.lock().clone() {
                     if sender.try_send(samples).is_err() {
-                        self.inner.lock().dropped_engine_chunks = self
-                            .inner
-                            .lock()
-                            .dropped_engine_chunks
-                            .saturating_add(1);
+                        self.inner.lock().dropped_engine_chunks =
+                            self.inner.lock().dropped_engine_chunks.saturating_add(1);
                     }
                 }
             }
@@ -277,7 +274,8 @@ impl WakeWordRuntimeManager {
                 if let Some(sender) = command_sink {
                     if sender.try_send(bytes).is_err() {
                         let mut inner = self.inner.lock();
-                        inner.dropped_command_chunks = inner.dropped_command_chunks.saturating_add(1);
+                        inner.dropped_command_chunks =
+                            inner.dropped_command_chunks.saturating_add(1);
                     }
                 }
             }
@@ -376,7 +374,9 @@ impl WakeWordRuntimeManager {
             tokio::task::spawn_blocking(move || worker.join())
                 .await
                 .map_err(|_| WakeWordError::runtime("The wake-word worker could not be joined."))?
-                .map_err(|_| WakeWordError::runtime("The wake-word worker terminated unexpectedly."))?;
+                .map_err(|_| {
+                    WakeWordError::runtime("The wake-word worker terminated unexpectedly.")
+                })?;
         }
         let mut inner = self.inner.lock();
         inner.state = WakeWordRuntimeState::Disabled;
@@ -458,7 +458,9 @@ mod tests {
         }
     }
 
-    async fn started_manager(detects: bool) -> (WakeWordRuntimeManager, Arc<AtomicU64>, Arc<AtomicBool>) {
+    async fn started_manager(
+        detects: bool,
+    ) -> (WakeWordRuntimeManager, Arc<AtomicU64>, Arc<AtomicBool>) {
         let manager = WakeWordRuntimeManager::new();
         let triggers = Arc::new(AtomicU64::new(0));
         let stopped = Arc::new(AtomicBool::new(false));
@@ -500,13 +502,17 @@ mod tests {
     #[tokio::test]
     async fn handoff_replays_chronological_pre_roll_then_forwards_live_pcm() {
         let (manager, _, _) = started_manager(false).await;
-        manager.ingest_pcm_bytes(AudioResampler::i16_to_bytes(&[1, 2, 3, 4])).unwrap();
+        manager
+            .ingest_pcm_bytes(AudioResampler::i16_to_bytes(&[1, 2, 3, 4]))
+            .unwrap();
         let (tx, mut rx) = mpsc::channel(8);
         let replayed = manager.begin_command_handoff(tx, None).unwrap();
         assert_eq!(replayed, 4);
         let replay = rx.recv().await.unwrap();
         assert_eq!(AudioResampler::bytes_to_i16(&replay), vec![1, 2, 3, 4]);
-        manager.ingest_pcm_bytes(AudioResampler::i16_to_bytes(&[5, 6])).unwrap();
+        manager
+            .ingest_pcm_bytes(AudioResampler::i16_to_bytes(&[5, 6]))
+            .unwrap();
         let live = rx.recv().await.unwrap();
         assert_eq!(AudioResampler::bytes_to_i16(&live), vec![5, 6]);
         manager.stop().await.unwrap();
@@ -515,7 +521,9 @@ mod tests {
     #[tokio::test]
     async fn talking_suspension_clears_pre_roll_and_resume_is_recoverable() {
         let (manager, _, _) = started_manager(false).await;
-        manager.ingest_pcm_bytes(AudioResampler::i16_to_bytes(&[7, 8, 9])).unwrap();
+        manager
+            .ingest_pcm_bytes(AudioResampler::i16_to_bytes(&[7, 8, 9]))
+            .unwrap();
         manager.suspend_for_talking();
         assert_eq!(manager.state(), WakeWordRuntimeState::Suspended);
         assert!(manager.diagnostics().suspended_for_talking);

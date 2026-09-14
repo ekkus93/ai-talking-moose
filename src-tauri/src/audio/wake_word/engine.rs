@@ -163,7 +163,12 @@ impl SherpaKwsEngine {
         );
         config.model_config.num_threads = WAKE_INFERENCE_THREADS;
         config.model_config.provider = Some("cpu".to_string());
-        config.keywords_file = Some(model_root.join("keywords.txt").to_string_lossy().into_owned());
+        config.keywords_file = Some(
+            model_root
+                .join("keywords.txt")
+                .to_string_lossy()
+                .into_owned(),
+        );
         config.keywords_score = DEFAULT_KEYWORDS_SCORE;
         config.keywords_threshold = DEFAULT_KEYWORDS_THRESHOLD;
 
@@ -255,7 +260,9 @@ mod tests {
         let root = tempdir().unwrap();
         let error = verify_model_artifacts(root.path()).unwrap_err();
         assert_eq!(error.kind, WakeWordErrorKind::Artifact);
-        assert!(!error.message.contains(root.path().to_string_lossy().as_ref()));
+        assert!(!error
+            .message
+            .contains(root.path().to_string_lossy().as_ref()));
         assert!(!error.message.to_ascii_lowercase().contains("pcm"));
     }
 
