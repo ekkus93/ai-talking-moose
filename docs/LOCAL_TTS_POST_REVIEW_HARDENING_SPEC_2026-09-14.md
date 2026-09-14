@@ -4,7 +4,7 @@
 **Companion TODO:** `docs/LOCAL_TTS_POST_REVIEW_HARDENING_TODO_2026-09-14.md`
 **Reviewed baseline:** `05c5d8106cda6febe871ba7a4eb579c818be695a` (`master`)
 **Review scope:** Local KittenTTS post-closeout implementation, tests, closeout documentation, persisted-default semantics, and ONNX output-contract hardening
-**Status:** Implemented by PR #118; closeout reconciled by PR #119; documentation precision cleanup pending
+**Status:** Implemented by PR #118; closeout reconciled by PR #119; documentation precision updated
 
 This specification captures the issues found during the 2026-09-14 code review of current `master` after the Local KittenTTS technical closeout, post-closeout hardening, automated ASR voice audition, Luna default selection, and the PR #116 documentation reconciliation.
 
