@@ -30,4 +30,4 @@ This record captures the implementation state before exact-head validation. Fina
 
 Because Rust tests and the Local TTS runtime engine changed, the final exact PR head must pass ordinary CI and real KittenTTS production CPU acceptance on Linux x86_64 and macOS arm64. ASR intelligibility smoke is also required because waveform output validation changed. The ASR voice-audition workflow may run due repository path policy; if it runs, its result is recorded, but the implementation does not change voice ranking policy.
 
-Rust formatting was applied after the first exact-head CI attempt reported only `cargo fmt --check` differences. The final validation head must therefore re-run the complete required gate set rather than relying on the pre-format head.
+Rust formatting was applied after the first exact-head CI attempt reported only `cargo fmt --check` differences. Clippy then identified one explicit auto-deref in waveform-shape extraction; the implementation now relies on Rust auto-deref for that borrow. The final validation head must therefore re-run the complete required gate set rather than relying on any pre-format or pre-Clippy head.
