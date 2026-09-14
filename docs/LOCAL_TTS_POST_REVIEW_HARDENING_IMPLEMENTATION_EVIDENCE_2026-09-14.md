@@ -4,9 +4,9 @@
 **TODO:** `docs/LOCAL_TTS_POST_REVIEW_HARDENING_TODO_2026-09-14.md`
 **Spec:** `docs/LOCAL_TTS_POST_REVIEW_HARDENING_SPEC_2026-09-14.md`
 **Implementation base:** `542b47b26f7cd86f0d669821e1a5120b58197328`
-**Status:** Implementation complete; exact-head validation pending
+**Status:** Complete — implementation merged and exact-head/exact-master validation passed
 
-This record captures the implementation state before exact-head validation. Final CI and merge evidence belongs in the TODO closeout update after the implementation head is qualified and merged.
+This record captures the final implementation and validation state. The companion TODO contains the authoritative per-task checkmarks and final closeout evidence.
 
 ## Implemented review findings
 
@@ -31,3 +31,22 @@ This record captures the implementation state before exact-head validation. Fina
 Because Rust tests and the Local TTS runtime engine changed, the final exact PR head must pass ordinary CI and real KittenTTS production CPU acceptance on Linux x86_64 and macOS arm64. ASR intelligibility smoke is also required because waveform output validation changed. The ASR voice-audition workflow may run due repository path policy; if it runs, its result is recorded, but the implementation does not change voice ranking policy.
 
 Rust formatting was applied after the first exact-head CI attempt reported only `cargo fmt --check` differences. Clippy then identified one explicit auto-deref in waveform-shape extraction; the implementation now relies on Rust auto-deref for that borrow. The final validation head must therefore re-run the complete required gate set rather than relying on any pre-format or pre-Clippy head.
+
+## Final qualification and merge evidence
+
+- PR #118 exact tested head: `2e238385ff7f47bd0eff8982be0408773d7742f4`.
+- PR-head CI `34872268664` — PASS.
+- PR-head production CPU acceptance `34872268709` — PASS.
+- PR-head ASR intelligibility smoke `34872268631` — PASS.
+- PR-head ASR voice audition `34872268820` — PASS.
+- Guarded squash merge master: `cfd32b06f106829a209a053891d155e822e58a10`.
+- Post-merge CI `34873555675` — PASS.
+- Post-merge production CPU acceptance `34873555672` — PASS.
+- Post-merge ASR intelligibility smoke `34873555704` — PASS.
+- Post-merge ASR voice audition `34873555711` — PASS.
+
+## LTR-500 pinned-model waveform evidence
+
+Dedicated evidence run `34876293975` on disposable branch head `7a776e88c585d700ffdcd6804df8e346726b5909` passed on Linux x86_64 and macOS arm64 while rooted at merged master `cfd32b06f106829a209a053891d155e822e58a10`. It observed the pinned ONNX model contract as `waveform: Float32 [-1]` with symbolic dimension `num_samples` and `duration: Int64 [-1]`. Runtime waveform tensors were one-dimensional (`[76200]` Linux, `[75600]` macOS), directly supporting the selected Path A validator.
+
+The final closeout branch is documentation-only; no production source, artifact pin, provider policy, or runtime behavior changes are introduced after PR #118 qualification.
