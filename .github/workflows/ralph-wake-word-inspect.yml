@@ -1,0 +1,28 @@
+name: Ralph Wake Word implementation inspection
+on:
+  push:
+    branches:
+      - ralph/wake-word-v1-core
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect wake integration surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== RELEVANT FILES ==='
+          find src-tauri/src src scripts .github/workflows -type f | sort | grep -E 'audio|capture|asr|state|setting|speech|conversation|local_tts|artifact|contract|tauri|lib.rs|main.rs' | head -300
+          echo '=== CARGO ==='
+          sed -n '1,240p' src-tauri/Cargo.toml
+          echo '=== AUDIO SYMBOLS ==='
+          grep -RInE 'struct AudioCapture|enum AudioCapture|AudioCapture|start_capture|stop_capture|sample_rate|16000|16000\.0' src-tauri/src | head -260 || true
+          echo '=== SETTINGS SYMBOLS ==='
+          grep -RInE 'struct AppSettings|impl Default for AppSettings|local_tts_voice|save_settings|update_settings|conversation_restart_required' src-tauri/src src | head -320 || true
+          echo '=== CONVERSATION SYMBOLS ==='
+          grep -RInE 'Conversation|Thinking|Talking|Listening|transition|AudioCapture|local_asr|transcri|speech' src-tauri/src/app src-tauri/src/commands src-tauri/src/ai | head -420 || true
+          echo '=== NATIVE ARTIFACT PATTERNS ==='
+          find scripts .github/workflows src-tauri -type f | sort | xargs grep -nE 'SHA256|sha256|artifact|prepare.*runtime|ONNX|Kitten|sherpa' 2>/dev/null | head -360 || true
