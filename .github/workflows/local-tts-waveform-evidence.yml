@@ -64,6 +64,8 @@ jobs:
     steps:
       - name: Check out evidence branch
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Verify base master parent
         shell: bash
