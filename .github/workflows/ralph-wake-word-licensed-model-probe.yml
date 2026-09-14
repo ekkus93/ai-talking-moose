@@ -22,7 +22,10 @@ jobs:
           mkdir -p "$work"
           cd "$work"
 
-          base='https://huggingface.co/openEuler/sherpa-kws/resolve/main'
+          revision="$(git ls-remote https://huggingface.co/openEuler/sherpa-kws HEAD | awk '{print $1}')"
+          test -n "$revision"
+          echo "MODEL_REVISION=$revision"
+          base="https://huggingface.co/openEuler/sherpa-kws/resolve/$revision"
           for rel in \
             assets/onnx/encoder.onnx \
             assets/onnx/decoder.onnx \
@@ -37,7 +40,7 @@ jobs:
           done
 
           curl --fail --location --retry 3 --output model-card.md \
-            'https://huggingface.co/openEuler/sherpa-kws/raw/main/README.md'
+            "https://huggingface.co/openEuler/sherpa-kws/raw/$revision/README.md"
           printf 'model-card.md bytes='
           stat -c '%s' model-card.md
           sha256sum model-card.md
@@ -55,5 +58,4 @@ jobs:
             keywords_raw.txt keywords.txt
           echo '=== HEY MOOSE TOKENS ==='
           cat keywords.txt
-
           echo '=== COMPLETE ==='
