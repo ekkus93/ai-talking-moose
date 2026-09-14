@@ -1,8 +1,8 @@
 # AI Talking Moose — Wake Word V1 Specification
 
-**Date:** 2026-09-14  
-**Companion TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`  
-**Baseline:** `e638daa706e63f8bbb36b514322679c1c39e19a6` (`master`)  
+**Date:** 2026-09-14
+**Companion TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`
+**Baseline:** `e638daa706e63f8bbb36b514322679c1c39e19a6` (`master`)
 **Status:** Approved design for implementation
 
 ## 1. Purpose
