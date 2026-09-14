@@ -8,11 +8,15 @@
 **Closeout implementation PR:** `#101`
 **Closeout PR final head:** `7eb69d81a6709587769e57abd2a2cf567e9b31a4`
 **Closeout merged master SHA:** `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`
-**Status:** Technical closeout complete on master. Human voice audition/default selection remains owner-only and open.
+**ASR-proxy voice audition PR:** `#114`
+**Default voice closeout PR:** `#115`
+**Default voice closeout master SHA:** `96ff21e17b02aa0e3b5d8d783bd09400297eaaa4`
+**Selected V1 Local default:** `Luna`
+**Status:** Complete for V1. Local default voice selected by owner-approved ASR proxy evidence; subjective listening not claimed.
 
-This TODO is the finite remediation queue for issues found during the post-KittenTTS code review. The core Local TTS implementation is present and the technical closeout has been implemented, CI-qualified, real-model-qualified, guarded-merged, and exact-master-verified.
+This TODO is the finite remediation queue for issues found during the post-KittenTTS code review. The core Local TTS implementation is present and the technical closeout has been implemented, CI-qualified, real-model-qualified, guarded-merged, and exact-master-verified. Later PR #114 added an automated ASR voice-audition proxy, and PR #115 selected `Luna` as the V1 Local default by owner-approved ASR proxy evidence.
 
-Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice audition/default selection remains owner-only.
+Do not describe the `KCR-330` / `KTT-805` closeout as subjective human listening. Human listening was not performed; the V1 default was selected by explicit owner-approved ASR proxy.
 
 ---
 
@@ -23,7 +27,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] Keep this closeout limited to code-review findings and tracker/doc/evidence reconciliation.
 - [x] Do not add unrelated Local TTS features.
 - [x] Do not introduce a user-facing Local TTS thread-count setting.
-- [x] Do not claim human voice acceptance from ASR evidence.
+- [x] Do not claim subjective human listening from ASR evidence.
 
 **Acceptance**
 
@@ -84,7 +88,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 ## KCR-C200 — Reconcile original active remediation TODO
 
 - [x] Supersede `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md` with this closeout TODO plus the evidence/reconciliation docs.
-- [x] Keep KCR-330 open and explicitly labeled human-only.
+- [x] Record the original KCR-330 deferral and the later PR #115 V1 ASR-proxy closeout truthfully.
 - [x] Mark final KCR-500/KCR-501/KCR-502/KCR-503 only after final source audit, exact-head CI, guarded merge, and exact-master verification complete.
 
 **Acceptance**
@@ -97,7 +101,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 ## KCR-C210 — Reconcile `docs/TODO(20260909-120003).md`
 
 - [x] Create `docs/KITTENTTS_LEGACY_TODO_RECONCILIATION_2026-09-12.md` mapping legacy KTT task ranges to current evidence.
-- [x] Record that KTT-805 remains owner-only/open.
+- [x] Record that KTT-805 was originally owner-only/open and later closed for V1 by owner-approved ASR proxy evidence.
 - [x] Record macOS x86_64 as compile/package/provenance boundary unless future real inference evidence exists.
 - [x] Record that aspirational latency targets are not universally proved unless measured evidence satisfies them.
 - [x] Treat the reconciliation doc as authoritative rather than mutating the historical legacy tracker.
@@ -137,7 +141,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] Document that Local pitch is disabled/not exposed as a truthful capability.
 - [x] Document that rate control is truthful for both providers but provider semantics differ.
 - [x] Document ASR intelligibility smoke result and its limitations.
-- [x] Document that human KCR-330/KTT-805 voice-quality acceptance remains open.
+- [x] Document that KCR-330/KTT-805 was originally deferred and later closed for V1 by owner-approved ASR proxy evidence.
 
 **Acceptance**
 
@@ -173,7 +177,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] Summarize ASR all-eight-voice outcome.
 - [x] Summarize 1/2/4-thread evidence and production default decision.
 - [x] Record that macOS x86_64 is compile/package-boundary unless real inference was actually run.
-- [x] Record that KCR-330 / KTT-805 human audition remains open.
+- [x] Record that KCR-330 / KTT-805 was originally deferred, then closed for V1 by PR #115 owner-approved ASR proxy evidence.
 - [x] Record closeout PR #101 final head `7eb69d81a6709587769e57abd2a2cf567e9b31a4`.
 - [x] Record closeout merged master SHA `79423e8cc0ad48e796e964dee7eb51c3a440ddc4`.
 - [x] Record exact PR-head CI `34755503886` and production CPU acceptance `34755503936`.
@@ -224,7 +228,7 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 
 **Acceptance**
 
-- [x] No mandatory defect from the closeout spec remains unresolved except the human-only KCR-330/KTT-805 gate.
+- [x] No mandatory defect from the closeout spec remains unresolved for V1; KCR-330/KTT-805 was later closed by owner-approved ASR proxy evidence.
 
 ---
 
@@ -307,13 +311,15 @@ Do not mark KCR-330 / KTT-805 complete from automated ASR alone. Human voice aud
 - [x] ASR all-eight-voice smoke evidence recorded.
 - [x] 1/2/4-thread policy evidence recorded; production default remains justified.
 - [x] macOS x86_64 claim is truthful and limited to actual evidence.
-- [x] KCR-330/KTT-805 human audition/default selection remains open unless owner explicitly completes it.
+- [x] KCR-330/KTT-805 default selection is closed for V1 by owner-approved ASR proxy evidence, without claiming subjective listening.
 - [x] Local/static validation completed or explicitly delegated through exact-head CI.
 - [x] Exact final PR-head CI passed.
 - [x] Final source audit found no mandatory unresolved issue except human-only audition.
 - [x] Guarded merge completed.
 - [x] Exact merged master verification completed.
 
-## Only remaining open item
+## Final V1 voice-selection closeout
 
-`KCR-330` / `KTT-805` is intentionally open and owner-only: audition real Local KittenTTS voices and choose the default Moose Local TTS voice. This is not a technical CI/code closeout blocker.
+`KCR-330` / `KTT-805` is closed for V1 by owner-approved ASR proxy evidence. PR #115 changed `DEFAULT_LOCAL_TTS_VOICE` from `Bella` to `Luna`, synced the generated backend contract and runtime test expectation, and recorded the evidence boundary in voice-selection docs. Exact PR-head validation passed on `4a8bf77e4803b7898c717a3cbe145f9df9600c75`: CI `34853091162`, production CPU acceptance `34853091150`, ASR intelligibility smoke `34853091234`, and ASR voice audition `34853091230`. Exact post-merge `master` validation passed on `96ff21e17b02aa0e3b5d8d783bd09400297eaaa4`: CI `34854193904`, production CPU acceptance `34854193873`, ASR intelligibility smoke `34854193869`, and ASR voice audition `34854193968`.
+
+This closeout is not subjective human listening evidence. Future human listening can replace `Luna`, but that would be a new override decision rather than remaining V1 closeout work.
