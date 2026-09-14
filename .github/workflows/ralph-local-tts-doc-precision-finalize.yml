@@ -1,0 +1,67 @@
+name: Ralph Local TTS doc precision finalization
+
+on:
+  push:
+    branches:
+      - ralph/local-tts-doc-precision
+    paths:
+      - ".github/workflows/ralph-local-tts-doc-precision-finalize.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ralph-local-tts-doc-precision-finalize-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: ralph/local-tts-doc-precision
+          fetch-depth: 0
+
+      - name: Finalize durable status wording
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          spec = Path('docs/LOCAL_TTS_POST_REVIEW_HARDENING_SPEC_2026-09-14.md')
+          text = spec.read_text(encoding='utf-8')
+          old = '**Status:** Implemented by PR #118; closeout reconciled by PR #119; documentation precision cleanup pending'
+          new = '**Status:** Implemented by PR #118; closeout reconciled by PR #119; documentation precision updated'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected one stale status occurrence, found {count}')
+          spec.write_text(text.replace(old, new, 1), encoding='utf-8')
+          Path('.github/workflows/ralph-local-tts-doc-precision-finalize.yml').unlink()
+          PY
+
+      - name: Verify finalization scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only | sort)"
+          expected=".github/workflows/ralph-local-tts-doc-precision-finalize.yml
+          docs/LOCAL_TTS_POST_REVIEW_HARDENING_SPEC_2026-09-14.md"
+          if [ "$changed" != "$expected" ]; then
+            printf 'unexpected changed files:\n%s\n' "$changed" >&2
+            exit 1
+          fi
+          git diff --check
+          grep -F '**Status:** Implemented by PR #118; closeout reconciled by PR #119; documentation precision updated' docs/LOCAL_TTS_POST_REVIEW_HARDENING_SPEC_2026-09-14.md
+
+      - name: Commit finalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'chatgpt-ralph-bridge[bot]'
+          git config user.email '326723642+chatgpt-ralph-bridge[bot]@users.noreply.github.com'
+          git add docs/LOCAL_TTS_POST_REVIEW_HARDENING_SPEC_2026-09-14.md .github/workflows/ralph-local-tts-doc-precision-finalize.yml
+          git commit -m 'docs: finalize Local TTS post-review spec status'
+          git push origin HEAD:ralph/local-tts-doc-precision
