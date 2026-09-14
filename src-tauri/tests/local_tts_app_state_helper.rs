@@ -50,11 +50,12 @@ async fn app_state_local_tts_helper_uses_real_local_provider_without_cloud_fallb
         .unwrap_err();
 
     assert_eq!(error.kind, ProviderErrorKind::Setup);
-    assert_ne!(
+    assert_eq!(
         error.message,
-        "Local TTS runtime is not available in this build yet."
+        "The selected Local TTS model is not installed and verified."
     );
     assert!(!error.message.contains("private local helper text"));
+    assert!(!error.message.contains("conversation"));
 }
 
 #[tokio::test]
@@ -73,8 +74,13 @@ async fn app_state_local_tts_helper_rejects_unknown_model_before_runtime_use() {
         .unwrap_err();
 
     assert_eq!(error.kind, ProviderErrorKind::Model);
+    assert_eq!(
+        error.message,
+        "The selected Local TTS model is not in the supported catalog."
+    );
     assert!(!error.message.contains("private unknown local model text"));
     assert!(!error.message.contains(DEFAULT_LOCAL_TTS_MODEL_ID));
+    assert!(!error.message.contains("conversation"));
 }
 
 #[tokio::test]
