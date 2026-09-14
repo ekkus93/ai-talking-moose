@@ -2,15 +2,46 @@
 
 **Date:** 2026-09-14
 **Scope:** Objective ASR proxy for `KCR-330` / `KTT-805`
-**Status:** Implemented as an automated evidence gate; not a subjective listening gate
+**Status:** Complete for V1 by owner-approved ASR proxy; not a subjective listening gate
 **Workflow:** `.github/workflows/kittentts-asr-voice-audition.yml`
 **Underlying Rust test:** `asr::pipeline::benchmarks::kittentts_all_voices_round_trip_through_moonshine_tiny`
+**Accepted V1 Local default:** `Luna`
 
 This document defines the automated ASR-based audition requested as an alternative to purely manual listening.
 
 The workflow synthesizes every Local KittenTTS V1 voice, transcribes the generated audio with pinned Moonshine Tiny, computes objective transcript-quality metrics, and emits machine-readable evidence with a recommended objective candidate.
 
 This is useful for catching unintelligible or badly drifting voices. It is not a complete substitute for human perception of naturalness, comedic timing, timbre preference, or fatigue.
+
+---
+
+## Final ASR-proxy decision
+
+The owner accepted the automated ASR proxy as sufficient for the V1 Local default-voice decision on 2026-09-14.
+
+The ASR-proxy recommendation selected `Luna`.
+
+Evidence used for the decision:
+
+- PR #114 head: `037a0f0a61e13c76ddc0f9a16ef88adb2f38f141`.
+- PR-head ASR audition workflow: `34821757481` — PASS.
+- Post-merge `master`: `21fac6785f008b1d5ab7f46e9125c76ca4c087ad`.
+- Post-merge ASR audition workflow: `34848251323` — PASS.
+
+Per-voice PR-head ASR result:
+
+| Voice | WER | Content recall | Result | Transcript summary |
+| --- | ---: | ---: | :---: | --- |
+| Bella | 0.0909 | 0.8571 | PASS | Moose recognized as “loose”. |
+| Jasper | 0.1818 | 0.8571 | PASS | Moose recognized as “moves”; one verb inflection drift. |
+| Luna | 0.0000 | 1.0000 | PASS | Exact transcript. |
+| Bruno | 0.0000 | 1.0000 | PASS | Exact transcript. |
+| Rosie | 0.0909 | 0.8571 | PASS | Moose recognized as “news”. |
+| Hugo | 0.0000 | 1.0000 | PASS | Exact transcript with capitalization differences only. |
+| Kiki | 0.0909 | 0.8571 | PASS | Moose recognized as “mousse”. |
+| Leo | 0.0000 | 1.0000 | PASS | Exact transcript. |
+
+`Luna`, `Bruno`, `Hugo`, and `Leo` tied with perfect ASR scores. `Luna` won by the documented Local KittenTTS catalog-order tie-breaker.
 
 ---
 
@@ -70,7 +101,7 @@ Among passing voices, the recommended objective candidate is selected by:
 2. highest content-word recall;
 3. Local KittenTTS catalog order as the deterministic tie-breaker.
 
-The evidence artifact records the full per-voice data so a later default change can cite the exact run rather than relying on a summary sentence.
+The evidence artifact records the full per-voice data so a default change can cite the exact run rather than relying on a summary sentence.
 
 ---
 
@@ -111,28 +142,31 @@ The GitHub step summary includes a compact table of:
 
 ## How this affects `KCR-330` / `KTT-805`
 
-There are now two valid ways to close the Local default-voice decision:
+`KCR-330` / `KTT-805` is closed for V1 by owner-approved ASR proxy evidence. This is not a claim of subjective human listening.
 
-1. **Human subjective closeout:** the owner listens to the worksheet corpus and records the selected voice.
-2. **Owner-approved ASR proxy closeout:** the owner explicitly accepts the automated ASR recommendation as sufficient for this project phase.
+The truthful closeout statement is:
 
-If path 2 is used, the closeout record must say that the default was selected by owner-approved ASR proxy evidence, not by subjective human audition.
+```text
+The V1 Local KittenTTS default voice is Luna. Luna was selected by owner-approved ASR proxy evidence from the all-eight-voice KittenTTS-to-Moonshine Tiny audition. No subjective human listening claim is made.
+```
 
-Do not silently rewrite “human audition” as complete merely because ASR passed.
+A future subjective listening pass can still override the default if the owner prefers another catalog voice after real-device audition.
 
 ---
 
 ## Follow-up default update
 
-After a validated ASR audition run exists, update `DEFAULT_LOCAL_TTS_VOICE` only if the owner explicitly accepts the ASR-selected candidate or provides a different selected voice.
+The accepted follow-up implementation updates `DEFAULT_LOCAL_TTS_VOICE` from `Bella` to `Luna`, updates `docs/VOICE_SELECTION.md`, and records the ASR-proxy basis without claiming subjective listening.
 
 The follow-up implementation should:
 
-- record the exact ASR audition workflow run ID;
-- record the qualified SHA;
-- record the recommended objective voice;
-- update `DEFAULT_LOCAL_TTS_VOICE` if the accepted voice is not already the default;
-- update `docs/VOICE_SELECTION.md` with the selection basis;
-- update the closeout/reconciliation docs without claiming subjective listening if it was not done;
-- run ordinary CI and any Local TTS/ASR workflow required by the diff scope;
-- merge with an exact-head guard and verify exact `master`.
+- [x] record the exact ASR audition workflow run ID;
+- [x] record the qualified SHA;
+- [x] record the recommended objective voice;
+- [x] update `DEFAULT_LOCAL_TTS_VOICE` if the accepted voice is not already the default;
+- [x] update `docs/VOICE_SELECTION.md` with the selection basis;
+- [x] update closeout/reconciliation evidence without claiming subjective listening;
+- [ ] run ordinary CI on the default-change PR;
+- [ ] run Local TTS production CPU acceptance if required by the final diff scope;
+- [ ] run ASR smoke/voice-audition validation if required by the final diff scope;
+- [ ] merge with an exact-head guard and verify exact `master`.

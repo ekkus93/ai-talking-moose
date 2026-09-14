@@ -17,7 +17,7 @@ pub use runtime::{LocalTtsRuntimeManager, LocalTtsRuntimeStatus};
 use runtime::{LocalTtsInferenceRequest, LocalTtsRuntimeError, LocalTtsRuntimeErrorKind};
 
 pub const DEFAULT_LOCAL_TTS_MODEL_ID: &str = "KittenML/kitten-tts-mini-0.8";
-pub const DEFAULT_LOCAL_TTS_VOICE: &str = "Bella";
+pub const DEFAULT_LOCAL_TTS_VOICE: &str = "Luna";
 
 pub const LOCAL_TTS_MODEL_IDS: &[&str] = &[DEFAULT_LOCAL_TTS_MODEL_ID];
 pub const LOCAL_TTS_VOICE_IDS: &[&str] = &[

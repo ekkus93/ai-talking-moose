@@ -2,23 +2,42 @@
 
 **Date:** 2026-09-14
 **Scope:** `KCR-330` / `KTT-805` human audition and final Local KittenTTS default-voice selection
-**Status:** Awaiting owner listening result
+**Status:** V1 default resolved by owner-approved ASR proxy; subjective listening not performed
 **Related docs:**
 
 - `docs/VOICE_SELECTION.md`
+- `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md`
 - `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`
 - `docs/KITTENTTS_LEGACY_TODO_RECONCILIATION_2026-09-12.md`
 - `docs/LOCAL_TTS_POST_CLOSEOUT_HARDENING_TODO_2026-09-13.md`
 
-This worksheet is intentionally human-scored. Automated CI and ASR evidence prove technical synthesis, offline behavior, intelligibility under a narrow smoke phrase, and no-fallback boundaries. They do **not** decide which Local KittenTTS voice sounds best for the Moose.
+This worksheet remains available for a future subjective listening pass. It was not used to select the V1 Local KittenTTS default.
 
-Do not mark `KCR-330` / `KTT-805` complete until the owner records an accepted voice here or in a follow-up voice-selection update.
+The V1 default was instead selected by owner-approved automated ASR proxy evidence. Do not describe that proxy decision as subjective listening evidence.
+
+---
+
+## V1 ASR-proxy decision record
+
+```text
+Decision date: 2026-09-14
+Basis: owner-approved ASR proxy, not human listening
+Accepted Local KittenTTS default voice: Luna
+PR-head ASR audition run: 34821757481
+PR-head qualified SHA: 037a0f0a61e13c76ddc0f9a16ef88adb2f38f141
+Post-merge ASR audition run: 34848251323
+Post-merge qualified SHA: 21fac6785f008b1d5ab7f46e9125c76ca4c087ad
+Reason: Luna tied with Bruno, Hugo, and Leo at WER 0.0000 and content recall 1.0000, then won by documented catalog-order tie-breaker.
+Subjective human listening performed: no
+Follow-up fixes required before default change: none known from ASR proxy evidence
+Owner approval: accepted ASR proxy in project chat on 2026-09-14
+```
 
 ---
 
 ## Fixed voice catalog
 
-Audition exactly the eight Local KittenTTS V1 voices:
+Audition exactly the eight Local KittenTTS V1 voices if a future subjective listening pass is performed:
 
 - `Bella`
 - `Jasper`
@@ -29,13 +48,13 @@ Audition exactly the eight Local KittenTTS V1 voices:
 - `Kiki`
 - `Leo`
 
-`Bella` remains the provisional Local TTS default until this worksheet records an owner-approved replacement or an explicit decision to keep Bella.
+`Luna` is now the V1 Local TTS default by owner-approved ASR proxy evidence. A future subjective pass can still replace it if the owner records a different accepted voice.
 
 ---
 
-## Setup checklist
+## Setup checklist for future subjective listening
 
-- [ ] Build or run an app version at or after `2a62368837b040086aecce8deefedab9125f269d`.
+- [ ] Build or run an app version that includes the current Local TTS default decision.
 - [ ] Open the Voice settings surface.
 - [ ] Select standalone speech provider: Local KittenTTS.
 - [ ] Install the Local KittenTTS model if it is not already installed.
@@ -43,7 +62,7 @@ Audition exactly the eight Local KittenTTS V1 voices:
 - [ ] Keep Gemini Live voice settings separate from Local standalone voice settings.
 - [ ] Do not change `google_tts_voice` or `live_voice` during this audition unless intentionally testing settings separation.
 - [ ] Use the same playback device and volume for every voice.
-- [ ] Audition every voice against the same corpus before choosing the final default.
+- [ ] Audition every voice against the same corpus before choosing a replacement default.
 
 ---
 
@@ -96,7 +115,7 @@ Scoring dimensions:
 
 ---
 
-## Score sheet
+## Score sheet for future subjective listening
 
 | Voice | Intelligibility | Naturalness | Dry/comedic fit | Timbre | Pronunciation | Artifacts/noise | Fatigue | Originality | Total | Notes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
@@ -118,29 +137,29 @@ Recommended acceptance threshold:
 
 ---
 
-## Final owner decision record
+## Future subjective override record
 
-Fill this section after listening.
+Fill this section only if the owner later performs subjective listening and wants to override the ASR-proxy default.
 
 ```text
 Audition date:
 App/build SHA:
 Playback device:
 Selected Local KittenTTS default voice:
-Decision: accept / reject / keep Bella provisional
+Decision: accept / reject / keep Luna
 Reason:
 Rejected finalists:
 Follow-up fixes required before default change:
 Owner initials/approval:
 ```
 
-Do not update the Rust default from this worksheet unless the decision is explicit and the selected voice is one of the eight catalog IDs.
+Do not update the Rust default from a future worksheet unless the decision is explicit and the selected voice is one of the eight catalog IDs.
 
 ---
 
-## Follow-up implementation if a voice is accepted
+## Follow-up implementation if a future voice override is accepted
 
-After the owner records the selected voice:
+After the owner records a new selected voice:
 
 - [ ] Update `DEFAULT_LOCAL_TTS_VOICE` if the accepted voice is not already the default.
 - [ ] Update `docs/VOICE_SELECTION.md` to record the final Local default and audition decision.
@@ -150,4 +169,4 @@ After the owner records the selected voice:
 - [ ] Run ASR smoke if the accepted default change could alter documented all-voice/default-voice evidence.
 - [ ] Merge with expected-head guard and verify exact master.
 
-If the owner rejects all voices, leave `Bella` provisional and create a new task for alternate Local TTS voice/model exploration rather than pretending `KTT-805` passed.
+If the owner rejects all voices in a future subjective pass, keep `Luna` as the ASR-proxy default and create a new task for alternate Local TTS voice/model exploration rather than pretending another catalog voice was accepted.
