@@ -1,0 +1,31 @@
+name: Ralph Wake Word sherpa Rust API probe
+on:
+  push:
+    branches:
+      - ralph/wake-word-v1-core
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect sherpa-onnx 1.13.8 Rust crate
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/sherpa-api-probe"
+          rm -rf "$work"
+          cargo new --lib "$work" >/dev/null
+          cd "$work"
+          cargo add 'sherpa-onnx@=1.13.8' >/dev/null
+          cargo fetch >/dev/null
+          crate_dir="$(find "$HOME/.cargo/registry/src" -maxdepth 2 -type d -name 'sherpa-onnx-1.13.8' | head -1)"
+          test -n "$crate_dir"
+          echo "CRATE_DIR=$crate_dir"
+          echo '=== CARGO FEATURES ==='
+          sed -n '/^\[features\]/,/^\[/p' "$crate_dir/Cargo.toml"
+          echo '=== KWS FILES ==='
+          find "$crate_dir/src" -type f | sort | grep -E 'keyword|spotter|online|config' | head -120
+          echo '=== KEYWORD SPOTTER API ==='
+          grep -RInE 'struct Keyword|KeywordSpotter|keywords_file|keywords_buf|num_threads|accept_waveform|is_ready|decode|get_result|reset' "$crate_dir/src" | head -320
