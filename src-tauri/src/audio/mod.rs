@@ -6,6 +6,7 @@ pub mod playback;
 pub mod resample;
 pub mod ring_buffer;
 pub mod speech;
+pub mod wake_word;
 
 pub use capture::AudioCapture;
 pub use devices::*;
