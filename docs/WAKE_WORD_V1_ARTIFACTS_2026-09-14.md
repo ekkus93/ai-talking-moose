@@ -11,9 +11,12 @@ The selected model is streaming Zipformer/transducer KWS, 16 kHz mono. The canon
 
 All production model and native-runtime artifact sizes and SHA-256 values are machine-readable in `src-tauri/resources/wake_word/artifacts-v1.json`. `scripts/prepare_wake_word_artifacts.py` resolves only immutable model URLs, downloads sherpa `1.13.8` static runtime archives by versioned release filename, verifies byte size and SHA-256 before use, rejects unsafe archive paths, and emits bounded verification metadata without audio or credentials.
 
-Supported V1 native runtime targets are deliberately limited to the platforms with planned real acceptance:
+Pinned native runtime packaging targets are:
 
 - Linux x86_64 — `sherpa-onnx-v1.13.8-linux-x64-static-lib.tar.bz2`
 - macOS arm64 — `sherpa-onnx-v1.13.8-osx-arm64-static-lib.tar.bz2`
+- macOS x86_64 — `sherpa-onnx-v1.13.8-osx-x64-static-lib.tar.bz2`
 
-No mutable `latest` URL is part of the production contract. Additional architectures remain unsupported until they have a pinned runtime and real inference acceptance.
+The macOS x86_64 archive is pinned because the existing application release matrix still builds that architecture. Wake Word V1's mandatory **real KWS inference** acceptance claim remains limited to Linux x86_64 and macOS arm64, exactly as defined by the companion TODO. Pinning an additional packaging architecture does not imply that its real KWS inference behavior has been qualified.
+
+No mutable `latest` URL is part of the production contract. Additional architectures remain unsupported until they have an immutable runtime identity and the project deliberately adds the corresponding packaging/acceptance policy.
