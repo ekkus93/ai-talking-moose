@@ -37,7 +37,10 @@ fn runtime_provider_errors_preserve_safe_local_tts_guidance_and_retry_policy() {
     });
     assert_eq!(shutting_down.kind, ProviderErrorKind::Closed);
     assert!(shutting_down.retryable);
-    assert_eq!(shutting_down.message, "The Local TTS runtime is shutting down.");
+    assert_eq!(
+        shutting_down.message,
+        "The Local TTS runtime is shutting down."
+    );
 
     let inference = provider_error_for_runtime(LocalTtsRuntimeError {
         kind: LocalTtsRuntimeErrorKind::Inference,
@@ -94,7 +97,10 @@ async fn production_local_provider_rejects_non_kitten_voice_before_runtime_use()
 
     assert_eq!(error.kind, ProviderErrorKind::Setup);
     assert!(!error.retryable);
-    assert_eq!(error.message, "The selected Local TTS voice is unavailable.");
+    assert_eq!(
+        error.message,
+        "The selected Local TTS voice is unavailable."
+    );
     assert!(!error.message.contains("private local text"));
     assert!(!error.message.contains("conversation"));
 }
@@ -204,7 +210,10 @@ fn stage_real_acceptance_install() -> (tempfile::TempDir, LocalTtsPlatform) {
             .unwrap();
         let destination = revision_dir.join(artifact.filename);
         fs::copy(source, &destination).unwrap();
-        assert_eq!(fs::metadata(destination).unwrap().len(), artifact.expected_bytes);
+        assert_eq!(
+            fs::metadata(destination).unwrap().len(),
+            artifact.expected_bytes
+        );
     }
 
     let marker = storage::install_marker(manifest, platform, &artifacts);
