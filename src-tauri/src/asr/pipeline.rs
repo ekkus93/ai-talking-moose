@@ -162,6 +162,20 @@ impl LocalAsrPipeline {
             })
     }
 
+    pub(super) fn enqueue_pre_roll(&self, bytes: Vec<u8>) -> Result<(), AsrError> {
+        if !self.is_running() {
+            return Err(invalid_state_error(
+                "Local ASR inference is not running; wake-word pre-roll was not accepted.",
+            ));
+        }
+        let sender = self.pcm_sender.as_ref().ok_or_else(|| {
+            invalid_state_error("Local ASR input is closed; wake-word pre-roll was not accepted.")
+        })?;
+        sender.try_send(bytes).map_err(|_| {
+            invalid_state_error("Local ASR queue could not accept wake-word pre-roll.")
+        })
+    }
+
     pub fn diagnostics(&self) -> LocalAsrPipelineDiagnostics {
         let runtime = self.runtime_diagnostics();
         LocalAsrPipelineDiagnostics {

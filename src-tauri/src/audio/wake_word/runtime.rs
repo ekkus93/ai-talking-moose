@@ -325,6 +325,18 @@ impl WakeWordRuntimeManager {
         Ok(replayed)
     }
 
+    pub fn finish_command_handoff(&self) {
+        let mut inner = self.inner.lock();
+        if !inner.enabled {
+            return;
+        }
+        inner.state = WakeWordRuntimeState::Suspended;
+        inner.command_sink = None;
+        inner.level_sink = None;
+        inner.ring.clear();
+        inner.suspended_for_talking = false;
+    }
+
     pub fn suspend_for_talking(&self) {
         let mut inner = self.inner.lock();
         if !inner.enabled {

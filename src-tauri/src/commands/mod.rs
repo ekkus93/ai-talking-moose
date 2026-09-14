@@ -9,6 +9,7 @@ mod presentation;
 pub mod settings;
 mod speech;
 pub mod tool_diagnostics;
+pub mod wake_word;
 
 pub use asr_diagnostics::*;
 pub use asr_models::*;
@@ -18,3 +19,4 @@ pub use local_llm_models::*;
 pub use local_tts_models::*;
 pub use settings::*;
 pub use tool_diagnostics::*;
+pub use wake_word::*;

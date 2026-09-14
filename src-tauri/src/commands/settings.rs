@@ -210,6 +210,7 @@ pub async fn update_settings<R: Runtime>(
         }
     }
 
+    crate::commands::wake_word::reconcile_wake_runtime(state.inner(), app).await?;
     Ok(())
 }
 

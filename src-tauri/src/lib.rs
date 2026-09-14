@@ -193,7 +193,18 @@ pub fn run() {
             });
 
             let tray_visible = app_state.settings.read().show_in_menu_bar;
-            app.manage(app_state);
+            app.manage(app_state.clone());
+            if startup_settings.wake_word_enabled {
+                let wake_state = app_state.clone();
+                let wake_app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) =
+                        commands::wake_word::reconcile_wake_runtime(&wake_state, wake_app).await
+                    {
+                        warn!(error = %error, "Persisted wake-word mode could not start");
+                    }
+                });
+            }
             app::tray::install(app, tray_visible)?;
             info!("Talking Moose AI backend initialized successfully");
             Ok(())
@@ -230,6 +241,7 @@ pub fn run() {
             get_microphone_permission,
             request_microphone_access,
             get_audio_diagnostics,
+            get_wake_word_diagnostics,
             get_tool_audit,
             test_microphone,
             test_audio_output,
@@ -304,6 +316,7 @@ pub fn run() {
                     (
                         state.local_llm_runtime.clone(),
                         state.local_tts_runtime.clone(),
+                        state.wake_word_runtime.clone(),
                         state.conversation_mgr.clone(),
                         state.audio_capture.clone(),
                         state.audio_playback.clone(),
@@ -313,6 +326,7 @@ pub fn run() {
                 if let Some((
                     local_llm_runtime,
                     local_tts_runtime,
+                    wake_word_runtime,
                     conversation_mgr,
                     audio_capture,
                     audio_playback,
@@ -357,6 +371,9 @@ pub fn run() {
                                 "Timed out waiting for local TTS runtime shutdown; continuing application exit"
                             );
                         }
+                    }
+                    if let Err(error) = wake_word_runtime.stop().await {
+                        warn!(kind = ?error.kind, "Failed to stop wake-word runtime during shutdown");
                     }
                     conversation_mgr
                         .shutdown_application(audio_capture, audio_playback)
