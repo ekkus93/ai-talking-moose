@@ -65,7 +65,8 @@ jobs:
         run: |
           set -euo pipefail
           changed="$(git diff --name-only | sort)"
-          expected="docs/LOCAL_TTS_POST_REVIEW_HARDENING_IMPLEMENTATION_EVIDENCE_2026-09-14.md
+          expected=".github/workflows/ralph-local-tts-doc-precision.yml
+          docs/LOCAL_TTS_POST_REVIEW_HARDENING_IMPLEMENTATION_EVIDENCE_2026-09-14.md
           docs/LOCAL_TTS_POST_REVIEW_HARDENING_SPEC_2026-09-14.md"
           if [ "$changed" != "$expected" ]; then
             printf 'unexpected changed files:\n%s\n' "$changed" >&2
