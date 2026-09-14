@@ -314,7 +314,7 @@ Do not describe the `KCR-330` / `KTT-805` closeout as subjective human listening
 - [x] KCR-330/KTT-805 default selection is closed for V1 by owner-approved ASR proxy evidence, without claiming subjective listening.
 - [x] Local/static validation completed or explicitly delegated through exact-head CI.
 - [x] Exact final PR-head CI passed.
-- [x] Final source audit found no mandatory unresolved issue except human-only audition.
+- [x] Final PR #101 source audit found no mandatory unresolved issue except the then-human-only audition; that later V1 gate was closed by owner-approved ASR proxy in PR #115.
 - [x] Guarded merge completed.
 - [x] Exact merged master verification completed.
 

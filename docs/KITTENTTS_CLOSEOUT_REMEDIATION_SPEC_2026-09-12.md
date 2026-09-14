@@ -7,6 +7,8 @@
 **Primary tracker to close:** `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md`
 **Legacy tracker to reconcile:** `docs/TODO(20260909-120003).md`
 
+> **Historical closeout specification.** The requirements below describe the state and policy at the 2026-09-12 closeout baseline, when `KCR-330` / `KTT-805` was still open. Do not read those historical “remains open” statements as current project status. PR #114 later added the automated ASR voice-audition proxy; the owner explicitly accepted that proxy for V1; PR #115 selected `Luna`; and exact PR-head plus merged-master validation passed. Current status is recorded in `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`, `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`, and `docs/VOICE_SELECTION.md`. No subjective human listening is claimed.
+
 ---
 
 ## 1. Purpose

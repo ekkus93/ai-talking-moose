@@ -472,9 +472,10 @@ struct RoundTripEvidence {
     all_passed: bool,
 }
 
-/// Automated intelligibility smoke only. This deliberately does not replace
-/// the deferred human KCR-330 audition for naturalness, character fit, or the
-/// final default-voice decision.
+/// Automated intelligibility smoke only. This test does not measure subjective
+/// naturalness, character fit, timbre, or fatigue. A later owner-approved ASR
+/// proxy used this objective evidence as part of the V1 default-voice decision;
+/// that policy decision does not turn this smoke test into human-listening evidence.
 #[tokio::test]
 #[ignore = "requires verified KittenTTS artifacts, pinned Moonshine Tiny, and native macOS runtimes"]
 async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {

@@ -68,6 +68,10 @@ Settings version 4 split the former standalone/live voice state into provider-ow
 
 This preserves user intent during upgrade and avoids mixing provider catalogs.
 
+### Luna default versus persisted Bella
+
+`Luna` is the default for new profiles and for persisted settings where `local_tts_voice` is absent. Existing valid persisted Local voice selections are preserved, including `Bella`. The application does not silently rewrite persisted `Bella` to `Luna`, because it cannot truthfully distinguish a user who explicitly chose Bella from a profile that merely inherited the older provisional default. No settings-schema bump is used solely to force a Bella-to-Luna migration.
+
 ## Audition behavior
 
 Voice audition is provider-aware:

@@ -5,6 +5,8 @@
 **Qualified baseline:** `3e63d51c68888a23cd98ceef052007eb3c833a45` (`master`)  
 **Companion tracker:** `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md`
 
+> **Superseded historical specification.** This file records the review state before the later closeout and default-voice decision. The active status moved to `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md` and `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`. PR #114/#115 later closed `KCR-330` / `KTT-805` for V1 by owner-approved ASR proxy and selected `Luna`; the historical human-gate language below is retained as provenance, not current status.
+
 ## 1. Purpose
 
 This specification converts the post-KittenTTS code review into a finite remediation program. The implementation through KTT-505 is already merged and qualified on the baseline above. The remaining work is not a rewrite of the Local TTS feature; it is the set of concrete gaps that remain before the Local KittenTTS path can be considered fully diagnosable, privacy-audited, packaged, licensed, platform-qualified, and release-ready.
