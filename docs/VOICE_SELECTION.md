@@ -2,6 +2,7 @@
 
 **Original Google voice decision:** 2026-08-22
 **KittenTTS closeout update:** 2026-09-12
+**Human Local voice audition worksheet:** `docs/LOCAL_TTS_HUMAN_VOICE_AUDITION_2026-09-14.md`
 
 Talking Moose V1 now has three separate voice ownership domains. Do not collapse them into one setting or one provider catalog.
 
@@ -37,6 +38,12 @@ The Local KittenTTS V1 catalog is owned by the Rust Local TTS layer and currentl
 - `Leo`
 
 `Bella` remains the initial Local TTS default until the owner completes the human voice audition gate. Unsupported Local voice IDs fail closed as setup errors. They must not normalize to a Google voice and must not trigger a Google TTS fallback.
+
+## Human Local voice audition
+
+The owner audition protocol and score sheet live in `docs/LOCAL_TTS_HUMAN_VOICE_AUDITION_2026-09-14.md`.
+
+That worksheet is the active place to record the subjective `KCR-330` / `KTT-805` result. Until it records an accepted owner decision, the Local KittenTTS default remains provisional and must not be described as subjectively accepted.
 
 ## Settings migration
 
