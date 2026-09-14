@@ -4,6 +4,7 @@
 **Scope:** Close `KCR-330` / `KTT-805` for V1 by owner-approved ASR proxy
 **Selected Local KittenTTS default:** `Luna`
 **Decision type:** Owner-approved automated ASR proxy, not subjective human listening
+**Implementation PR:** `#115`
 
 ---
 
