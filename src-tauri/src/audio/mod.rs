@@ -2,6 +2,7 @@ pub mod capture;
 pub mod devices;
 pub mod levels;
 pub mod permissions;
+pub mod pcm_ring_buffer;
 pub mod playback;
 pub mod resample;
 pub mod speech;
