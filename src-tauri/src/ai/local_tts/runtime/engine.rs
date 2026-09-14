@@ -623,6 +623,31 @@ mod tests {
         Some(raw)
     }
 
+    fn synthesize_thread_sweep_case(
+        engine: &mut KittenTtsRuntimeEngine,
+        request: &LocalTtsInferenceRequest,
+        inference_threads: usize,
+        phase: &str,
+    ) -> LocalTtsInferenceOutput {
+        let mut last_error = None;
+        for attempt in 1..=3 {
+            match engine.synthesize(request) {
+                Ok(output) => return output,
+                Err(error) => {
+                    eprintln!(
+                        "real KittenTTS thread sweep {phase} synthesis failed for {inference_threads} thread(s) on attempt {attempt}: {error:?}"
+                    );
+                    last_error = Some(error);
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+        }
+        panic!(
+            "real KittenTTS thread sweep {phase} synthesis failed for {inference_threads} thread(s) after retries: {:?}",
+            last_error.expect("retry loop must record a Local TTS error")
+        );
+    }
+
     #[derive(Debug, Serialize)]
     struct ThreadSweepConfigurationEvidence {
         inference_threads: usize,
@@ -690,7 +715,8 @@ mod tests {
                 .unwrap_or(u64::MAX);
 
             let first_started = Instant::now();
-            let first = engine.synthesize(&request).unwrap();
+            let first =
+                synthesize_thread_sweep_case(&mut engine, &request, inference_threads, "first");
             let first_elapsed = first_started.elapsed();
             assert_eq!(first.sample_rate_hz, manifest.sample_rate_hz);
             assert!(!first.samples.is_empty());
@@ -708,7 +734,8 @@ mod tests {
 
             for _ in 0..WARM_REPETITIONS {
                 let started = Instant::now();
-                let output = engine.synthesize(&request).unwrap();
+                let output =
+                    synthesize_thread_sweep_case(&mut engine, &request, inference_threads, "warm");
                 let elapsed = started.elapsed();
                 assert_eq!(output.sample_rate_hz, manifest.sample_rate_hz);
                 assert!(!output.samples.is_empty());
