@@ -26,6 +26,11 @@
       "filename": "sherpa-onnx-v1.13.8-osx-arm64-static-lib.tar.bz2",
       "bytes": 20965936,
       "sha256": "9091bf160dc7fdacedbc906b212badf53c2993f4e5277a0e03998e96c31d60da"
+    },
+    "macos-x86_64": {
+      "filename": "sherpa-onnx-v1.13.8-osx-x64-static-lib.tar.bz2",
+      "bytes": 20575933,
+      "sha256": "a3f88da3e54c850a12d61431e73f8affcd1f13738b75b768847dd79541835b4b"
     }
   }
 }

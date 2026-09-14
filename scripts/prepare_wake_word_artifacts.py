@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 import tarfile
@@ -32,7 +31,9 @@ def sha256(path: Path) -> str:
 def verify(path: Path, expected_bytes: int, expected_sha: str) -> None:
     size = path.stat().st_size
     if size != expected_bytes:
-        raise SystemExit(f"artifact size mismatch for {path.name}: expected {expected_bytes}, got {size}")
+        raise SystemExit(
+            f"artifact size mismatch for {path.name}: expected {expected_bytes}, got {size}"
+        )
     actual_sha = sha256(path)
     if actual_sha != expected_sha:
         raise SystemExit(f"artifact digest mismatch for {path.name}")
@@ -58,7 +59,11 @@ def safe_extract_tar_bz2(archive: Path, destination: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--destination", type=Path, required=True)
-    parser.add_argument("--platform", choices=["linux-x86_64", "macos-arm64"], required=True)
+    parser.add_argument(
+        "--platform",
+        choices=["linux-x86_64", "macos-arm64", "macos-x86_64"],
+        required=True,
+    )
     args = parser.parse_args()
 
     manifest = json.loads(MANIFEST_PATH.read_text())
@@ -79,7 +84,10 @@ def main() -> None:
     (model_root / "keywords.txt").write_text(manifest["keyword_tokens"] + "\n")
 
     runtime = manifest["runtime_archives"][args.platform]
-    release_url = f"https://github.com/k2-fsa/sherpa-onnx/releases/download/v{manifest['sherpa_version']}/{runtime['filename']}"
+    release_url = (
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+        f"v{manifest['sherpa_version']}/{runtime['filename']}"
+    )
     with tempfile.TemporaryDirectory(prefix="wake-runtime-") as temporary:
         archive = Path(temporary) / runtime["filename"]
         download(release_url, archive)
@@ -96,7 +104,9 @@ def main() -> None:
         "model_verified": True,
         "runtime_archive_verified": True,
     }
-    (destination / "verification.json").write_text(json.dumps(evidence, indent=2) + "\n")
+    (destination / "verification.json").write_text(
+        json.dumps(evidence, indent=2) + "\n"
+    )
     print(json.dumps(evidence, sort_keys=True))
 
 
