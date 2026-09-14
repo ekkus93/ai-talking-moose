@@ -1,0 +1,28 @@
+name: Ralph sherpa sys static-link probe
+on:
+  push:
+    branches:
+      - ralph/wake-word-artifact-probe
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect sherpa-onnx-sys 1.13.8 build behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/sherpa-sys-probe"
+          rm -rf "$work"
+          cargo new --lib "$work" >/dev/null
+          cd "$work"
+          cargo add 'sherpa-onnx@=1.13.8' >/dev/null
+          cargo fetch >/dev/null
+          sys_dir="$(find "$HOME/.cargo/registry/src" -maxdepth 2 -type d -name 'sherpa-onnx-sys-1.13.8' | head -1)"
+          test -n "$sys_dir"
+          echo '=== BUILD RS ENV/LINK ==='
+          grep -RInE 'SHERPA|ARCHIVE|STATIC|link-search|link-lib|OUT_DIR|download|release' "$sys_dir" | head -420
+          echo '=== BUILD RS ==='
+          sed -n '1,360p' "$sys_dir/build.rs"

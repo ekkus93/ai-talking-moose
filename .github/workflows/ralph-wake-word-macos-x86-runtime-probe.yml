@@ -1,0 +1,26 @@
+name: Ralph Wake Word macOS x86 runtime probe
+
+on:
+  push:
+    branches:
+      - ralph/wake-word-artifact-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Freeze sherpa macOS x86_64 static runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive='sherpa-onnx-v1.13.8-osx-x64-static-lib.tar.bz2'
+          url="https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/$archive"
+          curl --fail --location --retry 3 --output "$archive" "$url"
+          printf 'filename=%s\n' "$archive"
+          printf 'bytes='; stat -c '%s' "$archive"
+          sha256sum "$archive"
+          tar -tjf "$archive" | head -80

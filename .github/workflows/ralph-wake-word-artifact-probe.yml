@@ -1,0 +1,88 @@
+name: Ralph Wake Word artifact probe
+
+on:
+  push:
+    branches:
+      - ralph/wake-word-artifact-probe
+    paths:
+      - .github/workflows/ralph-wake-word-artifact-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Freeze upstream archives and keyword tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/wake-probe
+          cd /tmp/wake-probe
+
+          model='sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2'
+          linux='sherpa-onnx-v1.13.8-linux-x64-static-lib.tar.bz2'
+          macos='sherpa-onnx-v1.13.8-osx-arm64-static-lib.tar.bz2'
+
+          curl --fail --location --retry 3 --output "$model" \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/$model"
+          curl --fail --location --retry 3 --output "$linux" \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/$linux"
+          curl --fail --location --retry 3 --output "$macos" \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/$macos"
+
+          echo '=== ARCHIVES ==='
+          for file in "$model" "$linux" "$macos"; do
+            printf '%s bytes=' "$file"
+            stat -c '%s' "$file"
+            sha256sum "$file"
+          done
+
+          tar xf "$model"
+          root='sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01'
+          echo '=== MODEL ROOT ==='
+          find "$root" -maxdepth 1 -type f -printf '%f\n' | sort
+          echo '=== MODEL FILES ==='
+          for rel in \
+            encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx \
+            decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx \
+            joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx \
+            tokens.txt \
+            bpe.model \
+            README.md; do
+            file="$root/$rel"
+            printf '%s bytes=' "$rel"
+            stat -c '%s' "$file"
+            sha256sum "$file"
+          done
+
+          echo '=== RUNTIME ARCHIVE MEMBERS LINUX ==='
+          tar tf "$linux" | head -120
+          echo '=== RUNTIME ARCHIVE MEMBERS MACOS ==='
+          tar tf "$macos" | head -120
+
+          python3 -m pip install --disable-pip-version-check --no-input \
+            'sherpa-onnx==1.13.8' 'sherpa-onnx-bin==1.13.8' \
+            'sentencepiece==0.2.1' 'pypinyin==0.54.0'
+
+          printf 'HEY MOOSE\n' > keywords_raw.txt
+          sherpa-onnx-cli text2token \
+            --tokens "$root/tokens.txt" \
+            --tokens-type bpe \
+            --bpe-model "$root/bpe.model" \
+            keywords_raw.txt keywords.txt
+          echo '=== HEY MOOSE TOKENS ==='
+          cat keywords.txt
+
+          echo '=== DIRECT SENTENCEPIECE ==='
+          python3 - <<'PY'
+          import sentencepiece as spm
+          sp = spm.SentencePieceProcessor(model_file='sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/bpe.model')
+          print(' '.join(sp.encode('HEY MOOSE', out_type=str)))
+          PY
+
+          echo '=== COMPLETE ==='
