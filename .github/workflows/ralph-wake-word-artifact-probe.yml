@@ -44,6 +44,8 @@ jobs:
 
           tar xf "$model"
           root='sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01'
+          echo '=== MODEL ROOT ==='
+          find "$root" -maxdepth 1 -type f -printf '%f\n' | sort
           echo '=== MODEL FILES ==='
           for rel in \
             encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx \
@@ -51,7 +53,6 @@ jobs:
             joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx \
             tokens.txt \
             bpe.model \
-            configuration.json \
             README.md; do
             file="$root/$rel"
             printf '%s bytes=' "$rel"
@@ -59,9 +60,10 @@ jobs:
             sha256sum "$file"
           done
 
-          echo '=== RUNTIME ARCHIVE MEMBERS ==='
-          tar tf "$linux" | head -80
-          tar tf "$macos" | head -80
+          echo '=== RUNTIME ARCHIVE MEMBERS LINUX ==='
+          tar tf "$linux" | head -120
+          echo '=== RUNTIME ARCHIVE MEMBERS MACOS ==='
+          tar tf "$macos" | head -120
 
           python3 -m pip install --disable-pip-version-check --no-input \
             'sherpa-onnx==1.13.8' 'sherpa-onnx-bin==1.13.8'
