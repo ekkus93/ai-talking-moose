@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt --all
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all
           rm .github/workflows/ralph-local-tts-rustfmt-fix.yml
           git diff --check
           git config user.name 'chatgpt-ralph-bridge[bot]'
