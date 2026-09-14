@@ -38,6 +38,9 @@ const MAX_RUNTIME_LIBRARY_BYTES: u64 = 256 * 1024 * 1024;
 const TAR_BLOCK_BYTES: u64 = 512;
 const EXPECTED_MODEL_OUTPUT_COUNT: usize = 2;
 const WAVEFORM_OUTPUT_NAME: &str = "waveform";
+// Kitten Mini also returns `duration`. The adapter currently consumes only `waveform`, but
+// requiring `duration` to be present catches ONNX contract drift without inventing a downstream
+// semantic dependency on that output.
 const DURATION_OUTPUT_NAME: &str = "duration";
 
 struct Voice {
@@ -300,6 +303,9 @@ fn model_output_contract_is_valid(
 fn validate_model_output_contract(
     outputs: &ort::session::SessionOutputs<'_>,
 ) -> Result<(), LocalTtsRuntimeError> {
+    // Validate the exact named output contract before reading generated samples by name. `duration`
+    // is intentionally presence-only drift detection here; `waveform` is the only output consumed
+    // by this adapter.
     if model_output_contract_is_valid(
         outputs.len(),
         outputs.contains_key(WAVEFORM_OUTPUT_NAME),
@@ -542,7 +548,7 @@ mod tests {
     }
 
     #[test]
-    fn model_output_contract_requires_exact_named_outputs() {
+    fn model_output_contract_requires_exact_named_outputs_and_presence_only_duration() {
         assert!(model_output_contract_is_valid(2, true, true));
         assert!(!model_output_contract_is_valid(0, false, false));
         assert!(!model_output_contract_is_valid(1, true, false));
