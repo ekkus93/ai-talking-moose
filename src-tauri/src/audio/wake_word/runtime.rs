@@ -265,8 +265,8 @@ impl WakeWordRuntimeManager {
             WakeWordRuntimeState::Listening => {
                 if let Some(sender) = self.engine_sender.lock().clone() {
                     if sender.try_send(samples).is_err() {
-                        self.inner.lock().dropped_engine_chunks =
-                            self.inner.lock().dropped_engine_chunks.saturating_add(1);
+                        let mut inner = self.inner.lock();
+                        inner.dropped_engine_chunks = inner.dropped_engine_chunks.saturating_add(1);
                     }
                 }
             }
@@ -299,12 +299,7 @@ impl WakeWordRuntimeManager {
     ) -> Result<usize, WakeWordError> {
         let snapshot = {
             let mut inner = self.inner.lock();
-            if !inner.enabled
-                || !matches!(
-                    inner.state,
-                    WakeWordRuntimeState::Listening | WakeWordRuntimeState::Triggered
-                )
-            {
+            if !inner.enabled || inner.state != WakeWordRuntimeState::Triggered {
                 return Err(WakeWordError {
                     kind: WakeWordErrorKind::InvalidState,
                     message: "Wake-word audio is not available for command handoff.".to_string(),
@@ -505,6 +500,7 @@ mod tests {
         manager
             .ingest_pcm_bytes(AudioResampler::i16_to_bytes(&[1, 2, 3, 4]))
             .unwrap();
+        manager.inner.lock().state = WakeWordRuntimeState::Triggered;
         let (tx, mut rx) = mpsc::channel(8);
         let replayed = manager.begin_command_handoff(tx, None).unwrap();
         assert_eq!(replayed, 4);
@@ -528,6 +524,7 @@ mod tests {
         assert_eq!(manager.state(), WakeWordRuntimeState::Suspended);
         assert!(manager.diagnostics().suspended_for_talking);
         manager.resume_listening().unwrap();
+        manager.inner.lock().state = WakeWordRuntimeState::Triggered;
         let (tx, mut rx) = mpsc::channel(8);
         assert_eq!(manager.begin_command_handoff(tx, None).unwrap(), 0);
         assert!(rx.try_recv().is_err());

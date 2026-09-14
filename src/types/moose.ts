@@ -322,6 +322,8 @@ export interface AppSettings {
   live_voice: string;
   speaking_rate: number;
   pitch: number;
+  wake_word_enabled: boolean;
+  wake_phrase: string;
 
   text_provider: TextProvider;
   live_model: string;

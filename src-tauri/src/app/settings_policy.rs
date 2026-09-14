@@ -5,6 +5,7 @@ use crate::ai::local::local_model_entry;
 use crate::ai::local_tts::{validate_local_tts_model, validate_local_tts_voice};
 use crate::app::state::AppSettings;
 use crate::audio::devices::AudioDeviceInfo;
+use crate::audio::wake_word::{normalize_wake_phrase, DEFAULT_WAKE_PHRASE};
 use crate::character::behavior::BehaviorEngine;
 use crate::character::idle_banter::{
     normalize_idle_banter_seed_topics, IDLE_BANTER_MAX_MINUTES, IDLE_BANTER_MIN_MINUTES,
@@ -64,6 +65,11 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
     validate_local_tts_voice(&settings.local_tts_voice)?;
     optional_device_id("input device ID", settings.input_device.as_deref())?;
     optional_device_id("output device ID", settings.output_device.as_deref())?;
+    if normalize_wake_phrase(&settings.wake_phrase).as_deref() != Some(DEFAULT_WAKE_PHRASE)
+        || settings.wake_phrase != DEFAULT_WAKE_PHRASE
+    {
+        return Err("wake phrase must be the V1 default: Hey, Moose".to_string());
+    }
 
     finite_range("talkativeness", settings.talkativeness, 0.0, 1.0)?;
     finite_range("volume", settings.volume, 0.0, 1.0)?;
@@ -309,6 +315,10 @@ mod tests {
         assert!(!conversation_restart_required(&previous, &next));
 
         let mut next = previous.clone();
+        next.wake_word_enabled = !previous.wake_word_enabled;
+        assert!(!conversation_restart_required(&previous, &next));
+
+        let mut next = previous.clone();
         next.memory_enabled = !previous.memory_enabled;
         assert!(conversation_restart_required(&previous, &next));
 
@@ -375,6 +385,8 @@ mod tests {
             ("live_voice", "Gemini Live session voice selection"),
             ("speaking_rate", "standalone TTS request"),
             ("pitch", "standalone TTS request"),
+            ("wake_word_enabled", "local wake-word runtime gate"),
+            ("wake_phrase", "fixed V1 local wake phrase"),
             ("text_provider", "text model provider selection"),
             ("live_model", "Gemini Live session configuration"),
             ("google_text_model", "Google text model construction"),
