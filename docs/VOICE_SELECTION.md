@@ -3,6 +3,7 @@
 **Original Google voice decision:** 2026-08-22
 **KittenTTS closeout update:** 2026-09-12
 **Human Local voice audition worksheet:** `docs/LOCAL_TTS_HUMAN_VOICE_AUDITION_2026-09-14.md`
+**Automated ASR voice audition proxy:** `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md`
 
 Talking Moose V1 now has three separate voice ownership domains. Do not collapse them into one setting or one provider catalog.
 
@@ -37,13 +38,21 @@ The Local KittenTTS V1 catalog is owned by the Rust Local TTS layer and currentl
 - `Kiki`
 - `Leo`
 
-`Bella` remains the initial Local TTS default until the owner completes the human voice audition gate. Unsupported Local voice IDs fail closed as setup errors. They must not normalize to a Google voice and must not trigger a Google TTS fallback.
+`Bella` remains the initial Local TTS default until the owner completes the human voice audition gate or explicitly accepts an automated ASR proxy selection for this phase. Unsupported Local voice IDs fail closed as setup errors. They must not normalize to a Google voice and must not trigger a Google TTS fallback.
 
 ## Human Local voice audition
 
 The owner audition protocol and score sheet live in `docs/LOCAL_TTS_HUMAN_VOICE_AUDITION_2026-09-14.md`.
 
-That worksheet is the active place to record the subjective `KCR-330` / `KTT-805` result. Until it records an accepted owner decision, the Local KittenTTS default remains provisional and must not be described as subjectively accepted.
+That worksheet is the active place to record the subjective `KCR-330` / `KTT-805` result. Until it records an accepted owner decision, or until the owner explicitly accepts the ASR proxy result documented below, the Local KittenTTS default remains provisional and must not be described as subjectively accepted.
+
+## Automated ASR voice audition proxy
+
+The automated ASR proxy is defined in `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md` and implemented by `.github/workflows/kittentts-asr-voice-audition.yml`.
+
+It synthesizes all eight Local KittenTTS voices, transcribes them with pinned Moonshine Tiny, ranks passing voices by WER/content-recall evidence, and publishes a recommended objective candidate. This can support `KCR-330` / `KTT-805` only if the owner explicitly accepts ASR-only proxy evidence for this phase.
+
+ASR proxy evidence must not be described as subjective listening evidence. It does not measure naturalness, comedic timing, timbre preference, or fatigue.
 
 ## Settings migration
 
@@ -76,7 +85,11 @@ Local KittenTTS exposes truthful rate handling through its provider/runtime path
 
 The KittenTTS-to-Moonshine Tiny automated ASR smoke passed for all eight Kitten voices on macOS arm64. That proves the voices are machine-recognizable under the smoke-test phrase and configured WER/content-recall gates.
 
-It does not decide which Local voice should be the Moose default. `KCR-330` / `KTT-805` remains open for owner audition of naturalness, comedic fit, timbre, pronunciation, artifacts, fatigue, and final default Local voice selection.
+The ASR voice-audition proxy turns that all-eight-voice evidence into a deterministic objective recommendation. The selected candidate means “best by ASR transcript quality under the smoke corpus,” not “best sounding Moose voice.”
+
+That ASR recommendation can support the default-voice decision if the owner explicitly accepts an ASR-only proxy for this phase. If used, the closeout record must say the default was selected by owner-approved ASR proxy evidence, not subjective listening.
+
+Without either owner listening or explicit owner approval of the ASR proxy, `KCR-330` / `KTT-805` remains open for owner audition of naturalness, comedic fit, timbre, pronunciation, artifacts, fatigue, and final default Local voice selection.
 
 ## Post-processing decision
 
