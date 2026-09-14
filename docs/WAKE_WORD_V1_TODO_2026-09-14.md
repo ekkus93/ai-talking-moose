@@ -1,8 +1,8 @@
 # AI Talking Moose — Wake Word V1 TODO
 
-**Date:** 2026-09-14  
-**Companion spec:** `docs/WAKE_WORD_V1_SPEC_2026-09-14.md`  
-**Baseline:** `e638daa706e63f8bbb36b514322679c1c39e19a6` (`master`)  
+**Date:** 2026-09-14
+**Companion spec:** `docs/WAKE_WORD_V1_SPEC_2026-09-14.md`
+**Baseline:** `e638daa706e63f8bbb36b514322679c1c39e19a6` (`master`)
 **Status:** Planned implementation queue
 
 Task IDs use the `WW-###` prefix (**Wake Word**).
