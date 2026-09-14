@@ -525,7 +525,7 @@ mod tests {
         let manifest = local_tts_model_manifest(DEFAULT_LOCAL_TTS_MODEL_ID).unwrap();
         assert_eq!(
             resolve_voice_key(manifest, DEFAULT_LOCAL_TTS_VOICE).unwrap(),
-            "expr-voice-2-f"
+            "expr-voice-3-f"
         );
         assert_eq!(
             resolve_voice_key(manifest, "not-a-voice").unwrap_err().kind,
