@@ -1,0 +1,59 @@
+name: Ralph Wake Word licensed model probe
+
+on:
+  push:
+    branches:
+      - ralph/wake-word-artifact-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe-licensed-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freeze licensed bilingual KWS model and Hey Moose tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=/tmp/wake-licensed-probe
+          rm -rf "$work"
+          mkdir -p "$work"
+          cd "$work"
+
+          base='https://huggingface.co/openEuler/sherpa-kws/resolve/main'
+          for rel in \
+            assets/onnx/encoder.onnx \
+            assets/onnx/decoder.onnx \
+            assets/onnx/joiner.onnx \
+            assets/tokens.txt \
+            assets/en.phone; do
+            mkdir -p "$(dirname "$rel")"
+            curl --fail --location --retry 3 --output "$rel" "$base/$rel"
+            printf '%s bytes=' "$rel"
+            stat -c '%s' "$rel"
+            sha256sum "$rel"
+          done
+
+          curl --fail --location --retry 3 --output model-card.md \
+            'https://huggingface.co/openEuler/sherpa-kws/raw/main/README.md'
+          printf 'model-card.md bytes='
+          stat -c '%s' model-card.md
+          sha256sum model-card.md
+          grep -n -E 'license: apache-2.0|## License|Source Model' model-card.md
+
+          python3 -m pip install --disable-pip-version-check --no-input \
+            'sherpa-onnx==1.13.8' 'sherpa-onnx-bin==1.13.8' \
+            'pypinyin==0.54.0'
+
+          printf 'HEY MOOSE @HEY_MOOSE\n' > keywords_raw.txt
+          sherpa-onnx-cli text2token \
+            --tokens assets/tokens.txt \
+            --tokens-type phone+ppinyin \
+            --lexicon assets/en.phone \
+            keywords_raw.txt keywords.txt
+          echo '=== HEY MOOSE TOKENS ==='
+          cat keywords.txt
+
+          echo '=== COMPLETE ==='
