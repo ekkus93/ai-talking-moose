@@ -1,0 +1,195 @@
+name: Ralph one-shot Local TTS documentation reconciliation
+
+on:
+  push:
+    branches:
+      - ralph/local-tts-post-review-hardening
+    paths:
+      - .github/workflows/ralph-local-tts-doc-remediation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ralph/local-tts-post-review-hardening
+          fetch-depth: 0
+      - name: Reconcile reviewed Local TTS documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          banner = "> **Historical handoff snapshot.** Do not use the voice-selection status in this dated handoff as current project state. On 2026-09-14, PR #114 added the automated ASR audition proxy and PR #115 selected `Luna` after explicit owner approval. `KCR-330` / `KTT-805` is closed for V1 by owner-approved ASR proxy evidence, without claiming subjective human listening. Use `docs/VOICE_SELECTION.md` and the current closeout/reconciliation docs for authoritative status.\n\n"
+          replace_once("docs/CHAT_SESSION_HANDOFF_2026-09-13.md", "# AI Talking Moose — Chat Session Handoff (2026-09-13)\n\n", "# AI Talking Moose — Chat Session Handoff (2026-09-13)\n\n" + banner)
+          replace_once("docs/RALPH_BRIDGE_HANDOFF_2026-09-13.md", "# AI Talking Moose — Ralph Bridge Handoff (2026-09-13)\n\n", "# AI Talking Moose — Ralph Bridge Handoff (2026-09-13)\n\n" + banner)
+
+          replace_once("docs/KITTENTTS_CLOSEOUT_REMEDIATION_SPEC_2026-09-12.md",
+          '''**Legacy tracker to reconcile:** `docs/TODO(20260909-120003).md`
+          
+          ---
+          ''',
+          '''**Legacy tracker to reconcile:** `docs/TODO(20260909-120003).md`
+          
+          > **Historical closeout specification.** The requirements below describe the state and policy at the 2026-09-12 closeout baseline, when `KCR-330` / `KTT-805` was still open. Do not read those historical “remains open” statements as current project status. PR #114 later added the automated ASR voice-audition proxy; the owner explicitly accepted that proxy for V1; PR #115 selected `Luna`; and exact PR-head plus merged-master validation passed. Current status is recorded in `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`, `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`, and `docs/VOICE_SELECTION.md`. No subjective human listening is claimed.
+          
+          ---
+          ''')
+
+          replace_once("docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md",
+          '''- [x] Final source audit found no mandatory unresolved issue except human-only audition.
+          ''',
+          '''- [x] Final PR #101 source audit found no mandatory unresolved issue except the then-human-only audition; that later V1 gate was closed by owner-approved ASR proxy in PR #115.
+          ''')
+
+          replace_once("docs/LOCAL_TTS_ASR_PROXY_DEFAULT_VOICE_CLOSEOUT_2026-09-14.md",
+          '''- [ ] pass exact PR-head ordinary CI;
+          - [ ] pass exact PR-head Local TTS production CPU acceptance if triggered or required;
+          - [ ] pass exact PR-head ASR/voice-audition validation if triggered or required;
+          - [ ] merge with exact-head guard;
+          - [ ] verify exact merged `master`.
+          ''',
+          '''- [x] pass exact PR-head ordinary CI — `34853091162` on `4a8bf77e4803b7898c717a3cbe145f9df9600c75`;
+          - [x] pass exact PR-head Local TTS production CPU acceptance — `34853091150`;
+          - [x] pass exact PR-head ASR intelligibility smoke `34853091234` and ASR voice audition `34853091230`;
+          - [x] merge PR #115 with exact tested head `4a8bf77e4803b7898c717a3cbe145f9df9600c75`;
+          - [x] verify exact merged `master` `96ff21e17b02aa0e3b5d8d783bd09400297eaaa4` — CI `34854193904`, production CPU acceptance `34854193873`, ASR intelligibility smoke `34854193869`, and ASR voice audition `34854193968` all PASS.
+          ''')
+
+          spec = "docs/LOCAL_TTS_POST_CLOSEOUT_HARDENING_SPEC_2026-09-13.md"
+          replace_once(spec, "**Status:** Proposed implementation queue\n", "**Status:** Completed by PR #111; historical scope reconciled after the later Luna/ASR-proxy decision\n")
+          replace_once(spec,
+          '''The work here is cleanup, diagnostics precision, and documentation hygiene. It is intended to reduce future confusion and tighten Local TTS behavior at already-identified low-risk edges.
+          
+          ---
+          ''',
+          '''The work here is cleanup, diagnostics precision, and documentation hygiene. It is intended to reduce future confusion and tighten Local TTS behavior at already-identified low-risk edges.
+          
+          > **Later status note (2026-09-14):** PR #111 correctly preserved `KCR-330` / `KTT-805` as an owner-only gate because no owner voice decision existed when this hardening batch ran. PR #114 later added an automated all-eight-voice ASR audition proxy. The owner explicitly accepted that proxy for V1, and PR #115 changed the Local default to `Luna`. `KCR-330` / `KTT-805` is therefore closed for V1 by owner-approved ASR proxy evidence, without claiming subjective human listening. A future listening pass may override `Luna`, but it is not remaining V1 closeout work.
+          
+          ---
+          ''')
+          replace_once(spec, "- Do not mark `KCR-330` / `KTT-805` complete. Human voice audition and final default Local voice selection remain owner-only.\n", "- At the time of PR #111, do not mark `KCR-330` / `KTT-805` complete before an owner decision existed. This historical constraint was satisfied; the later owner-approved ASR-proxy decision and PR #115 close the V1 default-selection gate.\n")
+          replace_once(spec, "That tracker is technically complete except for owner-only `KCR-330` / `KTT-805` human voice audition/default selection.\n", "At the time this spec was written, that tracker was technically complete except for owner-only `KCR-330` / `KTT-805`. That historical gate was later closed for V1 by the owner-approved ASR proxy and PR #115 (`Luna`).\n")
+          replace_once(spec,
+          '''## Finding LTH-500 — Preserve human-only voice selection boundary
+          
+          ### Problem
+          
+          `KCR-330` / `KTT-805` remains owner-only: the final Local KittenTTS default voice requires human audition. Automated ASR can prove intelligibility but cannot decide comedic fit, naturalness, timbre, fatigue, pronunciation, or subjective artifact acceptability.
+          
+          ### Requirement
+          
+          Any changes made under this post-closeout hardening batch must preserve that boundary.
+          
+          ### Acceptance
+          
+          - No code or documentation change claims `KCR-330` / `KTT-805` complete.
+          - Bella may remain the provisional default unless the owner explicitly completes audition and selects a final default.
+          - ASR evidence remains described as intelligibility smoke, not human voice acceptance.
+          ''',
+          '''## Finding LTH-500 — Preserve the then-human-only voice-selection boundary
+          
+          ### Historical requirement
+          
+          When PR #111 implemented this hardening batch, `KCR-330` / `KTT-805` was still owner-only. Automated ASR evidence available at that time was intelligibility evidence and did not itself authorize a default-voice change. PR #111 therefore had to preserve Bella as the provisional Local default and keep the gate open.
+          
+          That requirement was implemented correctly. The project later changed state through a separate, explicit decision: PR #114 added the deterministic ASR audition proxy; the owner accepted that proxy for V1; PR #115 selected `Luna`; exact PR-head and merged-master CI, production CPU acceptance, ASR smoke, and ASR audition all passed.
+          
+          ### Current interpretation
+          
+          - `KCR-330` / `KTT-805` is closed for V1 by owner-approved ASR proxy evidence.
+          - `Luna` is the V1 Local KittenTTS default.
+          - No subjective human listening claim is made.
+          - Future subjective listening is an optional override/evidence-expansion path, not unfinished V1 closeout work.
+          - The historical PR #111 acceptance remains truthful because it describes the project state at the time that PR was implemented.
+          ''')
+          replace_once(spec, "- `KCR-330` / `KTT-805` remains explicitly human-owned unless the owner actually completes the audition.\n", "- the historical PR #111 human-only boundary remains documented, while current status records the later owner-approved ASR-proxy closeout and `Luna` default without claiming subjective listening.\n")
+
+          todo = "docs/LOCAL_TTS_POST_CLOSEOUT_HARDENING_TODO_2026-09-13.md"
+          replace_once(todo, "`KCR-330` / `KTT-805` remains owner-only human voice audition/default selection. It is explicitly outside this engineering closeout and must not be marked complete from automated ASR evidence.\n", "At the time PR #111 ran, `KCR-330` / `KTT-805` remained owner-only and was correctly left open by this engineering closeout. Later, PR #114 added an automated ASR audition proxy, the owner explicitly accepted that proxy for V1, and PR #115 selected `Luna`. The gate is now closed for V1 by owner-approved ASR proxy evidence; no subjective human listening claim is made. See `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md` and `docs/LOCAL_TTS_ASR_PROXY_DEFAULT_VOICE_CLOSEOUT_2026-09-14.md`.\n")
+          replace_once(todo, "- [x] Do not mark `KCR-330` / `KTT-805` complete.\n", "- [x] Preserve `KCR-330` / `KTT-805` as open for the PR #111 implementation because no owner decision existed yet; later PR #115 closeout is recorded separately.\n")
+          replace_once(todo,
+          '''## LTH-500 — Preserve human-only `KCR-330` / `KTT-805` boundary
+          
+          - [x] Verify `docs/VOICE_SELECTION.md` still says human audition/default selection remains open unless the owner completes it.
+          - [x] Verify `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md` still preserves the human-only gate.
+          - [x] Verify `docs/KITTENTTS_LEGACY_TODO_RECONCILIATION_2026-09-12.md` still treats KTT-805 as owner-only/open.
+          - [x] Do not change Bella from provisional/default based only on automated evidence.
+          - [x] Do not describe ASR smoke as subjective voice acceptance.
+          
+          **Acceptance**
+          
+          - [x] Human voice audition remains explicitly open and owner-owned.
+          - [x] Automated tests remain framed as intelligibility/technical evidence only.
+          ''',
+          '''## LTH-500 — Preserve the then-human-only `KCR-330` / `KTT-805` boundary
+          
+          - [x] Verify PR #111-era `docs/VOICE_SELECTION.md` kept audition/default selection open until an owner decision existed.
+          - [x] Verify the PR #111-era closeout/reconciliation docs preserved that same boundary.
+          - [x] Do not change Bella from the then-provisional default solely from the pre-PR-114 ASR smoke.
+          - [x] Do not describe the pre-PR-114 ASR smoke as subjective voice acceptance.
+          - [x] Record the later chronology separately: PR #114 added the ASR audition proxy; the owner accepted it for V1; PR #115 selected `Luna`.
+          - [x] Record current status as V1 closed by owner-approved ASR proxy, without claiming subjective human listening.
+          
+          **Acceptance**
+          
+          - [x] PR #111 preserved the correct boundary for its historical implementation point.
+          - [x] Current documentation distinguishes that historical boundary from the later explicit owner-approved ASR-proxy decision.
+          ''')
+          replace_once(todo, "- [x] `KCR-330` / `KTT-805` remains human-only/open.\n", "- [x] `KCR-330` / `KTT-805` historical PR #111 boundary is preserved, and the later V1 owner-approved ASR-proxy closeout is recorded truthfully.\n")
+          replace_once(todo, "- Human voice audition and final default Local KittenTTS voice selection.\n", "- Subjective human voice audition as an optional future override/evidence-expansion path; it is no longer required to close the V1 default-voice decision.\n")
+
+          replace_once("docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_SPEC_2026-09-12.md",
+          '''**Companion tracker:** `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md`
+          
+          ## 1. Purpose
+          ''',
+          '''**Companion tracker:** `docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md`
+          
+          > **Superseded historical specification.** This file records the review state before the later closeout and default-voice decision. The active status moved to `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md` and `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`. PR #114/#115 later closed `KCR-330` / `KTT-805` for V1 by owner-approved ASR proxy and selected `Luna`; the historical human-gate language below is retained as provenance, not current status.
+          
+          ## 1. Purpose
+          ''')
+          replace_once("docs/POST_KITTENTTS_CODE_REVIEW_REMEDIATION_TODO_2026-09-12.md",
+          '''Only `KCR-330` / `KTT-805` remains intentionally open: owner-only human audition
+          and final default Local KittenTTS voice selection.
+          ''',
+          '''At this historical tracker point, `KCR-330` / `KTT-805` remained intentionally open for owner-only human audition and final default selection. That historical state was later superseded: PR #114 introduced the ASR audition proxy and PR #115 selected `Luna` after explicit owner approval. Current V1 status is closed by owner-approved ASR proxy, not subjective listening.
+          ''')
+
+          replace_once("docs/VOICE_SELECTION.md",
+          '''This preserves user intent during upgrade and avoids mixing provider catalogs.
+          
+          ## Audition behavior
+          ''',
+          '''This preserves user intent during upgrade and avoids mixing provider catalogs.
+          
+          ### Luna default versus persisted Bella
+          
+          `Luna` is the default for new profiles and for persisted settings where `local_tts_voice` is absent. Existing valid persisted Local voice selections are preserved, including `Bella`. The application does not silently rewrite persisted `Bella` to `Luna`, because it cannot truthfully distinguish a user who explicitly chose Bella from a profile that merely inherited the older provisional default. No settings-schema bump is used solely to force a Bella-to-Luna migration.
+          
+          ## Audition behavior
+          ''')
+
+          Path(".github/workflows/ralph-local-tts-doc-remediation.yml").unlink()
+          PY
+          git diff --check
+          git config user.name 'chatgpt-ralph-bridge[bot]'
+          git config user.email '326723642+chatgpt-ralph-bridge[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'docs: reconcile Local TTS review findings'
+          git push origin HEAD:ralph/local-tts-post-review-hardening
