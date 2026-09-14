@@ -10,7 +10,7 @@
 
 This TODO covers only the post-closeout hardening issues found in the Local KittenTTS code review after the technical closeout and PR #109. It is not a replacement for the completed closeout tracker, and it must not reopen work already verified in `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`.
 
-`KCR-330` / `KTT-805` remains owner-only human voice audition/default selection. It is explicitly outside this engineering closeout and must not be marked complete from automated ASR evidence.
+At the time PR #111 ran, `KCR-330` / `KTT-805` remained owner-only and was correctly left open by this engineering closeout. Later, PR #114 added an automated ASR audition proxy, the owner explicitly accepted that proxy for V1, and PR #115 selected `Luna`. The gate is now closed for V1 by owner-approved ASR proxy evidence; no subjective human listening claim is made. See `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md` and `docs/LOCAL_TTS_ASR_PROXY_DEFAULT_VOICE_CLOSEOUT_2026-09-14.md`.
 
 ---
 
@@ -56,7 +56,7 @@ Validated runs on that exact merged master SHA:
 - [x] Do not change synthesis semantics, waveform generation, playback, or mouth-animation behavior unless required by a validated bug fix.
 - [x] Do not introduce Google fallback, Local fallback, browser speech fallback, or platform speech fallback.
 - [x] Do not add a user-facing Local TTS thread-count setting.
-- [x] Do not mark `KCR-330` / `KTT-805` complete.
+- [x] Preserve `KCR-330` / `KTT-805` as open for the PR #111 implementation because no owner decision existed yet; later PR #115 closeout is recorded separately.
 
 **Acceptance**
 
@@ -160,18 +160,19 @@ Validated runs on that exact merged master SHA:
 
 ---
 
-## LTH-500 — Preserve human-only `KCR-330` / `KTT-805` boundary
+## LTH-500 — Preserve the then-human-only `KCR-330` / `KTT-805` boundary
 
-- [x] Verify `docs/VOICE_SELECTION.md` still says human audition/default selection remains open unless the owner completes it.
-- [x] Verify `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md` still preserves the human-only gate.
-- [x] Verify `docs/KITTENTTS_LEGACY_TODO_RECONCILIATION_2026-09-12.md` still treats KTT-805 as owner-only/open.
-- [x] Do not change Bella from provisional/default based only on automated evidence.
-- [x] Do not describe ASR smoke as subjective voice acceptance.
+- [x] Verify PR #111-era `docs/VOICE_SELECTION.md` kept audition/default selection open until an owner decision existed.
+- [x] Verify the PR #111-era closeout/reconciliation docs preserved that same boundary.
+- [x] Do not change Bella from the then-provisional default solely from the pre-PR-114 ASR smoke.
+- [x] Do not describe the pre-PR-114 ASR smoke as subjective voice acceptance.
+- [x] Record the later chronology separately: PR #114 added the ASR audition proxy; the owner accepted it for V1; PR #115 selected `Luna`.
+- [x] Record current status as V1 closed by owner-approved ASR proxy, without claiming subjective human listening.
 
 **Acceptance**
 
-- [x] Human voice audition remains explicitly open and owner-owned.
-- [x] Automated tests remain framed as intelligibility/technical evidence only.
+- [x] PR #111 preserved the correct boundary for its historical implementation point.
+- [x] Current documentation distinguishes that historical boundary from the later explicit owner-approved ASR-proxy decision.
 
 ---
 
@@ -235,13 +236,13 @@ Validated runs on that exact merged master SHA:
 - [x] Pre-runtime Local TTS validation messages are Local-specific, safe, and tested.
 - [x] ONNX `duration` output validation is explicitly documented as presence-only contract drift detection.
 - [x] Historical KittenTTS docs have superseded banners.
-- [x] `KCR-330` / `KTT-805` remains human-only/open.
+- [x] `KCR-330` / `KTT-805` historical PR #111 boundary is preserved, and the later V1 owner-approved ASR-proxy closeout is recorded truthfully.
 - [x] Exact-head validation passed.
 - [x] Guarded merge completed.
 - [x] Exact merged-master verification passed.
 
 ## Intentionally out of scope
 
-- Human voice audition and final default Local KittenTTS voice selection.
+- Subjective human voice audition as an optional future override/evidence-expansion path; it is no longer required to close the V1 default-voice decision.
 - Real macOS x86_64 KittenTTS inference qualification, unless explicitly added as a future evidence-expansion task.
 - Aspirational latency target expansion beyond the already-verified hard warm RTF gate.

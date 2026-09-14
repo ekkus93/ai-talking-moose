@@ -4,11 +4,13 @@
 **Companion TODO:** `docs/LOCAL_TTS_POST_CLOSEOUT_HARDENING_TODO_2026-09-13.md`
 **Baseline:** `78ccea9838c8003332fc7499e7d5b6bc94623044` (`master`)
 **Review source:** post-closeout Local KittenTTS code review against current master
-**Status:** Proposed implementation queue
+**Status:** Completed by PR #111; historical scope reconciled after the later Luna/ASR-proxy decision
 
 This spec defines a small post-closeout hardening batch for issues found after the KittenTTS technical closeout and the Local TTS runtime-boundary hardening PR. The core KittenTTS implementation, closeout remediation, Idle Banter implementation, and PR #109 runtime hardening are already complete and verified on master. This document must not be used to reopen those completed scopes.
 
 The work here is cleanup, diagnostics precision, and documentation hygiene. It is intended to reduce future confusion and tighten Local TTS behavior at already-identified low-risk edges.
+
+> **Later status note (2026-09-14):** PR #111 correctly preserved `KCR-330` / `KTT-805` as an owner-only gate because no owner voice decision existed when this hardening batch ran. PR #114 later added an automated all-eight-voice ASR audition proxy. The owner explicitly accepted that proxy for V1, and PR #115 changed the Local default to `Luna`. `KCR-330` / `KTT-805` is therefore closed for V1 by owner-approved ASR proxy evidence, without claiming subjective human listening. A future listening pass may override `Luna`, but it is not remaining V1 closeout work.
 
 ---
 
@@ -28,7 +30,7 @@ The work here is cleanup, diagnostics precision, and documentation hygiene. It i
 - Do not change the pinned KittenTTS model, voice embeddings, CMUdict/G2P data, ONNX Runtime version, or artifact hashes.
 - Do not change synthesis semantics, phonemization, tokenization, style-row selection, speaking-rate behavior, PCM conversion, playback, or mouth-animation behavior.
 - Do not add a user-facing Local TTS thread-count setting.
-- Do not mark `KCR-330` / `KTT-805` complete. Human voice audition and final default Local voice selection remain owner-only.
+- At the time of PR #111, do not mark `KCR-330` / `KTT-805` complete before an owner decision existed. This historical constraint was satisfied; the later owner-approved ASR-proxy decision and PR #115 close the V1 default-selection gate.
 - Do not claim real macOS x86_64 KittenTTS inference unless a workflow actually runs inference on that platform.
 - Do not treat old historical trackers as active queues after they have been superseded by reconciliation documents.
 
@@ -48,7 +50,7 @@ The active KittenTTS closeout tracker remains:
 
 - `docs/KITTENTTS_CLOSEOUT_REMEDIATION_TODO_2026-09-12.md`
 
-That tracker is technically complete except for owner-only `KCR-330` / `KTT-805` human voice audition/default selection.
+At the time this spec was written, that tracker was technically complete except for owner-only `KCR-330` / `KTT-805`. That historical gate was later closed for V1 by the owner-approved ASR proxy and PR #115 (`Luna`).
 
 ---
 
@@ -175,21 +177,21 @@ The banner should point to:
 
 ---
 
-## Finding LTH-500 — Preserve human-only voice selection boundary
+## Finding LTH-500 — Preserve the then-human-only voice-selection boundary
 
-### Problem
+### Historical requirement
 
-`KCR-330` / `KTT-805` remains owner-only: the final Local KittenTTS default voice requires human audition. Automated ASR can prove intelligibility but cannot decide comedic fit, naturalness, timbre, fatigue, pronunciation, or subjective artifact acceptability.
+When PR #111 implemented this hardening batch, `KCR-330` / `KTT-805` was still owner-only. Automated ASR evidence available at that time was intelligibility evidence and did not itself authorize a default-voice change. PR #111 therefore had to preserve Bella as the provisional Local default and keep the gate open.
 
-### Requirement
+That requirement was implemented correctly. The project later changed state through a separate, explicit decision: PR #114 added the deterministic ASR audition proxy; the owner accepted that proxy for V1; PR #115 selected `Luna`; exact PR-head and merged-master CI, production CPU acceptance, ASR smoke, and ASR audition all passed.
 
-Any changes made under this post-closeout hardening batch must preserve that boundary.
+### Current interpretation
 
-### Acceptance
-
-- No code or documentation change claims `KCR-330` / `KTT-805` complete.
-- Bella may remain the provisional default unless the owner explicitly completes audition and selects a final default.
-- ASR evidence remains described as intelligibility smoke, not human voice acceptance.
+- `KCR-330` / `KTT-805` is closed for V1 by owner-approved ASR proxy evidence.
+- `Luna` is the V1 Local KittenTTS default.
+- No subjective human listening claim is made.
+- Future subjective listening is an optional override/evidence-expansion path, not unfinished V1 closeout work.
+- The historical PR #111 acceptance remains truthful because it describes the project state at the time that PR was implemented.
 
 ---
 
@@ -222,4 +224,4 @@ This hardening batch is complete when:
 - ONNX output-contract validation is either stronger or truthfully documented as presence-only for `duration`;
 - historical KittenTTS trackers/specs carry superseded banners;
 - exact-head and exact-master validation pass;
-- `KCR-330` / `KTT-805` remains explicitly human-owned unless the owner actually completes the audition.
+- the historical PR #111 human-only boundary remains documented, while current status records the later owner-approved ASR-proxy closeout and `Luna` default without claiming subjective listening.

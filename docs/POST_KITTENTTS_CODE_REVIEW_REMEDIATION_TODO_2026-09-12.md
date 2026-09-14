@@ -17,5 +17,4 @@ unchecked historical checklist in the current tree made this file look like the
 active queue after PR #101/#102 had already completed, so the current file is now
 only a pointer to the authoritative closeout records.
 
-Only `KCR-330` / `KTT-805` remains intentionally open: owner-only human audition
-and final default Local KittenTTS voice selection.
+At this historical tracker point, `KCR-330` / `KTT-805` remained intentionally open for owner-only human audition and final default selection. That historical state was later superseded: PR #114 introduced the ASR audition proxy and PR #115 selected `Luna` after explicit owner approval. Current V1 status is closed by owner-approved ASR proxy, not subjective listening.

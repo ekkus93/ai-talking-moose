@@ -1,5 +1,7 @@
 # AI Talking Moose — Ralph Bridge Handoff (2026-09-13)
 
+> **Historical handoff snapshot.** Do not use the voice-selection status in this dated handoff as current project state. On 2026-09-14, PR #114 added the automated ASR audition proxy and PR #115 selected `Luna` after explicit owner approval. `KCR-330` / `KTT-805` is closed for V1 by owner-approved ASR proxy evidence, without claiming subjective human listening. Use `docs/VOICE_SELECTION.md` and the current closeout/reconciliation docs for authoritative status.
+
 ## Purpose
 
 This document is the preferred starting point for the next ChatGPT session working on `ekkus93/ai-talking-moose`.

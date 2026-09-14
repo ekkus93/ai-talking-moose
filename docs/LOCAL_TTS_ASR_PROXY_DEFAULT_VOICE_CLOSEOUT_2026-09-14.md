@@ -72,8 +72,8 @@ The default-change implementation must:
 - [x] preserve no Local-to-Google fallback;
 - [x] update voice-selection documentation;
 - [x] update ASR-proxy/human-audition documentation without claiming subjective listening;
-- [ ] pass exact PR-head ordinary CI;
-- [ ] pass exact PR-head Local TTS production CPU acceptance if triggered or required;
-- [ ] pass exact PR-head ASR/voice-audition validation if triggered or required;
-- [ ] merge with exact-head guard;
-- [ ] verify exact merged `master`.
+- [x] pass exact PR-head ordinary CI — `34853091162` on `4a8bf77e4803b7898c717a3cbe145f9df9600c75`;
+- [x] pass exact PR-head Local TTS production CPU acceptance — `34853091150`;
+- [x] pass exact PR-head ASR intelligibility smoke `34853091234` and ASR voice audition `34853091230`;
+- [x] merge PR #115 with exact tested head `4a8bf77e4803b7898c717a3cbe145f9df9600c75`;
+- [x] verify exact merged `master` `96ff21e17b02aa0e3b5d8d783bd09400297eaaa4` — CI `34854193904`, production CPU acceptance `34854193873`, ASR intelligibility smoke `34854193869`, and ASR voice audition `34854193968` all PASS.
