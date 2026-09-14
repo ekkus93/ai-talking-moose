@@ -669,7 +669,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_tts_selection_fails_closed_before_runtime_integration() {
+    async fn local_tts_selection_fails_closed_when_model_is_not_installed() {
         let state = AppState::new_for_tests().unwrap();
         state.settings.write().tts_provider = TtsProvider::Local;
 
@@ -686,7 +686,12 @@ mod tests {
 
         assert_eq!(error.kind, ProviderErrorKind::Setup);
         assert!(!error.retryable);
+        assert_eq!(
+            error.message,
+            "The selected Local TTS model is not installed and verified."
+        );
         assert!(!error.message.contains("private local utterance"));
+        assert!(!error.message.contains("conversation"));
     }
 
     #[test]
