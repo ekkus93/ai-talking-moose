@@ -1,0 +1,233 @@
+name: Local TTS waveform contract evidence
+
+on:
+  push:
+    branches:
+      - ralph/local-tts-waveform-evidence
+    paths:
+      - ".github/workflows/local-tts-waveform-evidence.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-tts-waveform-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+  MODEL_FILENAME: kitten_tts_mini_v0_8.onnx
+  MODEL_URL: "https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/c02725660cea441db4c383af69f1f26f5cd00947/kitten_tts_mini_v0_8.onnx?download=true"
+  MODEL_BYTES: "78268016"
+  MODEL_SHA256: "0f5bbae4fc4800c98dbc544a87ecfa79510de2fb8222db30d12e5bfe9177df91"
+  VOICES_FILENAME: voices.npz
+  VOICES_URL: "https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/c02725660cea441db4c383af69f1f26f5cd00947/voices.npz?download=true"
+  VOICES_BYTES: "3278902"
+  VOICES_SHA256: "40ad2638952b77b7b2f30127e2608e169fc69dd256b53bd8aaa3409a33193c42"
+  G2P_FILENAME: cmudict_data.json
+  G2P_URL: "https://raw.githubusercontent.com/ayutaz/piper-plus/244ffeb44108347a514ebfc0c2f773d938c9613b/src/rust/piper-plus-g2p/data/cmudict_data.json"
+  G2P_BYTES: "3748042"
+  G2P_SHA256: "f78ed3bfa40146b70b9de78a7c67ef3be6b6c11671bb2a050442f232252a3f01"
+
+jobs:
+  evidence:
+    name: Waveform metadata and runtime shape (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-24.04
+            ort_filename: onnxruntime-linux-x64-1.23.2.tgz
+            ort_url: "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz"
+            ort_bytes: "8309231"
+            ort_sha256: "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b"
+          - label: macos-arm64
+            runner: macos-15
+            ort_filename: onnxruntime-osx-arm64-1.23.2.tgz
+            ort_url: "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-arm64-1.23.2.tgz"
+            ort_bytes: "9999931"
+            ort_sha256: "b4d513ab2b26f088c66891dbbc1408166708773d7cc4163de7bdca0e9bbb7856"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      HIP_VISIBLE_DEVICES: ""
+      ROCR_VISIBLE_DEVICES: ""
+      ORT_FILENAME: ${{ matrix.ort_filename }}
+      ORT_URL: ${{ matrix.ort_url }}
+      ORT_BYTES: ${{ matrix.ort_bytes }}
+      ORT_SHA256: ${{ matrix.ort_sha256 }}
+      EVIDENCE_LABEL: ${{ matrix.label }}
+    steps:
+      - name: Check out evidence branch
+        uses: actions/checkout@v7
+
+      - name: Verify base master parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor cfd32b06f106829a209a053891d155e822e58a10 HEAD
+          echo "Base master: cfd32b06f106829a209a053891d155e822e58a10" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.label }}-kittentts-shape-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-kittentts-cargo-
+            ${{ runner.os }}-kittentts-cargo-
+
+      - name: Cache pinned Moonshine native runtime
+        if: runner.os == 'macOS'
+        id: moonshine-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/native/macos/libmoonshine.dylib
+            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+            src-tauri/native/macos/notices/MoonshineRuntime
+            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
+            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
+          key: moonshine-macos-arm64-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
+
+      - name: Prepare pinned Moonshine native runtime
+        if: runner.os == 'macOS' && steps.moonshine-cache.outputs.cache-hit != 'true'
+        run: bash scripts/prepare_moonshine_macos.sh arm64
+
+      - name: Verify prepared Moonshine runtime architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s src-tauri/native/macos/libmoonshine.dylib
+          test -s src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+          lipo -archs src-tauri/native/macos/libmoonshine.dylib | tr ' ' '\n' | grep -Fx arm64
+          lipo -archs src-tauri/native/macos/libonnxruntime.1.23.2.dylib | tr ' ' '\n' | grep -Fx arm64
+
+      - name: Restore pinned KittenTTS artifacts
+        id: artifact-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/kittentts-artifacts
+          key: kittentts-${{ matrix.label }}-${{ env.MODEL_SHA256 }}-${{ env.VOICES_SHA256 }}-${{ env.G2P_SHA256 }}-${{ matrix.ort_sha256 }}
+
+      - name: Download and verify frozen KittenTTS artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARTIFACT_DIR="$RUNNER_TEMP/kittentts-artifacts"
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+          artifact_dir.mkdir(parents=True, exist_ok=True)
+          specs = [
+              ("MODEL_FILENAME", "MODEL_URL", "MODEL_BYTES", "MODEL_SHA256"),
+              ("VOICES_FILENAME", "VOICES_URL", "VOICES_BYTES", "VOICES_SHA256"),
+              ("G2P_FILENAME", "G2P_URL", "G2P_BYTES", "G2P_SHA256"),
+              ("ORT_FILENAME", "ORT_URL", "ORT_BYTES", "ORT_SHA256"),
+          ]
+          for filename_key, url_key, bytes_key, sha_key in specs:
+              filename = os.environ[filename_key]
+              path = artifact_dir / filename
+              expected_bytes = int(os.environ[bytes_key])
+              expected_sha = os.environ[sha_key]
+              if not path.exists():
+                  temporary = path.with_suffix(path.suffix + ".download")
+                  with urllib.request.urlopen(os.environ[url_key], timeout=120) as response:
+                      with temporary.open("wb") as output:
+                          while chunk := response.read(1024 * 1024):
+                              output.write(chunk)
+                  temporary.replace(path)
+              if path.stat().st_size != expected_bytes:
+                  raise SystemExit(f"size mismatch for {filename}")
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if digest != expected_sha:
+                  raise SystemExit(f"SHA-256 mismatch for {filename}")
+              print(f"verified {filename} bytes={expected_bytes} sha256={digest}")
+          PY
+
+      - name: Instrument direct engine acceptance for metadata evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src-tauri/src/ai/local_tts/runtime/engine.rs')
+          s = p.read_text()
+          old = '''        let mut engine = KittenTtsRuntimeEngine::new();\n        engine.load(&identity, &paths).unwrap();\n        let output = engine\n'''
+          new = '''        let mut engine = KittenTtsRuntimeEngine::new();\n        engine.load(&identity, &paths).unwrap();\n        let session = engine.session.as_ref().expect("loaded session");\n        for outlet in session.outputs() {\n            println!("KITTENTTS_ONNX_OUTPUT_METADATA={}::{:?}", outlet.name(), outlet.dtype());\n        }\n        let output = engine\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one direct-engine insertion point, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Run direct engine waveform evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KTT301_MODEL_PATH="$RUNNER_TEMP/kittentts-artifacts/$MODEL_FILENAME"
+          export KTT301_VOICES_PATH="$RUNNER_TEMP/kittentts-artifacts/$VOICES_FILENAME"
+          export KTT301_G2P_PATH="$RUNNER_TEMP/kittentts-artifacts/$G2P_FILENAME"
+          export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/kittentts-artifacts/$ORT_FILENAME"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          fi
+          cargo test \
+            --manifest-path src-tauri/Cargo.toml \
+            --locked \
+            --lib \
+            'ai::local_tts::runtime::engine::tests::real_kitten_cpu_acceptance' \
+            -- \
+            --ignored \
+            --exact \
+            --nocapture \
+            --test-threads=1 \
+            2>&1 | tee "$RUNNER_TEMP/kittentts-waveform-evidence.log"
+
+      - name: Verify and publish waveform evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/kittentts-waveform-evidence.log"
+          metadata_count="$(grep -c '^KITTENTTS_ONNX_OUTPUT_METADATA=' "$log")"
+          test "$metadata_count" -eq 2
+          grep '^KITTENTTS_ONNX_OUTPUT_METADATA=waveform::' "$log"
+          grep '^KITTENTTS_ONNX_OUTPUT_METADATA=duration::' "$log"
+          shape_line="$(grep '^KITTENTTS_WAVEFORM_SHAPE=' "$log")"
+          test -n "$shape_line"
+          {
+            echo "## Local TTS waveform evidence — $EVIDENCE_LABEL"
+            echo
+            echo '```text'
+            grep '^KITTENTTS_ONNX_OUTPUT_METADATA=' "$log"
+            printf '%s\n' "$shape_line"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
