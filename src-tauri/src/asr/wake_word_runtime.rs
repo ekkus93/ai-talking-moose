@@ -90,6 +90,8 @@ struct WakeWordRuntimeState {
     last_trigger_at: Option<Instant>,
     last_error: Option<&'static str>,
     triggered_pre_roll: Option<Vec<i16>>,
+    load_started_at: Option<Instant>,
+    last_initialization_duration: Option<Duration>,
 }
 
 impl Default for WakeWordRuntimeState {
@@ -100,6 +102,8 @@ impl Default for WakeWordRuntimeState {
             last_trigger_at: None,
             last_error: None,
             triggered_pre_roll: None,
+            load_started_at: None,
+            last_initialization_duration: None,
         }
     }
 }
@@ -113,6 +117,7 @@ pub struct WakeWordRuntimeSnapshot {
     pub ring_buffer_samples: usize,
     pub ring_buffer_capacity_samples: usize,
     pub handoff_pre_roll_samples: usize,
+    pub initialization_duration: Option<Duration>,
 }
 
 #[derive(Clone)]
@@ -138,6 +143,10 @@ impl WakeWordRuntimeManager {
     }
 
     pub fn begin_enable(&self) -> Result<(), WakeWordRuntimeError> {
+        self.begin_enable_at(Instant::now())
+    }
+
+    pub fn begin_enable_at(&self, now: Instant) -> Result<(), WakeWordRuntimeError> {
         if self.shutting_down.load(Ordering::SeqCst) {
             return Err(WakeWordRuntimeError::shutting_down());
         }
@@ -147,6 +156,7 @@ impl WakeWordRuntimeManager {
                 self.clear_audio_locked(&mut state);
                 state.phase = WakeWordRuntimePhase::Loading;
                 state.last_error = None;
+                state.load_started_at = Some(now);
                 Ok(())
             }
             WakeWordRuntimePhase::Loading | WakeWordRuntimePhase::Listening => Ok(()),
@@ -158,6 +168,10 @@ impl WakeWordRuntimeManager {
     }
 
     pub fn mark_loaded(&self) -> Result<(), WakeWordRuntimeError> {
+        self.mark_loaded_at(Instant::now())
+    }
+
+    pub fn mark_loaded_at(&self, now: Instant) -> Result<(), WakeWordRuntimeError> {
         if self.shutting_down.load(Ordering::SeqCst) {
             return Err(WakeWordRuntimeError::shutting_down());
         }
@@ -165,6 +179,10 @@ impl WakeWordRuntimeManager {
         if state.phase != WakeWordRuntimePhase::Loading {
             return Err(WakeWordRuntimeError::invalid_transition());
         }
+        state.last_initialization_duration = state
+            .load_started_at
+            .and_then(|started_at| now.checked_duration_since(started_at));
+        state.load_started_at = None;
         self.clear_audio_locked(&mut state);
         state.phase = WakeWordRuntimePhase::Listening;
         Ok(())
@@ -178,6 +196,7 @@ impl WakeWordRuntimeManager {
         self.clear_audio_locked(&mut state);
         state.phase = WakeWordRuntimePhase::Disabled;
         state.last_error = None;
+        state.load_started_at = None;
     }
 
     /// Append canonical 16 kHz mono PCM while the wake runtime is actively listening.
@@ -282,6 +301,7 @@ impl WakeWordRuntimeManager {
         self.clear_audio_locked(&mut state);
         state.phase = WakeWordRuntimePhase::Error;
         state.last_error = Some(WakeWordRuntimeError::runtime().message);
+        state.load_started_at = None;
     }
 
     pub fn begin_shutdown(&self) {
@@ -291,6 +311,7 @@ impl WakeWordRuntimeManager {
         let mut state = self.state.lock();
         self.clear_audio_locked(&mut state);
         state.phase = WakeWordRuntimePhase::ShuttingDown;
+        state.load_started_at = None;
     }
 
     pub fn snapshot(&self, now: Instant) -> WakeWordRuntimeSnapshot {
@@ -309,6 +330,7 @@ impl WakeWordRuntimeManager {
                 .triggered_pre_roll
                 .as_ref()
                 .map_or(0, |samples| samples.len()),
+            initialization_duration: state.last_initialization_duration,
         }
     }
 
@@ -336,6 +358,23 @@ mod tests {
         assert_eq!(manager.snapshot(now).phase, WakeWordRuntimePhase::Loading);
         manager.mark_loaded().unwrap();
         assert_eq!(manager.snapshot(now).phase, WakeWordRuntimePhase::Listening);
+    }
+
+    #[test]
+    fn initialization_duration_is_recorded_from_loading_to_listening() {
+        let manager = WakeWordRuntimeManager::new();
+        let started = Instant::now();
+        manager.begin_enable_at(started).unwrap();
+        manager
+            .mark_loaded_at(started + Duration::from_millis(37))
+            .unwrap();
+
+        let snapshot = manager.snapshot(started + Duration::from_millis(37));
+        assert_eq!(snapshot.phase, WakeWordRuntimePhase::Listening);
+        assert_eq!(
+            snapshot.initialization_duration,
+            Some(Duration::from_millis(37))
+        );
     }
 
     #[test]

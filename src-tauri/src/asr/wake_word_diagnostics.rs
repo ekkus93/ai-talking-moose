@@ -30,6 +30,7 @@ pub struct WakeWordDiagnostics {
     pub handoff_pre_roll_samples: usize,
     pub trigger_count: u64,
     pub last_trigger_age_ms: Option<u64>,
+    pub runtime_initialization_ms: Option<u64>,
     pub talking_suspended: bool,
     pub last_error: Option<String>,
 }
@@ -56,6 +57,7 @@ impl WakeWordDiagnostics {
             handoff_pre_roll_samples: snapshot.handoff_pre_roll_samples,
             trigger_count: snapshot.trigger_count,
             last_trigger_age_ms: snapshot.last_trigger_age.map(duration_ms),
+            runtime_initialization_ms: snapshot.initialization_duration.map(duration_ms),
             talking_suspended: snapshot.phase == WakeWordRuntimePhase::SuspendedTalking,
             last_error: snapshot.last_error.map(str::to_string),
         }
@@ -95,6 +97,7 @@ mod tests {
         assert_eq!(diagnostics.ring_buffer_samples, 0);
         assert_eq!(diagnostics.handoff_pre_roll_samples, 0);
         assert_eq!(diagnostics.trigger_count, 0);
+        assert_eq!(diagnostics.runtime_initialization_ms, None);
         assert!(!diagnostics.talking_suspended);
         assert!(diagnostics.last_error.is_none());
 
@@ -103,6 +106,25 @@ mod tests {
         assert!(!json.contains("transcript"));
         assert!(!json.contains("credential"));
         assert!(!json.contains("path"));
+    }
+
+    #[test]
+    fn initialization_duration_is_observable_without_unbounded_details() {
+        let manager = WakeWordRuntimeManager::new();
+        let started = Instant::now();
+        manager.begin_enable_at(started).unwrap();
+        manager
+            .mark_loaded_at(started + Duration::from_millis(42))
+            .unwrap();
+
+        let diagnostics = WakeWordDiagnostics::from_runtime(
+            &manager.snapshot(started + Duration::from_millis(42)),
+        );
+        assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Listening);
+        assert_eq!(diagnostics.runtime_initialization_ms, Some(42));
+        let json = serde_json::to_string(&diagnostics).unwrap();
+        assert!(!json.contains("model_path"));
+        assert!(!json.contains("runtime_path"));
     }
 
     #[test]
