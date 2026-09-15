@@ -521,18 +521,18 @@ mod tests {
     async fn repeated_positive_frames_create_one_trigger_until_resume() {
         let (manager, triggers, _) = started_manager(true).await;
         manager
-            .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))
+            .ingest_pcm_bytes([1_u8, 0_u8].repeat(1600))
             .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
         manager
-            .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))
+            .ingest_pcm_bytes([1_u8, 0_u8].repeat(1600))
             .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert_eq!(triggers.load(Ordering::SeqCst), 1);
         assert_eq!(manager.diagnostics().trigger_count, 1);
         manager.resume_listening().unwrap();
         manager
-            .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))
+            .ingest_pcm_bytes([1_u8, 0_u8].repeat(1600))
             .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert_eq!(triggers.load(Ordering::SeqCst), 2);
@@ -582,7 +582,7 @@ mod tests {
         let (manager, triggers, _) = started_manager(true).await;
         for expected in 1..=CYCLES {
             manager
-                .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))
+                .ingest_pcm_bytes([1_u8, 0_u8].repeat(1600))
                 .unwrap();
             tokio::time::timeout(Duration::from_secs(1), async {
                 while manager.state() != WakeWordRuntimeState::Triggered {
