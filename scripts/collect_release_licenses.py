@@ -31,6 +31,9 @@ REQUIRED_LOCAL_TTS_CARGO = {
     "ort": "2.0.0-rc.13",
     "piper-plus-g2p": "0.4.0",
 }
+REQUIRED_WAKE_CARGO = {
+    "sherpa-onnx": "1.13.8",
+}
 
 
 def safe(value: str) -> str:
@@ -329,6 +332,7 @@ def main() -> None:
     cargo = cargo_rows()
     validate_required_cargo_rows(cargo, REQUIRED_LOCAL_LLM_CARGO, "Local LLM")
     validate_required_cargo_rows(cargo, REQUIRED_LOCAL_TTS_CARGO, "Local TTS")
+    validate_required_cargo_rows(cargo, REQUIRED_WAKE_CARGO, "Wake Word")
     inventory = OUTPUT / "DEPENDENCY_LICENSES.md"
     lines = [
         "# Bundled dependency license inventory",
@@ -382,7 +386,7 @@ def main() -> None:
     print(
         "release-license-inventory-ok "
         f"npm={len(npm)} cargo={len(cargo)} declaration_only={len(declaration_only)} "
-        "required_local_llm=2 required_local_tts=2"
+        "required_local_llm=2 required_local_tts=2 required_wake=1"
     )
 
 

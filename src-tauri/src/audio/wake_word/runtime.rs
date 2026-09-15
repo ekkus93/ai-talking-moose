@@ -497,12 +497,16 @@ mod tests {
             .ingest_pcm_bytes(vec![1_i16, 0].repeat(1600))
             .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
-        manager.ingest_pcm_bytes(vec![1, 0; 1600]).unwrap();
+        manager
+            .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert_eq!(triggers.load(Ordering::SeqCst), 1);
         assert_eq!(manager.diagnostics().trigger_count, 1);
         manager.resume_listening().unwrap();
-        manager.ingest_pcm_bytes(vec![1, 0; 1600]).unwrap();
+        manager
+            .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert_eq!(triggers.load(Ordering::SeqCst), 2);
         manager.stop().await.unwrap();

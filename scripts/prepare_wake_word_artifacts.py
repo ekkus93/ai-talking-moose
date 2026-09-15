@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 import shutil
 import tarfile
-import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,13 +87,15 @@ def main() -> None:
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/"
         f"v{manifest['sherpa_version']}/{runtime['filename']}"
     )
-    with tempfile.TemporaryDirectory(prefix="wake-runtime-") as temporary:
-        archive = Path(temporary) / runtime["filename"]
+    runtime_archive_root = destination / "runtime-archive"
+    runtime_archive_root.mkdir(parents=True, exist_ok=True)
+    archive = runtime_archive_root / runtime["filename"]
+    if not archive.exists():
         download(release_url, archive)
-        verify(archive, runtime["bytes"], runtime["sha256"])
-        if runtime_root.exists():
-            shutil.rmtree(runtime_root)
-        safe_extract_tar_bz2(archive, runtime_root)
+    verify(archive, runtime["bytes"], runtime["sha256"])
+    if runtime_root.exists():
+        shutil.rmtree(runtime_root)
+    safe_extract_tar_bz2(archive, runtime_root)
 
     evidence = {
         "engine": manifest["engine"],
@@ -103,6 +104,7 @@ def main() -> None:
         "platform": args.platform,
         "model_verified": True,
         "runtime_archive_verified": True,
+        "runtime_archive_filename": runtime["filename"],
     }
     (destination / "verification.json").write_text(
         json.dumps(evidence, indent=2) + "\n"
