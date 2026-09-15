@@ -1,0 +1,132 @@
+name: Ralph Wake CI Fixes
+
+on:
+  push:
+    branches:
+      - ralph/wake-word-v1-core
+    paths:
+      - ".github/workflows/ralph-wake-ci-fixes.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ralph/wake-word-v1-core
+      - name: Apply exact-head CI fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old!r}")
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          acceptance = Path("src-tauri/src/bin/wake_word_acceptance.rs")
+          text = acceptance.read_text(encoding="utf-8")
+          old = '''    Ok(data
+        .chunks_exact(2)
+        .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect())'''
+          new = '''    Ok(data
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|chunk| i16::from_le_bytes(*chunk))
+        .collect())'''
+          if old not in text:
+              raise SystemExit("wake acceptance PCM conversion shape drifted")
+          acceptance.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          runtime = Path("src-tauri/src/audio/wake_word/runtime.rs")
+          text = runtime.read_text(encoding="utf-8")
+          needle = "vec![1_u8, 0_u8].repeat(1600)"
+          count = text.count(needle)
+          if count < 1:
+              raise SystemExit("wake runtime Clippy fixture shape drifted")
+          runtime.write_text(text.replace(needle, "[1_u8, 0_u8].repeat(1600)"), encoding="utf-8")
+          print(f"updated {count} wake runtime PCM fixtures")
+
+          character = Path("src-tauri/src/commands/character.rs")
+          text = character.read_text(encoding="utf-8")
+          old = '''        let (pcm_tx, _pcm_rx) = tokio::sync::mpsc::channel(1);
+        capture.lock().start(None, 16_000, pcm_tx, None).unwrap();
+        playback.seed_buffer_for_tests(&[0.25, -0.25, 0.5], 0.5);'''
+          new = '''        playback.seed_buffer_for_tests(&[0.25, -0.25, 0.5], 0.5);'''
+          if old not in text:
+              raise SystemExit("character interaction capture setup drifted")
+          text = text.replace(old, new, 1)
+          marker = '''        .expect("interaction setup state should succeed through IPC");
+
+        InteractionTestFixture {'''
+          replacement = '''        .expect("interaction setup state should succeed through IPC");
+
+        // Build/setup may reconcile inactive wake capture. Arm the explicit mock
+        // microphone only after the presentation state is established so these
+        // tests exercise mute/dismiss teardown from an actually active capture.
+        let (pcm_tx, _pcm_rx) = tokio::sync::mpsc::channel(1);
+        capture.lock().start(None, 16_000, pcm_tx, None).unwrap();
+
+        InteractionTestFixture {'''
+          if marker not in text:
+              raise SystemExit("character interaction fixture return marker drifted")
+          character.write_text(text.replace(marker, replacement, 1), encoding="utf-8")
+
+          policy = Path("scripts/check_local_tts_packaging_policy.py")
+          text = policy.read_text(encoding="utf-8")
+          old = '''    resources = bundle.get("resources", [])
+    if resources != ["native/macos/notices/"]:
+        fail("ordinary Tauri resources must remain notice-only; Local TTS artifacts are installer-owned")'''
+          new = '''    resources = bundle.get("resources", [])
+    allowed_resources = {"native/macos/notices/", "resources/wake_word/"}
+    if len(resources) != len(allowed_resources) or set(resources) != allowed_resources:
+        fail(
+            "ordinary Tauri resources may contain notices plus the independently pinned "
+            "Wake Word subtree; Local TTS artifacts remain installer-owned"
+        )'''
+          if old not in text:
+              raise SystemExit("Local TTS bundle resource guard drifted")
+          policy.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          workflow = Path(".github/workflows/wake-word-v1-acceptance.yml")
+          text = workflow.read_text(encoding="utf-8")
+          marker = '''      - name: Build exact production KWS acceptance harness
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --bin wake_word_acceptance'''
+          replacement = '''      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+      - name: Build exact production KWS acceptance harness
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --bin wake_word_acceptance'''
+          if marker not in text:
+              raise SystemExit("Wake Word acceptance build step drifted")
+          workflow.write_text(text.replace(marker, replacement, 1), encoding="utf-8")
+          PY
+
+          rm .github/workflows/ralph-wake-ci-fixes.yml
+          git config user.name "Ralph Wake Loop"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          changed="$(git diff --cached --name-only)"
+          printf '%s\n' "$changed"
+          for expected in \
+            .github/workflows/wake-word-v1-acceptance.yml \
+            scripts/check_local_tts_packaging_policy.py \
+            src-tauri/src/audio/wake_word/runtime.rs \
+            src-tauri/src/bin/wake_word_acceptance.rs \
+            src-tauri/src/commands/character.rs; do
+            printf '%s\n' "$changed" | grep -Fx "$expected" >/dev/null
+          done
+          printf '%s\n' "$changed" | grep -Fx .github/workflows/ralph-wake-ci-fixes.yml >/dev/null
+          test "$(printf '%s\n' "$changed" | wc -l | tr -d ' ')" = 6
+          git commit -m "fix: close Wake Word exact-head CI failures"
+          git push origin HEAD:ralph/wake-word-v1-core
