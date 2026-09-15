@@ -39,7 +39,13 @@ struct AcceptanceReport {
     keywords_score: f32,
     keywords_threshold: f32,
     initialization_duration_ms: f64,
+    baseline_rss_kib: u64,
     max_rss_kib: u64,
+    rss_delta_kib: u64,
+    process_cpu_time_ms: f64,
+    cpu_realtime_ratio: f64,
+    silence_equivalent_cpu_percent: f64,
+    silence_realtime_factor: f64,
     positive_total: usize,
     positive_detected: usize,
     negative_total: usize,
@@ -114,27 +120,43 @@ fn read_pcm_wav(path: &Path) -> Result<Vec<i16>, String> {
         .collect())
 }
 
+#[derive(Clone, Copy)]
+struct ResourceUsage {
+    max_rss_kib: u64,
+    cpu_time_ms: f64,
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn max_rss_kib() -> u64 {
+fn resource_usage() -> ResourceUsage {
     unsafe {
         let mut usage: libc::rusage = std::mem::zeroed();
         if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0 {
-            return 0;
+            return ResourceUsage {
+                max_rss_kib: 0,
+                cpu_time_ms: 0.0,
+            };
         }
+        let user_ms =
+            usage.ru_utime.tv_sec as f64 * 1000.0 + usage.ru_utime.tv_usec as f64 / 1000.0;
+        let system_ms =
+            usage.ru_stime.tv_sec as f64 * 1000.0 + usage.ru_stime.tv_usec as f64 / 1000.0;
         #[cfg(target_os = "linux")]
-        {
-            usage.ru_maxrss.max(0) as u64
-        }
+        let max_rss_kib = usage.ru_maxrss.max(0) as u64;
         #[cfg(target_os = "macos")]
-        {
-            (usage.ru_maxrss.max(0) as u64) / 1024
+        let max_rss_kib = (usage.ru_maxrss.max(0) as u64) / 1024;
+        ResourceUsage {
+            max_rss_kib,
+            cpu_time_ms: user_ms + system_ms,
         }
     }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn max_rss_kib() -> u64 {
-    0
+fn resource_usage() -> ResourceUsage {
+    ResourceUsage {
+        max_rss_kib: 0,
+        cpu_time_ms: 0.0,
+    }
 }
 
 fn parse_args() -> Result<(PathBuf, PathBuf, PathBuf), String> {
@@ -170,6 +192,7 @@ fn main() -> Result<(), String> {
         return Err("Corpus manifest contains no cases.".to_string());
     }
 
+    let baseline_usage = resource_usage();
     let initialization_started = Instant::now();
     let mut engine = SherpaKwsEngine::open(&model_root).map_err(|error| error.message)?;
     let initialization_duration_ms = initialization_started.elapsed().as_secs_f64() * 1000.0;
@@ -186,6 +209,8 @@ fn main() -> Result<(), String> {
     let mut negative_total = 0usize;
     let mut negative_false_accepts = 0usize;
     let mut maximum_realtime_factor = 0.0f64;
+    let mut total_audio_duration_ms = 0.0f64;
+    let inference_cpu_started = resource_usage().cpu_time_ms;
 
     for case in corpus.cases {
         engine.reset().map_err(|error| error.message)?;
@@ -221,6 +246,7 @@ fn main() -> Result<(), String> {
             0.0
         };
         maximum_realtime_factor = maximum_realtime_factor.max(realtime_factor);
+        total_audio_duration_ms += audio_duration_ms;
 
         if case.expect_trigger {
             positive_total += 1;
@@ -245,7 +271,33 @@ fn main() -> Result<(), String> {
         });
     }
 
+    let inference_cpu_time_ms = (resource_usage().cpu_time_ms - inference_cpu_started).max(0.0);
+    let cpu_realtime_ratio = if total_audio_duration_ms > 0.0 {
+        inference_cpu_time_ms / total_audio_duration_ms
+    } else {
+        0.0
+    };
+
+    engine.reset().map_err(|error| error.message)?;
+    let silence = vec![0_i16; (WAKE_SAMPLE_RATE_HZ * 30) as usize];
+    let silence_cpu_started = resource_usage().cpu_time_ms;
+    let silence_wall_started = Instant::now();
+    for chunk in silence.chunks(1600) {
+        if engine
+            .process_pcm_i16(chunk)
+            .map_err(|error| error.message)?
+        {
+            return Err("Wake Word silence baseline produced a false trigger.".to_string());
+        }
+    }
+    let silence_wall_ms = silence_wall_started.elapsed().as_secs_f64() * 1000.0;
+    let silence_cpu_ms = (resource_usage().cpu_time_ms - silence_cpu_started).max(0.0);
+    let silence_audio_ms = 30_000.0;
+    let silence_equivalent_cpu_percent = silence_cpu_ms / silence_audio_ms * 100.0;
+    let silence_realtime_factor = silence_wall_ms / silence_audio_ms;
+
     engine.shutdown().map_err(|error| error.message)?;
+    let final_usage = resource_usage();
     let report = AcceptanceReport {
         engine: "sherpa-onnx-kws",
         sample_rate_hz: WAKE_SAMPLE_RATE_HZ,
@@ -253,7 +305,15 @@ fn main() -> Result<(), String> {
         keywords_score: DEFAULT_KEYWORDS_SCORE,
         keywords_threshold: DEFAULT_KEYWORDS_THRESHOLD,
         initialization_duration_ms,
-        max_rss_kib: max_rss_kib(),
+        baseline_rss_kib: baseline_usage.max_rss_kib,
+        max_rss_kib: final_usage.max_rss_kib,
+        rss_delta_kib: final_usage
+            .max_rss_kib
+            .saturating_sub(baseline_usage.max_rss_kib),
+        process_cpu_time_ms: inference_cpu_time_ms,
+        cpu_realtime_ratio,
+        silence_equivalent_cpu_percent,
+        silence_realtime_factor,
         positive_total,
         positive_detected,
         negative_total,
@@ -268,14 +328,15 @@ fn main() -> Result<(), String> {
     )
     .map_err(|_| "Acceptance report could not be written.".to_string())?;
     println!(
-        "wake-word-acceptance positives={}/{} false_accepts={}/{} max_rtf={:.4} init_ms={:.1} max_rss_kib={}",
+        "wake-word-acceptance positives={}/{} false_accepts={}/{} max_rtf={:.4} init_ms={:.1} rss_delta_kib={} silence_cpu_pct={:.2}",
         report.positive_detected,
         report.positive_total,
         report.negative_false_accepts,
         report.negative_total,
         report.maximum_realtime_factor,
         report.initialization_duration_ms,
-        report.max_rss_kib
+        report.rss_delta_kib,
+        report.silence_equivalent_cpu_percent
     );
     if report.positive_detected != report.positive_total {
         return Err("Wake Word positive corpus contains false rejects.".to_string());

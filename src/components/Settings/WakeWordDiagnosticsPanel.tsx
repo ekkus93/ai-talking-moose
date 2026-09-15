@@ -93,6 +93,22 @@ export const WakeWordDiagnosticsPanel: React.FC = () => {
             }
           />
           <Row
+            label="Trigger → handoff"
+            value={
+              diagnostics.last_handoff_latency_ms === null
+                ? "—"
+                : `${diagnostics.last_handoff_latency_ms} ms`
+            }
+          />
+          <Row
+            label="Pre-roll replay"
+            value={
+              diagnostics.last_handoff_replay_duration_us === null
+                ? "—"
+                : `${diagnostics.last_handoff_replay_samples} samples / ${diagnostics.last_handoff_replay_duration_us} µs`
+            }
+          />
+          <Row
             label="Suspended for Talking"
             value={diagnostics.suspended_for_talking ? "Yes" : "No"}
           />

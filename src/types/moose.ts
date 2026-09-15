@@ -308,6 +308,9 @@ export interface WakeWordDiagnostics {
   trigger_count: number;
   last_trigger_unix_ms: number | null;
   initialization_duration_ms: number | null;
+  last_handoff_latency_ms: number | null;
+  last_handoff_replay_duration_us: number | null;
+  last_handoff_replay_samples: number;
   suspended_for_talking: boolean;
   dropped_engine_chunks: number;
   dropped_command_chunks: number;

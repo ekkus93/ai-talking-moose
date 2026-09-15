@@ -48,6 +48,9 @@ pub struct WakeWordDiagnostics {
     pub trigger_count: u64,
     pub last_trigger_unix_ms: Option<u64>,
     pub initialization_duration_ms: Option<u64>,
+    pub last_handoff_latency_ms: Option<u64>,
+    pub last_handoff_replay_duration_us: Option<u64>,
+    pub last_handoff_replay_samples: usize,
     pub suspended_for_talking: bool,
     pub dropped_engine_chunks: u64,
     pub dropped_command_chunks: u64,
@@ -67,6 +70,10 @@ struct RuntimeInner {
     trigger_count: u64,
     last_trigger_unix_ms: Option<u64>,
     initialization_duration_ms: Option<u64>,
+    last_trigger_instant: Option<Instant>,
+    last_handoff_latency_ms: Option<u64>,
+    last_handoff_replay_duration_us: Option<u64>,
+    last_handoff_replay_samples: usize,
     suspended_for_talking: bool,
     dropped_engine_chunks: u64,
     dropped_command_chunks: u64,
@@ -84,6 +91,10 @@ impl RuntimeInner {
             trigger_count: 0,
             last_trigger_unix_ms: None,
             initialization_duration_ms: None,
+            last_trigger_instant: None,
+            last_handoff_latency_ms: None,
+            last_handoff_replay_duration_us: None,
+            last_handoff_replay_samples: 0,
             suspended_for_talking: false,
             dropped_engine_chunks: 0,
             dropped_command_chunks: 0,
@@ -148,6 +159,10 @@ impl WakeWordRuntimeManager {
             inner.ring.clear();
             inner.command_sink = None;
             inner.level_sink = None;
+            inner.last_trigger_instant = None;
+            inner.last_handoff_latency_ms = None;
+            inner.last_handoff_replay_duration_us = None;
+            inner.last_handoff_replay_samples = 0;
         }
         self.stop_requested.store(false, Ordering::SeqCst);
         let (engine_tx, mut engine_rx) = mpsc::channel::<Vec<i16>>(ENGINE_QUEUE_CAPACITY);
@@ -185,6 +200,7 @@ impl WakeWordRuntimeManager {
                                         .duration_since(UNIX_EPOCH)
                                         .ok()
                                         .map(|duration| duration.as_millis() as u64);
+                                    state.last_trigger_instant = Some(Instant::now());
                                     true
                                 } else {
                                     false
@@ -297,7 +313,8 @@ impl WakeWordRuntimeManager {
         command_sink: mpsc::Sender<Vec<u8>>,
         level_sink: Option<mpsc::Sender<f32>>,
     ) -> Result<usize, WakeWordError> {
-        let snapshot = {
+        let handoff_started = Instant::now();
+        let (snapshot, trigger_latency_ms) = {
             let mut inner = self.inner.lock();
             if !inner.enabled || inner.state != WakeWordRuntimeState::Triggered {
                 return Err(WakeWordError {
@@ -306,10 +323,13 @@ impl WakeWordRuntimeManager {
                     retryable: true,
                 });
             }
+            let trigger_latency_ms = inner
+                .last_trigger_instant
+                .map(|instant| instant.elapsed().as_millis() as u64);
             inner.state = WakeWordRuntimeState::CommandHandoff;
             inner.command_sink = Some(command_sink.clone());
             inner.level_sink = level_sink;
-            inner.ring.snapshot()
+            (inner.ring.snapshot(), trigger_latency_ms)
         };
 
         let mut replayed = 0usize;
@@ -322,6 +342,10 @@ impl WakeWordRuntimeManager {
             })?;
             replayed += chunk.len();
         }
+        let mut inner = self.inner.lock();
+        inner.last_handoff_latency_ms = trigger_latency_ms;
+        inner.last_handoff_replay_duration_us = Some(handoff_started.elapsed().as_micros() as u64);
+        inner.last_handoff_replay_samples = replayed;
         Ok(replayed)
     }
 
@@ -410,6 +434,9 @@ impl WakeWordRuntimeManager {
             trigger_count: inner.trigger_count,
             last_trigger_unix_ms: inner.last_trigger_unix_ms,
             initialization_duration_ms: inner.initialization_duration_ms,
+            last_handoff_latency_ms: inner.last_handoff_latency_ms,
+            last_handoff_replay_duration_us: inner.last_handoff_replay_duration_us,
+            last_handoff_replay_samples: inner.last_handoff_replay_samples,
             suspended_for_talking: inner.suspended_for_talking,
             dropped_engine_chunks: inner.dropped_engine_chunks,
             dropped_command_chunks: inner.dropped_command_chunks,
@@ -547,6 +574,39 @@ mod tests {
         assert_eq!(manager.begin_command_handoff(tx, None).unwrap(), 0);
         assert!(rx.try_recv().is_err());
         manager.stop().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn hundred_wake_handoff_resume_cycles_remain_bounded_and_recoverable() {
+        const CYCLES: u64 = 100;
+        let (manager, triggers, _) = started_manager(true).await;
+        for expected in 1..=CYCLES {
+            manager
+                .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while manager.state() != WakeWordRuntimeState::Triggered {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+            })
+            .await
+            .expect("wake trigger did not arrive during bounded soak cycle");
+            let (tx, mut rx) = mpsc::channel(64);
+            let replayed = manager.begin_command_handoff(tx, None).unwrap();
+            assert!(replayed <= manager.diagnostics().ring_buffer_capacity_samples);
+            while rx.try_recv().is_ok() {}
+            manager.finish_command_handoff();
+            manager.resume_listening().unwrap();
+            let diagnostics = manager.diagnostics();
+            assert_eq!(diagnostics.trigger_count, expected);
+            assert_eq!(diagnostics.ring_buffer_capacity_samples, 32_000);
+            assert_eq!(diagnostics.dropped_engine_chunks, 0);
+            assert_eq!(diagnostics.dropped_command_chunks, 0);
+            assert_eq!(diagnostics.state, WakeWordRuntimeState::Listening);
+        }
+        assert_eq!(triggers.load(Ordering::SeqCst), CYCLES);
+        manager.stop().await.unwrap();
+        assert_eq!(manager.state(), WakeWordRuntimeState::Disabled);
     }
 
     #[tokio::test]
