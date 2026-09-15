@@ -97,8 +97,8 @@ fn read_pcm_wav(path: &Path) -> Result<Vec<i16>, String> {
         }
         cursor = end + (size % 2);
     }
-    let (channels, sample_rate, bits) = format
-        .ok_or_else(|| "Acceptance WAV has no format chunk.".to_string())?;
+    let (channels, sample_rate, bits) =
+        format.ok_or_else(|| "Acceptance WAV has no format chunk.".to_string())?;
     if channels != 1 || sample_rate != WAKE_SAMPLE_RATE_HZ || bits != 16 {
         return Err(format!(
             "Acceptance WAV must be mono 16-bit PCM at {WAKE_SAMPLE_RATE_HZ} Hz."
@@ -263,7 +263,8 @@ fn main() -> Result<(), String> {
     };
     fs::write(
         &report_path,
-        serde_json::to_vec_pretty(&report).map_err(|_| "Report serialization failed.".to_string())?,
+        serde_json::to_vec_pretty(&report)
+            .map_err(|_| "Report serialization failed.".to_string())?,
     )
     .map_err(|_| "Acceptance report could not be written.".to_string())?;
     println!(
