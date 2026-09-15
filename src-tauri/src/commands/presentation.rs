@@ -1,14 +1,33 @@
+use crate::app::state::AppState;
 use crate::character::state::{transition_character_state, CharacterState};
 use parking_lot::RwLock;
-use tauri::{Emitter, Runtime};
+use tauri::{Emitter, Manager, Runtime};
 
 pub(crate) fn transition_and_emit<R: Runtime>(
     character_state: &RwLock<CharacterState>,
     app: &tauri::AppHandle<R>,
     target: CharacterState,
 ) -> Result<(), String> {
+    let previous = *character_state.read();
     transition_character_state(character_state, target)?;
     let _ = app.emit("moose://state", target);
+
+    if let Some(state) = app.try_state::<AppState>() {
+        if target == CharacterState::Talking {
+            state.wake_word_runtime.suspend_for_talking();
+            state.audio_capture.lock().stop();
+        } else if previous == CharacterState::Talking && target == CharacterState::Idle {
+            let state = state.inner().clone();
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) =
+                    crate::commands::wake_word::reconcile_wake_runtime(state, app).await
+                {
+                    tracing::warn!(error = %error, "Failed to resume wake-word listening after Talking");
+                }
+            });
+        }
+    }
     Ok(())
 }
 

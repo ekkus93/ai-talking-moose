@@ -22,6 +22,7 @@ import {
   ToolAuditRecord,
   TtsCatalog,
   TtsProvider,
+  WakeWordDiagnostics,
 } from "../types/moose";
 import type {
   LocalTtsDiagnostics,
@@ -250,6 +251,11 @@ export const nativeTauriBridge = {
   async getAudioDiagnostics(): Promise<AudioDiagnostics> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<AudioDiagnostics>("get_audio_diagnostics");
+  },
+
+  async getWakeWordDiagnostics(): Promise<WakeWordDiagnostics> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<WakeWordDiagnostics>("get_wake_word_diagnostics");
   },
 
   async testMicrophone(): Promise<MicrophoneTestResult> {

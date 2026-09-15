@@ -22,6 +22,7 @@ import type {
   ToolAuditRecord,
   TtsCatalog,
   TtsProvider,
+  WakeWordDiagnostics,
 } from "../types/moose";
 import type {
   LocalTtsDiagnostics,
@@ -432,6 +433,31 @@ export const browserPreviewBridge = {
 
   async getAudioDiagnostics(): Promise<AudioDiagnostics> {
     return previewAudioDiagnostics();
+  },
+
+  async getWakeWordDiagnostics(): Promise<WakeWordDiagnostics> {
+    return {
+      enabled: false,
+      state: "disabled",
+      engine: "sherpa-onnx",
+      runtime_version: "1.13.8",
+      platform: "browser-preview",
+      architecture: "preview",
+      inference_threads: 1,
+      sample_rate_hz: 16_000,
+      channels: 1,
+      ring_buffer_seconds: 2,
+      ring_buffer_capacity_samples: 32_000,
+      keywords_score: 1.0,
+      keywords_threshold: 0.25,
+      trigger_count: 0,
+      last_trigger_unix_ms: null,
+      initialization_duration_ms: null,
+      suspended_for_talking: false,
+      dropped_engine_chunks: 0,
+      dropped_command_chunks: 0,
+      last_error: null,
+    };
   },
 
   async testMicrophone(): Promise<MicrophoneTestResult> {

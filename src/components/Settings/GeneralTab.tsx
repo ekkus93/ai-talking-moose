@@ -1,6 +1,6 @@
 import React from "react";
 import { useMooseStore } from "../../stores/mooseStore";
-import { Keyboard } from "lucide-react";
+import { Keyboard, Radio } from "lucide-react";
 
 export const GeneralTab: React.FC = () => {
   const { settings, updateSettingsPatch } = useMooseStore();
@@ -63,6 +63,38 @@ export const GeneralTab: React.FC = () => {
         />
         <span>Restore desktop window position across restarts</span>
       </label>
+
+      <section
+        className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2"
+        aria-labelledby="wake-word-heading"
+      >
+        <div
+          className="flex items-center gap-1.5 font-bold"
+          id="wake-word-heading"
+        >
+          <Radio className="w-3.5 h-3.5" aria-hidden="true" />
+          Wake Word
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={settings.wake_word_enabled}
+            onChange={(e) =>
+              updateSettingsPatch({ wake_word_enabled: e.target.checked })
+            }
+            className="accent-black"
+          />
+          <span>Enable wake word</span>
+        </label>
+        <div className="text-[11px]">
+          <span className="font-bold">Wake phrase:</span> {settings.wake_phrase}
+        </div>
+        <p className="text-[10px] text-gray-700">
+          When enabled, the microphone stays locally active for offline
+          sherpa-onnx keyword detection. Full ASR starts only after “Hey, Moose”
+          is detected. Wake listening is suspended while Moose is speaking.
+        </p>
+      </section>
 
       <section
         className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2"
