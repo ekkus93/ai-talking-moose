@@ -371,7 +371,10 @@ mod tests {
 
         let snapshot = manager.snapshot(started + Duration::from_millis(37));
         assert_eq!(snapshot.phase, WakeWordRuntimePhase::Listening);
-        assert_eq!(snapshot.initialization_duration, Some(Duration::from_millis(37)));
+        assert_eq!(
+            snapshot.initialization_duration,
+            Some(Duration::from_millis(37))
+        );
     }
 
     #[test]
