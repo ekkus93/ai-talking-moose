@@ -6,6 +6,7 @@ on:
       - ralph/wake-word-v1-core
     paths:
       - .github/workflows/ralph-wake-ui-lifecycle.yml
+      - .github/ralph/wake_ui_patch.py
 
 permissions:
   contents: write
@@ -23,165 +24,23 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Apply Wake Word Settings and diagnostics UI
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply patch
+        run: python3 .github/ralph/wake_ui_patch.py
+      - name: Format and publish patch
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace(path, old, new, count=1):
-              p = Path(path)
-              text = p.read_text()
-              if old not in text:
-                  raise SystemExit(f"{path}: missing replacement: {old[:120]!r}")
-              p.write_text(text.replace(old, new, count))
-
-          # Types.
-          replace(
-              "src/types/moose.ts",
-              "export interface MicrophoneTestResult {\n",
-              '''export type WakeWordRuntimeState =\n  | "disabled"\n  | "loading"\n  | "listening"\n  | "suspended"\n  | "triggered"\n  | "command_handoff"\n  | "error"\n  | "stopping";\n\nexport interface WakeWordDiagnostics {\n  enabled: boolean;\n  state: WakeWordRuntimeState;\n  engine: string;\n  runtime_version: string;\n  platform: string;\n  architecture: string;\n  inference_threads: number;\n  sample_rate_hz: number;\n  channels: number;\n  ring_buffer_seconds: number;\n  ring_buffer_capacity_samples: number;\n  keywords_score: number;\n  keywords_threshold: number;\n  trigger_count: number;\n  last_trigger_unix_ms: number | null;\n  initialization_duration_ms: number | null;\n  suspended_for_talking: boolean;\n  dropped_engine_chunks: number;\n  dropped_command_chunks: number;\n  last_error: string | null;\n}\n\nexport interface MicrophoneTestResult {\n''')
-
-          # Tauri bridge.
-          replace(
-              "src/lib/tauriBridge.ts",
-              "  TtsProvider,\n} from \"../types/moose\";",
-              "  TtsProvider,\n  WakeWordDiagnostics,\n} from \"../types/moose\";"
-          )
-          replace(
-              "src/lib/tauriBridge.ts",
-              '''  async getAudioDiagnostics(): Promise<AudioDiagnostics> {\n    const { invoke } = await import("@tauri-apps/api/core");\n    return invoke<AudioDiagnostics>("get_audio_diagnostics");\n  },\n''',
-              '''  async getAudioDiagnostics(): Promise<AudioDiagnostics> {\n    const { invoke } = await import("@tauri-apps/api/core");\n    return invoke<AudioDiagnostics>("get_audio_diagnostics");\n  },\n\n  async getWakeWordDiagnostics(): Promise<WakeWordDiagnostics> {\n    const { invoke } = await import("@tauri-apps/api/core");\n    return invoke<WakeWordDiagnostics>("get_wake_word_diagnostics");\n  },\n''')
-
-          # Browser preview.
-          replace(
-              "src/lib/browserPreviewBridge.ts",
-              "  TtsProvider,\n} from \"../types/moose\";",
-              "  TtsProvider,\n  WakeWordDiagnostics,\n} from \"../types/moose\";"
-          )
-          replace(
-              "src/lib/browserPreviewBridge.ts",
-              '''  async getAudioDiagnostics(): Promise<AudioDiagnostics> {\n    return previewAudioDiagnostics();\n  },\n''',
-              '''  async getAudioDiagnostics(): Promise<AudioDiagnostics> {\n    return previewAudioDiagnostics();\n  },\n\n  async getWakeWordDiagnostics(): Promise<WakeWordDiagnostics> {\n    return {\n      enabled: false,\n      state: "disabled",\n      engine: "sherpa-onnx",\n      runtime_version: "1.13.8",\n      platform: "browser-preview",\n      architecture: "preview",\n      inference_threads: 1,\n      sample_rate_hz: 16_000,\n      channels: 1,\n      ring_buffer_seconds: 2,\n      ring_buffer_capacity_samples: 32_000,\n      keywords_score: 1.0,\n      keywords_threshold: 0.25,\n      trigger_count: 0,\n      last_trigger_unix_ms: null,\n      initialization_duration_ms: null,\n      suspended_for_talking: false,\n      dropped_engine_chunks: 0,\n      dropped_command_chunks: 0,\n      last_error: null,\n    };\n  },\n''')
-
-          # General Settings UI.
-          replace(
-              "src/components/Settings/GeneralTab.tsx",
-              'import { Keyboard } from "lucide-react";',
-              'import { Keyboard, Radio } from "lucide-react";'
-          )
-          replace(
-              "src/components/Settings/GeneralTab.tsx",
-              '''      <section\n        className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2"\n        aria-labelledby="keyboard-shortcuts-heading"\n      >\n''',
-              '''      <section\n        className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2"\n        aria-labelledby="wake-word-heading"\n      >\n        <div\n          className="flex items-center gap-1.5 font-bold"\n          id="wake-word-heading"\n        >\n          <Radio className="w-3.5 h-3.5" aria-hidden="true" />\n          Wake Word\n        </div>\n        <label className="flex items-center gap-2 cursor-pointer">\n          <input\n            type="checkbox"\n            checked={settings.wake_word_enabled}\n            onChange={(e) =>\n              updateSettingsPatch({ wake_word_enabled: e.target.checked })\n            }\n            className="accent-black"\n          />\n          <span>Enable wake word</span>\n        </label>\n        <div className="text-[11px]">\n          <span className="font-bold">Wake phrase:</span> {settings.wake_phrase}\n        </div>\n        <p className="text-[10px] text-gray-700">\n          When enabled, the microphone stays locally active for offline\n          sherpa-onnx keyword detection. Full ASR starts only after “Hey, Moose”\n          is detected. Wake listening is suspended while Moose is speaking.\n        </p>\n      </section>\n\n      <section\n        className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2"\n        aria-labelledby="keyboard-shortcuts-heading"\n      >\n''')
-
-          # Wake diagnostics panel.
-          Path("src/components/Settings/WakeWordDiagnosticsPanel.tsx").write_text(r'''import React, { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
-import { tauriBridge } from "../../lib/tauriBridge";
-import type { WakeWordDiagnostics } from "../../types/moose";
-
-const show = (value: string | number | null) =>
-  value === null ? "—" : String(value);
-
-const Row: React.FC<{ label: string; value: React.ReactNode }> = ({
-  label,
-  value,
-}) => (
-  <div className="flex justify-between gap-4 border-b border-gray-200 py-1 last:border-b-0">
-    <span className="text-gray-600">{label}</span>
-    <span className="font-bold text-right break-all">{value}</span>
-  </div>
-);
-
-export const WakeWordDiagnosticsPanel: React.FC = () => {
-  const [diagnostics, setDiagnostics] = useState<WakeWordDiagnostics | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      setDiagnostics(await tauriBridge.getWakeWordDiagnostics());
-      setError(null);
-    } catch (cause) {
-      setError(String(cause));
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return (
-    <div className="space-y-3">
-      <button
-        type="button"
-        onClick={() => void refresh()}
-        className="px-3 py-1.5 bg-white border-2 border-black rounded font-bold hover:bg-gray-100 flex items-center gap-1.5"
-      >
-        <RefreshCw className="w-3.5 h-3.5" />
-        Refresh Wake Diagnostics
-      </button>
-      {error && <p role="status" className="text-[11px]">{error}</p>}
-      {diagnostics && (
-        <div className="border border-black rounded p-3 bg-[#fbf9f5] text-[11px]">
-          <Row label="Enabled" value={diagnostics.enabled ? "Yes" : "No"} />
-          <Row label="State" value={diagnostics.state} />
-          <Row label="Engine" value={`${diagnostics.engine} ${diagnostics.runtime_version}`} />
-          <Row label="Platform" value={`${diagnostics.platform} / ${diagnostics.architecture}`} />
-          <Row label="Inference threads" value={diagnostics.inference_threads} />
-          <Row label="Audio" value={`${diagnostics.sample_rate_hz} Hz / ${diagnostics.channels} ch`} />
-          <Row label="Ring buffer" value={`${diagnostics.ring_buffer_seconds}s / ${diagnostics.ring_buffer_capacity_samples} samples`} />
-          <Row label="Keyword score" value={diagnostics.keywords_score} />
-          <Row label="Trigger threshold" value={diagnostics.keywords_threshold} />
-          <Row label="Triggers" value={diagnostics.trigger_count} />
-          <Row label="Last trigger (Unix ms)" value={show(diagnostics.last_trigger_unix_ms)} />
-          <Row label="Init duration" value={diagnostics.initialization_duration_ms === null ? "—" : `${diagnostics.initialization_duration_ms} ms`} />
-          <Row label="Suspended for Talking" value={diagnostics.suspended_for_talking ? "Yes" : "No"} />
-          <Row label="Dropped KWS chunks" value={diagnostics.dropped_engine_chunks} />
-          <Row label="Dropped command chunks" value={diagnostics.dropped_command_chunks} />
-          <Row label="Last error" value={show(diagnostics.last_error)} />
-        </div>
-      )}
-      <p className="text-[10px] text-gray-500">
-        Wake diagnostics contain lifecycle/performance metadata only. Raw PCM and
-        ring-buffer contents are never exposed here.
-      </p>
-    </div>
-  );
-};
-''')
-
-          replace(
-              "src/components/Settings/DiagnosticsTab.tsx",
-              'import { ToolAuditDiagnosticsPanel } from "./ToolAuditDiagnosticsPanel";',
-              'import { ToolAuditDiagnosticsPanel } from "./ToolAuditDiagnosticsPanel";\nimport { WakeWordDiagnosticsPanel } from "./WakeWordDiagnosticsPanel";'
-          )
-          replace(
-              "src/components/Settings/DiagnosticsTab.tsx",
-              '''      <section className="space-y-3">\n        <h3 className="font-bold text-sm border-b border-black pb-1">\n          Local TTS Diagnostics\n        </h3>\n''',
-              '''      <section className="space-y-3">\n        <h3 className="font-bold text-sm border-b border-black pb-1">\n          Wake Word Diagnostics\n        </h3>\n        <WakeWordDiagnosticsPanel />\n      </section>\n\n      <section className="space-y-3">\n        <h3 className="font-bold text-sm border-b border-black pb-1">\n          Local TTS Diagnostics\n        </h3>\n''')
-
-          # Central Talking -> wake-suspend, Talking -> Idle -> reconcile boundary.
-          p = Path("src-tauri/src/commands/presentation.rs")
-          text = p.read_text()
-          text = text.replace(
-              'use crate::character::state::{transition_character_state, CharacterState};',
-              'use crate::app::state::AppState;\nuse crate::character::state::{transition_character_state, CharacterState};')
-          text = text.replace('use tauri::{Emitter, Runtime};', 'use tauri::{Emitter, Manager, Runtime};')
-          old = '''    transition_character_state(character_state, target)?;\n    let _ = app.emit("moose://state", target);\n    Ok(())\n'''
-          new = '''    let previous = *character_state.read();\n    transition_character_state(character_state, target)?;\n    let _ = app.emit("moose://state", target);\n\n    if let Some(state) = app.try_state::<AppState>() {\n        if target == CharacterState::Talking {\n            state.wake_word_runtime.suspend_for_talking();\n            state.audio_capture.lock().stop();\n        } else if previous == CharacterState::Talking && target == CharacterState::Idle {\n            let state = state.inner().clone();\n            let app = app.clone();\n            tauri::async_runtime::spawn(async move {\n                if let Err(error) = crate::commands::wake_word::reconcile_wake_runtime(state, app).await {\n                    tracing::warn!(error = %error, "Failed to resume wake-word listening after Talking");\n                }\n            });\n        }\n    }\n    Ok(())\n'''
-          if old not in text:
-              raise SystemExit("presentation.rs transition body not found")
-          p.write_text(text.replace(old, new, 1))
-          PY
           npm ci
           npm run format:write
           cargo fmt --manifest-path src-tauri/Cargo.toml
           rm .github/workflows/ralph-wake-ui-inventory.yml
           rm .github/workflows/ralph-wake-ui-lifecycle.yml
+          rm .github/ralph/wake_ui_patch.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src src-tauri/src .github/workflows/ralph-wake-ui-inventory.yml .github/workflows/ralph-wake-ui-lifecycle.yml
+          git add src src-tauri/src .github/workflows/ralph-wake-ui-inventory.yml .github/workflows/ralph-wake-ui-lifecycle.yml .github/ralph/wake_ui_patch.py
           git commit -m "feat: add wake word settings and diagnostics UI"
           git push origin HEAD:ralph/wake-word-v1-core
