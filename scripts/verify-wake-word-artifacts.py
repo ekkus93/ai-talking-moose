@@ -10,7 +10,14 @@ import argparse
 import hashlib
 import json
 import pathlib
+import struct
 import sys
+
+
+ELF_MAGIC = b"\x7fELF"
+MACHO64_LE_MAGIC = b"\xcf\xfa\xed\xfe"
+ELF_MACHINE_X86_64 = 62
+MACHO_CPU_TYPE_ARM64 = 0x0100000C
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -19,6 +26,26 @@ def sha256(path: pathlib.Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def architecture_matches(path: pathlib.Path, architecture: str) -> bool:
+    """Validate the native binary header without executing or loading the artifact."""
+    with path.open("rb") as stream:
+        header = stream.read(32)
+
+    if architecture == "elf-x86_64":
+        if len(header) < 20 or header[:4] != ELF_MAGIC:
+            return False
+        if header[4] != 2 or header[5] != 1:  # ELF64, little-endian
+            return False
+        return struct.unpack_from("<H", header, 18)[0] == ELF_MACHINE_X86_64
+
+    if architecture == "macho-arm64":
+        if len(header) < 8 or header[:4] != MACHO64_LE_MAGIC:
+            return False
+        return struct.unpack_from("<I", header, 4)[0] == MACHO_CPU_TYPE_ARM64
+
+    return False
 
 
 def main() -> int:
@@ -65,6 +92,11 @@ def main() -> int:
             continue
         if sha256(path) != expected_sha.lower():
             errors.append(f"{artifact['id']}: SHA-256 mismatch")
+            continue
+        architecture = artifact.get("architecture")
+        if architecture is not None:
+            if not isinstance(architecture, str) or not architecture_matches(path, architecture):
+                errors.append(f"{artifact['id']}: wrong architecture or binary format")
 
     if errors:
         for error in errors:

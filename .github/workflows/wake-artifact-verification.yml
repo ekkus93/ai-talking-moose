@@ -1,0 +1,44 @@
+name: Wake Artifact Verification
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "wake-word-artifacts.json"
+      - "scripts/prepare-wake-word-artifacts.py"
+      - "scripts/verify-wake-word-artifacts.py"
+      - "scripts/test-prepare-wake-word-artifacts.py"
+      - "scripts/test-verify-wake-word-artifacts.py"
+      - ".github/workflows/wake-artifact-verification.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "wake-word-artifacts.json"
+      - "scripts/prepare-wake-word-artifacts.py"
+      - "scripts/verify-wake-word-artifacts.py"
+      - "scripts/test-prepare-wake-word-artifacts.py"
+      - "scripts/test-verify-wake-word-artifacts.py"
+      - ".github/workflows/wake-artifact-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wake-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Deterministic wake artifact gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Verify artifact verifier behavior
+        run: python3 scripts/test-verify-wake-word-artifacts.py
+      - name: Verify artifact preparation behavior
+        run: python3 scripts/test-prepare-wake-word-artifacts.py
