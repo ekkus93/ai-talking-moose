@@ -107,10 +107,8 @@ mod tests {
         let triggered_at = Instant::now();
         assert!(manager.accept_trigger(triggered_at).unwrap());
 
-        let triggered = WakeWordDiagnostics::from_runtime(
-            &manager,
-            triggered_at + Duration::from_millis(125),
-        );
+        let triggered =
+            WakeWordDiagnostics::from_runtime(&manager, triggered_at + Duration::from_millis(125));
         assert!(triggered.enabled);
         assert_eq!(triggered.trigger_count, 1);
         assert_eq!(triggered.last_trigger_age_ms, Some(125));
