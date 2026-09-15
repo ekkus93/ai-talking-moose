@@ -80,6 +80,9 @@ def main() -> None:
         assert failure.returncode != 0
         assert "missing" in failure.stderr
 
+        # Restore the artifact so this probe exercises manifest freezing rather
+        # than being short-circuited by the earlier missing-file condition.
+        artifact.write_bytes(payload)
         unfrozen = json.loads(manifest.read_text(encoding="utf-8"))
         unfrozen["artifacts"][0]["size_bytes"] = None
         manifest.write_text(json.dumps(unfrozen), encoding="utf-8")
