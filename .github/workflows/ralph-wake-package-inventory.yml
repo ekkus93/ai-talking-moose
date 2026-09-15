@@ -1,0 +1,30 @@
+name: Ralph Wake Package Inventory
+
+on:
+  push:
+    branches:
+      - ralph/wake-word-v1-core
+    paths:
+      - .github/workflows/ralph-wake-package-inventory.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Report packaging workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '::error::WAKE_PACKAGE_INVENTORY_BEGIN'
+          for path in .github/workflows/*.yml; do
+            if grep -qiE 'tauri build|bundle|packag' "$path"; then
+              echo "::error::WAKE_PACKAGE_FILE $path"
+            fi
+          done
+          echo '::error::WAKE_PACKAGE_INVENTORY_END'
+          exit 1
