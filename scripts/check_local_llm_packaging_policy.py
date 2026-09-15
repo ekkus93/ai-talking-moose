@@ -157,8 +157,12 @@ def check_bundle_configuration() -> None:
     if re.search(r"(?:^|[/\\])models?(?:[/\\]|$)", serialized):
         fail("Tauri bundle configuration must not embed a model directory")
     resources = bundle.get("resources", [])
-    if resources != ["native/macos/notices/"]:
-        fail("Tauri bundle resources must remain notice-only for Local LLM V1")
+    allowed_resources = {"native/macos/notices/", "resources/wake_word/"}
+    if len(resources) != len(allowed_resources) or set(resources) != allowed_resources:
+        fail(
+            "Tauri resources may contain Local LLM notices plus the independently "
+            "pinned Wake Word resource subtree; Local LLM model weights remain forbidden"
+        )
 
     tracked = subprocess.run(
         ["git", "ls-files", "*.gguf", "*.GGUF"],
