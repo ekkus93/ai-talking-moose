@@ -153,6 +153,8 @@ jobs:
       - name: Prepare pinned Moonshine native runtime for macOS crate build
         if: matrix.os == 'macos'
         run: bash scripts/prepare_moonshine_macos.sh arm64
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
       - name: Build exact production KWS acceptance harness
         run: cargo build --manifest-path src-tauri/Cargo.toml --locked --bin wake_word_acceptance
       - name: Run real KWS with network denied
