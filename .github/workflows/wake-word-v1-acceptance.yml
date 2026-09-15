@@ -1,0 +1,193 @@
+name: Wake Word V1 acceptance
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "src-tauri/src/audio/wake_word/**"
+      - "src-tauri/src/audio/ring_buffer.rs"
+      - "src-tauri/src/bin/wake_word_acceptance.rs"
+      - "src-tauri/src/commands/wake_word.rs"
+      - "src-tauri/src/commands/conversation/**"
+      - "src-tauri/src/conversation/**"
+      - "src-tauri/src/app/**"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/resources/wake_word/**"
+      - "scripts/generate_wake_word_corpus.py"
+      - "scripts/prepare_wake_word_artifacts.py"
+      - ".github/workflows/wake-word-v1-acceptance.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "src-tauri/src/audio/wake_word/**"
+      - "src-tauri/src/audio/ring_buffer.rs"
+      - "src-tauri/src/bin/wake_word_acceptance.rs"
+      - "src-tauri/src/commands/wake_word.rs"
+      - "src-tauri/src/commands/conversation/**"
+      - "src-tauri/src/conversation/**"
+      - "src-tauri/src/app/**"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/resources/wake_word/**"
+      - "scripts/generate_wake_word_corpus.py"
+      - "scripts/prepare_wake_word_artifacts.py"
+      - ".github/workflows/wake-word-v1-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wake-word-v1-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  corpus:
+    name: Generate deterministic Wake Word corpus
+    runs-on: macos-15
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Generate ephemeral acceptance corpus
+        run: python3 scripts/generate_wake_word_corpus.py --output "$RUNNER_TEMP/wake-corpus"
+      - name: Validate corpus manifest contains both positive and negative coverage
+        run: |
+          python3 - "$RUNNER_TEMP/wake-corpus/manifest.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1], encoding='utf-8'))
+          positives=sum(1 for case in data['cases'] if case['expect_trigger'])
+          negatives=sum(1 for case in data['cases'] if not case['expect_trigger'])
+          assert positives >= 7, positives
+          assert negatives >= 7, negatives
+          assert len(data['voices']) >= 2
+          print(f"wake-corpus-coverage-ok positives={positives} negatives={negatives} voices={len(data['voices'])}")
+          PY
+      - name: Upload ephemeral corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-word-v1-corpus
+          path: ${{ runner.temp }}/wake-corpus
+          if-no-files-found: error
+          retention-days: 1
+
+  real-kws:
+    name: Real KWS (${{ matrix.label }})
+    needs: corpus
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-latest
+            platform: linux-x86_64
+            os: linux
+            expected_arch: x86-64
+          - label: macos-arm64
+            runner: macos-15
+            platform: macos-arm64
+            os: macos
+            expected_arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install Linux build dependencies
+        if: matrix.os == 'linux'
+        run: |
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.label }}-wake-v1-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-wake-v1-
+            ${{ runner.os }}-cargo-
+      - name: Download acceptance corpus
+        uses: actions/download-artifact@v5
+        with:
+          name: wake-word-v1-corpus
+          path: ${{ runner.temp }}/wake-corpus
+      - name: Prepare and hash-verify pinned model/runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          destination="$RUNNER_TEMP/wake-artifacts"
+          python3 scripts/prepare_wake_word_artifacts.py \
+            --destination "$destination" \
+            --platform "${{ matrix.platform }}"
+          echo "WAKE_ARTIFACT_ROOT=$destination" >> "$GITHUB_ENV"
+          echo "SHERPA_ONNX_ARCHIVE_DIR=$destination/runtime-archive" >> "$GITHUB_ENV"
+      - name: Verify extracted native architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find "$WAKE_ARTIFACT_ROOT/runtime" -type f -name '*.a' -print -quit)"
+          test -n "$archive" && test -f "$archive"
+          if [[ "${{ matrix.os }}" == macos ]]; then
+            lipo -archs "$archive" | tr ' ' '\n' | grep -Fx '${{ matrix.expected_arch }}'
+          else
+            member="$(ar t "$archive" | grep -E '\.(o|obj)$' | head -n 1)"
+            test -n "$member"
+            ar p "$archive" "$member" > "$RUNNER_TEMP/wake-native-member.o"
+            file "$RUNNER_TEMP/wake-native-member.o" | grep -qi '${{ matrix.expected_arch }}'
+          fi
+      - name: Build exact production KWS acceptance harness
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --bin wake_word_acceptance
+      - name: Run real KWS with network denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="$GITHUB_WORKSPACE/src-tauri/target/debug/wake_word_acceptance"
+          report="$RUNNER_TEMP/wake-report-${{ matrix.label }}.json"
+          args=(
+            --model-root "$WAKE_ARTIFACT_ROOT/model"
+            --manifest "$RUNNER_TEMP/wake-corpus/manifest.json"
+            --report "$report"
+          )
+          if [[ "${{ matrix.os }}" == linux ]]; then
+            sudo -E unshare --net "$binary" "${args[@]}"
+          else
+            /usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' \
+              "$binary" "${args[@]}"
+          fi
+          python3 - "$report" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1], encoding='utf-8'))
+          assert data['inference_threads'] == 1
+          assert data['positive_detected'] == data['positive_total']
+          assert data['negative_false_accepts'] == 0
+          assert data['maximum_realtime_factor'] < 1.0
+          print('wake-real-kws-report-ok', json.dumps({
+            'positive_total': data['positive_total'],
+            'negative_total': data['negative_total'],
+            'max_rtf': round(data['maximum_realtime_factor'], 4),
+            'init_ms': round(data['initialization_duration_ms'], 1),
+            'max_rss_kib': data['max_rss_kib'],
+          }, sort_keys=True))
+          PY
+      - name: Upload privacy-safe acceptance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-word-v1-report-${{ matrix.label }}
+          path: ${{ runner.temp }}/wake-report-${{ matrix.label }}.json
+          if-no-files-found: error
+          retention-days: 14
