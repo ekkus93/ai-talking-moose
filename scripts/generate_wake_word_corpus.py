@@ -60,7 +60,6 @@ def synthesize(output: Path, voice: str, text: str, rate: int) -> None:
                 str(rate),
                 "-o",
                 str(aiff),
-                "--data-format=LEI16@16000",
                 text,
             ],
             check=True,
