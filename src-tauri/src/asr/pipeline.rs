@@ -162,7 +162,7 @@ impl LocalAsrPipeline {
             })
     }
 
-    pub(super) fn enqueue_pre_roll(&self, bytes: Vec<u8>) -> Result<(), AsrError> {
+    pub(crate) fn enqueue_pre_roll(&self, bytes: Vec<u8>) -> Result<(), AsrError> {
         if !self.is_running() {
             return Err(invalid_state_error(
                 "Local ASR inference is not running; wake-word pre-roll was not accepted.",

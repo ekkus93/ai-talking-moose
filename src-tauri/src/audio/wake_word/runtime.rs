@@ -493,7 +493,9 @@ mod tests {
     #[tokio::test]
     async fn repeated_positive_frames_create_one_trigger_until_resume() {
         let (manager, triggers, _) = started_manager(true).await;
-        manager.ingest_pcm_bytes(vec![1, 0; 1600]).unwrap();
+        manager
+            .ingest_pcm_bytes(vec![1_i16, 0].repeat(1600))
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
         manager.ingest_pcm_bytes(vec![1, 0; 1600]).unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;

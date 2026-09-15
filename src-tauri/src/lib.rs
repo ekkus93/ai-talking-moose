@@ -199,7 +199,7 @@ pub fn run() {
                 let wake_app = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(error) =
-                        commands::wake_word::reconcile_wake_runtime(&wake_state, wake_app).await
+                        commands::wake_word::reconcile_wake_runtime(wake_state, wake_app).await
                     {
                         warn!(error = %error, "Persisted wake-word mode could not start");
                     }

@@ -1,5 +1,5 @@
 use ring::digest::{digest, SHA256};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sherpa_onnx::{KeywordSpotter, KeywordSpotterConfig, OnlineStream};
 use std::fs;
 use std::path::Path;
@@ -13,7 +13,7 @@ pub const DEFAULT_KEYWORDS_THRESHOLD: f32 = 0.25;
 const KEYWORD_TOKENS: &str = "HH EY1 M UW1 S @HEY_MOOSE";
 const ARTIFACT_MANIFEST: &str = include_str!("../../../resources/wake_word/artifacts-v1.json");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WakeWordErrorKind {
     #[error("artifact")]

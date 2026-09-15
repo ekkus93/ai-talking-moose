@@ -260,7 +260,7 @@ pub async fn stop_conversation(
 
     state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
-    crate::commands::wake_word::reconcile_wake_runtime(state.inner(), app).await
+    crate::commands::wake_word::reconcile_wake_runtime(state.inner().clone(), app).await
 }
 
 #[tauri::command]
