@@ -271,7 +271,9 @@ mod tests {
         let first = Instant::now();
 
         assert!(manager.accept_trigger(first).unwrap());
-        assert!(!manager.accept_trigger(first + Duration::from_millis(20)).unwrap());
+        assert!(!manager
+            .accept_trigger(first + Duration::from_millis(20))
+            .unwrap());
         let triggered = manager.snapshot(first + Duration::from_millis(20));
         assert_eq!(triggered.phase, WakeWordRuntimePhase::Triggered);
         assert_eq!(triggered.trigger_count, 1);
@@ -281,7 +283,9 @@ mod tests {
             .accept_trigger(first + Duration::from_secs(1))
             .unwrap());
         assert_eq!(
-            manager.snapshot(first + Duration::from_secs(1)).trigger_count,
+            manager
+                .snapshot(first + Duration::from_secs(1))
+                .trigger_count,
             2
         );
     }
@@ -312,7 +316,10 @@ mod tests {
 
         let error = manager.accept_trigger(Instant::now()).unwrap_err();
         assert_eq!(error.kind, WakeWordRuntimeErrorKind::Disabled);
-        assert_eq!(manager.snapshot(Instant::now()).phase, WakeWordRuntimePhase::Disabled);
+        assert_eq!(
+            manager.snapshot(Instant::now()).phase,
+            WakeWordRuntimePhase::Disabled
+        );
     }
 
     #[test]
