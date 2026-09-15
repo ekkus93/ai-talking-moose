@@ -42,7 +42,10 @@ fn repeated_wake_talking_resume_cycles_remain_bounded_and_reusable() {
         assert_eq!(resumed.handoff_pre_roll_samples, 0);
     }
 
-    assert_eq!(manager.snapshot(Instant::now()).trigger_count, STABILITY_CYCLES);
+    assert_eq!(
+        manager.snapshot(Instant::now()).trigger_count,
+        STABILITY_CYCLES
+    );
 }
 
 #[test]
