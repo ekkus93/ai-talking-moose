@@ -1,0 +1,111 @@
+name: Ralph Wake Perf Soak
+
+on:
+  push:
+    branches:
+      - ralph/wake-word-v1-core
+    paths:
+      - .github/workflows/ralph-wake-perf-soak.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ralph/wake-word-v1-core
+          fetch-depth: 0
+      - name: Add privacy-safe performance diagnostics and lifecycle soak
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p=Path(path); text=p.read_text()
+              if old not in text:
+                  raise SystemExit(f"{path}: replacement needle missing: {old[:100]!r}")
+              p.write_text(text.replace(old,new,count))
+
+          path='src-tauri/src/audio/wake_word/runtime.rs'
+          replace(path,
+              '''    pub initialization_duration_ms: Option<u64>,\n    pub suspended_for_talking: bool,\n''',
+              '''    pub initialization_duration_ms: Option<u64>,\n    pub last_handoff_latency_ms: Option<u64>,\n    pub last_handoff_replay_duration_us: Option<u64>,\n    pub last_handoff_replay_samples: usize,\n    pub suspended_for_talking: bool,\n''')
+          replace(path,
+              '''    initialization_duration_ms: Option<u64>,\n    suspended_for_talking: bool,\n''',
+              '''    initialization_duration_ms: Option<u64>,\n    last_trigger_instant: Option<Instant>,\n    last_handoff_latency_ms: Option<u64>,\n    last_handoff_replay_duration_us: Option<u64>,\n    last_handoff_replay_samples: usize,\n    suspended_for_talking: bool,\n''')
+          replace(path,
+              '''            initialization_duration_ms: None,\n            suspended_for_talking: false,\n''',
+              '''            initialization_duration_ms: None,\n            last_trigger_instant: None,\n            last_handoff_latency_ms: None,\n            last_handoff_replay_duration_us: None,\n            last_handoff_replay_samples: 0,\n            suspended_for_talking: false,\n''')
+          replace(path,
+              '''            inner.command_sink = None;\n            inner.level_sink = None;\n        }\n        self.stop_requested.store(false, Ordering::SeqCst);\n''',
+              '''            inner.command_sink = None;\n            inner.level_sink = None;\n            inner.last_trigger_instant = None;\n            inner.last_handoff_latency_ms = None;\n            inner.last_handoff_replay_duration_us = None;\n            inner.last_handoff_replay_samples = 0;\n        }\n        self.stop_requested.store(false, Ordering::SeqCst);\n''',1)
+          replace(path,
+              '''                                    state.last_trigger_unix_ms = SystemTime::now()\n                                        .duration_since(UNIX_EPOCH)\n                                        .ok()\n                                        .map(|duration| duration.as_millis() as u64);\n                                    true\n''',
+              '''                                    state.last_trigger_unix_ms = SystemTime::now()\n                                        .duration_since(UNIX_EPOCH)\n                                        .ok()\n                                        .map(|duration| duration.as_millis() as u64);\n                                    state.last_trigger_instant = Some(Instant::now());\n                                    true\n''')
+          old='''    pub fn begin_command_handoff(\n        &self,\n        command_sink: mpsc::Sender<Vec<u8>>,\n        level_sink: Option<mpsc::Sender<f32>>,\n    ) -> Result<usize, WakeWordError> {\n        let snapshot = {\n            let mut inner = self.inner.lock();\n            if !inner.enabled || inner.state != WakeWordRuntimeState::Triggered {\n                return Err(WakeWordError {\n                    kind: WakeWordErrorKind::InvalidState,\n                    message: "Wake-word audio is not available for command handoff.".to_string(),\n                    retryable: true,\n                });\n            }\n            inner.state = WakeWordRuntimeState::CommandHandoff;\n            inner.command_sink = Some(command_sink.clone());\n            inner.level_sink = level_sink;\n            inner.ring.snapshot()\n        };\n\n        let mut replayed = 0usize;\n        for chunk in snapshot.chunks(COMMAND_QUEUE_CHUNK_SAMPLES) {\n            let bytes = AudioResampler::i16_to_bytes(chunk);\n            command_sink.try_send(bytes).map_err(|_| WakeWordError {\n                kind: WakeWordErrorKind::InvalidState,\n                message: "Command ASR was not ready to accept wake-word pre-roll.".to_string(),\n                retryable: true,\n            })?;\n            replayed += chunk.len();\n        }\n        Ok(replayed)\n    }\n'''
+          new='''    pub fn begin_command_handoff(\n        &self,\n        command_sink: mpsc::Sender<Vec<u8>>,\n        level_sink: Option<mpsc::Sender<f32>>,\n    ) -> Result<usize, WakeWordError> {\n        let handoff_started = Instant::now();\n        let (snapshot, trigger_latency_ms) = {\n            let mut inner = self.inner.lock();\n            if !inner.enabled || inner.state != WakeWordRuntimeState::Triggered {\n                return Err(WakeWordError {\n                    kind: WakeWordErrorKind::InvalidState,\n                    message: "Wake-word audio is not available for command handoff.".to_string(),\n                    retryable: true,\n                });\n            }\n            let trigger_latency_ms = inner\n                .last_trigger_instant\n                .map(|instant| instant.elapsed().as_millis() as u64);\n            inner.state = WakeWordRuntimeState::CommandHandoff;\n            inner.command_sink = Some(command_sink.clone());\n            inner.level_sink = level_sink;\n            (inner.ring.snapshot(), trigger_latency_ms)\n        };\n\n        let mut replayed = 0usize;\n        for chunk in snapshot.chunks(COMMAND_QUEUE_CHUNK_SAMPLES) {\n            let bytes = AudioResampler::i16_to_bytes(chunk);\n            command_sink.try_send(bytes).map_err(|_| WakeWordError {\n                kind: WakeWordErrorKind::InvalidState,\n                message: "Command ASR was not ready to accept wake-word pre-roll.".to_string(),\n                retryable: true,\n            })?;\n            replayed += chunk.len();\n        }\n        let mut inner = self.inner.lock();\n        inner.last_handoff_latency_ms = trigger_latency_ms;\n        inner.last_handoff_replay_duration_us = Some(handoff_started.elapsed().as_micros() as u64);\n        inner.last_handoff_replay_samples = replayed;\n        Ok(replayed)\n    }\n'''
+          replace(path, old, new)
+          replace(path,
+              '''            initialization_duration_ms: inner.initialization_duration_ms,\n            suspended_for_talking: inner.suspended_for_talking,\n''',
+              '''            initialization_duration_ms: inner.initialization_duration_ms,\n            last_handoff_latency_ms: inner.last_handoff_latency_ms,\n            last_handoff_replay_duration_us: inner.last_handoff_replay_duration_us,\n            last_handoff_replay_samples: inner.last_handoff_replay_samples,\n            suspended_for_talking: inner.suspended_for_talking,\n''')
+
+          marker='''    #[tokio::test]\n    async fn stop_is_idempotent_and_reaps_engine() {\n'''
+          test='''    #[tokio::test]\n    async fn hundred_wake_handoff_resume_cycles_remain_bounded_and_recoverable() {\n        const CYCLES: u64 = 100;\n        let (manager, triggers, _) = started_manager(true).await;\n        for expected in 1..=CYCLES {\n            manager\n                .ingest_pcm_bytes(vec![1_u8, 0_u8].repeat(1600))\n                .unwrap();\n            tokio::time::timeout(Duration::from_secs(1), async {\n                while manager.state() != WakeWordRuntimeState::Triggered {\n                    tokio::time::sleep(Duration::from_millis(1)).await;\n                }\n            })\n            .await\n            .expect("wake trigger did not arrive during bounded soak cycle");\n            let (tx, mut rx) = mpsc::channel(64);\n            let replayed = manager.begin_command_handoff(tx, None).unwrap();\n            assert!(replayed <= manager.diagnostics().ring_buffer_capacity_samples);\n            while rx.try_recv().is_ok() {}\n            manager.finish_command_handoff();\n            manager.resume_listening().unwrap();\n            let diagnostics = manager.diagnostics();\n            assert_eq!(diagnostics.trigger_count, expected);\n            assert_eq!(diagnostics.ring_buffer_capacity_samples, 32_000);\n            assert_eq!(diagnostics.dropped_engine_chunks, 0);\n            assert_eq!(diagnostics.dropped_command_chunks, 0);\n            assert_eq!(diagnostics.state, WakeWordRuntimeState::Listening);\n        }\n        assert_eq!(triggers.load(Ordering::SeqCst), CYCLES);\n        manager.stop().await.unwrap();\n        assert_eq!(manager.state(), WakeWordRuntimeState::Disabled);\n    }\n\n'''
+          replace(path, marker, test+marker)
+
+          # Frontend diagnostics contract and preview stay in sync with the Rust shape.
+          replace('src/types/moose.ts',
+              '''  initialization_duration_ms: number | null;\n  suspended_for_talking: boolean;\n''',
+              '''  initialization_duration_ms: number | null;\n  last_handoff_latency_ms: number | null;\n  last_handoff_replay_duration_us: number | null;\n  last_handoff_replay_samples: number;\n  suspended_for_talking: boolean;\n''')
+          replace('src/lib/browserPreviewBridge.ts',
+              '''      initialization_duration_ms: null,\n      suspended_for_talking: false,\n''',
+              '''      initialization_duration_ms: null,\n      last_handoff_latency_ms: null,\n      last_handoff_replay_duration_us: null,\n      last_handoff_replay_samples: 0,\n      suspended_for_talking: false,\n''')
+          replace('src/components/Settings/WakeWordDiagnosticsPanel.tsx',
+              '''          <Row\n            label="Suspended for Talking"\n''',
+              '''          <Row\n            label="Trigger → handoff"\n            value={\n              diagnostics.last_handoff_latency_ms === null\n                ? "—"\n                : `${diagnostics.last_handoff_latency_ms} ms`\n            }\n          />\n          <Row\n            label="Pre-roll replay"\n            value={\n              diagnostics.last_handoff_replay_duration_us === null\n                ? "—"\n                : `${diagnostics.last_handoff_replay_samples} samples / ${diagnostics.last_handoff_replay_duration_us} µs`\n            }\n          />\n          <Row\n            label="Suspended for Talking"\n''')
+
+          # Acceptance report adds RSS delta, process CPU cost, and a 30-second silence-equivalent idle KWS baseline.
+          path='src-tauri/src/bin/wake_word_acceptance.rs'
+          replace(path,
+              '''    initialization_duration_ms: f64,\n    max_rss_kib: u64,\n    positive_total: usize,\n''',
+              '''    initialization_duration_ms: f64,\n    baseline_rss_kib: u64,\n    max_rss_kib: u64,\n    rss_delta_kib: u64,\n    process_cpu_time_ms: f64,\n    cpu_realtime_ratio: f64,\n    silence_equivalent_cpu_percent: f64,\n    silence_realtime_factor: f64,\n    positive_total: usize,\n''')
+          old='''#[cfg(any(target_os = "linux", target_os = "macos"))]\nfn max_rss_kib() -> u64 {\n    unsafe {\n        let mut usage: libc::rusage = std::mem::zeroed();\n        if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0 {\n            return 0;\n        }\n        #[cfg(target_os = "linux")]\n        {\n            usage.ru_maxrss.max(0) as u64\n        }\n        #[cfg(target_os = "macos")]\n        {\n            (usage.ru_maxrss.max(0) as u64) / 1024\n        }\n    }\n}\n\n#[cfg(not(any(target_os = "linux", target_os = "macos")))]\nfn max_rss_kib() -> u64 {\n    0\n}\n'''
+          new='''#[derive(Clone, Copy)]\nstruct ResourceUsage {\n    max_rss_kib: u64,\n    cpu_time_ms: f64,\n}\n\n#[cfg(any(target_os = "linux", target_os = "macos"))]\nfn resource_usage() -> ResourceUsage {\n    unsafe {\n        let mut usage: libc::rusage = std::mem::zeroed();\n        if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0 {\n            return ResourceUsage { max_rss_kib: 0, cpu_time_ms: 0.0 };\n        }\n        let user_ms = usage.ru_utime.tv_sec as f64 * 1000.0 + usage.ru_utime.tv_usec as f64 / 1000.0;\n        let system_ms = usage.ru_stime.tv_sec as f64 * 1000.0 + usage.ru_stime.tv_usec as f64 / 1000.0;\n        #[cfg(target_os = "linux")]\n        let max_rss_kib = usage.ru_maxrss.max(0) as u64;\n        #[cfg(target_os = "macos")]\n        let max_rss_kib = (usage.ru_maxrss.max(0) as u64) / 1024;\n        ResourceUsage { max_rss_kib, cpu_time_ms: user_ms + system_ms }\n    }\n}\n\n#[cfg(not(any(target_os = "linux", target_os = "macos")))]\nfn resource_usage() -> ResourceUsage {\n    ResourceUsage { max_rss_kib: 0, cpu_time_ms: 0.0 }\n}\n'''
+          replace(path,old,new)
+          replace(path,
+              '''    let initialization_started = Instant::now();\n    let mut engine = SherpaKwsEngine::open(&model_root).map_err(|error| error.message)?;\n''',
+              '''    let baseline_usage = resource_usage();\n    let initialization_started = Instant::now();\n    let mut engine = SherpaKwsEngine::open(&model_root).map_err(|error| error.message)?;\n''')
+          replace(path,
+              '''    let mut maximum_realtime_factor = 0.0f64;\n\n    for case in corpus.cases {\n''',
+              '''    let mut maximum_realtime_factor = 0.0f64;\n    let mut total_audio_duration_ms = 0.0f64;\n    let inference_cpu_started = resource_usage().cpu_time_ms;\n\n    for case in corpus.cases {\n''')
+          replace(path,
+              '''        maximum_realtime_factor = maximum_realtime_factor.max(realtime_factor);\n\n        if case.expect_trigger {\n''',
+              '''        maximum_realtime_factor = maximum_realtime_factor.max(realtime_factor);\n        total_audio_duration_ms += audio_duration_ms;\n\n        if case.expect_trigger {\n''')
+          replace(path,
+              '''    engine.shutdown().map_err(|error| error.message)?;\n    let report = AcceptanceReport {\n''',
+              '''    let inference_cpu_time_ms = (resource_usage().cpu_time_ms - inference_cpu_started).max(0.0);\n    let cpu_realtime_ratio = if total_audio_duration_ms > 0.0 {\n        inference_cpu_time_ms / total_audio_duration_ms\n    } else {\n        0.0\n    };\n\n    engine.reset().map_err(|error| error.message)?;\n    let silence = vec![0_i16; (WAKE_SAMPLE_RATE_HZ * 30) as usize];\n    let silence_cpu_started = resource_usage().cpu_time_ms;\n    let silence_wall_started = Instant::now();\n    for chunk in silence.chunks(1600) {\n        if engine.process_pcm_i16(chunk).map_err(|error| error.message)? {\n            return Err("Wake Word silence baseline produced a false trigger.".to_string());\n        }\n    }\n    let silence_wall_ms = silence_wall_started.elapsed().as_secs_f64() * 1000.0;\n    let silence_cpu_ms = (resource_usage().cpu_time_ms - silence_cpu_started).max(0.0);\n    let silence_audio_ms = 30_000.0;\n    let silence_equivalent_cpu_percent = silence_cpu_ms / silence_audio_ms * 100.0;\n    let silence_realtime_factor = silence_wall_ms / silence_audio_ms;\n\n    engine.shutdown().map_err(|error| error.message)?;\n    let final_usage = resource_usage();\n    let report = AcceptanceReport {\n''')
+          replace(path,
+              '''        initialization_duration_ms,\n        max_rss_kib: max_rss_kib(),\n        positive_total,\n''',
+              '''        initialization_duration_ms,\n        baseline_rss_kib: baseline_usage.max_rss_kib,\n        max_rss_kib: final_usage.max_rss_kib,\n        rss_delta_kib: final_usage.max_rss_kib.saturating_sub(baseline_usage.max_rss_kib),\n        process_cpu_time_ms: inference_cpu_time_ms,\n        cpu_realtime_ratio,\n        silence_equivalent_cpu_percent,\n        silence_realtime_factor,\n        positive_total,\n''')
+          replace(path,
+              '''        "wake-word-acceptance positives={}/{} false_accepts={}/{} max_rtf={:.4} init_ms={:.1} max_rss_kib={}",\n''',
+              '''        "wake-word-acceptance positives={}/{} false_accepts={}/{} max_rtf={:.4} init_ms={:.1} rss_delta_kib={} silence_cpu_pct={:.2}",\n''')
+          replace(path,
+              '''        report.initialization_duration_ms,\n        report.max_rss_kib\n''',
+              '''        report.initialization_duration_ms,\n        report.rss_delta_kib,\n        report.silence_equivalent_cpu_percent\n''')
+          PY
+          cargo fmt --manifest-path src-tauri/Cargo.toml
+          npx prettier --write src/types/moose.ts src/lib/browserPreviewBridge.ts src/components/Settings/WakeWordDiagnosticsPanel.tsx
+          rm .github/workflows/ralph-wake-perf-soak.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: instrument Wake Word performance and soak lifecycle"
+          git push origin HEAD:ralph/wake-word-v1-core
