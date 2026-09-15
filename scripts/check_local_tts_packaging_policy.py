@@ -203,8 +203,12 @@ def check_bundle_is_model_weight_free() -> None:
             fail(f"Tauri bundle configuration embeds Local TTS runtime/model token {token!r}")
 
     resources = bundle.get("resources", [])
-    if resources != ["native/macos/notices/"]:
-        fail("ordinary Tauri resources must remain notice-only; Local TTS artifacts are installer-owned")
+    allowed_resources = {"native/macos/notices/", "resources/wake_word/"}
+    if len(resources) != len(allowed_resources) or set(resources) != allowed_resources:
+        fail(
+            "ordinary Tauri resources may contain notices plus the independently pinned "
+            "Wake Word subtree; Local TTS artifacts remain installer-owned"
+        )
 
     tracked = subprocess.run(
         ["git", "ls-files"],

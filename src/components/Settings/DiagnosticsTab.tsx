@@ -3,6 +3,7 @@ import { useMooseStore } from "../../stores/mooseStore";
 import { AudioDiagnosticsPanel } from "./AudioDiagnosticsPanel";
 import { LocalTtsDiagnosticsPanel } from "./LocalTtsDiagnosticsPanel";
 import { ToolAuditDiagnosticsPanel } from "./ToolAuditDiagnosticsPanel";
+import { WakeWordDiagnosticsPanel } from "./WakeWordDiagnosticsPanel";
 
 export const DiagnosticsTab: React.FC = () => {
   const { triggerCanned } = useMooseStore();
@@ -14,6 +15,13 @@ export const DiagnosticsTab: React.FC = () => {
           Audio Diagnostics
         </h3>
         <AudioDiagnosticsPanel />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="font-bold text-sm border-b border-black pb-1">
+          Wake Word Diagnostics
+        </h3>
+        <WakeWordDiagnosticsPanel />
       </section>
 
       <section className="space-y-3">

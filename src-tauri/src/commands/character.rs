@@ -265,8 +265,6 @@ mod tests {
         let is_muted = app_state.is_muted.clone();
         let behavior_engine = app_state.behavior_engine.clone();
 
-        let (pcm_tx, _pcm_rx) = tokio::sync::mpsc::channel(1);
-        capture.lock().start(None, 16_000, pcm_tx, None).unwrap();
         playback.seed_buffer_for_tests(&[0.25, -0.25, 0.5], 0.5);
         let app = mock_builder()
             .manage(app_state)
@@ -290,6 +288,12 @@ mod tests {
             ),
         )
         .expect("interaction setup state should succeed through IPC");
+
+        // Build/setup may reconcile inactive wake capture. Arm the explicit mock
+        // microphone only after the presentation state is established so these
+        // tests exercise mute/dismiss teardown from an actually active capture.
+        let (pcm_tx, _pcm_rx) = tokio::sync::mpsc::channel(1);
+        capture.lock().start(None, 16_000, pcm_tx, None).unwrap();
 
         InteractionTestFixture {
             app,

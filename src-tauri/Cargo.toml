@@ -71,6 +71,10 @@ ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "
 piper-plus-g2p = { version = "=0.4.0", default-features = false, features = ["english"] }
 tempfile = "=3.27.0"
 zip = { version = "=2.4.2", default-features = false, features = ["deflate"] }
+# WW-300: exact production wake-word KWS API/runtime. The crate statically links
+# sherpa-onnx 1.13.8; release/acceptance preparation supplies the independently
+# hash-verified platform archive through SHERPA_ONNX_ARCHIVE_DIR.
+sherpa-onnx = { version = "=1.13.8", default-features = true }
 
 [dev-dependencies]
 tauri = { version = "2.1", features = ["test"] }

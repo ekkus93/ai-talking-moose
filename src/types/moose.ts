@@ -281,6 +281,42 @@ export interface AudioDiagnostics {
   playback: AudioPlaybackDiagnostics;
 }
 
+export type WakeWordRuntimeState =
+  | "disabled"
+  | "loading"
+  | "listening"
+  | "suspended"
+  | "triggered"
+  | "command_handoff"
+  | "error"
+  | "stopping";
+
+export interface WakeWordDiagnostics {
+  enabled: boolean;
+  state: WakeWordRuntimeState;
+  engine: string;
+  runtime_version: string;
+  platform: string;
+  architecture: string;
+  inference_threads: number;
+  sample_rate_hz: number;
+  channels: number;
+  ring_buffer_seconds: number;
+  ring_buffer_capacity_samples: number;
+  keywords_score: number;
+  keywords_threshold: number;
+  trigger_count: number;
+  last_trigger_unix_ms: number | null;
+  initialization_duration_ms: number | null;
+  last_handoff_latency_ms: number | null;
+  last_handoff_replay_duration_us: number | null;
+  last_handoff_replay_samples: number;
+  suspended_for_talking: boolean;
+  dropped_engine_chunks: number;
+  dropped_command_chunks: number;
+  last_error: string | null;
+}
+
 export interface MicrophoneTestResult {
   peak_level: number;
   diagnostics: AudioDiagnostics;
@@ -322,6 +358,8 @@ export interface AppSettings {
   live_voice: string;
   speaking_rate: number;
   pitch: number;
+  wake_word_enabled: boolean;
+  wake_phrase: string;
 
   text_provider: TextProvider;
   live_model: string;

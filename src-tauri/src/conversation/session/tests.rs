@@ -234,6 +234,9 @@ fn test_request(muted: bool) -> ConversationStartRequest {
         muted: Arc::new(RwLock::new(muted)),
         tool_router: test_tool_router(),
         callbacks: ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}, |_| {}),
+        wake_handoff_rx: None,
+        one_shot: false,
+        session_end_callback: None,
     }
 }
 
@@ -257,6 +260,8 @@ fn test_event_loop_context(
         provider_error_callback: Arc::new(|_| {}),
         transcript_callback: Arc::new(|_, _, _| {}),
         speech_bubble_callback: Arc::new(|_| {}),
+        one_shot: false,
+        session_end_callback: None,
     }
 }
 

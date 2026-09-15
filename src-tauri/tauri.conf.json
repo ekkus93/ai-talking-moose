@@ -51,7 +51,8 @@
       "entitlements": null
     },
     "resources": [
-      "native/macos/notices/"
+      "native/macos/notices/",
+      "resources/wake_word/"
     ]
   }
 }

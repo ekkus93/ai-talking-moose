@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "engine": "sherpa-onnx",
+  "sherpa_version": "1.13.8",
+  "model_repository": "openEuler/sherpa-kws",
+  "model_revision": "b73da3087e40072f6251351acd5f54a8c563bd11",
+  "license": "Apache-2.0",
+  "sample_rate_hz": 16000,
+  "channels": 1,
+  "default_phrase": "Hey, Moose",
+  "keyword_tokens": "HH EY1 M UW1 S @HEY_MOOSE",
+  "model_artifacts": [
+    {"path":"assets/onnx/encoder.onnx","bytes":11976272,"sha256":"540ff509ed89bd22afe04bf7049a54bb1c95c6d8a18742ea9691910cdb5f859e"},
+    {"path":"assets/onnx/decoder.onnx","bytes":759829,"sha256":"63a22dd60f40fff082ac3e09afa507f6787da36df76ded2fbe145fa233e22c21"},
+    {"path":"assets/onnx/joiner.onnx","bytes":338154,"sha256":"76f7a24ed0c08633af14b2ee377f747af880d3b65eeba2cd3f31f3380fb73e8d"},
+    {"path":"assets/tokens.txt","bytes":1928,"sha256":"2d3f32311f9b692b964da3c90e830258d3e78e013cb0c992dbfb15cd5a1a71b0"},
+    {"path":"assets/en.phone","bytes":3330061,"sha256":"f7000ec3a90544c0c7c16090d8951779c2b322e14dad5006290f498567d439ea"}
+  ],
+  "runtime_archives": {
+    "linux-x86_64": {
+      "filename": "sherpa-onnx-v1.13.8-linux-x64-static-lib.tar.bz2",
+      "bytes": 22952328,
+      "sha256": "e1fdc5b67530e15741ef897fa5ffff297056f3bf0c6d829a27af9225a4c4b5a6"
+    },
+    "macos-arm64": {
+      "filename": "sherpa-onnx-v1.13.8-osx-arm64-static-lib.tar.bz2",
+      "bytes": 20965936,
+      "sha256": "9091bf160dc7fdacedbc906b212badf53c2993f4e5277a0e03998e96c31d60da"
+    },
+    "macos-x86_64": {
+      "filename": "sherpa-onnx-v1.13.8-osx-x64-static-lib.tar.bz2",
+      "bytes": 20575933,
+      "sha256": "a3f88da3e54c850a12d61431e73f8affcd1f13738b75b768847dd79541835b4b"
+    }
+  }
+}

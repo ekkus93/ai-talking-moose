@@ -109,6 +109,29 @@ if grep -q '\*\*MISSING\*\*' "$dependency_inventory"; then
   fail "dependency license inventory contains missing notice evidence"
 fi
 
+wake_root="$app_path/Contents/Resources/resources/wake_word"
+wake_manifest="$wake_root/artifacts-v1.json"
+wake_model="$wake_root/model"
+[[ -f "$wake_manifest" ]] || fail "Wake Word artifact manifest is missing from bundle"
+[[ -f "$wake_root/THIRD_PARTY_NOTICES.md" ]] || fail "Wake Word third-party notices are missing from bundle"
+python3 - "$wake_manifest" "$wake_model" <<'PY_WAKE'
+import hashlib, json, pathlib, sys
+manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+root = pathlib.Path(sys.argv[2])
+for artifact in manifest["model_artifacts"]:
+    path = root / artifact["path"]
+    if not path.is_file():
+        raise SystemExit(f"bundled Wake Word artifact missing: {artifact['path']}")
+    if path.stat().st_size != artifact["bytes"]:
+        raise SystemExit(f"bundled Wake Word artifact size mismatch: {artifact['path']}")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != artifact["sha256"]:
+        raise SystemExit(f"bundled Wake Word artifact digest mismatch: {artifact['path']}")
+print("wake-word-bundle-model-hashes-ok")
+PY_WAKE
+grep -F '| cargo | `sherpa-onnx` | `1.13.8` |' "$dependency_inventory" >/dev/null \
+  || fail "sherpa-onnx is missing from bundled dependency license inventory"
+
 if find "$app_path" -type f -iname '*.gguf' -print -quit | grep -q .; then
   fail "bundle contains GGUF model weights; Local LLM weights must remain external"
 fi

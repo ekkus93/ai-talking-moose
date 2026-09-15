@@ -15,6 +15,7 @@ use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
 use crate::audio::speech::StandaloneSpeechController;
+use crate::audio::wake_word::{normalize_wake_phrase, WakeWordRuntimeManager, DEFAULT_WAKE_PHRASE};
 use crate::character::ambient::AmbientScheduler;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::idle_banter::{
@@ -72,6 +73,8 @@ pub struct AppSettings {
     pub live_voice: String,
     pub speaking_rate: f32,
     pub pitch: f32,
+    pub wake_word_enabled: bool,
+    pub wake_phrase: String,
 
     // AI Configuration
     pub text_provider: TextProvider,
@@ -152,6 +155,8 @@ impl Default for AppSettings {
             live_voice: DEFAULT_TTS_VOICE.to_string(),
             speaking_rate: 0.95,
             pitch: -1.5,
+            wake_word_enabled: false,
+            wake_phrase: DEFAULT_WAKE_PHRASE.to_string(),
 
             // P12 real-CPU acceptance selected Local text as the new-profile default.
             // Existing pre-selector profiles still migrate explicitly to Google below.
@@ -226,6 +231,8 @@ impl AppSettings {
         let had_local_tts_model = value.get("local_tts_model").is_some();
         let had_local_tts_voice = value.get("local_tts_voice").is_some();
         let had_live_voice = value.get("live_voice").is_some();
+        let had_wake_word_enabled = value.get("wake_word_enabled").is_some();
+        let had_wake_phrase = value.get("wake_phrase").is_some();
         let legacy_tts_model = value
             .get("tts_model")
             .and_then(serde_json::Value::as_str)
@@ -307,6 +314,12 @@ impl AppSettings {
         settings.google_tts_model = normalized_google_tts_model;
         settings.google_tts_voice = normalized_google_tts_voice;
         settings.live_voice = normalized_live_voice;
+        let normalized_wake_phrase =
+            normalize_wake_phrase(&settings.wake_phrase).ok_or_else(|| {
+                PersistedSettingsError::Invalid("unsupported wake phrase".to_string())
+            })?;
+        let wake_phrase_migrated = normalized_wake_phrase != settings.wake_phrase;
+        settings.wake_phrase = normalized_wake_phrase;
 
         // Window-title observation is an unsupported V1 compatibility field, not an
         // authoritative preference. Persist it fail-closed even for legacy profiles.
@@ -327,6 +340,9 @@ impl AppSettings {
                 || !had_local_tts_model
                 || !had_local_tts_voice
                 || !had_live_voice
+                || !had_wake_word_enabled
+                || !had_wake_phrase
+                || wake_phrase_migrated
                 || had_legacy_provider
                 || had_legacy_text_model
                 || had_legacy_tts_model
@@ -374,6 +390,7 @@ pub struct AppState {
     pub moonshine_installer: Arc<MoonshineModelInstaller>,
     pub(crate) local_llm_runtime: Arc<LocalRuntimeManager>,
     pub(crate) local_tts_runtime: Arc<LocalTtsRuntimeManager>,
+    pub wake_word_runtime: Arc<WakeWordRuntimeManager>,
     pub tool_router: Arc<ToolRouter>,
     pub settings: Arc<RwLock<AppSettings>>,
     pub is_muted: Arc<RwLock<bool>>,
@@ -521,6 +538,7 @@ impl AppState {
         );
         let local_llm_runtime = Arc::new(LocalRuntimeManager::new());
         let local_tts_runtime = Arc::new(LocalTtsRuntimeManager::new());
+        let wake_word_runtime = Arc::new(WakeWordRuntimeManager::new());
 
         let builtin_tools = Arc::new(BuiltinTools {
             memory_manager: memory.clone(),
@@ -544,6 +562,7 @@ impl AppState {
             moonshine_installer,
             local_llm_runtime,
             local_tts_runtime,
+            wake_word_runtime,
             tool_router,
             settings,
             is_muted: Arc::new(RwLock::new(false)),

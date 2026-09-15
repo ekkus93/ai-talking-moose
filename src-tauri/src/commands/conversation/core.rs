@@ -12,7 +12,9 @@ use crate::conversation::session::{
     ConversationCallbacks, ConversationLifecycle, ConversationStartRequest,
 };
 use crate::persistence::{Database, MemoryRecord, TranscriptRecord};
+use std::sync::Arc;
 use tauri::{Emitter, Runtime, State};
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 const MAX_TEXT_MESSAGE_CHARS: usize = 16_384;
@@ -107,32 +109,37 @@ fn prepare_character_for_conversation<R: Runtime>(
     transition_and_emit(&state.character_state, app, CharacterState::Idle)
 }
 
-#[tauri::command]
-pub async fn start_conversation<R: Runtime>(
-    state: State<'_, AppState>,
+async fn start_conversation_impl<R: Runtime>(
+    state: &AppState,
     app: tauri::AppHandle<R>,
+    wake_handoff_rx: Option<mpsc::Receiver<Vec<u8>>>,
+    one_shot: bool,
+    session_end_callback: Option<Arc<dyn Fn() + Send + Sync>>,
 ) -> Result<String, String> {
     state.record_user_interaction();
-    state
-        .standalone_speech
-        .cancel(state.audio_playback.as_ref());
+    state.standalone_speech.cancel(state.audio_playback.as_ref());
     clear_speech_bubble(&app);
     if *state.is_muted.read() {
         return Err("Moose is currently muted".to_string());
     }
 
-    // Prevent a settings update from committing a new ASR/provider/device selection while this
-    // start request is still constructing or activating the old graph.
+    if wake_handoff_rx.is_none() && state.wake_word_runtime.is_enabled() {
+        state
+            .wake_word_runtime
+            .stop()
+            .await
+            .map_err(|error| error.message)?;
+        state.audio_capture.lock().stop();
+    }
+
     let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
     state.ambient_scheduler.claim_foreground_presentation();
-    prepare_character_for_conversation(state.inner(), &app)?;
+    prepare_character_for_conversation(state, &app)?;
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
 
-    let system_instruction =
-        build_conversation_system_instruction(state.inner(), settings.memory_enabled);
-
+    let system_instruction = build_conversation_system_instruction(state, settings.memory_enabled);
     let config = LiveSessionConfig {
         model: settings.live_model.clone(),
         voice_name: Some(settings.live_voice.clone()),
@@ -198,12 +205,46 @@ pub async fn start_conversation<R: Runtime>(
                 let _ = app_provider_error.emit("moose://conversation/error", provider_error);
             },
         ),
+        wake_handoff_rx,
+        one_shot,
+        session_end_callback,
     };
 
     let session_id = state.conversation_mgr.start_session(request).await?;
-
-    info!(session_id = %session_id, "Conversation session started");
+    info!(session_id = %session_id, one_shot, "Conversation session started");
     Ok(session_id)
+}
+
+#[tauri::command]
+pub async fn start_conversation<R: Runtime>(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<String, String> {
+    let end_callback = if state.settings.read().wake_word_enabled {
+        Some(crate::commands::wake_word::wake_session_end_callback(
+            state.inner().clone(),
+            app.clone(),
+        ))
+    } else {
+        None
+    };
+    start_conversation_impl(state.inner(), app, None, false, end_callback).await
+}
+
+pub(crate) async fn start_wake_conversation<R: Runtime>(
+    state: &AppState,
+    app: tauri::AppHandle<R>,
+    wake_handoff_rx: mpsc::Receiver<Vec<u8>>,
+    session_end_callback: Arc<dyn Fn() + Send + Sync>,
+) -> Result<String, String> {
+    start_conversation_impl(
+        state,
+        app,
+        Some(wake_handoff_rx),
+        true,
+        Some(session_end_callback),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -218,7 +259,8 @@ pub async fn stop_conversation(
         .await;
 
     state.ambient_scheduler.claim_foreground_presentation();
-    transition_and_emit(&state.character_state, &app, CharacterState::Idle)
+    transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
+    crate::commands::wake_word::reconcile_wake_runtime(state.inner().clone(), app).await
 }
 
 #[tauri::command]

@@ -2,6 +2,7 @@ use super::{ConversationEventLoopContext, ConversationLifecycle, ConversationMan
 use crate::ai::types::{LiveServerEvent, ToolCallResponse};
 use crate::character::state::CharacterState;
 use std::sync::atomic::Ordering;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
@@ -23,6 +24,8 @@ impl ConversationManager {
             provider_error_callback,
             transcript_callback,
             speech_bubble_callback,
+            one_shot,
+            session_end_callback,
         } = context;
         info!(session_id = %session_id, "Conversation event loop started");
         let mut terminal_failed = false;
@@ -86,6 +89,9 @@ impl ConversationManager {
                     speech_bubble_callback(update.text);
                 }
                 LiveServerEvent::AudioData(pcm_bytes) => {
+                    if one_shot {
+                        capture.lock().stop();
+                    }
                     Self::set_lifecycle(
                         &self.lifecycle,
                         ConversationLifecycle::Responding,
@@ -134,6 +140,15 @@ impl ConversationManager {
                         "moose_partial".to_string(),
                         String::new(),
                     );
+                    if one_shot {
+                        let deadline = Instant::now() + Duration::from_secs(60);
+                        while (playback.queue_length() > 0 || playback.is_playing())
+                            && Instant::now() < deadline
+                        {
+                            tokio::time::sleep(Duration::from_millis(20)).await;
+                        }
+                        break;
+                    }
                     if self.is_in_conversation.load(Ordering::SeqCst)
                         && self.generation.load(Ordering::SeqCst) == generation
                     {
@@ -209,6 +224,9 @@ impl ConversationManager {
                 state_callback(CharacterState::Idle);
             }
             info!(session_id = %session_id, "Conversation event loop exited");
+            if let Some(callback) = session_end_callback {
+                callback();
+            }
         }
     }
 

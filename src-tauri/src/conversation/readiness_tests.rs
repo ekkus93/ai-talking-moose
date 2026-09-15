@@ -75,6 +75,9 @@ async fn conversation_stays_connecting_until_provider_setup_finishes() {
         muted: Arc::new(RwLock::new(false)),
         tool_router: tool_router(),
         callbacks: ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}, |_| {}),
+        wake_handoff_rx: None,
+        one_shot: false,
+        session_end_callback: None,
     };
 
     let manager_for_start = manager.clone();

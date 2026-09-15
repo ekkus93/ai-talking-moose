@@ -47,6 +47,7 @@ async fn shutdown_preserves_last_local_asr_diagnostics_for_selected_mode() {
             Arc::new(SyncMutex::new(AudioCapture::new_mock())),
             Arc::new(AudioPlayback::new()),
             ConversationLifecycle::Idle,
+            true,
         )
         .await;
 
@@ -186,6 +187,9 @@ fn stable_request(
         muted: Arc::new(RwLock::new(false)),
         tool_router: test_tool_router(),
         callbacks: ConversationCallbacks::new(|_| {}, |_| {}, |_, _, _| {}, |_| {}, |_| {}, |_| {}),
+        wake_handoff_rx: None,
+        one_shot: false,
+        session_end_callback: None,
     }
 }
 
@@ -277,8 +281,6 @@ async fn teardown_wins_race_against_in_flight_start(mark_muted: bool) {
     .await
     .expect("provider connect did not enter the deterministic race window");
 
-    // set_mute sets the privacy gate before calling this same stop primitive.
-    // dismiss_moose calls the stop primitive directly. Exercise both interleavings.
     if mark_muted {
         *muted.write() = true;
     }

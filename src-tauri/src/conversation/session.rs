@@ -44,6 +44,7 @@ type ProviderErrorCallback = Arc<dyn Fn(ProviderError) + Send + Sync>;
 type TranscriptCallback = Arc<dyn Fn(String, String, String) + Send + Sync>;
 type SpeechBubbleCallback = Arc<dyn Fn(String) + Send + Sync>;
 type InputLevelCallback = Arc<dyn Fn(f32) + Send + Sync>;
+type SessionEndCallback = Arc<dyn Fn() + Send + Sync>;
 
 impl ConversationLifecycle {
     pub fn can_transition_to(self, target: Self) -> bool {
@@ -121,6 +122,9 @@ pub struct ConversationStartRequest {
     pub muted: Arc<RwLock<bool>>,
     pub tool_router: Arc<ToolRouter>,
     pub callbacks: ConversationCallbacks,
+    pub wake_handoff_rx: Option<mpsc::Receiver<Vec<u8>>>,
+    pub one_shot: bool,
+    pub session_end_callback: Option<SessionEndCallback>,
 }
 
 struct ConversationEventLoopContext {
@@ -135,6 +139,8 @@ struct ConversationEventLoopContext {
     provider_error_callback: ProviderErrorCallback,
     transcript_callback: TranscriptCallback,
     speech_bubble_callback: SpeechBubbleCallback,
+    one_shot: bool,
+    session_end_callback: Option<SessionEndCallback>,
 }
 
 #[derive(Clone)]
@@ -266,6 +272,7 @@ impl ConversationManager {
         capture: Arc<SyncMutex<AudioCapture>>,
         playback: Arc<AudioPlayback>,
         final_lifecycle: ConversationLifecycle,
+        stop_capture: bool,
     ) -> Option<Box<dyn LiveSession>> {
         let lifecycle_callback = self.lifecycle_callback.lock().clone();
         self.generation.fetch_add(1, Ordering::SeqCst);
@@ -277,7 +284,9 @@ impl ConversationManager {
             lifecycle_callback.as_ref(),
         );
 
-        capture.lock().stop();
+        if stop_capture {
+            capture.lock().stop();
+        }
         playback.flush();
         let active_asr_mode = *self.active_asr_mode.lock();
         self.stop_local_asr_for_shutdown(active_asr_mode, &capture)
@@ -321,7 +330,7 @@ impl ConversationManager {
         }
 
         let session = self
-            .begin_shutdown_locked(capture, playback, final_lifecycle)
+            .begin_shutdown_locked(capture, playback, final_lifecycle, true)
             .await;
         drop(operation_guard);
         Self::close_detached_session(session).await;
@@ -486,6 +495,9 @@ impl ConversationManager {
             muted,
             tool_router,
             callbacks,
+            mut wake_handoff_rx,
+            one_shot,
+            session_end_callback,
         } = request;
         let ConversationCallbacks {
             state: state_callback,
@@ -496,15 +508,18 @@ impl ConversationManager {
             input_level: input_level_callback,
         } = callbacks;
 
-        // Invalidate and detach any prior session while serialized, but close its provider handle
-        // only after releasing the global operation lock. If Stop races that close it increments
-        // generation, and this start notices the invalidation before doing any new provider I/O.
+        // Wake-triggered startup keeps the existing wake capture alive while local ASR and
+        // the provider initialize. Immediately before command capture starts we stop that one
+        // authoritative stream, drain its bounded handoff queue, feed pre-roll, and reopen the
+        // same AudioCapture for command ASR. Manual starts retain the existing teardown behavior.
+        let preserve_wake_capture = wake_handoff_rx.is_some() && !self.is_active();
         let operation_guard = self.operation_lock.lock().await;
         let previous_session = self
             .begin_shutdown_locked(
                 capture.clone(),
                 playback.clone(),
                 ConversationLifecycle::Idle,
+                !preserve_wake_capture,
             )
             .await;
         let teardown_generation = self.generation.load(Ordering::SeqCst);
@@ -595,6 +610,60 @@ impl ConversationManager {
 
         let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
         let mut cloud_pcm_rx = None;
+
+        let wake_pre_roll = if let Some(receiver) = wake_handoff_rx.as_mut() {
+            capture.lock().stop();
+            let mut bytes = Vec::new();
+            while let Ok(chunk) = receiver.try_recv() {
+                bytes.extend_from_slice(&chunk);
+            }
+            bytes
+        } else {
+            Vec::new()
+        };
+
+        if !wake_pre_roll.is_empty() {
+            match asr_mode {
+                AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => {
+                    if let Err(error) = local_pipeline
+                        .as_ref()
+                        .expect("local Moonshine mode must have a provisional ASR pipeline")
+                        .enqueue_pre_roll(wake_pre_roll.clone())
+                    {
+                        Self::stop_provisional_local_asr(&mut local_pipeline).await;
+                        playback.flush();
+                        Self::set_lifecycle(
+                            &self.lifecycle,
+                            ConversationLifecycle::Failed,
+                            Some(&lifecycle_callback),
+                        );
+                        state_callback(CharacterState::Error);
+                        drop(operation_guard);
+                        Self::close_provisional_session(&mut session).await;
+                        return Err(error.message);
+                    }
+                }
+                AsrMode::GeminiLiveAudio => {
+                    if let Err(error_value) =
+                        Self::bounded_provider_operation(session.send_audio_chunk(&wake_pre_roll))
+                            .await
+                    {
+                        Self::stop_provisional_local_asr(&mut local_pipeline).await;
+                        playback.flush();
+                        Self::set_lifecycle(
+                            &self.lifecycle,
+                            ConversationLifecycle::Failed,
+                            Some(&lifecycle_callback),
+                        );
+                        state_callback(CharacterState::Error);
+                        drop(operation_guard);
+                        Self::close_provisional_session(&mut session).await;
+                        return Err(error_value.to_string());
+                    }
+                }
+            }
+        }
+
         let capture_result = match asr_mode {
             AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => local_pipeline
                 .as_ref()
@@ -734,6 +803,8 @@ impl ConversationManager {
             provider_error_callback,
             transcript_callback,
             speech_bubble_callback,
+            one_shot,
+            session_end_callback,
         };
         tauri::async_runtime::spawn(async move {
             manager
@@ -774,7 +845,7 @@ impl ConversationManager {
     ) {
         let operation_guard = self.operation_lock.lock().await;
         let session = self
-            .begin_shutdown_locked(capture, playback, ConversationLifecycle::Idle)
+            .begin_shutdown_locked(capture, playback, ConversationLifecycle::Idle, true)
             .await;
         drop(operation_guard);
         Self::close_detached_session(session).await;
@@ -787,7 +858,7 @@ impl ConversationManager {
     ) {
         let operation_guard = self.operation_lock.lock().await;
         let session = self
-            .begin_shutdown_locked(capture, playback.clone(), ConversationLifecycle::Idle)
+            .begin_shutdown_locked(capture, playback.clone(), ConversationLifecycle::Idle, true)
             .await;
         drop(operation_guard);
         Self::close_detached_session(session).await;
