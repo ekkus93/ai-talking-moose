@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "runtime_version": "v1.13.8",
+    "model_family": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
+    "verification": "size-and-sha256-required-before-use"
+  },
+  "artifacts": []
+}
