@@ -1,4 +1,6 @@
-use crate::audio::pcm_ring_buffer::{PcmRingBuffer, WAKE_PCM_PRE_ROLL_SAMPLES};
+use crate::audio::pcm_ring_buffer::PcmRingBuffer;
+#[cfg(test)]
+use crate::audio::pcm_ring_buffer::WAKE_PCM_PRE_ROLL_SAMPLES;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
