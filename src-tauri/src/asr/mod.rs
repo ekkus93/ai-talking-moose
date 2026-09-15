@@ -7,5 +7,7 @@ pub mod types;
 pub mod wake_word_diagnostics;
 pub mod wake_word_handoff;
 pub mod wake_word_runtime;
+#[cfg(test)]
+mod wake_word_stability;
 
 pub use types::*;
