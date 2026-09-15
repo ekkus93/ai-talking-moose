@@ -3,8 +3,7 @@ pub const WAKE_PCM_SAMPLE_RATE_HZ: usize = 16_000;
 /// Wake Word V1 retains two seconds of canonical mono PCM.
 pub const WAKE_PCM_PRE_ROLL_SECONDS: usize = 2;
 /// Number of i16 mono samples retained by the nominal Wake Word V1 pre-roll buffer.
-pub const WAKE_PCM_PRE_ROLL_SAMPLES: usize =
-    WAKE_PCM_SAMPLE_RATE_HZ * WAKE_PCM_PRE_ROLL_SECONDS;
+pub const WAKE_PCM_PRE_ROLL_SAMPLES: usize = WAKE_PCM_SAMPLE_RATE_HZ * WAKE_PCM_PRE_ROLL_SECONDS;
 
 /// Fixed-capacity chronological buffer for mono signed 16-bit PCM samples.
 ///
@@ -23,7 +22,10 @@ pub struct PcmRingBuffer {
 impl PcmRingBuffer {
     /// Creates a fixed-capacity ring. Capacity must be greater than zero.
     pub fn new(capacity_samples: usize) -> Self {
-        assert!(capacity_samples > 0, "PCM ring-buffer capacity must be non-zero");
+        assert!(
+            capacity_samples > 0,
+            "PCM ring-buffer capacity must be non-zero"
+        );
         Self {
             samples: vec![0; capacity_samples].into_boxed_slice(),
             write_index: 0,
