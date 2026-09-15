@@ -5,6 +5,7 @@ use std::time::Duration;
 
 pub const WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ: u32 = 16_000;
 pub const WAKE_WORD_CANONICAL_CHANNELS: u8 = 1;
+pub const WAKE_WORD_ENGINE_ID: &str = "sherpa-onnx-kws";
 
 /// Privacy-safe Wake Word V1 runtime diagnostics.
 ///
@@ -15,6 +16,9 @@ pub const WAKE_WORD_CANONICAL_CHANNELS: u8 = 1;
 pub struct WakeWordDiagnostics {
     pub enabled: bool,
     pub runtime_phase: WakeWordRuntimePhase,
+    pub engine_id: &'static str,
+    pub platform: &'static str,
+    pub architecture: &'static str,
     pub canonical_sample_rate_hz: u32,
     pub canonical_channels: u8,
     pub inference_threads: u8,
@@ -38,6 +42,9 @@ impl WakeWordDiagnostics {
                 WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::ShuttingDown
             ),
             runtime_phase: snapshot.phase,
+            engine_id: WAKE_WORD_ENGINE_ID,
+            platform: std::env::consts::OS,
+            architecture: std::env::consts::ARCH,
             canonical_sample_rate_hz: WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ,
             canonical_channels: WAKE_WORD_CANONICAL_CHANNELS,
             inference_threads: 1,
@@ -76,6 +83,9 @@ mod tests {
 
         assert!(!diagnostics.enabled);
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Disabled);
+        assert_eq!(diagnostics.engine_id, "sherpa-onnx-kws");
+        assert_eq!(diagnostics.platform, std::env::consts::OS);
+        assert_eq!(diagnostics.architecture, std::env::consts::ARCH);
         assert_eq!(diagnostics.canonical_sample_rate_hz, 16_000);
         assert_eq!(diagnostics.canonical_channels, 1);
         assert_eq!(diagnostics.inference_threads, 1);
