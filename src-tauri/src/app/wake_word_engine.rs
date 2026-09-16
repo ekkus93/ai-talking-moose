@@ -198,26 +198,34 @@ mod tests {
 
     #[test]
     fn config_rejects_drift_from_frozen_v1_policy() {
-        let mut config = SherpaKwsConfig::default();
-        config.sample_rate_hz = 48_000;
+        let config = SherpaKwsConfig {
+            sample_rate_hz: 48_000,
+            ..Default::default()
+        };
         assert_eq!(
             config.validate().unwrap_err().kind,
             WakeWordErrorKind::InvalidConfiguration
         );
 
-        let mut config = SherpaKwsConfig::default();
-        config.threads = 2;
+        let config = SherpaKwsConfig {
+            threads: 2,
+            ..Default::default()
+        };
         assert_eq!(
             config.validate().unwrap_err().message,
             "wake KWS V1 must use one inference thread"
         );
 
-        let mut config = SherpaKwsConfig::default();
-        config.keyword = "HEY BRUCE".to_string();
+        let config = SherpaKwsConfig {
+            keyword: "HEY BRUCE".to_string(),
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        let mut config = SherpaKwsConfig::default();
-        config.threshold = 0.5;
+        let config = SherpaKwsConfig {
+            threshold: 0.5,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
     }
 
