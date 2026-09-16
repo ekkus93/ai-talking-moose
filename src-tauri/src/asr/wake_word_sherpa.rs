@@ -108,6 +108,20 @@ impl std::fmt::Display for SherpaKwsError {
 
 impl std::error::Error for SherpaKwsError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KwsFrameOutcome {
+    NoTrigger,
+    WakeDetected,
+}
+
+/// Engine-private native streaming session contract. Implementations may wrap sherpa objects,
+/// but callers only provide canonical 16 kHz mono PCM and receive a bounded detection boolean.
+pub trait NativeKwsSession: Send {
+    fn accept_pcm(&mut self, samples: &[f32]) -> Result<bool, SherpaKwsError>;
+    fn reset_stream(&mut self) -> Result<(), SherpaKwsError>;
+    fn shutdown(&mut self);
+}
+
 /// Narrow ownership boundary for the sherpa-onnx keyword spotter.
 ///
 /// Native sherpa session construction is intentionally kept behind this type so microphone
@@ -117,6 +131,7 @@ impl std::error::Error for SherpaKwsError {}
 pub struct SherpaKwsEngine {
     config: SherpaKwsConfig,
     shutting_down: AtomicBool,
+    session: Option<Box<dyn NativeKwsSession>>,
 }
 
 impl SherpaKwsEngine {
@@ -125,7 +140,34 @@ impl SherpaKwsEngine {
         Ok(Self {
             config,
             shutting_down: AtomicBool::new(false),
+            session: None,
         })
+    }
+
+    pub fn attach_session(
+        &mut self,
+        session: Box<dyn NativeKwsSession>,
+    ) -> Result<(), SherpaKwsError> {
+        self.ensure_running()?;
+        self.session = Some(session);
+        Ok(())
+    }
+
+    pub fn feed_canonical_pcm(
+        &mut self,
+        samples: &[f32],
+    ) -> Result<KwsFrameOutcome, SherpaKwsError> {
+        self.ensure_running()?;
+        if samples.is_empty() {
+            return Ok(KwsFrameOutcome::NoTrigger);
+        }
+        let session = self.session.as_mut().ok_or_else(SherpaKwsError::artifact)?;
+        if session.accept_pcm(samples)? {
+            session.reset_stream()?;
+            Ok(KwsFrameOutcome::WakeDetected)
+        } else {
+            Ok(KwsFrameOutcome::NoTrigger)
+        }
     }
 
     pub fn engine_id(&self) -> &'static str {
@@ -163,8 +205,13 @@ impl SherpaKwsEngine {
         Ok(())
     }
 
-    pub fn shutdown(&self) {
-        self.shutting_down.store(true, Ordering::SeqCst);
+    pub fn shutdown(&mut self) {
+        if !self.shutting_down.swap(true, Ordering::SeqCst) {
+            if let Some(session) = self.session.as_mut() {
+                session.shutdown();
+            }
+        }
+        self.session = None;
     }
 
     pub fn is_shutting_down(&self) -> bool {
@@ -183,6 +230,7 @@ impl SherpaKwsEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
 
     fn config() -> SherpaKwsConfig {
         SherpaKwsConfig::v1(
@@ -190,6 +238,32 @@ mod tests {
             PathBuf::from("tokens.txt"),
             PathBuf::from("keywords.txt"),
         )
+    }
+
+    #[derive(Default)]
+    struct SessionState {
+        frames: Vec<Vec<f32>>,
+        resets: usize,
+        shutdowns: usize,
+        trigger_next: bool,
+    }
+
+    struct FakeSession(Arc<Mutex<SessionState>>);
+    impl NativeKwsSession for FakeSession {
+        fn accept_pcm(&mut self, samples: &[f32]) -> Result<bool, SherpaKwsError> {
+            let mut state = self.0.lock().unwrap();
+            state.frames.push(samples.to_vec());
+            Ok(std::mem::take(&mut state.trigger_next))
+        }
+
+        fn reset_stream(&mut self) -> Result<(), SherpaKwsError> {
+            self.0.lock().unwrap().resets += 1;
+            Ok(())
+        }
+
+        fn shutdown(&mut self) {
+            self.0.lock().unwrap().shutdowns += 1;
+        }
     }
 
     #[test]
@@ -202,6 +276,47 @@ mod tests {
         assert_eq!(engine.channels(), 1);
         assert_eq!(engine.trigger_threshold(), V1_WAKE_THRESHOLD);
         assert_eq!(engine.trigger_score(), V1_WAKE_SCORE);
+    }
+
+    #[test]
+    fn streaming_pcm_emits_bounded_detection_and_resets_after_trigger() {
+        let state = Arc::new(Mutex::new(SessionState {
+            trigger_next: true,
+            ..Default::default()
+        }));
+        let mut engine = SherpaKwsEngine::new(config()).unwrap();
+        engine
+            .attach_session(Box::new(FakeSession(state.clone())))
+            .unwrap();
+        assert_eq!(
+            engine.feed_canonical_pcm(&[0.1, -0.2]).unwrap(),
+            KwsFrameOutcome::WakeDetected
+        );
+        let state = state.lock().unwrap();
+        assert_eq!(state.frames, vec![vec![0.1, -0.2]]);
+        assert_eq!(state.resets, 1);
+    }
+
+    #[test]
+    fn non_triggering_frames_do_not_reset_stream() {
+        let state = Arc::new(Mutex::new(SessionState::default()));
+        let mut engine = SherpaKwsEngine::new(config()).unwrap();
+        engine
+            .attach_session(Box::new(FakeSession(state.clone())))
+            .unwrap();
+        assert_eq!(
+            engine.feed_canonical_pcm(&[0.0]).unwrap(),
+            KwsFrameOutcome::NoTrigger
+        );
+        assert_eq!(state.lock().unwrap().resets, 0);
+    }
+
+    #[test]
+    fn missing_native_session_fails_with_sanitized_artifact_error() {
+        let mut engine = SherpaKwsEngine::new(config()).unwrap();
+        let error = engine.feed_canonical_pcm(&[0.0]).unwrap_err();
+        assert_eq!(error.kind, SherpaKwsErrorKind::Artifact);
+        assert!(!error.message.contains('/'));
     }
 
     #[test]
@@ -224,11 +339,16 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_is_idempotent_and_prevents_further_runtime_work() {
-        let engine = SherpaKwsEngine::new(config()).unwrap();
+    fn shutdown_is_idempotent_and_releases_native_session_once() {
+        let state = Arc::new(Mutex::new(SessionState::default()));
+        let mut engine = SherpaKwsEngine::new(config()).unwrap();
+        engine
+            .attach_session(Box::new(FakeSession(state.clone())))
+            .unwrap();
         engine.shutdown();
         engine.shutdown();
         assert!(engine.is_shutting_down());
+        assert_eq!(state.lock().unwrap().shutdowns, 1);
         let error = engine.ensure_running().unwrap_err();
         assert_eq!(error.kind, SherpaKwsErrorKind::ShuttingDown);
     }
