@@ -145,13 +145,17 @@ mod tests {
 
     #[test]
     fn app_settings_projection_rejects_invalid_types_and_phrase() {
-        assert!(WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
-            "wake_word_enabled": "yes"
-        }))
-        .is_err());
-        assert!(WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
-            "wake_word_phrase": "Hey Bruce"
-        }))
-        .is_err());
+        assert!(
+            WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
+                "wake_word_enabled": "yes"
+            }))
+            .is_err()
+        );
+        assert!(
+            WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
+                "wake_word_phrase": "Hey Bruce"
+            }))
+            .is_err()
+        );
     }
 }
