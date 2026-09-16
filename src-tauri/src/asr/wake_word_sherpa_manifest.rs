@@ -38,8 +38,12 @@ impl SherpaKwsModelManifest {
         if self.id != SHERPA_KWS_MODEL_ID {
             return Err(SherpaKwsManifestError::WrongModelId);
         }
-        if !self.archive_url.starts_with("https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/")
-            || !self.archive_url.ends_with(&format!("/{SHERPA_KWS_MODEL_ID}.tar.bz2"))
+        if !self
+            .archive_url
+            .starts_with("https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/")
+            || !self
+                .archive_url
+                .ends_with(&format!("/{SHERPA_KWS_MODEL_ID}.tar.bz2"))
         {
             return Err(SherpaKwsManifestError::MutableOrInsecureSource);
         }
@@ -95,11 +99,31 @@ mod tests {
 
     const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     const FILES: [SherpaKwsModelFile; 5] = [
-        SherpaKwsModelFile { name: "encoder.onnx", bytes: 1, sha256: HASH },
-        SherpaKwsModelFile { name: "decoder.onnx", bytes: 2, sha256: HASH },
-        SherpaKwsModelFile { name: "joiner.onnx", bytes: 3, sha256: HASH },
-        SherpaKwsModelFile { name: "tokens.txt", bytes: 4, sha256: HASH },
-        SherpaKwsModelFile { name: "bpe.model", bytes: 5, sha256: HASH },
+        SherpaKwsModelFile {
+            name: "encoder.onnx",
+            bytes: 1,
+            sha256: HASH,
+        },
+        SherpaKwsModelFile {
+            name: "decoder.onnx",
+            bytes: 2,
+            sha256: HASH,
+        },
+        SherpaKwsModelFile {
+            name: "joiner.onnx",
+            bytes: 3,
+            sha256: HASH,
+        },
+        SherpaKwsModelFile {
+            name: "tokens.txt",
+            bytes: 4,
+            sha256: HASH,
+        },
+        SherpaKwsModelFile {
+            name: "bpe.model",
+            bytes: 5,
+            sha256: HASH,
+        },
     ];
 
     fn valid_manifest() -> SherpaKwsModelManifest {
@@ -130,21 +154,42 @@ mod tests {
     fn mutable_or_insecure_sources_are_rejected() {
         let mut manifest = valid_manifest();
         manifest.archive_url = "https://example.invalid/latest/model.tar.bz2";
-        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::MutableOrInsecureSource));
+        assert_eq!(
+            manifest.validate(),
+            Err(SherpaKwsManifestError::MutableOrInsecureSource)
+        );
     }
 
     #[test]
     fn duplicate_and_unhashed_files_are_rejected() {
         const DUPLICATES: [SherpaKwsModelFile; 2] = [
-            SherpaKwsModelFile { name: "tokens.txt", bytes: 1, sha256: HASH },
-            SherpaKwsModelFile { name: "tokens.txt", bytes: 1, sha256: HASH },
+            SherpaKwsModelFile {
+                name: "tokens.txt",
+                bytes: 1,
+                sha256: HASH,
+            },
+            SherpaKwsModelFile {
+                name: "tokens.txt",
+                bytes: 1,
+                sha256: HASH,
+            },
         ];
         let mut manifest = valid_manifest();
         manifest.files = &DUPLICATES;
-        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::DuplicateFileName("tokens.txt")));
+        assert_eq!(
+            manifest.validate(),
+            Err(SherpaKwsManifestError::DuplicateFileName("tokens.txt"))
+        );
 
-        const UNHASHED: [SherpaKwsModelFile; 1] = [SherpaKwsModelFile { name: "tokens.txt", bytes: 1, sha256: "" }];
+        const UNHASHED: [SherpaKwsModelFile; 1] = [SherpaKwsModelFile {
+            name: "tokens.txt",
+            bytes: 1,
+            sha256: "",
+        }];
         manifest.files = &UNHASHED;
-        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::InvalidFileIdentity("tokens.txt")));
+        assert_eq!(
+            manifest.validate(),
+            Err(SherpaKwsManifestError::InvalidFileIdentity("tokens.txt"))
+        );
     }
 }
