@@ -25,11 +25,7 @@ pub struct WakeWordError {
 }
 
 impl WakeWordError {
-    pub fn sanitized(
-        kind: WakeWordErrorKind,
-        message: impl Into<String>,
-        retryable: bool,
-    ) -> Self {
+    pub fn sanitized(kind: WakeWordErrorKind, message: impl Into<String>, retryable: bool) -> Self {
         let message = sanitize_error_message(&message.into());
         Self {
             kind,
@@ -136,7 +132,11 @@ impl WakeWordDetection {
 
 pub trait SherpaKwsEngine {
     fn config(&self) -> &SherpaKwsConfig;
-    fn accept_pcm16_mono(&mut self, sample_rate_hz: u32, samples: &[i16]) -> Result<Option<WakeWordDetection>, WakeWordError>;
+    fn accept_pcm16_mono(
+        &mut self,
+        sample_rate_hz: u32,
+        samples: &[i16],
+    ) -> Result<Option<WakeWordDetection>, WakeWordError>;
     fn reset_stream(&mut self) -> Result<(), WakeWordError>;
     fn shutdown(&mut self) -> Result<(), WakeWordError>;
 }
@@ -242,10 +242,7 @@ mod tests {
             "failed /tmp/private/model.onnx token abcdefghijklmnopqrstuvwxyz123456",
             true,
         );
-        assert_eq!(
-            error.message,
-            "failed <path> token <redacted>"
-        );
+        assert_eq!(error.message, "failed <path> token <redacted>");
         assert!(error.retryable);
     }
 
@@ -293,10 +290,19 @@ mod tests {
             shutdowns: 0,
         };
         engine.config().validate().unwrap();
-        assert!(engine.accept_pcm16_mono(16_000, &[1, 2, 3]).unwrap().is_some());
-        assert!(engine.accept_pcm16_mono(16_000, &[1, 2, 3]).unwrap().is_none());
+        assert!(engine
+            .accept_pcm16_mono(16_000, &[1, 2, 3])
+            .unwrap()
+            .is_some());
+        assert!(engine
+            .accept_pcm16_mono(16_000, &[1, 2, 3])
+            .unwrap()
+            .is_none());
         engine.reset_stream().unwrap();
-        assert!(engine.accept_pcm16_mono(16_000, &[1, 2, 3]).unwrap().is_some());
+        assert!(engine
+            .accept_pcm16_mono(16_000, &[1, 2, 3])
+            .unwrap()
+            .is_some());
         engine.shutdown().unwrap();
         engine.shutdown().unwrap();
         assert_eq!(engine.shutdowns, 2);
