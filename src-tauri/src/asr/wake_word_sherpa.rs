@@ -72,7 +72,10 @@ pub struct SherpaKwsError {
 
 impl SherpaKwsError {
     fn configuration(message: &'static str) -> Self {
-        Self { kind: SherpaKwsErrorKind::Configuration, message }
+        Self {
+            kind: SherpaKwsErrorKind::Configuration,
+            message,
+        }
     }
 
     pub fn artifact() -> Self {
@@ -134,16 +137,26 @@ pub struct SherpaKwsEngine {
 impl SherpaKwsEngine {
     pub fn new(config: SherpaKwsConfig) -> Result<Self, SherpaKwsError> {
         config.validate()?;
-        Ok(Self { config, shutting_down: AtomicBool::new(false), session: None })
+        Ok(Self {
+            config,
+            shutting_down: AtomicBool::new(false),
+            session: None,
+        })
     }
 
-    pub fn attach_session(&mut self, session: Box<dyn NativeKwsSession>) -> Result<(), SherpaKwsError> {
+    pub fn attach_session(
+        &mut self,
+        session: Box<dyn NativeKwsSession>,
+    ) -> Result<(), SherpaKwsError> {
         self.ensure_running()?;
         self.session = Some(session);
         Ok(())
     }
 
-    pub fn feed_canonical_pcm(&mut self, samples: &[f32]) -> Result<KwsFrameOutcome, SherpaKwsError> {
+    pub fn feed_canonical_pcm(
+        &mut self,
+        samples: &[f32],
+    ) -> Result<KwsFrameOutcome, SherpaKwsError> {
         self.ensure_running()?;
         if samples.is_empty() {
             return Ok(KwsFrameOutcome::NoTrigger);
@@ -157,13 +170,33 @@ impl SherpaKwsEngine {
         }
     }
 
-    pub fn engine_id(&self) -> &'static str { SHERPA_KWS_ENGINE_ID }
-    pub fn thread_count(&self) -> usize { self.config.threads }
-    pub fn keyword(&self) -> &'static str { V1_CANONICAL_KEYWORD }
-    pub fn sample_rate_hz(&self) -> u32 { V1_CANONICAL_SAMPLE_RATE_HZ }
-    pub fn channels(&self) -> u16 { V1_CANONICAL_CHANNELS }
-    pub fn trigger_threshold(&self) -> f32 { self.config.trigger_threshold }
-    pub fn trigger_score(&self) -> f32 { self.config.trigger_score }
+    pub fn engine_id(&self) -> &'static str {
+        SHERPA_KWS_ENGINE_ID
+    }
+
+    pub fn thread_count(&self) -> usize {
+        self.config.threads
+    }
+
+    pub fn keyword(&self) -> &'static str {
+        V1_CANONICAL_KEYWORD
+    }
+
+    pub fn sample_rate_hz(&self) -> u32 {
+        V1_CANONICAL_SAMPLE_RATE_HZ
+    }
+
+    pub fn channels(&self) -> u16 {
+        V1_CANONICAL_CHANNELS
+    }
+
+    pub fn trigger_threshold(&self) -> f32 {
+        self.config.trigger_threshold
+    }
+
+    pub fn trigger_score(&self) -> f32 {
+        self.config.trigger_score
+    }
 
     pub fn ensure_running(&self) -> Result<(), SherpaKwsError> {
         if self.shutting_down.load(Ordering::SeqCst) {
@@ -181,10 +214,16 @@ impl SherpaKwsEngine {
         self.session = None;
     }
 
-    pub fn is_shutting_down(&self) -> bool { self.shutting_down.load(Ordering::SeqCst) }
+    pub fn is_shutting_down(&self) -> bool {
+        self.shutting_down.load(Ordering::SeqCst)
+    }
 
     pub fn artifact_paths(&self) -> (&Path, &Path, &Path) {
-        (&self.config.model_path, &self.config.tokens_path, &self.config.keywords_path)
+        (
+            &self.config.model_path,
+            &self.config.tokens_path,
+            &self.config.keywords_path,
+        )
     }
 }
 
@@ -194,11 +233,20 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     fn config() -> SherpaKwsConfig {
-        SherpaKwsConfig::v1(PathBuf::from("model.onnx"), PathBuf::from("tokens.txt"), PathBuf::from("keywords.txt"))
+        SherpaKwsConfig::v1(
+            PathBuf::from("model.onnx"),
+            PathBuf::from("tokens.txt"),
+            PathBuf::from("keywords.txt"),
+        )
     }
 
     #[derive(Default)]
-    struct SessionState { frames: Vec<Vec<f32>>, resets: usize, shutdowns: usize, trigger_next: bool }
+    struct SessionState {
+        frames: Vec<Vec<f32>>,
+        resets: usize,
+        shutdowns: usize,
+        trigger_next: bool,
+    }
 
     struct FakeSession(Arc<Mutex<SessionState>>);
     impl NativeKwsSession for FakeSession {
@@ -207,11 +255,15 @@ mod tests {
             state.frames.push(samples.to_vec());
             Ok(std::mem::take(&mut state.trigger_next))
         }
+
         fn reset_stream(&mut self) -> Result<(), SherpaKwsError> {
             self.0.lock().unwrap().resets += 1;
             Ok(())
         }
-        fn shutdown(&mut self) { self.0.lock().unwrap().shutdowns += 1; }
+
+        fn shutdown(&mut self) {
+            self.0.lock().unwrap().shutdowns += 1;
+        }
     }
 
     #[test]
@@ -228,10 +280,18 @@ mod tests {
 
     #[test]
     fn streaming_pcm_emits_bounded_detection_and_resets_after_trigger() {
-        let state = Arc::new(Mutex::new(SessionState { trigger_next: true, ..Default::default() }));
+        let state = Arc::new(Mutex::new(SessionState {
+            trigger_next: true,
+            ..Default::default()
+        }));
         let mut engine = SherpaKwsEngine::new(config()).unwrap();
-        engine.attach_session(Box::new(FakeSession(state.clone()))).unwrap();
-        assert_eq!(engine.feed_canonical_pcm(&[0.1, -0.2]).unwrap(), KwsFrameOutcome::WakeDetected);
+        engine
+            .attach_session(Box::new(FakeSession(state.clone())))
+            .unwrap();
+        assert_eq!(
+            engine.feed_canonical_pcm(&[0.1, -0.2]).unwrap(),
+            KwsFrameOutcome::WakeDetected
+        );
         let state = state.lock().unwrap();
         assert_eq!(state.frames, vec![vec![0.1, -0.2]]);
         assert_eq!(state.resets, 1);
@@ -241,8 +301,13 @@ mod tests {
     fn non_triggering_frames_do_not_reset_stream() {
         let state = Arc::new(Mutex::new(SessionState::default()));
         let mut engine = SherpaKwsEngine::new(config()).unwrap();
-        engine.attach_session(Box::new(FakeSession(state.clone()))).unwrap();
-        assert_eq!(engine.feed_canonical_pcm(&[0.0]).unwrap(), KwsFrameOutcome::NoTrigger);
+        engine
+            .attach_session(Box::new(FakeSession(state.clone())))
+            .unwrap();
+        assert_eq!(
+            engine.feed_canonical_pcm(&[0.0]).unwrap(),
+            KwsFrameOutcome::NoTrigger
+        );
         assert_eq!(state.lock().unwrap().resets, 0);
     }
 
@@ -277,7 +342,9 @@ mod tests {
     fn shutdown_is_idempotent_and_releases_native_session_once() {
         let state = Arc::new(Mutex::new(SessionState::default()));
         let mut engine = SherpaKwsEngine::new(config()).unwrap();
-        engine.attach_session(Box::new(FakeSession(state.clone()))).unwrap();
+        engine
+            .attach_session(Box::new(FakeSession(state.clone())))
+            .unwrap();
         engine.shutdown();
         engine.shutdown();
         assert!(engine.is_shutting_down());
