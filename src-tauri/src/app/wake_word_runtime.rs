@@ -2,6 +2,7 @@ use super::wake_word_engine::{
     SherpaKwsEngine, WakeWordDetection, WakeWordError, WakeWordErrorKind,
 };
 use crate::audio::PcmRingBuffer;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WakeWordRuntimeState {
@@ -19,6 +20,8 @@ pub struct WakeWordRuntimeManager<E: SherpaKwsEngine> {
     engine: Option<E>,
     ring_buffer: PcmRingBuffer,
     trigger_in_flight: bool,
+    trigger_count: u64,
+    last_trigger_at: Option<Instant>,
 }
 
 impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
@@ -28,11 +31,21 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
             engine: None,
             ring_buffer: PcmRingBuffer::wake_word_v1(),
             trigger_in_flight: false,
+            trigger_count: 0,
+            last_trigger_at: None,
         }
     }
 
     pub fn state(&self) -> WakeWordRuntimeState {
         self.state
+    }
+
+    pub fn trigger_count(&self) -> u64 {
+        self.trigger_count
+    }
+
+    pub fn last_trigger_age(&self) -> Option<Duration> {
+        self.last_trigger_at.map(|instant| instant.elapsed())
     }
 
     pub fn begin_loading(&mut self) -> Result<(), WakeWordError> {
@@ -75,6 +88,8 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
         let detection = engine.accept_pcm16_mono(sample_rate_hz, samples)?;
         if detection.is_some() {
             self.trigger_in_flight = true;
+            self.trigger_count = self.trigger_count.saturating_add(1);
+            self.last_trigger_at = Some(Instant::now());
             self.state = WakeWordRuntimeState::Triggered;
         }
         Ok(detection)
@@ -212,15 +227,39 @@ mod tests {
         let detection = manager.feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[1, 2, 3]).unwrap();
         assert!(detection.is_some());
         assert_eq!(manager.state(), WakeWordRuntimeState::Triggered);
+        assert_eq!(manager.trigger_count(), 1);
+        assert!(manager.last_trigger_age().is_some());
         assert!(manager
             .feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[4, 5])
             .unwrap()
             .is_none());
+        assert_eq!(manager.trigger_count(), 1);
 
         manager.suspend().unwrap();
         manager.resume().unwrap();
         assert_eq!(manager.state(), WakeWordRuntimeState::Listening);
         assert!(manager.pre_roll_snapshot().is_empty());
+    }
+
+    #[test]
+    fn later_detection_after_resume_counts_as_new_trigger() {
+        let mut engine = FakeEngine::new();
+        engine.detect_next = true;
+        let mut manager = WakeWordRuntimeManager::disabled();
+        manager.begin_loading().unwrap();
+        manager.finish_loading(engine).unwrap();
+        assert!(manager
+            .feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[1])
+            .unwrap()
+            .is_some());
+        manager.suspend().unwrap();
+        manager.resume().unwrap();
+        manager.engine.as_mut().unwrap().detect_next = true;
+        assert!(manager
+            .feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[2])
+            .unwrap()
+            .is_some());
+        assert_eq!(manager.trigger_count(), 2);
     }
 
     #[test]
