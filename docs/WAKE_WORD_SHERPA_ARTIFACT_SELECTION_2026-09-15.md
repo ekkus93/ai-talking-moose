@@ -1,7 +1,9 @@
 # Wake Word V1 — sherpa-onnx artifact selection
 
 **Date:** 2026-09-15
-**Status:** WW-100 selection decision; immutable byte-level manifest still required before WW-100 acceptance
+**Status:** Historical WW-100 selection record; reconciled to the later fp32 freeze on 2026-09-16
+
+> **Reconciliation:** `docs/WAKE_WORD_V1_SHERPA_MODEL_SELECTION_2026-09-16.md` is the authoritative model-selection record. The initial int8 preference below was superseded before production qualification. Wake Word V1 starts with the fp32 encoder/decoder/joiner set; int8 remains a possible later optimization only if real acceptance justifies it.
 
 ## Selected KWS model family
 
@@ -11,14 +13,14 @@ Rationale:
 
 - It is the sherpa-onnx KWS model documented specifically for English.
 - It is an open-vocabulary/custom-keyword Zipformer KWS model, so `Hey, Moose` can be configured without training a Moose-specific neural model.
-- Upstream documents both fp32 and int8 encoder/decoder/joiner variants. V1 should begin with the int8 model set for continuous CPU use, subject to real-corpus acceptance proving adequate recall/false-trigger behavior.
+- Upstream documents both fp32 and int8 encoder/decoder/joiner variants. The authoritative 2026-09-16 freeze selects fp32 first so optimization does not precede real acceptance.
 - The model is trained on the GigaSpeech XL subset (10,000 hours) according to upstream sherpa-onnx documentation.
 
 Selected production model files:
 
-- `encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx`
-- `decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx`
-- `joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx`
+- `encoder-epoch-12-avg-2-chunk-16-left-64.onnx`
+- `decoder-epoch-12-avg-2-chunk-16-left-64.onnx`
+- `joiner-epoch-12-avg-2-chunk-16-left-64.onnx`
 - `tokens.txt`
 - `bpe.model`
 
@@ -42,11 +44,11 @@ sherpa-onnx-cli text2token \
 
 For V1 the source phrase is fixed to `HEY MOOSE`. The generated token sequence must be committed or deterministically generated from the pinned `tokens.txt` and `bpe.model`; runtime startup must not depend on Python, pip, or a network request.
 
-Sherpa KWS supports per-keyword boosting score and trigger threshold. Those values remain explicit V1 configuration and must be frozen only after corpus qualification; lower threshold / higher boost makes triggering easier and therefore changes the false-accept tradeoff.
+Sherpa KWS supports per-keyword boosting score and trigger threshold. The authoritative V1 selection freezes score `1.0` and threshold `0.25`; no user-facing sensitivity setting is added until corpus evidence establishes a stable mapping.
 
 ## Native runtime selection
 
-Pin sherpa-onnx runtime version `v1.13.8` for the first Wake Word V1 implementation candidate. Upstream released it on 2026-09-10 and publishes prebuilt native artifacts for the required desktop architectures, including Linux x64 and macOS arm64. sherpa-onnx supports a Rust API, so no Python sidecar is required for production inference.
+Pin sherpa-onnx runtime version `v1.13.8` for the first Wake Word V1 implementation candidate. Upstream released it on 2026-09-10 and publishes prebuilt native artifacts for the required desktop architectures, including Linux x64 and macOS arm64. The sherpa-onnx native C API exposes keyword spotting directly, so Rust/Tauri can bind to the native ABI without a Python sidecar; see `docs/WAKE_WORD_V1_SHERPA_NATIVE_API_EVIDENCE_2026-09-16.md`.
 
 The repository's deterministic runtime manifest must record the exact chosen native archive filenames, byte sizes, SHA-256 values, architecture, extraction layout, and license before WW-100/WW-110 can be marked complete. CI caches are never identity evidence: every prepared artifact must be verified against the committed manifest.
 
@@ -68,4 +70,4 @@ None of those failures may switch ASR providers, enable cloud processing, or fal
 
 ## Remaining WW-100 evidence
 
-This decision intentionally does **not** mark WW-100 complete. Before acceptance, the implementation still needs exact byte identities for the model archive and selected Linux x86_64/macOS arm64 native artifacts, model-license provenance, deterministic preparation/verification scripts, and CI evidence proving mismatch rejection.
+This decision intentionally does **not** mark WW-100 complete. Before acceptance, the implementation still needs exact byte identities for the model archive and selected Linux x86_64/macOS arm64 native artifacts, model-license provenance, and production population of the already-merged deterministic preparation/verification manifest. The existing verification workflow and scripts provide the fail-closed mechanism but cannot substitute for independently verified immutable identities.
