@@ -41,9 +41,7 @@ impl WakeWordSettings {
     /// Missing fields intentionally fail closed to the V1 defaults. This helper keeps
     /// migration semantics independent of the sherpa engine and gives AppSettings a
     /// single normalization boundary when the fields are wired into its persisted schema.
-    pub fn from_persisted_app_settings(
-        value: &serde_json::Value,
-    ) -> Result<Self, &'static str> {
+    pub fn from_persisted_app_settings(value: &serde_json::Value) -> Result<Self, &'static str> {
         let enabled = match value.get(WAKE_WORD_ENABLED_FIELD) {
             None => false,
             Some(value) => value
