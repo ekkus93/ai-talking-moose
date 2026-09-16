@@ -10,12 +10,7 @@ export type CharacterState =
   | "error";
 
 export type ConversationLifecycle =
-  | "idle"
-  | "connecting"
-  | "listening"
-  | "responding"
-  | "stopping"
-  | "failed";
+  "idle" | "connecting" | "listening" | "responding" | "stopping" | "failed";
 
 export type ProviderErrorKind =
   | "auth"
@@ -252,16 +247,10 @@ export interface AudioPlaybackDiagnostics {
 }
 
 export type ToolPermissionLevel =
-  | "safe_read_only"
-  | "character_action"
-  | "memory_mutation"
-  | "denied";
+  "safe_read_only" | "character_action" | "memory_mutation" | "denied";
 
 export type ToolPermissionOutcome =
-  | "not_evaluated"
-  | "allowed"
-  | "denied"
-  | "confirmation_required";
+  "not_evaluated" | "allowed" | "denied" | "confirmation_required";
 
 export type ToolResultCategory =
   | "success"
