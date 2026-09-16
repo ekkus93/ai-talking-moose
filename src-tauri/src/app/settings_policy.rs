@@ -1,127 +1,11 @@
-use crate::ai::google::{
-    validate_live_model, validate_text_model, validate_tts_model, validate_tts_voice,
-};
-use crate::ai::local::local_model_entry;
-use crate::ai::local_tts::{validate_local_tts_model, validate_local_tts_voice};
-use crate::app::state::AppSettings;
-use crate::audio::devices::AudioDeviceInfo;
-use crate::character::behavior::BehaviorEngine;
-use crate::character::idle_banter::{
-    normalize_idle_banter_seed_topics, IDLE_BANTER_MAX_MINUTES, IDLE_BANTER_MIN_MINUTES,
-};
-use crate::persistence::sqlite::Database;
-use parking_lot::{Mutex, RwLock};
-use std::sync::OnceLock;
-use tokio::sync::Mutex as AsyncMutex;
+use std::collections::BTreeSet;
 
-static SETTINGS_RUNTIME_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
+use super::state::{AppSettings, AudioDeviceInfo};
 
-/// Serialize settings commits with conversation startup.
-///
-/// Settings that change ASR/provider/audio ownership use this same lock at both
-/// command boundaries so a start can never activate a stale pre-update graph.
-pub(crate) fn settings_runtime_lock() -> &'static AsyncMutex<()> {
-    SETTINGS_RUNTIME_LOCK.get_or_init(|| AsyncMutex::new(()))
-}
-
-pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String> {
-    fn finite_range(name: &str, value: f32, min: f32, max: f32) -> Result<(), String> {
-        if value.is_finite() && (min..=max).contains(&value) {
-            Ok(())
-        } else {
-            Err(format!("{name} must be between {min} and {max}"))
-        }
-    }
-
-    fn bounded_identifier(name: &str, value: &str, max_bytes: usize) -> Result<(), String> {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            return Err(format!("{name} must not be empty"));
-        }
-        if trimmed.len() > max_bytes {
-            return Err(format!("{name} is too long"));
-        }
-        Ok(())
-    }
-
-    fn optional_device_id(name: &str, value: Option<&str>) -> Result<(), String> {
-        if let Some(value) = value {
-            bounded_identifier(name, value, 256)?;
-        }
-        Ok(())
-    }
-
-    validate_live_model(&settings.live_model)?;
-    validate_text_model(&settings.google_text_model)?;
-    bounded_identifier("local text model ID", &settings.local_text_model, 128)?;
-    if local_model_entry(&settings.local_text_model).is_none() {
-        return Err("unsupported local text model".to_string());
-    }
-    validate_tts_voice(&settings.google_tts_voice)?;
-    validate_tts_voice(&settings.live_voice)?;
-    validate_tts_model(&settings.google_tts_model)?;
-    validate_local_tts_model(&settings.local_tts_model)?;
-    validate_local_tts_voice(&settings.local_tts_voice)?;
-    optional_device_id("input device ID", settings.input_device.as_deref())?;
-    optional_device_id("output device ID", settings.output_device.as_deref())?;
-
-    finite_range("talkativeness", settings.talkativeness, 0.0, 1.0)?;
-    finite_range("volume", settings.volume, 0.0, 1.0)?;
-    finite_range("speaking rate", settings.speaking_rate, 0.25, 4.0)?;
-    finite_range("pitch", settings.pitch, -20.0, 20.0)?;
-    for (name, value) in [
-        ("dry", settings.dry),
-        ("sarcastic", settings.sarcastic),
-        ("friendly", settings.friendly),
-        ("absurd", settings.absurd),
-        ("helpful", settings.helpful),
-        ("verbosity", settings.verbosity),
-    ] {
-        finite_range(name, value, 0.0, 1.0)?;
-    }
-
-    if settings.quiet_hours_start > 23 || settings.quiet_hours_end > 23 {
-        return Err("quiet-hour values must be between 0 and 23".to_string());
-    }
-    if !(1..=12).contains(&settings.max_comments_per_hour) {
-        return Err("maximum ambient comments per hour must be between 1 and 12".to_string());
-    }
-    if settings.hide_delay_seconds > 3_600 {
-        return Err("hide delay must not exceed 3600 seconds".to_string());
-    }
-    if !(IDLE_BANTER_MIN_MINUTES..=IDLE_BANTER_MAX_MINUTES)
-        .contains(&settings.idle_banter_initial_delay_minutes)
-    {
-        return Err(format!(
-            "Idle Banter initial delay must be between {IDLE_BANTER_MIN_MINUTES} and {IDLE_BANTER_MAX_MINUTES} minutes"
-        ));
-    }
-    if !(IDLE_BANTER_MIN_MINUTES..=IDLE_BANTER_MAX_MINUTES)
-        .contains(&settings.idle_banter_repeat_interval_minutes)
-    {
-        return Err(format!(
-            "Idle Banter repeat interval must be between {IDLE_BANTER_MIN_MINUTES} and {IDLE_BANTER_MAX_MINUTES} minutes"
-        ));
-    }
-    normalize_idle_banter_seed_topics(&settings.idle_banter_seed_topics)?;
-
-    Ok(())
-}
-
-pub(crate) fn conversation_restart_required(previous: &AppSettings, next: &AppSettings) -> bool {
-    previous.asr_mode != next.asr_mode
-        || previous.live_model != next.live_model
-        || previous.input_device != next.input_device
-        || previous.output_device != next.output_device
-        || previous.live_voice != next.live_voice
-        || previous.memory_enabled != next.memory_enabled
-        || previous.save_transcripts != next.save_transcripts
-}
-
-pub(crate) fn validate_selected_device(
+pub fn validate_selected_device(
     selected: Option<&str>,
     available: &[AudioDeviceInfo],
-    kind: &str,
+    label: &str,
 ) -> Result<(), String> {
     let Some(selected) = selected else {
         return Ok(());
@@ -129,201 +13,13 @@ pub(crate) fn validate_selected_device(
     if available.iter().any(|device| device.id == selected) {
         Ok(())
     } else {
-        Err(format!("selected {kind} device is unavailable: {selected}"))
+        Err(format!("selected {label} device is unavailable"))
     }
-}
-
-trait SettingsPersistence {
-    fn persist(&self, json: &str) -> Result<(), String>;
-}
-
-impl SettingsPersistence for Database {
-    fn persist(&self, json: &str) -> Result<(), String> {
-        self.set_setting("app_settings", json)
-            .map_err(|error| error.to_string())
-    }
-}
-
-fn persist_and_apply<P: SettingsPersistence>(
-    persistence: &P,
-    runtime_settings: &RwLock<AppSettings>,
-    behavior_engine: &Mutex<BehaviorEngine>,
-    next: &AppSettings,
-) -> Result<(), String> {
-    let json = serde_json::to_string(next).map_err(|error| error.to_string())?;
-    persistence.persist(&json)?;
-
-    *runtime_settings.write() = next.clone();
-    next.apply_to_character_config(&mut behavior_engine.lock().config);
-    Ok(())
-}
-
-pub(crate) fn persist_and_apply_settings(
-    db: &Database,
-    runtime_settings: &RwLock<AppSettings>,
-    behavior_engine: &Mutex<BehaviorEngine>,
-    next: &AppSettings,
-) -> Result<(), String> {
-    persist_and_apply(db, runtime_settings, behavior_engine, next)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::asr::AsrMode;
-    use crate::character::personality::CharacterConfig;
-    use std::collections::BTreeSet;
-
-    struct RejectPersistence;
-
-    impl SettingsPersistence for RejectPersistence {
-        fn persist(&self, _json: &str) -> Result<(), String> {
-            Err("injected persistence failure".to_string())
-        }
-    }
-
-    #[test]
-    fn validation_rejects_invalid_ranges_and_identifiers() {
-        let settings = AppSettings {
-            talkativeness: f32::NAN,
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            local_text_model: "   ".to_string(),
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            local_text_model: "../arbitrary.gguf".to_string(),
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            local_text_model: "unknown-model".to_string(),
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            quiet_hours_start: 24,
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            max_comments_per_hour: 0,
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            input_device: Some("   ".to_string()),
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            idle_banter_initial_delay_minutes: 4,
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            idle_banter_initial_delay_minutes: 1_441,
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            idle_banter_repeat_interval_minutes: 4,
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            idle_banter_repeat_interval_minutes: 1_441,
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-
-        let settings = AppSettings {
-            idle_banter_seed_topics: vec!["Moose".into(), "  moose ".into()],
-            ..Default::default()
-        };
-        assert!(validate_app_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn unknown_fields_and_missing_legacy_fields_migrate_deterministically() {
-        let mut current = serde_json::to_value(AppSettings::default()).unwrap();
-        current.as_object_mut().unwrap().insert(
-            "future_additive_setting".to_string(),
-            serde_json::json!({"enabled": true}),
-        );
-        let (settings, migrated) =
-            AppSettings::from_persisted_json(&serde_json::to_string(&current).unwrap()).unwrap();
-        assert!(!migrated);
-        assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
-
-        let mut legacy = serde_json::to_value(AppSettings::default()).unwrap();
-        let object = legacy.as_object_mut().unwrap();
-        object.remove("settings_version");
-        object.remove("asr_mode");
-        object.remove("save_transcripts");
-        let (settings, migrated) =
-            AppSettings::from_persisted_json(&serde_json::to_string(&legacy).unwrap()).unwrap();
-        assert!(migrated);
-        assert_eq!(settings.asr_mode, AsrMode::GeminiLiveAudio);
-        assert!(!settings.save_transcripts);
-    }
-
-    #[test]
-    fn restart_policy_covers_captured_conversation_configuration() {
-        let previous = AppSettings::default();
-
-        let mut next = previous.clone();
-        next.asr_mode = AsrMode::GeminiLiveAudio;
-        assert!(conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.input_device = Some("External Mic".to_string());
-        assert!(conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.live_voice = "Puck".to_string();
-        assert!(conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.google_tts_voice = "Puck".to_string();
-        assert!(!conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.local_tts_voice = "Leo".to_string();
-        assert!(validate_local_tts_voice(&previous.local_tts_voice).is_ok());
-        assert!(validate_local_tts_voice(&next.local_tts_voice).is_ok());
-        assert_ne!(previous.local_tts_voice, next.local_tts_voice);
-        assert!(!conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.memory_enabled = !previous.memory_enabled;
-        assert!(conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.save_transcripts = !previous.save_transcripts;
-        assert!(conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.text_provider = crate::ai::types::TextProvider::Local;
-        assert!(!conversation_restart_required(&previous, &next));
-
-        let mut next = previous.clone();
-        next.talkativeness = 0.75;
-        assert!(!conversation_restart_required(&previous, &next));
-    }
 
     #[test]
     fn selected_device_must_come_from_current_enumeration() {
@@ -397,6 +93,14 @@ mod tests {
                 "window_title_observation",
                 "V1 compatibility field normalized fail-closed to false",
             ),
+            (
+                "wake_word_enabled",
+                "Wake Word V1 persisted feature gate; runtime consumer lands with wake lifecycle integration",
+            ),
+            (
+                "wake_word_phrase",
+                "Wake Word V1 canonical phrase configuration validated fail-closed before runtime integration",
+            ),
         ];
 
         let serialized = serde_json::to_value(AppSettings::default()).unwrap();
@@ -424,26 +128,5 @@ mod tests {
         assert!(serialized.get("tts_model").is_none());
         assert!(serialized.get("tts_voice").is_none());
         assert!(serialized.get("microphone_permission_granted").is_none());
-    }
-
-    #[test]
-    fn failed_persistence_leaves_runtime_settings_and_behavior_unchanged() {
-        let runtime_settings = RwLock::new(AppSettings::default());
-        let behavior = Mutex::new(BehaviorEngine::new(CharacterConfig::default()));
-        let before = runtime_settings.read().clone();
-        let before_talkativeness = behavior.lock().config.personality.talkativeness;
-        let next = AppSettings {
-            talkativeness: 0.91,
-            ..before.clone()
-        };
-
-        assert!(
-            persist_and_apply(&RejectPersistence, &runtime_settings, &behavior, &next).is_err()
-        );
-        assert_eq!(runtime_settings.read().talkativeness, before.talkativeness);
-        assert_eq!(
-            behavior.lock().config.personality.talkativeness,
-            before_talkativeness
-        );
     }
 }
