@@ -184,14 +184,15 @@ mod tests {
 
     #[test]
     fn duplicate_and_unhashed_files_are_rejected() {
-        const DUPLICATES: [SherpaKwsModelFile; 5] = [
-            FILES[0], FILES[1], FILES[2], FILES[3], FILES[3],
-        ];
+        const DUPLICATES: [SherpaKwsModelFile; 5] =
+            [FILES[0], FILES[1], FILES[2], FILES[3], FILES[3]];
         let mut manifest = valid_manifest();
         manifest.files = &DUPLICATES;
         assert_eq!(
             manifest.validate(),
-            Err(SherpaKwsManifestError::DuplicateFileName(SHERPA_KWS_TOKENS_FILE))
+            Err(SherpaKwsManifestError::DuplicateFileName(
+                SHERPA_KWS_TOKENS_FILE
+            ))
         );
 
         const UNHASHED: [SherpaKwsModelFile; 5] = [
@@ -208,7 +209,9 @@ mod tests {
         manifest.files = &UNHASHED;
         assert_eq!(
             manifest.validate(),
-            Err(SherpaKwsManifestError::InvalidFileIdentity(SHERPA_KWS_TOKENS_FILE))
+            Err(SherpaKwsManifestError::InvalidFileIdentity(
+                SHERPA_KWS_TOKENS_FILE
+            ))
         );
     }
 
@@ -219,7 +222,9 @@ mod tests {
         manifest.files = &MISSING_BPE;
         assert_eq!(
             manifest.validate(),
-            Err(SherpaKwsManifestError::MissingRequiredFile(SHERPA_KWS_BPE_FILE))
+            Err(SherpaKwsManifestError::MissingRequiredFile(
+                SHERPA_KWS_BPE_FILE
+            ))
         );
 
         const EXTRA: [SherpaKwsModelFile; 6] = [
