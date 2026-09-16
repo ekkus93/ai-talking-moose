@@ -1,7 +1,7 @@
 # Wake Word V1 — Sherpa Engine Boundary Evidence
 
-**Date:** 2026-09-15  
-**Task area:** WW-300  
+**Date:** 2026-09-15
+**Task area:** WW-300
 **Repository:** `ekkus93/ai-talking-moose`
 
 ## Qualified merged slices
