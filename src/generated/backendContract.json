@@ -2,6 +2,8 @@
   "settings": {
     "settings_version": 5,
     "asr_mode": "moonshine_tiny_streaming",
+    "wake_word_enabled": false,
+    "wake_word_phrase": "Hey, Moose",
     "launch_at_login": false,
     "show_in_menu_bar": true,
     "always_on_top": false,
@@ -836,6 +838,8 @@
     "AppSettings": {
       "settings_version": 5,
       "asr_mode": "moonshine_tiny_streaming",
+      "wake_word_enabled": false,
+      "wake_word_phrase": "Hey, Moose",
       "launch_at_login": false,
       "show_in_menu_bar": true,
       "always_on_top": false,
