@@ -397,6 +397,14 @@ mod tests {
                 "window_title_observation",
                 "V1 compatibility field normalized fail-closed to false",
             ),
+            (
+                "wake_word_enabled",
+                "Wake Word V1 persisted feature gate; runtime consumer lands with wake lifecycle integration",
+            ),
+            (
+                "wake_word_phrase",
+                "Wake Word V1 canonical phrase configuration validated fail-closed before runtime integration",
+            ),
         ];
 
         let serialized = serde_json::to_value(AppSettings::default()).unwrap();

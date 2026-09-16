@@ -296,6 +296,9 @@ export interface AppSettings {
   settings_version: number;
   asr_mode: AsrMode;
 
+  wake_word_enabled: boolean;
+  wake_word_phrase: string;
+
   launch_at_login: boolean;
   show_in_menu_bar: boolean;
   always_on_top: boolean;

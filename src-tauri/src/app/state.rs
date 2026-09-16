@@ -10,6 +10,9 @@ use crate::ai::local_tts::{
 };
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::ai::types::{TextProvider, TtsProvider};
+use crate::app::wake_word_settings::{
+    WakeWordSettings, DEFAULT_WAKE_PHRASE, WAKE_WORD_ENABLED_FIELD, WAKE_WORD_PHRASE_FIELD,
+};
 use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
@@ -42,6 +45,10 @@ use tracing::warn;
 pub struct AppSettings {
     pub settings_version: u32,
     pub asr_mode: AsrMode,
+
+    // Wake Word
+    pub wake_word_enabled: bool,
+    pub wake_word_phrase: String,
 
     // General
     pub launch_at_login: bool,
@@ -126,6 +133,9 @@ impl Default for AppSettings {
             settings_version: CURRENT_SETTINGS_VERSION,
             asr_mode: AsrMode::MoonshineTinyStreaming,
 
+            wake_word_enabled: false,
+            wake_word_phrase: DEFAULT_WAKE_PHRASE.to_string(),
+
             launch_at_login: false,
             show_in_menu_bar: true,
             always_on_top: false,
@@ -196,6 +206,10 @@ impl AppSettings {
             }
         }
         let had_asr_mode = value.get("asr_mode").is_some();
+        let had_wake_word_enabled = value.get(WAKE_WORD_ENABLED_FIELD).is_some();
+        let had_wake_word_phrase = value.get(WAKE_WORD_PHRASE_FIELD).is_some();
+        let wake_word_settings = WakeWordSettings::from_persisted_app_settings(&value)
+            .map_err(|error| PersistedSettingsError::Invalid(error.to_string()))?;
         let had_legacy_microphone_permission = value.get("microphone_permission_granted").is_some();
         let had_current_version = value
             .get("settings_version")
@@ -238,6 +252,12 @@ impl AppSettings {
         let had_legacy_tts_voice = legacy_tts_voice.is_some();
 
         let mut settings: Self = serde_json::from_value(value)?;
+        let wake_word_migrated = !had_wake_word_enabled
+            || !had_wake_word_phrase
+            || settings.wake_word_enabled != wake_word_settings.enabled
+            || settings.wake_word_phrase != wake_word_settings.phrase;
+        settings.wake_word_enabled = wake_word_settings.enabled;
+        settings.wake_word_phrase = wake_word_settings.phrase;
         let legacy_idle_banter = !had_current_version
             || !had_idle_banter_enabled
             || !had_idle_banter_initial_delay
@@ -318,6 +338,7 @@ impl AppSettings {
             !had_asr_mode
                 || had_legacy_microphone_permission
                 || !had_current_version
+                || wake_word_migrated
                 || !had_text_provider
                 || !had_google_text_model
                 || !had_local_text_model
@@ -624,6 +645,8 @@ mod tests {
         let settings = AppSettings::default();
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+        assert!(!settings.wake_word_enabled);
+        assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
         assert_eq!(settings.text_provider, TextProvider::Local);
         assert_eq!(settings.google_text_model, DEFAULT_TEXT_MODEL);
         assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
@@ -730,6 +753,71 @@ mod tests {
         assert!(migrated);
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert_eq!(settings.asr_mode, AsrMode::GeminiLiveAudio);
+        assert!(!settings.wake_word_enabled);
+        assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
+    }
+
+    #[test]
+    fn persisted_wake_word_enabled_round_trips_without_migration() {
+        let original = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&original).unwrap();
+
+        let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
+
+        assert!(!migrated);
+        assert!(settings.wake_word_enabled);
+        assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
+    }
+
+    #[test]
+    fn missing_wake_word_fields_default_disabled_and_preserve_unrelated_settings() {
+        let mut value = serde_json::to_value(AppSettings {
+            asr_mode: AsrMode::MoonshineSmallStreaming,
+            tts_provider: TtsProvider::Local,
+            local_tts_voice: "Bella".to_string(),
+            google_tts_voice: "Kore".to_string(),
+            ..Default::default()
+        })
+        .unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove(WAKE_WORD_ENABLED_FIELD);
+        object.remove(WAKE_WORD_PHRASE_FIELD);
+
+        let (settings, migrated) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
+
+        assert!(migrated);
+        assert!(!settings.wake_word_enabled);
+        assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
+        assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
+        assert_eq!(settings.tts_provider, TtsProvider::Local);
+        assert_eq!(settings.local_tts_voice, "Bella");
+        assert_eq!(settings.google_tts_voice, "Kore");
+    }
+
+    #[test]
+    fn wake_word_phrase_normalizes_or_fails_safely() {
+        let original = AppSettings {
+            wake_word_enabled: true,
+            wake_word_phrase: "  hey, moose  ".to_string(),
+            ..Default::default()
+        };
+        let (settings, migrated) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&original).unwrap()).unwrap();
+        assert!(migrated);
+        assert!(settings.wake_word_enabled);
+        assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
+
+        let invalid = AppSettings {
+            wake_word_phrase: "Hey Bruce".to_string(),
+            ..Default::default()
+        };
+        let error = AppSettings::from_persisted_json(&serde_json::to_string(&invalid).unwrap())
+            .unwrap_err();
+        assert!(matches!(error, PersistedSettingsError::Invalid(_)));
     }
 
     #[test]
@@ -753,6 +841,8 @@ mod tests {
         assert_eq!(settings.text_provider, TextProvider::Google);
         assert_eq!(settings.google_text_model, "gemini-3.6-flash");
         assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
+        assert!(!settings.wake_word_enabled);
+        assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
 
         let normalized = serde_json::to_value(settings).unwrap();
         assert!(normalized.get("provider").is_none());
