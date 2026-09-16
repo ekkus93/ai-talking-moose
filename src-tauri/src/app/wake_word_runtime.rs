@@ -1,4 +1,6 @@
-use super::wake_word_engine::{SherpaKwsEngine, WakeWordDetection, WakeWordError, WakeWordErrorKind};
+use super::wake_word_engine::{
+    SherpaKwsEngine, WakeWordDetection, WakeWordError, WakeWordErrorKind,
+};
 use crate::audio::PcmRingBuffer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,7 +91,9 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
                 Ok(())
             }
             WakeWordRuntimeState::Suspended => Ok(()),
-            _ => Err(invalid_transition("wake runtime cannot suspend from current state")),
+            _ => Err(invalid_transition(
+                "wake runtime cannot suspend from current state",
+            )),
         }
     }
 
@@ -208,7 +212,10 @@ mod tests {
         let detection = manager.feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[1, 2, 3]).unwrap();
         assert!(detection.is_some());
         assert_eq!(manager.state(), WakeWordRuntimeState::Triggered);
-        assert!(manager.feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[4, 5]).unwrap().is_none());
+        assert!(manager
+            .feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[4, 5])
+            .unwrap()
+            .is_none());
 
         manager.suspend().unwrap();
         manager.resume().unwrap();
