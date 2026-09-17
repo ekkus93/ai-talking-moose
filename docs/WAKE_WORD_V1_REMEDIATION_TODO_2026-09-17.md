@@ -96,31 +96,33 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-030 — Freeze one authoritative V1 KWS policy
 
-- [ ] Define canonical constants in one source location:
-  - [ ] sample rate `16_000 Hz`;
-  - [ ] channels `1`;
-  - [ ] feature dimension `80`;
-  - [ ] inference threads `1`;
-  - [ ] keyword source `HEY MOOSE`;
-  - [ ] score `1.0`;
-  - [ ] threshold `0.25`;
-  - [ ] pre-roll `2 seconds`.
-- [ ] Make settings/docs/diagnostics/tests consume or verify the same constants.
-- [ ] Remove permissive parallel config validation that merely accepts any positive threshold/score.
-- [ ] Make config drift fail deterministically.
-- [ ] Ensure model artifact schema matches engine config schema.
+- [x] Define canonical constants in one source location:
+  - [x] sample rate `16_000 Hz`;
+  - [x] channels `1`;
+  - [x] feature dimension `80`;
+  - [x] inference threads `1`;
+  - [x] keyword source `HEY MOOSE`;
+  - [x] score `1.0`;
+  - [x] threshold `0.25`;
+  - [x] pre-roll `2 seconds`.
+- [x] Make settings/docs/diagnostics/tests consume or verify the same constants.
+- [x] Remove permissive parallel config validation that merely accepts any positive threshold/score.
+- [x] Make config drift fail deterministically.
+- [x] Ensure model artifact schema matches engine config schema.
 
 **Tests**
 
-- [ ] Any threshold other than `0.25` fails V1 config validation.
-- [ ] Any score other than `1.0` fails V1 config validation.
-- [ ] Any inference thread count other than `1` fails V1 validation.
-- [ ] Non-16-kHz or non-mono KWS input fails before retention/inference.
-- [ ] Artifact contract test verifies encoder/decoder/joiner/tokens/BPE expectations.
+- [x] Any threshold other than `0.25` fails V1 config validation.
+- [x] Any score other than `1.0` fails V1 config validation.
+- [x] Any inference thread count other than `1` fails V1 validation.
+- [x] Non-16-kHz or non-mono KWS input fails before retention/inference.
+- [x] Artifact contract test verifies encoder/decoder/joiner/tokens/BPE expectations.
 
 **Acceptance**
 
-- [ ] No production module can configure a contradictory Wake Word V1 policy.
+- [x] No production module can configure a contradictory Wake Word V1 policy.
+
+**Evidence:** `docs/evidence/WWR-030_CANONICAL_KWS_POLICY_2026-09-17.md`; implementation merged in PR #174 at `4a9c3d585bf1458418ab87aa3d5b818add845505`. Exact PR-head ordinary CI `35281663768` and KittenTTS CPU acceptance `35281663889` passed on `93ea1f9cbd41178975293abf0ce1c0f5f9665153`.
 
 ---
 
@@ -779,7 +781,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [ ] Native runtimes have immutable identities.
 - [ ] Model/runtime licenses and notices are verified.
 - [ ] Real native sherpa session loads exact verified inputs.
-- [ ] KWS uses 16 kHz mono, one thread, score 1.0, threshold 0.25.
+- [x] KWS uses 16 kHz mono, one thread, score 1.0, threshold 0.25.
 - [ ] KWS is local/offline during idle inference.
 
 ### Audio/handoff/lifecycle
