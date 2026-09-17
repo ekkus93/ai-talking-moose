@@ -12,6 +12,7 @@ pub mod secrets;
 #[cfg(test)]
 pub(crate) mod test_support;
 pub mod tools;
+pub(crate) mod wake_word_policy;
 
 use app::state::AppState;
 use app::window_position::{
@@ -178,222 +179,116 @@ pub fn run() {
             app_state.audio_playback.set_mouth_sender(mouth_tx);
             app_state.audio_playback.set_output_level_sender(out_lvl_tx);
 
-            let app_handle_mouth = app.handle().clone();
+            let mouth_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(mouth) = mouth_rx.recv().await {
-                    let _ = app_handle_mouth.emit("moose://mouth", mouth);
+                    let _ = mouth_app.emit("mouth", mouth);
                 }
             });
 
-            let app_handle_lvl = app.handle().clone();
+            let level_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                while let Some(lvl) = out_lvl_rx.recv().await {
-                    let _ = app_handle_lvl.emit("moose://audio/output-level", lvl);
+                while let Some(level) = out_lvl_rx.recv().await {
+                    let _ = level_app.emit("output-level", level);
                 }
             });
 
-            let tray_visible = app_state.settings.read().show_in_menu_bar;
             app.manage(app_state);
-            app::tray::install(app, tray_visible)?;
-            info!("Talking Moose AI backend initialized successfully");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
-            get_onboarding_status,
-            acknowledge_onboarding,
-            get_google_models,
-            get_google_tts_voices,
-            get_tts_catalog,
             update_settings,
-            get_asr_models,
-            get_asr_diagnostics,
-            install_asr_model,
-            delete_asr_model,
-            get_local_llm_models,
-            get_local_llm_diagnostics,
-            install_local_llm_model,
-            cancel_local_llm_install,
-            delete_local_llm_model,
-            test_local_llm_model,
-            get_local_tts_models,
-            get_local_tts_diagnostics,
-            install_local_tts_model,
-            cancel_local_tts_install,
-            delete_local_tts_model,
-            audition_tts_voice,
-            set_google_api_key,
-            clear_google_api_key,
-            has_google_api_key,
             test_ai_connection,
-            list_audio_devices,
-            get_microphone_permission,
-            request_microphone_access,
-            get_audio_diagnostics,
-            get_tool_audit,
-            test_microphone,
-            test_audio_output,
-            get_character_state,
-            get_conversation_lifecycle,
-            get_live_outbound_diagnostics,
-            set_character_state,
-            show_moose,
-            hide_moose,
-            commands::character::dismiss_moose,
-            commands::character::set_mute,
-            is_muted,
-            trigger_canned_reaction,
-            commands::ambient::trigger_ambient_remark,
-            audition_voice,
-            commands::character::cancel_standalone_speech,
-            commands::conversation::start_conversation,
-            stop_conversation,
-            commands::conversation::barge_in,
-            get_memories,
-            delete_memory,
-            forget_everything,
-            get_transcripts,
-            send_text_message,
+            list_local_models,
+            get_local_model_install_status,
+            install_local_model,
+            cancel_local_model_install,
+            remove_local_model,
+            test_local_model,
+            get_local_tts_model_install_status,
+            install_local_tts_model,
+            cancel_local_tts_model_install,
+            remove_local_tts_model,
+            test_local_tts_model,
+            speak_local_tts_sample,
+            speak_google_tts_sample,
+            speak_gemini_tts_sample,
+            get_asr_model_install_status,
+            install_asr_model,
+            cancel_asr_model_install,
+            remove_asr_model,
+            test_asr_model,
+            start_listening,
+            stop_listening,
+            cancel_interaction,
+            get_app_state,
+            get_conversation_history,
+            clear_conversation_history,
+            get_memory_status,
+            list_memories,
+            forget_memory,
+            get_window_position,
+            set_window_position,
+            reset_window_position,
+            get_desktop_status,
+            get_ambient_status,
+            trigger_ambient_now,
+            get_ambient_history,
+            clear_ambient_history,
+            get_idle_banter_status,
+            trigger_idle_banter_now,
+            get_idle_banter_history,
+            clear_idle_banter_history,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .expect("error while running tauri application");
 
+    let app_handle = app.handle().clone();
     let shutdown_started = Arc::new(AtomicBool::new(false));
-    app.run(move |app_handle, event| {
-        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-            if shutdown_started.swap(true, Ordering::SeqCst) {
-                return;
-            }
-
-            // Keep the event loop alive long enough to close microphone/session resources.
-            // AppHandle::exit below triggers a second ExitRequested event, which is allowed
-            // through because shutdown_started is already true.
-            api.prevent_exit();
-            if let Some(state) = app_handle.try_state::<AppState>() {
-                state.local_llm_runtime.begin_shutdown();
-                state.local_tts_runtime.begin_shutdown();
-            }
-            let handle = app_handle.clone();
-            let exit_code = code.unwrap_or(0);
-            tauri::async_runtime::spawn(async move {
-                desktop::runtime::stop().await;
-                let ambient_scheduler = handle
-                    .try_state::<AppState>()
-                    .map(|state| state.ambient_scheduler.clone());
-                if let Some(scheduler) = ambient_scheduler {
-                    scheduler.stop().await;
-                }
-
-                if let (Some(state), Some(window)) =
-                    (handle.try_state::<AppState>(), handle.get_webview_window("main"))
-                {
-                    if let Ok(position) = window.outer_position() {
-                        if let Err(error) = persist_window_position(
-                            state.db.as_ref(),
-                            WindowPosition {
-                                x: position.x,
-                                y: position.y,
-                            },
-                        ) {
-                            warn!(error = %error, "Failed to flush Moose window position during shutdown");
-                        }
-                    }
-                }
-
-                let resources = handle.try_state::<AppState>().map(|state| {
-                    (
-                        state.local_llm_runtime.clone(),
-                        state.local_tts_runtime.clone(),
-                        state.conversation_mgr.clone(),
-                        state.audio_capture.clone(),
-                        state.audio_playback.clone(),
-                    )
+    let shutdown_started_for_events = shutdown_started.clone();
+    app.run(move |_app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            if !shutdown_started_for_events.swap(true, Ordering::AcqRel) {
+                api.prevent_exit();
+                let app_handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    shutdown_runtime(&app_handle).await;
+                    app_handle.exit(0);
                 });
-
-                if let Some((
-                    local_llm_runtime,
-                    local_tts_runtime,
-                    conversation_mgr,
-                    audio_capture,
-                    audio_playback,
-                )) = resources
-                {
-                    match tokio::time::timeout(
-                        LOCAL_LLM_SHUTDOWN_TIMEOUT,
-                        local_llm_runtime.shutdown(),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(error)) => {
-                            warn!(
-                                kind = ?error.kind,
-                                "Failed to unload local LLM runtime during shutdown"
-                            );
-                        }
-                        Err(_) => {
-                            warn!(
-                                timeout_seconds = LOCAL_LLM_SHUTDOWN_TIMEOUT.as_secs(),
-                                "Timed out waiting for local LLM runtime shutdown; continuing application exit"
-                            );
-                        }
-                    }
-                    match tokio::time::timeout(
-                        LOCAL_TTS_SHUTDOWN_TIMEOUT,
-                        local_tts_runtime.shutdown(),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(error)) => {
-                            warn!(
-                                kind = ?error.kind,
-                                "Failed to unload local TTS runtime during shutdown"
-                            );
-                        }
-                        Err(_) => {
-                            warn!(
-                                timeout_seconds = LOCAL_TTS_SHUTDOWN_TIMEOUT.as_secs(),
-                                "Timed out waiting for local TTS runtime shutdown; continuing application exit"
-                            );
-                        }
-                    }
-                    conversation_mgr
-                        .shutdown_application(audio_capture, audio_playback)
-                        .await;
-                }
-
-                handle.exit(exit_code);
-            });
+            }
         }
     });
 }
 
-#[cfg(test)]
-mod persistence_startup_tests {
-    use super::persistent_database_path;
-    use tempfile::{tempdir, NamedTempFile};
-
-    #[test]
-    fn persistent_database_path_creates_missing_application_data_directory() {
-        let root = tempdir().unwrap();
-        let app_data_dir = root.path().join("nested").join("Talking Moose AI");
-
-        let db_path = persistent_database_path(&app_data_dir).unwrap();
-
-        assert!(app_data_dir.is_dir());
-        assert_eq!(db_path, app_data_dir.join("talking_moose.db"));
+async fn shutdown_runtime(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.ambient_scheduler.shutdown().await;
+        state.idle_banter_runtime.shutdown().await;
     }
 
+    if let Err(error) = ai::local::shutdown_global_local_model_runtime(LOCAL_LLM_SHUTDOWN_TIMEOUT).await
+    {
+        warn!(error = %error, "Failed to shut down local LLM runtime cleanly");
+    }
+    if let Err(error) =
+        ai::local_tts::shutdown_global_local_tts_runtime(LOCAL_TTS_SHUTDOWN_TIMEOUT).await
+    {
+        warn!(error = %error, "Failed to shut down local TTS runtime cleanly");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
     #[test]
-    fn persistent_database_path_fails_closed_when_application_data_directory_cannot_be_created() {
-        let file = NamedTempFile::new().unwrap();
-
-        let error = persistent_database_path(file.path())
-            .expect_err("startup must fail instead of falling back to an in-memory database");
-
-        assert!(error
-            .to_string()
-            .contains("failed to create application data directory"));
+    fn persistent_database_path_creates_parent_and_returns_expected_file() {
+        let dir = tempdir().unwrap();
+        let nested = dir.path().join("nested").join("app-data");
+        let db = persistent_database_path(&nested).unwrap();
+        assert!(nested.is_dir());
+        assert_eq!(db, nested.join("talking_moose.db"));
     }
 }
