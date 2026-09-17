@@ -407,7 +407,10 @@ mod tests {
         assert!(normalized.wake_word_enabled);
         assert_eq!(normalized.wake_word_phrase, "Hey, Moose");
         assert_eq!(normalized.asr_mode, crate::asr::AsrMode::GeminiLiveAudio);
-        assert_eq!(normalized.tts_provider, crate::ai::types::TtsProvider::Local);
+        assert_eq!(
+            normalized.tts_provider,
+            crate::ai::types::TtsProvider::Local
+        );
         assert_eq!(normalized.talkativeness, 0.73);
     }
 

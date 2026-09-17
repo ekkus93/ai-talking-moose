@@ -107,8 +107,7 @@ mod tests {
 
     #[test]
     fn field_constructor_is_the_canonical_live_and_persisted_boundary() {
-        let settings =
-            WakeWordSettings::from_app_settings_fields(true, "  hey, moose  ").unwrap();
+        let settings = WakeWordSettings::from_app_settings_fields(true, "  hey, moose  ").unwrap();
         assert!(settings.enabled);
         assert_eq!(settings.phrase, DEFAULT_WAKE_PHRASE);
         assert!(WakeWordSettings::from_app_settings_fields(true, "Hey Bruce").is_err());
