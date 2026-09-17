@@ -1,9 +1,13 @@
+use crate::app::wake_word::policy::{
+    V1_KWS_SAMPLE_RATE_HZ, V1_PRE_ROLL_SAMPLES, V1_PRE_ROLL_SECONDS,
+};
+
 /// Canonical wake-word microphone sample rate used for pre-roll sizing.
-pub const WAKE_PCM_SAMPLE_RATE_HZ: usize = 16_000;
+pub const WAKE_PCM_SAMPLE_RATE_HZ: usize = V1_KWS_SAMPLE_RATE_HZ as usize;
 /// Wake Word V1 retains two seconds of canonical mono PCM.
-pub const WAKE_PCM_PRE_ROLL_SECONDS: usize = 2;
+pub const WAKE_PCM_PRE_ROLL_SECONDS: usize = V1_PRE_ROLL_SECONDS;
 /// Number of i16 mono samples retained by the nominal Wake Word V1 pre-roll buffer.
-pub const WAKE_PCM_PRE_ROLL_SAMPLES: usize = WAKE_PCM_SAMPLE_RATE_HZ * WAKE_PCM_PRE_ROLL_SECONDS;
+pub const WAKE_PCM_PRE_ROLL_SAMPLES: usize = V1_PRE_ROLL_SAMPLES;
 
 /// Fixed-capacity chronological buffer for mono signed 16-bit PCM samples.
 ///
