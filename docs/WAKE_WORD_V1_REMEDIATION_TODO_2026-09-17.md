@@ -15,22 +15,24 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-000 — Freeze remediation baseline and preserve known-good behavior
 
-- [ ] Confirm current implementation base is `9f5d90b4b15f16c1ef2d473e574537392c310f0b` or a later verified descendant.
-- [ ] Record exact starting master SHA and ordinary CI run.
-- [ ] Preserve manual-listen behavior while Wake Word remains disabled.
-- [ ] Preserve ASR provider selection/fallback policy.
-- [ ] Preserve Local/Google/Gemini TTS separation.
-- [ ] Preserve Local TTS production thread policy.
-- [ ] Preserve no-barge-in V1 policy.
-- [ ] Preserve no acoustic wake-phrase trimming V1 policy.
-- [ ] Preserve `PcmRingBuffer` behavior and tests.
-- [ ] Preserve fail-closed artifact behavior until real identities are populated.
-- [ ] Add/update a remediation evidence file recording baseline and scope.
+- [x] Confirm current implementation base is `9f5d90b4b15f16c1ef2d473e574537392c310f0b` or a later verified descendant.
+- [x] Record exact starting master SHA and ordinary CI run.
+- [x] Preserve manual-listen behavior while Wake Word remains disabled.
+- [x] Preserve ASR provider selection/fallback policy.
+- [x] Preserve Local/Google/Gemini TTS separation.
+- [x] Preserve Local TTS production thread policy.
+- [x] Preserve no-barge-in V1 policy.
+- [x] Preserve no acoustic wake-phrase trimming V1 policy.
+- [x] Preserve `PcmRingBuffer` behavior and tests.
+- [x] Preserve fail-closed artifact behavior until real identities are populated.
+- [x] Add/update a remediation evidence file recording baseline and scope.
 
 **Acceptance**
 
-- [ ] No remediation change silently changes non-Wake ASR/TTS/manual behavior.
-- [ ] Baseline is reproducible from repository evidence.
+- [x] No remediation change silently changes non-Wake ASR/TTS/manual behavior.
+- [x] Baseline is reproducible from repository evidence.
+
+**Evidence:** `docs/evidence/WWR-000_REMEDIATION_BASELINE_2026-09-17.md`
 
 ---
 
