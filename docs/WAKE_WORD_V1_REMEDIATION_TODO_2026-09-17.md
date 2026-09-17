@@ -38,29 +38,31 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-010 — Fix live Wake Word settings validation defect
 
-- [ ] Identify the one canonical Wake Word settings validation/normalization function.
-- [ ] Route persisted-load validation through that function.
-- [ ] Route live `update_settings` validation through the same function.
-- [ ] Ensure `wake_word_phrase` normalizes case/whitespace to exact `Hey, Moose`.
-- [ ] Reject any other Wake Word phrase before state mutation or persistence.
-- [ ] Ensure invalid type/value does not partially persist Wake Word state.
-- [ ] Preserve unrelated ASR/TTS fields on successful Wake Word updates.
-- [ ] Preserve previous valid persisted settings on failed update.
+- [x] Identify the one canonical Wake Word settings validation/normalization function.
+- [x] Route persisted-load validation through that function.
+- [x] Route live `update_settings` validation through the same function.
+- [x] Ensure `wake_word_phrase` normalizes case/whitespace to exact `Hey, Moose`.
+- [x] Reject any other Wake Word phrase before state mutation or persistence.
+- [x] Ensure invalid type/value does not partially persist Wake Word state.
+- [x] Preserve unrelated ASR/TTS fields on successful Wake Word updates.
+- [x] Preserve previous valid persisted settings on failed update.
 
 **Tests**
 
-- [ ] Live update accepts canonical `Hey, Moose`.
-- [ ] Live update normalizes `  hey, moose  `.
-- [ ] Live update rejects `Hey Bruce`.
-- [ ] Rejected update does not persist invalid JSON/settings.
-- [ ] Restart/load after rejected update still succeeds.
-- [ ] Missing Wake Word fields still migrate to disabled + canonical phrase.
-- [ ] Existing unrelated ASR/TTS settings remain unchanged.
+- [x] Live update accepts canonical `Hey, Moose`.
+- [x] Live update normalizes `  hey, moose  `.
+- [x] Live update rejects `Hey Bruce`.
+- [x] Rejected update does not persist invalid JSON/settings.
+- [x] Restart/load after rejected update still succeeds.
+- [x] Missing Wake Word fields still migrate to disabled + canonical phrase.
+- [x] Existing unrelated ASR/TTS settings remain unchanged.
 
 **Acceptance**
 
-- [ ] There is no settings path that can persist a value startup validation later rejects.
-- [ ] Command-level regression test covers the previously identified defect.
+- [x] There is no settings path that can persist a value startup validation later rejects.
+- [x] Command-level regression test covers the previously identified defect.
+
+**Evidence:** implementation merged in PR #169 at `cdf5ec65cf1a2d0d726c6e96459ba4264d7aeadc`; exact PR-head ordinary CI `35254726268` passed on `a85158d62084fd8506004b6d486530af32bf37a4`. Canonical validation is `WakeWordSettings::from_app_settings_fields`; both persisted-load projection and live `update_settings` use it, with live normalization/rejection regression tests in `src-tauri/src/commands/settings.rs`.
 
 ---
 
@@ -762,12 +764,12 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ### Settings/UI
 
-- [ ] Live settings validation cannot persist an invalid phrase.
-- [ ] Wake defaults disabled.
-- [ ] Phrase is fixed to `Hey, Moose`.
+- [x] Live settings validation cannot persist an invalid phrase.
+- [x] Wake defaults disabled.
+- [x] Phrase is fixed to `Hey, Moose`.
 - [ ] Settings UI can enable/disable Wake Word.
 - [ ] UI discloses local/offline KWS and active microphone behavior.
-- [ ] Manual behavior is preserved when Wake Word is disabled.
+- [x] Manual behavior is preserved when Wake Word is disabled.
 
 ### Artifacts/engine
 
