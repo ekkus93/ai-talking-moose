@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_WAKE_PHRASE: &str = "Hey, Moose";
-pub const V1_WAKE_THRESHOLD: f32 = 0.25;
-pub const V1_WAKE_SCORE: f32 = 1.0;
+pub use super::wake_word::policy::{
+    DEFAULT_WAKE_PHRASE, V1_WAKE_SCORE, V1_WAKE_THRESHOLD,
+};
 pub const WAKE_WORD_ENABLED_FIELD: &str = "wake_word_enabled";
 pub const WAKE_WORD_PHRASE_FIELD: &str = "wake_word_phrase";
 
