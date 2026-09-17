@@ -10,13 +10,13 @@
 // consume every facade component.
 #![allow(unused_imports)]
 
-pub(crate) use crate::wake_word_policy as policy;
 pub(crate) use super::wake_word_engine as engine;
 pub(crate) use super::wake_word_settings as settings;
 pub(crate) use crate::asr::wake_word_diagnostics as diagnostics;
 pub(crate) use crate::asr::wake_word_handoff as handoff;
 pub(crate) use crate::asr::wake_word_runtime as runtime;
 pub(crate) use crate::asr::wake_word_sherpa_manifest as manifest;
+pub(crate) use crate::wake_word_policy as policy;
 
 #[cfg(test)]
 mod architecture_tests {
