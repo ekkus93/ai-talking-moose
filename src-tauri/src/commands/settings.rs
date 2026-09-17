@@ -130,9 +130,8 @@ fn normalize_settings_update(mut new_settings: AppSettings) -> Result<AppSetting
 
     let wake = WakeWordSettings::from_app_settings_fields(
         new_settings.wake_word_enabled,
-        new_settings.wake_word_phrase.clone(),
-    )
-    .map_err(str::to_string)?;
+        &new_settings.wake_word_phrase,
+    )?;
     new_settings.wake_word_enabled = wake.enabled;
     new_settings.wake_word_phrase = wake.phrase;
 
