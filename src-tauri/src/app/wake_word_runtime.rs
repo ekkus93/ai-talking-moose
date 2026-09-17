@@ -372,7 +372,9 @@ mod tests {
         let mut manager = WakeWordRuntimeManager::disabled();
         manager.begin_loading().unwrap();
         manager.finish_loading(FakeEngine::new()).unwrap();
-        manager.feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[1234, -2345]).unwrap();
+        manager
+            .feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[1234, -2345])
+            .unwrap();
         let diagnostics = manager.diagnostics();
         assert!(diagnostics.enabled);
         assert_eq!(diagnostics.state, WakeWordRuntimeState::Listening);
