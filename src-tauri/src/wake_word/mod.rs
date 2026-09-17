@@ -5,12 +5,12 @@
 //! have one stable ownership boundary while the legacy `app`/`asr` paths remain
 //! compatibility re-exports during remediation.
 
+pub use crate::app::wake_word_settings as settings;
 pub use crate::asr::wake_word_diagnostics as diagnostics;
 pub use crate::asr::wake_word_handoff as handoff;
 pub use crate::asr::wake_word_runtime as runtime;
 pub use crate::asr::wake_word_sherpa as engine;
 pub use crate::asr::wake_word_sherpa_manifest as manifest;
-pub use crate::app::wake_word_settings as settings;
 
 pub use diagnostics::WakeWordDiagnostics;
 pub use engine::{NativeKwsSession, SherpaKwsConfig, SherpaKwsEngine};
