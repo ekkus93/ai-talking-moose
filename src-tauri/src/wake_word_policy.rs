@@ -13,8 +13,7 @@ pub const V1_KWS_THREADS: u16 = 1;
 pub const V1_WAKE_SCORE: f32 = 1.0;
 pub const V1_WAKE_THRESHOLD: f32 = 0.25;
 pub const V1_PRE_ROLL_SECONDS: usize = 2;
-pub const V1_PRE_ROLL_SAMPLES: usize =
-    V1_KWS_SAMPLE_RATE_HZ as usize * V1_PRE_ROLL_SECONDS;
+pub const V1_PRE_ROLL_SAMPLES: usize = V1_KWS_SAMPLE_RATE_HZ as usize * V1_PRE_ROLL_SECONDS;
 
 #[cfg(test)]
 mod tests {

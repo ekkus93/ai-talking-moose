@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub use super::wake_word::policy::{
-    DEFAULT_WAKE_PHRASE, V1_WAKE_SCORE, V1_WAKE_THRESHOLD,
-};
+pub use super::wake_word::policy::{DEFAULT_WAKE_PHRASE, V1_WAKE_SCORE, V1_WAKE_THRESHOLD};
 pub const WAKE_WORD_ENABLED_FIELD: &str = "wake_word_enabled";
 pub const WAKE_WORD_PHRASE_FIELD: &str = "wake_word_phrase";
 
