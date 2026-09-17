@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub use super::wake_word::policy::DEFAULT_WAKE_PHRASE;
+pub use super::wake_word::policy::{DEFAULT_WAKE_PHRASE, V1_WAKE_SCORE, V1_WAKE_THRESHOLD};
 pub const WAKE_WORD_ENABLED_FIELD: &str = "wake_word_enabled";
 pub const WAKE_WORD_PHRASE_FIELD: &str = "wake_word_phrase";
 
@@ -25,51 +25,51 @@ impl Default for WakeWordSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WakeWordSettingsError {
-    InvalidPhrase,
-}
-
-impl std::fmt::Display for WakeWordSettingsError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidPhrase => formatter.write_str("Wake Word V1 only supports 'Hey, Moose'"),
-        }
-    }
-}
-
-impl std::error::Error for WakeWordSettingsError {}
-
 impl WakeWordSettings {
-    /// Canonical settings boundary for both persisted-load and live updates.
+    /// Build Wake Word settings from the authoritative flat AppSettings fields.
+    ///
+    /// Both persisted-load migration and live settings updates must pass through
+    /// this constructor so they share one V1 phrase validation/normalization rule.
     pub fn from_app_settings_fields(
         enabled: bool,
-        phrase: &str,
-    ) -> Result<Self, WakeWordSettingsError> {
-        let mut settings = Self {
+        phrase: impl Into<String>,
+    ) -> Result<Self, &'static str> {
+        Self {
             enabled,
-            phrase: phrase.to_string(),
-        };
-        settings.validate_and_normalize()?;
-        Ok(settings)
+            phrase: phrase.into(),
+        }
+        .validate_and_normalize()
     }
 
-    pub fn validate_and_normalize(&mut self) -> Result<(), WakeWordSettingsError> {
-        let normalized = normalize_phrase(&self.phrase);
-        if normalized != "hey, moose" {
-            return Err(WakeWordSettingsError::InvalidPhrase);
+    pub fn validate_and_normalize(mut self) -> Result<Self, &'static str> {
+        let normalized = self.phrase.trim();
+        if !normalized.eq_ignore_ascii_case(DEFAULT_WAKE_PHRASE) {
+            return Err("Wake Word V1 only supports the default wake phrase");
         }
         self.phrase = DEFAULT_WAKE_PHRASE.to_string();
-        Ok(())
+        Ok(self)
     }
-}
 
-fn normalize_phrase(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
+    /// Project the Wake Word settings from the authoritative flat AppSettings JSON shape.
+    /// Missing fields intentionally fail closed to the V1 defaults. This helper keeps
+    /// migration semantics independent of the sherpa engine and gives AppSettings a
+    /// single normalization boundary when the fields are wired into its persisted schema.
+    pub fn from_persisted_app_settings(value: &serde_json::Value) -> Result<Self, &'static str> {
+        let enabled = match value.get(WAKE_WORD_ENABLED_FIELD) {
+            None => false,
+            Some(value) => value
+                .as_bool()
+                .ok_or("wake_word_enabled must be a boolean")?,
+        };
+        let phrase = match value.get(WAKE_WORD_PHRASE_FIELD) {
+            None => DEFAULT_WAKE_PHRASE.to_string(),
+            Some(value) => value
+                .as_str()
+                .ok_or("wake_word_phrase must be a string")?
+                .to_string(),
+        };
+        Self::from_app_settings_fields(enabled, phrase)
+    }
 }
 
 #[cfg(test)]
@@ -77,28 +77,104 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_are_disabled_and_fixed_phrase() {
+    fn defaults_are_disabled_and_use_canonical_phrase() {
         let settings = WakeWordSettings::default();
         assert!(!settings.enabled);
         assert_eq!(settings.phrase, "Hey, Moose");
+        assert_eq!(V1_WAKE_THRESHOLD, 0.25);
+        assert_eq!(V1_WAKE_SCORE, 1.0);
     }
 
     #[test]
-    fn canonical_phrase_is_accepted() {
-        let settings = WakeWordSettings::from_app_settings_fields(true, "Hey, Moose").unwrap();
+    fn missing_fields_default_fail_closed() {
+        let settings: WakeWordSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(settings, WakeWordSettings::default());
+    }
+
+    #[test]
+    fn enabled_state_round_trips() {
+        let settings = WakeWordSettings {
+            enabled: true,
+            ..Default::default()
+        };
+        let decoded: WakeWordSettings =
+            serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
+        assert!(decoded.enabled);
+        assert_eq!(decoded.phrase, DEFAULT_WAKE_PHRASE);
+    }
+
+    #[test]
+    fn field_constructor_is_the_canonical_live_and_persisted_boundary() {
+        let settings = WakeWordSettings::from_app_settings_fields(true, "  hey, moose  ").unwrap();
+        assert!(settings.enabled);
+        assert_eq!(settings.phrase, DEFAULT_WAKE_PHRASE);
+        assert!(WakeWordSettings::from_app_settings_fields(true, "Hey Bruce").is_err());
+    }
+
+    #[test]
+    fn canonical_phrase_normalizes_case_and_whitespace() {
+        let settings = WakeWordSettings {
+            enabled: true,
+            phrase: "  hey, moose  ".to_string(),
+        }
+        .validate_and_normalize()
+        .unwrap();
+        assert_eq!(settings.phrase, DEFAULT_WAKE_PHRASE);
+    }
+
+    #[test]
+    fn arbitrary_phrase_fails_closed() {
+        let error = WakeWordSettings {
+            enabled: true,
+            phrase: "Hey Bruce".to_string(),
+        }
+        .validate_and_normalize()
+        .unwrap_err();
+        assert_eq!(error, "Wake Word V1 only supports the default wake phrase");
+    }
+
+    #[test]
+    fn unknown_fields_are_rejected() {
+        assert!(serde_json::from_str::<WakeWordSettings>(
+            r#"{"enabled":true,"phrase":"Hey, Moose","cloud":true}"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn app_settings_projection_defaults_missing_wake_fields() {
+        let settings = WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
+            "asr_mode": "moonshine_tiny_streaming",
+            "tts_provider": "google"
+        }))
+        .unwrap();
+        assert_eq!(settings, WakeWordSettings::default());
+    }
+
+    #[test]
+    fn app_settings_projection_preserves_enabled_state_and_normalizes_phrase() {
+        let settings = WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
+            "wake_word_enabled": true,
+            "wake_word_phrase": "  hey, moose  "
+        }))
+        .unwrap();
         assert!(settings.enabled);
         assert_eq!(settings.phrase, DEFAULT_WAKE_PHRASE);
     }
 
     #[test]
-    fn whitespace_and_case_are_normalized() {
-        let settings = WakeWordSettings::from_app_settings_fields(true, "  hey,   MOOSE  ").unwrap();
-        assert_eq!(settings.phrase, DEFAULT_WAKE_PHRASE);
-    }
-
-    #[test]
-    fn arbitrary_phrase_is_rejected() {
-        let error = WakeWordSettings::from_app_settings_fields(true, "Hey Bruce").unwrap_err();
-        assert_eq!(error, WakeWordSettingsError::InvalidPhrase);
+    fn app_settings_projection_rejects_invalid_types_and_phrase() {
+        assert!(
+            WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
+                "wake_word_enabled": "yes"
+            }))
+            .is_err()
+        );
+        assert!(
+            WakeWordSettings::from_persisted_app_settings(&serde_json::json!({
+                "wake_word_phrase": "Hey Bruce"
+            }))
+            .is_err()
+        );
     }
 }
