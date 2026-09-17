@@ -1,10 +1,10 @@
 # AI Talking Moose — Wake Word V1 Remediation Specification
 
-**Date:** 2026-09-17  
-**Status:** Proposed remediation specification  
-**Baseline reviewed:** `master` at `9f5d90b4b15f16c1ef2d473e574537392c310f0b`  
-**Source TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`  
-**Source review:** `ai-talking-moose-wake-word-v1-code-review-2026-09-17.md`  
+**Date:** 2026-09-17
+**Status:** Proposed remediation specification
+**Baseline reviewed:** `master` at `9f5d90b4b15f16c1ef2d473e574537392c310f0b`
+**Source TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`
+**Source review:** `ai-talking-moose-wake-word-v1-code-review-2026-09-17.md`
 **Companion remediation TODO:** `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`
 
 ---
