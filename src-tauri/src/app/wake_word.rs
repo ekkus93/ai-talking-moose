@@ -46,7 +46,7 @@ mod architecture_tests {
         );
         assert_eq!(
             super::manifest::SHERPA_KWS_REQUIRED_FILES,
-            super::engine::V1_KWS_REQUIRED_MODEL_FILES
+            *config.required_artifact_files()
         );
         assert!(super::manifest::V1_SHERPA_KWS_MODEL_MANIFEST
             .validate()
