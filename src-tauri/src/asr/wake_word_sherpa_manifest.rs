@@ -2,7 +2,9 @@ use std::collections::HashSet;
 
 pub const SHERPA_KWS_MODEL_ID: &str = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01";
 pub const SHERPA_KWS_MODEL_ARCHIVE_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2";
-pub const SHERPA_KWS_MODEL_LICENSE: &str = "Apache-2.0";
+// The sherpa-onnx runtime license does not establish the independently trained model's license.
+// Keep this explicit until upstream model provenance supplies independently verifiable terms.
+pub const SHERPA_KWS_MODEL_LICENSE: &str = "unverified";
 pub const SHERPA_KWS_ENCODER_FILE: &str = "encoder-epoch-12-avg-2-chunk-16-left-64.onnx";
 pub const SHERPA_KWS_DECODER_FILE: &str = "decoder-epoch-12-avg-2-chunk-16-left-64.onnx";
 pub const SHERPA_KWS_JOINER_FILE: &str = "joiner-epoch-12-avg-2-chunk-16-left-64.onnx";
@@ -121,98 +123,46 @@ mod tests {
 
     const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     const FILES: [SherpaKwsModelFile; 5] = [
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_ENCODER_FILE,
-            bytes: 1,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_DECODER_FILE,
-            bytes: 2,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_JOINER_FILE,
-            bytes: 3,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_TOKENS_FILE,
-            bytes: 4,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_BPE_FILE,
-            bytes: 5,
-            sha256: HASH,
-        },
+        SherpaKwsModelFile { name: SHERPA_KWS_ENCODER_FILE, bytes: 1, sha256: HASH },
+        SherpaKwsModelFile { name: SHERPA_KWS_DECODER_FILE, bytes: 2, sha256: HASH },
+        SherpaKwsModelFile { name: SHERPA_KWS_JOINER_FILE, bytes: 3, sha256: HASH },
+        SherpaKwsModelFile { name: SHERPA_KWS_TOKENS_FILE, bytes: 4, sha256: HASH },
+        SherpaKwsModelFile { name: SHERPA_KWS_BPE_FILE, bytes: 5, sha256: HASH },
     ];
 
     fn valid_manifest() -> SherpaKwsModelManifest {
-        SherpaKwsModelManifest {
-            id: SHERPA_KWS_MODEL_ID,
-            archive_url: SHERPA_KWS_MODEL_ARCHIVE_URL,
-            archive_bytes: 15,
-            archive_sha256: HASH,
-            license: SHERPA_KWS_MODEL_LICENSE,
-            files: &FILES,
-        }
+        SherpaKwsModelManifest { id: SHERPA_KWS_MODEL_ID, archive_url: SHERPA_KWS_MODEL_ARCHIVE_URL, archive_bytes: 15, archive_sha256: HASH, license: SHERPA_KWS_MODEL_LICENSE, files: &FILES }
     }
 
     #[test]
-    fn qualified_shape_validates() {
-        assert_eq!(valid_manifest().validate(), Ok(()));
-    }
+    fn qualified_shape_validates() { assert_eq!(valid_manifest().validate(), Ok(())); }
 
     #[test]
     fn production_placeholder_fails_closed_until_hashes_are_recorded() {
-        assert_eq!(
-            V1_SHERPA_KWS_MODEL_MANIFEST.validate(),
-            Err(SherpaKwsManifestError::MissingArchiveIdentity)
-        );
+        assert_eq!(V1_SHERPA_KWS_MODEL_MANIFEST.validate(), Err(SherpaKwsManifestError::MissingArchiveIdentity));
+    }
+
+    #[test]
+    fn model_license_is_not_inferred_from_runtime_license() {
+        assert_eq!(SHERPA_KWS_MODEL_LICENSE, "unverified");
     }
 
     #[test]
     fn mutable_or_insecure_sources_are_rejected() {
         let mut manifest = valid_manifest();
         manifest.archive_url = "https://example.invalid/latest/model.tar.bz2";
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::MutableOrInsecureSource)
-        );
+        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::MutableOrInsecureSource));
     }
 
     #[test]
     fn duplicate_and_unhashed_files_are_rejected() {
-        const DUPLICATES: [SherpaKwsModelFile; 5] =
-            [FILES[0], FILES[1], FILES[2], FILES[3], FILES[3]];
+        const DUPLICATES: [SherpaKwsModelFile; 5] = [FILES[0], FILES[1], FILES[2], FILES[3], FILES[3]];
         let mut manifest = valid_manifest();
         manifest.files = &DUPLICATES;
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::DuplicateFileName(
-                SHERPA_KWS_TOKENS_FILE
-            ))
-        );
-
-        const UNHASHED: [SherpaKwsModelFile; 5] = [
-            FILES[0],
-            FILES[1],
-            FILES[2],
-            SherpaKwsModelFile {
-                name: SHERPA_KWS_TOKENS_FILE,
-                bytes: 1,
-                sha256: "",
-            },
-            FILES[4],
-        ];
+        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::DuplicateFileName(SHERPA_KWS_TOKENS_FILE)));
+        const UNHASHED: [SherpaKwsModelFile; 5] = [FILES[0], FILES[1], FILES[2], SherpaKwsModelFile { name: SHERPA_KWS_TOKENS_FILE, bytes: 1, sha256: "" }, FILES[4]];
         manifest.files = &UNHASHED;
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::InvalidFileIdentity(
-                SHERPA_KWS_TOKENS_FILE
-            ))
-        );
+        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::InvalidFileIdentity(SHERPA_KWS_TOKENS_FILE)));
     }
 
     #[test]
@@ -220,29 +170,9 @@ mod tests {
         const MISSING_BPE: [SherpaKwsModelFile; 4] = [FILES[0], FILES[1], FILES[2], FILES[3]];
         let mut manifest = valid_manifest();
         manifest.files = &MISSING_BPE;
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::MissingRequiredFile(
-                SHERPA_KWS_BPE_FILE
-            ))
-        );
-
-        const EXTRA: [SherpaKwsModelFile; 6] = [
-            FILES[0],
-            FILES[1],
-            FILES[2],
-            FILES[3],
-            FILES[4],
-            SherpaKwsModelFile {
-                name: "configuration.json",
-                bytes: 48,
-                sha256: HASH,
-            },
-        ];
+        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::MissingRequiredFile(SHERPA_KWS_BPE_FILE)));
+        const EXTRA: [SherpaKwsModelFile; 6] = [FILES[0], FILES[1], FILES[2], FILES[3], FILES[4], SherpaKwsModelFile { name: "configuration.json", bytes: 48, sha256: HASH }];
         manifest.files = &EXTRA;
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::UnexpectedFile("configuration.json"))
-        );
+        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::UnexpectedFile("configuration.json")));
     }
 }
