@@ -42,9 +42,9 @@ impl WakeWordSettings {
             None => false,
         };
         let phrase = match object.get(WAKE_WORD_PHRASE_FIELD) {
-            Some(value) => value.as_str().ok_or_else(|| {
-                format!("{WAKE_WORD_PHRASE_FIELD} must be a string when present")
-            })?,
+            Some(value) => value
+                .as_str()
+                .ok_or_else(|| format!("{WAKE_WORD_PHRASE_FIELD} must be a string when present"))?,
             None => DEFAULT_WAKE_PHRASE,
         };
         Self::from_app_settings_fields(enabled, phrase)
