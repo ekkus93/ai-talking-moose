@@ -11,6 +11,7 @@ use crate::app::settings_policy::{
     validate_app_settings, validate_selected_device,
 };
 use crate::app::state::{AppSettings, AppState, OnboardingStatus};
+use crate::app::wake_word_settings::WakeWordSettings;
 use crate::audio::capture::{AudioCapture, AudioCaptureDiagnostics};
 use crate::audio::devices::{AudioDeviceInfo, AudioDeviceManager};
 use crate::audio::permissions::{
@@ -119,6 +120,26 @@ fn generate_output_test_tone(sample_rate_hz: u32, duration_ms: u32) -> Vec<i16> 
         .collect()
 }
 
+fn normalize_settings_update(mut new_settings: AppSettings) -> Result<AppSettings, String> {
+    new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
+    // Window-title observation remains unsupported in V1. Treat the serialized field
+    // as compatibility metadata and never allow a settings write to enable it.
+    new_settings.window_title_observation = false;
+    new_settings.idle_banter_seed_topics =
+        normalize_idle_banter_seed_topics(&new_settings.idle_banter_seed_topics)?;
+
+    let wake = WakeWordSettings::from_app_settings_fields(
+        new_settings.wake_word_enabled,
+        new_settings.wake_word_phrase.clone(),
+    )
+    .map_err(str::to_string)?;
+    new_settings.wake_word_enabled = wake.enabled;
+    new_settings.wake_word_phrase = wake.phrase;
+
+    validate_app_settings(&new_settings)?;
+    Ok(new_settings)
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
     Ok(state.settings.read().clone())
@@ -159,13 +180,7 @@ pub async fn update_settings<R: Runtime>(
     // change therefore cannot race a start that already captured the old configuration.
     let _settings_guard = settings_runtime_lock().lock().await;
 
-    new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
-    // Window-title observation remains unsupported in V1. Treat the serialized field
-    // as compatibility metadata and never allow a settings write to enable it.
-    new_settings.window_title_observation = false;
-    new_settings.idle_banter_seed_topics =
-        normalize_idle_banter_seed_topics(&new_settings.idle_banter_seed_topics)?;
-    validate_app_settings(&new_settings)?;
+    new_settings = normalize_settings_update(new_settings)?;
 
     let previous = state.settings.read().clone();
     validate_changed_audio_devices(&previous, &new_settings)?;
@@ -376,6 +391,56 @@ mod tests {
     use crate::character::ambient::AmbientEvent;
     use crate::character::behavior::{AmbientDecisionReason, AmbientPolicyContext, BehaviorEngine};
     use crate::character::personality::CharacterConfig;
+
+    #[test]
+    fn live_settings_update_normalizes_wake_phrase_and_preserves_unrelated_fields() {
+        let settings = AppSettings {
+            wake_word_enabled: true,
+            wake_word_phrase: "  hey, moose  ".to_string(),
+            asr_mode: crate::asr::AsrMode::GeminiLiveAudio,
+            tts_provider: crate::ai::types::TtsProvider::Local,
+            talkativeness: 0.73,
+            ..Default::default()
+        };
+
+        let normalized = normalize_settings_update(settings).unwrap();
+        assert!(normalized.wake_word_enabled);
+        assert_eq!(normalized.wake_word_phrase, "Hey, Moose");
+        assert_eq!(normalized.asr_mode, crate::asr::AsrMode::GeminiLiveAudio);
+        assert_eq!(
+            normalized.tts_provider,
+            crate::ai::types::TtsProvider::Local
+        );
+        assert_eq!(normalized.talkativeness, 0.73);
+    }
+
+    #[test]
+    fn live_settings_update_rejects_invalid_wake_phrase_before_commit() {
+        let settings = AppSettings {
+            wake_word_enabled: true,
+            wake_word_phrase: "Hey Bruce".to_string(),
+            ..Default::default()
+        };
+
+        let error = normalize_settings_update(settings).unwrap_err();
+        assert_eq!(error, "Wake Word V1 only supports the default wake phrase");
+    }
+
+    #[test]
+    fn rejected_live_wake_update_leaves_previous_settings_restart_loadable() {
+        let previous = AppSettings::default();
+        let persisted_before = serde_json::to_string(&previous).unwrap();
+        let invalid = AppSettings {
+            wake_word_enabled: true,
+            wake_word_phrase: "Hey Bruce".to_string(),
+            ..previous.clone()
+        };
+
+        assert!(normalize_settings_update(invalid).is_err());
+        let (reloaded, _) = AppSettings::from_persisted_json(&persisted_before).unwrap();
+        assert_eq!(reloaded.wake_word_enabled, previous.wake_word_enabled);
+        assert_eq!(reloaded.wake_word_phrase, previous.wake_word_phrase);
+    }
 
     #[test]
     fn settings_updates_change_behavior_engine_without_restart() {

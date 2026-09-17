@@ -28,6 +28,21 @@ impl Default for WakeWordSettings {
 }
 
 impl WakeWordSettings {
+    /// Build Wake Word settings from the authoritative flat AppSettings fields.
+    ///
+    /// Both persisted-load migration and live settings updates must pass through
+    /// this constructor so they share one V1 phrase validation/normalization rule.
+    pub fn from_app_settings_fields(
+        enabled: bool,
+        phrase: impl Into<String>,
+    ) -> Result<Self, &'static str> {
+        Self {
+            enabled,
+            phrase: phrase.into(),
+        }
+        .validate_and_normalize()
+    }
+
     pub fn validate_and_normalize(mut self) -> Result<Self, &'static str> {
         let normalized = self.phrase.trim();
         if !normalized.eq_ignore_ascii_case(DEFAULT_WAKE_PHRASE) {
@@ -55,7 +70,7 @@ impl WakeWordSettings {
                 .ok_or("wake_word_phrase must be a string")?
                 .to_string(),
         };
-        Self { enabled, phrase }.validate_and_normalize()
+        Self::from_app_settings_fields(enabled, phrase)
     }
 }
 
@@ -88,6 +103,14 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&settings).unwrap()).unwrap();
         assert!(decoded.enabled);
         assert_eq!(decoded.phrase, DEFAULT_WAKE_PHRASE);
+    }
+
+    #[test]
+    fn field_constructor_is_the_canonical_live_and_persisted_boundary() {
+        let settings = WakeWordSettings::from_app_settings_fields(true, "  hey, moose  ").unwrap();
+        assert!(settings.enabled);
+        assert_eq!(settings.phrase, DEFAULT_WAKE_PHRASE);
+        assert!(WakeWordSettings::from_app_settings_fields(true, "Hey Bruce").is_err());
     }
 
     #[test]
