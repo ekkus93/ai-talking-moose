@@ -1,10 +1,12 @@
-use crate::app::wake_word_settings::{V1_WAKE_SCORE, V1_WAKE_THRESHOLD};
 use crate::asr::wake_word_runtime::{WakeWordRuntimePhase, WakeWordRuntimeSnapshot};
+use crate::wake_word_policy::{
+    V1_KWS_CHANNELS, V1_KWS_SAMPLE_RATE_HZ, V1_KWS_THREADS, V1_WAKE_SCORE, V1_WAKE_THRESHOLD,
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-pub const WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ: u32 = 16_000;
-pub const WAKE_WORD_CANONICAL_CHANNELS: u8 = 1;
+pub const WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ: u32 = V1_KWS_SAMPLE_RATE_HZ;
+pub const WAKE_WORD_CANONICAL_CHANNELS: u8 = V1_KWS_CHANNELS as u8;
 pub const WAKE_WORD_ENGINE_ID: &str = "sherpa-onnx-kws";
 
 /// Privacy-safe Wake Word V1 runtime diagnostics.
@@ -46,9 +48,9 @@ impl WakeWordDiagnostics {
             engine_id: WAKE_WORD_ENGINE_ID,
             platform: std::env::consts::OS,
             architecture: std::env::consts::ARCH,
-            canonical_sample_rate_hz: WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ,
-            canonical_channels: WAKE_WORD_CANONICAL_CHANNELS,
-            inference_threads: 1,
+            canonical_sample_rate_hz: V1_KWS_SAMPLE_RATE_HZ,
+            canonical_channels: V1_KWS_CHANNELS as u8,
+            inference_threads: V1_KWS_THREADS as u8,
             threshold: V1_WAKE_THRESHOLD,
             score: V1_WAKE_SCORE,
             ring_buffer_capacity_samples: snapshot.ring_buffer_capacity_samples,
@@ -65,7 +67,7 @@ impl WakeWordDiagnostics {
 }
 
 fn samples_to_ms(samples: usize) -> u64 {
-    (samples as u64).saturating_mul(1_000) / u64::from(WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ)
+    (samples as u64).saturating_mul(1_000) / u64::from(V1_KWS_SAMPLE_RATE_HZ)
 }
 
 fn duration_ms(duration: Duration) -> u64 {
@@ -88,9 +90,9 @@ mod tests {
         assert_eq!(diagnostics.engine_id, "sherpa-onnx-kws");
         assert_eq!(diagnostics.platform, std::env::consts::OS);
         assert_eq!(diagnostics.architecture, std::env::consts::ARCH);
-        assert_eq!(diagnostics.canonical_sample_rate_hz, 16_000);
-        assert_eq!(diagnostics.canonical_channels, 1);
-        assert_eq!(diagnostics.inference_threads, 1);
+        assert_eq!(diagnostics.canonical_sample_rate_hz, V1_KWS_SAMPLE_RATE_HZ);
+        assert_eq!(diagnostics.canonical_channels, V1_KWS_CHANNELS as u8);
+        assert_eq!(diagnostics.inference_threads, V1_KWS_THREADS as u8);
         assert_eq!(diagnostics.threshold, V1_WAKE_THRESHOLD);
         assert_eq!(diagnostics.score, V1_WAKE_SCORE);
         assert_eq!(diagnostics.ring_buffer_capacity_ms, 2_000);

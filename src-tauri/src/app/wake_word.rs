@@ -16,6 +16,7 @@ pub(crate) use crate::asr::wake_word_diagnostics as diagnostics;
 pub(crate) use crate::asr::wake_word_handoff as handoff;
 pub(crate) use crate::asr::wake_word_runtime as runtime;
 pub(crate) use crate::asr::wake_word_sherpa_manifest as manifest;
+pub(crate) use crate::wake_word_policy as policy;
 
 #[cfg(test)]
 mod architecture_tests {
@@ -36,12 +37,16 @@ mod architecture_tests {
         let _manager = super::runtime::WakeWordRuntimeManager::new();
         let config = super::engine::SherpaKwsConfig::default();
         config.validate().unwrap();
-        assert_eq!(config.threads, super::engine::V1_KWS_THREADS);
+        assert_eq!(config.threads, super::policy::V1_KWS_THREADS);
         assert_eq!(super::settings::DEFAULT_WAKE_PHRASE, "Hey, Moose");
         assert_eq!(super::diagnostics::WAKE_WORD_ENGINE_ID, "sherpa-onnx-kws");
         assert_eq!(
             super::handoff::WAKE_ASR_LIVE_HANDOFF_CAPACITY_SAMPLES,
-            32_000
+            super::policy::V1_PRE_ROLL_SAMPLES
+        );
+        assert_eq!(
+            super::manifest::SHERPA_KWS_REQUIRED_FILES,
+            *config.required_artifact_files()
         );
         assert!(super::manifest::V1_SHERPA_KWS_MODEL_MANIFEST
             .validate()
