@@ -4,11 +4,14 @@ pub(crate) mod pipeline;
 pub(crate) mod runtime_metrics;
 mod transcript_state;
 pub mod types;
-pub mod wake_word_diagnostics;
-pub mod wake_word_handoff;
-pub mod wake_word_runtime;
-pub mod wake_word_sherpa;
-pub mod wake_word_sherpa_manifest;
+#[allow(dead_code)]
+pub(crate) mod wake_word_diagnostics;
+#[allow(dead_code)]
+pub(crate) mod wake_word_handoff;
+#[allow(dead_code)]
+pub(crate) mod wake_word_runtime;
+#[allow(dead_code)]
+pub(crate) mod wake_word_sherpa_manifest;
 #[cfg(test)]
 mod wake_word_stability;
 
