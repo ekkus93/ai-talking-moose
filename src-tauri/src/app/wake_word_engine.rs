@@ -1,10 +1,8 @@
-use super::wake_word_settings::{DEFAULT_WAKE_PHRASE, V1_WAKE_SCORE, V1_WAKE_THRESHOLD};
-
-pub const V1_KWS_SAMPLE_RATE_HZ: u32 = 16_000;
-pub const V1_KWS_CHANNELS: u16 = 1;
-pub const V1_KWS_FEATURE_DIM: u16 = 80;
-pub const V1_KWS_THREADS: u16 = 1;
-pub const V1_KWS_KEYWORD: &str = "HEY MOOSE";
+pub use super::wake_word::policy::{
+    DEFAULT_WAKE_PHRASE, V1_KWS_CHANNELS, V1_KWS_FEATURE_DIM, V1_KWS_KEYWORD,
+    V1_KWS_SAMPLE_RATE_HZ, V1_KWS_THREADS, V1_WAKE_SCORE, V1_WAKE_THRESHOLD,
+};
+use crate::asr::wake_word_sherpa_manifest::SHERPA_KWS_REQUIRED_FILES;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WakeWordErrorKind {
@@ -61,6 +59,10 @@ impl Default for SherpaKwsConfig {
 }
 
 impl SherpaKwsConfig {
+    pub fn required_artifact_files(&self) -> &'static [&'static str; 5] {
+        &SHERPA_KWS_REQUIRED_FILES
+    }
+
     pub fn validate(&self) -> Result<(), WakeWordError> {
         if self.sample_rate_hz != V1_KWS_SAMPLE_RATE_HZ {
             return Err(WakeWordError::sanitized(
@@ -217,6 +219,18 @@ mod tests {
         );
 
         let config = SherpaKwsConfig {
+            channels: 2,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+
+        let config = SherpaKwsConfig {
+            score: 0.5,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+
+        let config = SherpaKwsConfig {
             keyword: "HEY BRUCE".to_string(),
             ..Default::default()
         };
@@ -227,6 +241,21 @@ mod tests {
             ..Default::default()
         };
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn engine_artifact_contract_matches_manifest_exactly() {
+        let config = SherpaKwsConfig::default();
+        assert_eq!(
+            config.required_artifact_files(),
+            &[
+                "encoder-epoch-12-avg-2-chunk-16-left-64.onnx",
+                "decoder-epoch-12-avg-2-chunk-16-left-64.onnx",
+                "joiner-epoch-12-avg-2-chunk-16-left-64.onnx",
+                "tokens.txt",
+                "bpe.model",
+            ]
+        );
     }
 
     #[test]
