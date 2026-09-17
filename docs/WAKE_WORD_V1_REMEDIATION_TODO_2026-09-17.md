@@ -68,27 +68,29 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-020 — Consolidate duplicate Wake Word module architecture
 
-- [ ] Choose a single canonical module boundary, preferably `src-tauri/src/wake_word/`.
-- [ ] Inventory all functionality in `app/wake_word_*`.
-- [ ] Inventory all functionality in `asr/wake_word_*`.
-- [ ] Select one authoritative KWS config representation.
-- [ ] Select one authoritative KWS engine/session abstraction.
-- [ ] Select one authoritative `WakeWordRuntimeManager`.
-- [ ] Select one authoritative handoff implementation.
-- [ ] Select one authoritative diagnostics representation.
-- [ ] Move/rehome reusable tests to the canonical module.
-- [ ] Remove duplicate/obsolete public exports.
-- [ ] Remove duplicate/obsolete source files after migration.
-- [ ] Ensure production code cannot instantiate two independent Wake Word managers.
-- [ ] Ensure Wake Word remains distinct from command ASR provider implementations.
-- [ ] Add structural/source regression coverage against duplicate manager reintroduction.
+- [x] Choose a single canonical module boundary, preferably `src-tauri/src/wake_word/`.
+- [x] Inventory all functionality in `app/wake_word_*`.
+- [x] Inventory all functionality in `asr/wake_word_*`.
+- [x] Select one authoritative KWS config representation.
+- [x] Select one authoritative KWS engine/session abstraction.
+- [x] Select one authoritative `WakeWordRuntimeManager`.
+- [x] Select one authoritative handoff implementation.
+- [x] Select one authoritative diagnostics representation.
+- [x] Move/rehome reusable tests to the canonical module.
+- [x] Remove duplicate/obsolete public exports.
+- [x] Remove duplicate/obsolete source files after migration.
+- [x] Ensure production code cannot instantiate two independent Wake Word managers.
+- [x] Ensure Wake Word remains distinct from command ASR provider implementations.
+- [x] Add structural/source regression coverage against duplicate manager reintroduction.
 
 **Acceptance**
 
-- [ ] Exactly one production `WakeWordRuntimeManager` exists.
-- [ ] Exactly one production V1 KWS config/engine policy exists.
-- [ ] No tests depend on the removed duplicate implementation.
-- [ ] Ordinary CI passes after consolidation.
+- [x] Exactly one production `WakeWordRuntimeManager` exists.
+- [x] Exactly one production V1 KWS config/engine policy exists.
+- [x] No tests depend on the removed duplicate implementation.
+- [x] Ordinary CI passes after consolidation.
+
+**Evidence:** `docs/evidence/WWR-020_WAKE_WORD_ARCHITECTURE_CONSOLIDATION_2026-09-17.md`; implementation merged in PR #172 at `70b813b757789cf993ff4c1e8d2d4c9825f6313b`. Exact PR-head ordinary CI `35268110856` passed on `39c95ddba9628cdd531c08f3bff4451fc6bad785`.
 
 ---
 
@@ -757,10 +759,10 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ### Architecture
 
-- [ ] One authoritative Wake Word subsystem exists.
-- [ ] One authoritative `WakeWordRuntimeManager` exists.
-- [ ] One authoritative KWS config/engine policy exists.
-- [ ] Duplicate legacy Wake Word stacks are removed.
+- [x] One authoritative Wake Word subsystem exists.
+- [x] One authoritative `WakeWordRuntimeManager` exists.
+- [x] One authoritative KWS config/engine policy exists.
+- [x] Duplicate legacy Wake Word stacks are removed.
 
 ### Settings/UI
 
