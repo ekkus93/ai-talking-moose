@@ -15,6 +15,23 @@ pub enum WakeWordRuntimeState {
     Stopping,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct WakeWordDiagnostics {
+    pub enabled: bool,
+    pub state: WakeWordRuntimeState,
+    pub sample_rate_hz: u32,
+    pub channels: u16,
+    pub inference_threads: u16,
+    pub threshold: f32,
+    pub score: f32,
+    pub ring_buffer_capacity_samples: usize,
+    pub ring_buffer_duration_ms: u64,
+    pub trigger_count: u64,
+    pub last_trigger_age: Option<Duration>,
+    pub talking_suspended: bool,
+    pub last_error: Option<String>,
+}
+
 pub struct WakeWordRuntimeManager<E: SherpaKwsEngine> {
     state: WakeWordRuntimeState,
     engine: Option<E>,
@@ -22,6 +39,7 @@ pub struct WakeWordRuntimeManager<E: SherpaKwsEngine> {
     trigger_in_flight: bool,
     trigger_count: u64,
     last_trigger_at: Option<Instant>,
+    last_error: Option<String>,
 }
 
 impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
@@ -33,6 +51,7 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
             trigger_in_flight: false,
             trigger_count: 0,
             last_trigger_at: None,
+            last_error: None,
         }
     }
 
@@ -48,10 +67,31 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
         self.last_trigger_at.map(|instant| instant.elapsed())
     }
 
+    pub fn diagnostics(&self) -> WakeWordDiagnostics {
+        let config = self.engine.as_ref().map(|engine| engine.config());
+        let sample_rate_hz = config.map_or(16_000, |config| config.sample_rate_hz);
+        WakeWordDiagnostics {
+            enabled: self.state != WakeWordRuntimeState::Disabled,
+            state: self.state,
+            sample_rate_hz,
+            channels: config.map_or(1, |config| config.channels),
+            inference_threads: config.map_or(1, |config| config.threads),
+            threshold: config.map_or(0.25, |config| config.threshold),
+            score: config.map_or(1.0, |config| config.score),
+            ring_buffer_capacity_samples: 2 * sample_rate_hz as usize,
+            ring_buffer_duration_ms: 2_000,
+            trigger_count: self.trigger_count,
+            last_trigger_age: self.last_trigger_age(),
+            talking_suspended: self.state == WakeWordRuntimeState::Suspended,
+            last_error: self.last_error.clone(),
+        }
+    }
+
     pub fn begin_loading(&mut self) -> Result<(), WakeWordError> {
         if self.state != WakeWordRuntimeState::Disabled {
             return Err(invalid_transition("wake runtime is already active"));
         }
+        self.last_error = None;
         self.state = WakeWordRuntimeState::Loading;
         Ok(())
     }
@@ -60,10 +100,14 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
         if self.state != WakeWordRuntimeState::Loading {
             return Err(invalid_transition("wake runtime is not loading"));
         }
-        engine.config().validate()?;
+        if let Err(error) = engine.config().validate() {
+            self.record_error(&error);
+            return Err(error);
+        }
         self.engine = Some(engine);
         self.ring_buffer.clear();
         self.trigger_in_flight = false;
+        self.last_error = None;
         self.state = WakeWordRuntimeState::Listening;
         Ok(())
     }
@@ -78,14 +122,21 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
         }
         self.ring_buffer.append(samples);
         let Some(engine) = self.engine.as_mut() else {
-            self.state = WakeWordRuntimeState::Error;
-            return Err(WakeWordError::sanitized(
+            let error = WakeWordError::sanitized(
                 WakeWordErrorKind::RuntimeUnavailable,
                 "wake runtime has no loaded KWS engine",
                 false,
-            ));
+            );
+            self.record_error(&error);
+            return Err(error);
         };
-        let detection = engine.accept_pcm16_mono(sample_rate_hz, samples)?;
+        let detection = match engine.accept_pcm16_mono(sample_rate_hz, samples) {
+            Ok(detection) => detection,
+            Err(error) => {
+                self.record_error(&error);
+                return Err(error);
+            }
+        };
         if detection.is_some() {
             self.trigger_in_flight = true;
             self.trigger_count = self.trigger_count.saturating_add(1);
@@ -117,16 +168,21 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
             return Err(invalid_transition("wake runtime is not suspended"));
         }
         let Some(engine) = self.engine.as_mut() else {
-            self.state = WakeWordRuntimeState::Error;
-            return Err(WakeWordError::sanitized(
+            let error = WakeWordError::sanitized(
                 WakeWordErrorKind::RuntimeUnavailable,
                 "wake runtime has no loaded KWS engine",
                 false,
-            ));
+            );
+            self.record_error(&error);
+            return Err(error);
         };
-        engine.reset_stream()?;
+        if let Err(error) = engine.reset_stream() {
+            self.record_error(&error);
+            return Err(error);
+        }
         self.ring_buffer.clear();
         self.trigger_in_flight = false;
+        self.last_error = None;
         self.state = WakeWordRuntimeState::Listening;
         Ok(())
     }
@@ -141,11 +197,19 @@ impl<E: SherpaKwsEngine> WakeWordRuntimeManager<E> {
         } else {
             Ok(())
         };
+        if let Err(error) = &shutdown_result {
+            self.last_error = Some(error.message.clone());
+        }
         self.engine = None;
         self.ring_buffer.clear();
         self.trigger_in_flight = false;
         self.state = WakeWordRuntimeState::Disabled;
         shutdown_result
+    }
+
+    fn record_error(&mut self, error: &WakeWordError) {
+        self.last_error = Some(error.message.clone());
+        self.state = WakeWordRuntimeState::Error;
     }
 }
 
@@ -161,6 +225,7 @@ mod tests {
     struct FakeEngine {
         config: SherpaKwsConfig,
         detect_next: bool,
+        fail_next: bool,
         reset_count: usize,
         shutdown_count: usize,
     }
@@ -170,6 +235,7 @@ mod tests {
             Self {
                 config: SherpaKwsConfig::default(),
                 detect_next: false,
+                fail_next: false,
                 reset_count: 0,
                 shutdown_count: 0,
             }
@@ -186,6 +252,14 @@ mod tests {
             _sample_rate_hz: u32,
             _samples: &[i16],
         ) -> Result<Option<WakeWordDetection>, WakeWordError> {
+            if self.fail_next {
+                self.fail_next = false;
+                return Err(WakeWordError::sanitized(
+                    WakeWordErrorKind::Inference,
+                    "failed /private/model.onnx token abcdefghijklmnopqrstuvwxyz123456",
+                    true,
+                ));
+            }
             if self.detect_next {
                 self.detect_next = false;
                 Ok(Some(WakeWordDetection::v1_detected(1.0)))
@@ -291,5 +365,39 @@ mod tests {
         let error = manager.resume().unwrap_err();
         assert_eq!(error.kind, WakeWordErrorKind::InvalidConfiguration);
         assert_eq!(manager.state(), WakeWordRuntimeState::Disabled);
+    }
+
+    #[test]
+    fn diagnostics_are_bounded_and_contain_no_pcm() {
+        let mut manager = WakeWordRuntimeManager::disabled();
+        manager.begin_loading().unwrap();
+        manager.finish_loading(FakeEngine::new()).unwrap();
+        manager.feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[1234, -2345]).unwrap();
+        let diagnostics = manager.diagnostics();
+        assert!(diagnostics.enabled);
+        assert_eq!(diagnostics.state, WakeWordRuntimeState::Listening);
+        assert_eq!(diagnostics.sample_rate_hz, 16_000);
+        assert_eq!(diagnostics.channels, 1);
+        assert_eq!(diagnostics.inference_threads, 1);
+        assert_eq!(diagnostics.ring_buffer_capacity_samples, 32_000);
+        assert_eq!(diagnostics.ring_buffer_duration_ms, 2_000);
+        assert_eq!(diagnostics.trigger_count, 0);
+        assert!(diagnostics.last_error.is_none());
+    }
+
+    #[test]
+    fn diagnostics_retain_only_sanitized_error_text() {
+        let mut engine = FakeEngine::new();
+        engine.fail_next = true;
+        let mut manager = WakeWordRuntimeManager::disabled();
+        manager.begin_loading().unwrap();
+        manager.finish_loading(engine).unwrap();
+        assert!(manager.feed_pcm(V1_KWS_SAMPLE_RATE_HZ, &[1]).is_err());
+        let diagnostics = manager.diagnostics();
+        assert_eq!(diagnostics.state, WakeWordRuntimeState::Error);
+        assert_eq!(
+            diagnostics.last_error.as_deref(),
+            Some("failed <path> token <redacted>")
+        );
     }
 }
