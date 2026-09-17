@@ -5,6 +5,11 @@
 //! import Wake Word components through this module rather than through the
 //! underlying implementation paths.
 
+// These re-exports establish the canonical boundary before later remediation
+// slices wire the runtime into production. Until then, non-test builds do not
+// consume every facade component.
+#![allow(unused_imports)]
+
 pub(crate) use super::wake_word_engine as engine;
 pub(crate) use super::wake_word_settings as settings;
 pub(crate) use crate::asr::wake_word_diagnostics as diagnostics;
