@@ -12,6 +12,7 @@ pub mod secrets;
 #[cfg(test)]
 pub(crate) mod test_support;
 pub mod tools;
+pub mod wake_word;
 
 use app::state::AppState;
 use app::window_position::{
