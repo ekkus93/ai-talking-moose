@@ -1,0 +1,38 @@
+name: Wake Word model identity freeze
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "scripts/freeze_wake_word_model_identity.py"
+      - ".github/workflows/wake-word-model-identity.yml"
+      - "wake-word-artifacts.json"
+      - "src-tauri/src/asr/wake_word_sherpa_manifest.rs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-model-identity:
+    name: Freeze selected model identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.14"
+      - name: Install pinned tokenizer dependency
+        run: python -m pip install --disable-pip-version-check sentencepiece==0.2.1
+      - name: Freeze upstream archive, consumed files, and HEY MOOSE representation
+        run: python scripts/freeze_wake_word_model_identity.py --output wake-word-model-identity.json
+      - name: Upload machine-readable identity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-word-model-identity-${{ github.event.pull_request.head.sha || github.sha }}
+          path: wake-word-model-identity.json
+          if-no-files-found: error
+          retention-days: 30
