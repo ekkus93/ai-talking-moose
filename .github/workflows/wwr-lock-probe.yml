@@ -6,6 +6,7 @@ on:
     paths:
       - src-tauri/Cargo.toml
       - src-tauri/Cargo.lock
+      - .github/workflows/wwr-lock-probe.yml
 
 permissions:
   contents: read
@@ -18,4 +19,14 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Require Cargo.toml and Cargo.lock consistency
-        run: cargo metadata --locked --manifest-path src-tauri/Cargo.toml --format-version 1 >/dev/null
+        shell: bash
+        run: |
+          if cargo metadata --locked --manifest-path src-tauri/Cargo.toml --format-version 1 >/dev/null; then
+            exit 0
+          fi
+          cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+          echo 'WWR_LOCK_GZIP_BASE64_BEGIN'
+          gzip -c src-tauri/Cargo.lock | base64 -w0
+          echo
+          echo 'WWR_LOCK_GZIP_BASE64_END'
+          exit 1
