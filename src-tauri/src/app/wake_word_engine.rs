@@ -223,14 +223,16 @@ fn native_capi_contract() -> Result<NativeCapiContract, WakeWordError> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
         Ok(NativeCapiContract {
-            library_relative_path: "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libsherpa-onnx-c-api.so",
+            library_relative_path:
+                "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libsherpa-onnx-c-api.so",
             required_symbols: &SHERPA_KWS_C_API_SYMBOLS,
         })
     }
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
         Ok(NativeCapiContract {
-            library_relative_path: "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libsherpa-onnx-c-api.dylib",
+            library_relative_path:
+                "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libsherpa-onnx-c-api.dylib",
             required_symbols: &SHERPA_KWS_C_API_SYMBOLS,
         })
     }
