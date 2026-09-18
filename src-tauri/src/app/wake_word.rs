@@ -11,6 +11,7 @@
 #![allow(unused_imports)]
 
 pub(crate) use super::wake_word_engine as engine;
+pub(crate) use super::wake_word_native as native;
 pub(crate) use super::wake_word_settings as settings;
 pub(crate) use crate::asr::wake_word_diagnostics as diagnostics;
 pub(crate) use crate::asr::wake_word_handoff as handoff;
