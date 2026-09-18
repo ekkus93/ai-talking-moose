@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import struct
+import tarfile
 import tempfile
 import unittest
 import zipfile
