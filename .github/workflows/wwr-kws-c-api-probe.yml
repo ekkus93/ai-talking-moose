@@ -34,32 +34,50 @@ jobs:
           set -euo pipefail
           lib="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libsherpa-onnx-c-api.so' -print -quit)"
           ort="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libonnxruntime.so' -print -quit)"
-          test -n "$lib"
-          test -n "$ort"
+          test -n "$lib"; test -n "$ort"
           echo "WWR_C_API_RELATIVE_PATH=${lib#"$RUNNER_TEMP/shared-runtime/"}"
           echo "WWR_C_API_BYTES=$(stat -c %s "$lib")"
           echo "WWR_C_API_SHA256=$(sha256sum "$lib" | cut -d' ' -f1)"
           echo "WWR_ORT_RELATIVE_PATH=${ort#"$RUNNER_TEMP/shared-runtime/"}"
           echo "WWR_ORT_BYTES=$(stat -c %s "$ort")"
           echo "WWR_ORT_SHA256=$(sha256sum "$ort" | cut -d' ' -f1)"
-          file "$lib"
-          file "$ort"
-          symbols=(
-            SherpaOnnxCreateKeywordSpotter
-            SherpaOnnxCreateKeywordStream
-            SherpaOnnxOnlineStreamAcceptWaveform
-            SherpaOnnxIsKeywordStreamReady
-            SherpaOnnxDecodeKeywordStream
-            SherpaOnnxGetKeywordResult
-            SherpaOnnxDestroyKeywordResult
-            SherpaOnnxDestroyOnlineStream
-            SherpaOnnxDestroyKeywordSpotter
-          )
+          file "$lib"; file "$ort"
+          symbols=(SherpaOnnxCreateKeywordSpotter SherpaOnnxCreateKeywordStream SherpaOnnxOnlineStreamAcceptWaveform SherpaOnnxIsKeywordStreamReady SherpaOnnxDecodeKeywordStream SherpaOnnxGetKeywordResult SherpaOnnxDestroyKeywordResult SherpaOnnxDestroyOnlineStream SherpaOnnxDestroyKeywordSpotter)
           nm -D --defined-only "$lib" > "$RUNNER_TEMP/exports.txt"
-          for symbol in "${symbols[@]}"; do
-            grep -Eq "[[:space:]]${symbol}$" "$RUNNER_TEMP/exports.txt" || {
-              echo "missing required KWS C API export: $symbol" >&2
-              exit 1
-            }
-          done
+          for symbol in "${symbols[@]}"; do grep -Eq "[[:space:]]${symbol}$" "$RUNNER_TEMP/exports.txt" || exit 1; done
+          echo "Verified ${#symbols[@]} required KWS-only C API exports in v1.13.8 shared runtime."
+
+  macos-arm64-kws-c-api:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact upstream v1.13.8 shared runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2"
+          curl --fail --location --retry 3 --output "$archive" \
+            'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2'
+          echo 'b10e5c7e2c30ea03de9c442655d14860d9edc475c6251d58a8f5f06e913a1d56  '"$archive" | shasum -a 256 --check --status
+          echo "WWR_SHARED_ARCHIVE_BYTES=$(stat -f %z "$archive")"
+          echo "WWR_SHARED_ARCHIVE_SHA256=$(shasum -a 256 "$archive" | cut -d' ' -f1)"
+          mkdir "$RUNNER_TEMP/shared-runtime"
+          tar -xjf "$archive" -C "$RUNNER_TEMP/shared-runtime"
+      - name: Verify and report KWS C API runtime identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libsherpa-onnx-c-api.dylib' -print -quit)"
+          ort="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libonnxruntime.dylib' -print -quit)"
+          test -n "$lib"; test -n "$ort"
+          echo "WWR_C_API_RELATIVE_PATH=${lib#"$RUNNER_TEMP/shared-runtime/"}"
+          echo "WWR_C_API_BYTES=$(stat -f %z "$lib")"
+          echo "WWR_C_API_SHA256=$(shasum -a 256 "$lib" | cut -d' ' -f1)"
+          echo "WWR_ORT_RELATIVE_PATH=${ort#"$RUNNER_TEMP/shared-runtime/"}"
+          echo "WWR_ORT_BYTES=$(stat -f %z "$ort")"
+          echo "WWR_ORT_SHA256=$(shasum -a 256 "$ort" | cut -d' ' -f1)"
+          file "$lib"; file "$ort"
+          symbols=(SherpaOnnxCreateKeywordSpotter SherpaOnnxCreateKeywordStream SherpaOnnxOnlineStreamAcceptWaveform SherpaOnnxIsKeywordStreamReady SherpaOnnxDecodeKeywordStream SherpaOnnxGetKeywordResult SherpaOnnxDestroyKeywordResult SherpaOnnxDestroyOnlineStream SherpaOnnxDestroyKeywordSpotter)
+          nm -gU "$lib" > "$RUNNER_TEMP/exports.txt"
+          for symbol in "${symbols[@]}"; do grep -Eq "[[:space:]]_?${symbol}$" "$RUNNER_TEMP/exports.txt" || exit 1; done
           echo "Verified ${#symbols[@]} required KWS-only C API exports in v1.13.8 shared runtime."
