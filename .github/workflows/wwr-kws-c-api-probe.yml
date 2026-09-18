@@ -1,0 +1,45 @@
+name: WWR KWS C API Probe
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/wwr-kws-c-api-probe.yml'
+      - 'wake-word-artifacts.json'
+      - 'scripts/prepare_wake_word_runtime.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x86_64-kws-c-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare exact frozen runtime
+        run: python3 scripts/prepare_wake_word_runtime.py --platform linux-x86_64 --output-root "$RUNNER_TEMP/wake-runtime"
+      - name: Verify KWS C API exports from consumed native library
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib="$RUNNER_TEMP/wake-runtime/sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so"
+          test -f "$lib"
+          symbols=(
+            SherpaOnnxCreateKeywordSpotter
+            SherpaOnnxCreateKeywordStream
+            SherpaOnnxOnlineStreamAcceptWaveform
+            SherpaOnnxIsKeywordStreamReady
+            SherpaOnnxDecodeKeywordStream
+            SherpaOnnxGetKeywordResult
+            SherpaOnnxDestroyKeywordResult
+            SherpaOnnxDestroyOnlineStream
+            SherpaOnnxDestroyKeywordSpotter
+          )
+          nm -D --defined-only "$lib" > "$RUNNER_TEMP/exports.txt"
+          for symbol in "${symbols[@]}"; do
+            grep -Eq "[[:space:]]${symbol}$" "$RUNNER_TEMP/exports.txt" || {
+              echo "missing required KWS C API export: $symbol" >&2
+              exit 1
+            }
+          done
+          echo "Verified ${#symbols[@]} required KWS-only C API exports in frozen runtime."
