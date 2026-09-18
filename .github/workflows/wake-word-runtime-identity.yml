@@ -4,6 +4,18 @@ on:
     branches: [master]
     paths:
       - "scripts/freeze_wake_word_runtime_identity.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "tests/test_wake_word_runtime_artifacts.py"
+      - "wake-word-artifacts.json"
+      - "docs/licenses/SHERPA_ONNX_RUNTIME_NOTICE.md"
+      - ".github/workflows/wake-word-runtime-identity.yml"
+  pull_request:
+    paths:
+      - "scripts/freeze_wake_word_runtime_identity.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "tests/test_wake_word_runtime_artifacts.py"
+      - "wake-word-artifacts.json"
+      - "docs/licenses/SHERPA_ONNX_RUNTIME_NOTICE.md"
       - ".github/workflows/wake-word-runtime-identity.yml"
   workflow_dispatch:
 permissions:
@@ -15,3 +27,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 scripts/freeze_wake_word_runtime_identity.py
+      - run: python3 -m unittest tests/test_wake_word_runtime_artifacts.py
