@@ -60,6 +60,26 @@ def main() -> None:
             except ValueError:
                 pass
 
+        malicious_tar = root / "malicious.tar.bz2"
+        evil = root / "evil.bin"
+        evil.write_bytes(b"evil")
+        with tarfile.open(malicious_tar, "w:bz2") as bundle:
+            bundle.add(evil, arcname="../escape.bin")
+        try:
+            module.extract_archive(malicious_tar, root / "malicious-tar-output", "tar.bz2")
+            raise AssertionError("tar traversal member was extracted")
+        except ValueError:
+            pass
+
+        malicious_zip = root / "malicious.zip"
+        with zipfile.ZipFile(malicious_zip, "w") as bundle:
+            bundle.writestr("../escape.bin", b"evil")
+        try:
+            module.extract_archive(malicious_zip, root / "malicious-zip-output", "zip")
+            raise AssertionError("zip traversal member was extracted")
+        except ValueError:
+            pass
+
     print("wake artifact preparation tests passed")
 
 

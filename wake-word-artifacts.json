@@ -3,7 +3,8 @@
   "policy": {
     "runtime_version": "v1.13.8",
     "model_family": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
-    "verification": "size-and-sha256-required-before-use"
+    "verification": "size-and-sha256-required-before-use",
+    "production_mode": true
   },
   "artifacts": [
     {
@@ -16,11 +17,31 @@
         "sha256": "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a"
       },
       "files": [
-        {"name": "encoder-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 12174219, "sha256": "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693"},
-        {"name": "decoder-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 1063189, "sha256": "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3"},
-        {"name": "joiner-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 642462, "sha256": "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d"},
-        {"name": "tokens.txt", "bytes": 5006, "sha256": "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53"},
-        {"name": "bpe.model", "bytes": 244837, "sha256": "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24"}
+        {
+          "name": "encoder-epoch-12-avg-2-chunk-16-left-64.onnx",
+          "bytes": 12174219,
+          "sha256": "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693"
+        },
+        {
+          "name": "decoder-epoch-12-avg-2-chunk-16-left-64.onnx",
+          "bytes": 1063189,
+          "sha256": "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3"
+        },
+        {
+          "name": "joiner-epoch-12-avg-2-chunk-16-left-64.onnx",
+          "bytes": 642462,
+          "sha256": "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d"
+        },
+        {
+          "name": "tokens.txt",
+          "bytes": 5006,
+          "sha256": "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53"
+        },
+        {
+          "name": "bpe.model",
+          "bytes": 244837,
+          "sha256": "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24"
+        }
       ],
       "keyword": {
         "source": "HEY MOOSE",
@@ -60,8 +81,16 @@
           "sha256": "30c93b59381113f9c20aedbbf9fc1ad399158f6bc03dddc0f8934a6e28e069ba"
         },
         "files": [
-          {"path": "sherpa-onnx/native/linux-x64/libonnxruntime.so", "bytes": 27026609, "sha256": "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e"},
-          {"path": "sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so", "bytes": 5166360, "sha256": "adcabd1866f667ec78796a504ff96030eff30fbd80792e892752c64a861bf231"}
+          {
+            "path": "sherpa-onnx/native/linux-x64/libonnxruntime.so",
+            "bytes": 27026609,
+            "sha256": "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e"
+          },
+          {
+            "path": "sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so",
+            "bytes": 5166360,
+            "sha256": "adcabd1866f667ec78796a504ff96030eff30fbd80792e892752c64a861bf231"
+          }
         ]
       },
       "macos-arm64": {
@@ -75,8 +104,16 @@
           "sha256": "42e272180c8836127f024f3335d7afcdfb30fe0164b78330d5d449034e34ce34"
         },
         "files": [
-          {"path": "sherpa-onnx/native/osx-aarch64/libonnxruntime.dylib", "bytes": 29006384, "sha256": "b0613d0ae53199a83b05fa48e169211498e9d40d54beaa372068ebe5ec5b0929"},
-          {"path": "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-jni.dylib", "bytes": 4218024, "sha256": "e8025656a2680b838dd7ccd7d7ee7e88e5da42a35ad010d8717c22dd7b851ca1"}
+          {
+            "path": "sherpa-onnx/native/osx-aarch64/libonnxruntime.dylib",
+            "bytes": 29006384,
+            "sha256": "b0613d0ae53199a83b05fa48e169211498e9d40d54beaa372068ebe5ec5b0929"
+          },
+          {
+            "path": "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-jni.dylib",
+            "bytes": 4218024,
+            "sha256": "e8025656a2680b838dd7ccd7d7ee7e88e5da42a35ad010d8717c22dd7b851ca1"
+          }
         ]
       }
     }
