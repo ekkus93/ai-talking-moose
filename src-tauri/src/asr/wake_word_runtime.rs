@@ -227,7 +227,8 @@ impl WakeWordRuntimeManager {
         sample_rate_hz: u32,
         samples: &[i16],
     ) -> Result<bool, WakeWordRuntimeError> {
-        validate_pcm_frame(sample_rate_hz, samples).map_err(|_| WakeWordRuntimeError::invalid_pcm())?;
+        validate_pcm_frame(sample_rate_hz, samples)
+            .map_err(|_| WakeWordRuntimeError::invalid_pcm())?;
         if self.shutting_down.load(Ordering::SeqCst) {
             return Err(WakeWordRuntimeError::shutting_down());
         }
@@ -438,7 +439,10 @@ mod tests {
 
         let after = manager.snapshot(Instant::now());
         assert_eq!(after.ring_buffer_samples, before.ring_buffer_samples);
-        assert_eq!(after.handoff_pre_roll_samples, before.handoff_pre_roll_samples);
+        assert_eq!(
+            after.handoff_pre_roll_samples,
+            before.handoff_pre_roll_samples
+        );
         assert!(manager.accept_trigger(Instant::now()).unwrap());
         assert_eq!(
             manager.take_triggered_pre_roll().unwrap().unwrap(),
