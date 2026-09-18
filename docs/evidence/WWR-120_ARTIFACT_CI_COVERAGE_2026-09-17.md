@@ -2,7 +2,7 @@
 
 WWR-120 makes the Wake artifact gate sensitive to every production identity boundary rather than only the legacy verifier/preparer tests.
 
-The Wake Artifact Verification workflow now triggers on both identity freezers, their dedicated offline test suites, the production manifest, model/runtime preparation and verification code, runtime cache tests, the manifest validator, and the workflow itself. It executes the four explicit artifact/freezer suites requested by the remediation plan (verifier, preparation, model freezer, runtime freezer) plus the WWR-110 runtime preparation/cache suite.
+The Wake Artifact Verification workflow now triggers on both current production identity freezers, the pre-existing deterministic freezer helpers and their tests, the production manifest, model/runtime preparation and verification code, runtime cache tests, the manifest validator, and the workflow itself. It executes the repository's four pre-existing Wake artifact Python suites (`test-verify-wake-word-artifacts.py`, `test-prepare-wake-word-artifacts.py`, `test-freeze-wake-word-model-identities.py`, and `test-freeze-wake-word-runtime-identities.py`) plus focused tests for the newer production freezers and the WWR-110 runtime preparation/cache suite.
 
 `scripts/validate_wake_word_artifact_manifest.py --production` validates schema version, the explicit production-mode flag, model/freezer constants, exact consumed model-file set, keyword identity, runtime/freezer version and platform set, deterministic install/bundle roots, archive filenames/source URLs, architecture policy, and every required non-zero size/SHA-256 identity. Placeholder identities fail closed.
 
