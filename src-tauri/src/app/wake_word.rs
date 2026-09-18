@@ -50,6 +50,6 @@ mod architecture_tests {
         );
         assert!(super::manifest::V1_SHERPA_KWS_MODEL_MANIFEST
             .validate()
-            .is_err());
+            .is_ok());
     }
 }

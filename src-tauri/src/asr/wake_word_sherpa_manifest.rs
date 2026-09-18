@@ -58,8 +58,12 @@ impl SherpaKwsModelManifest {
         if self.id != SHERPA_KWS_MODEL_ID {
             return Err(SherpaKwsManifestError::WrongModelId);
         }
-        if !self.archive_url.starts_with("https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/")
-            || !self.archive_url.ends_with(&format!("/{SHERPA_KWS_MODEL_ID}.tar.bz2"))
+        if !self
+            .archive_url
+            .starts_with("https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/")
+            || !self
+                .archive_url
+                .ends_with(&format!("/{SHERPA_KWS_MODEL_ID}.tar.bz2"))
         {
             return Err(SherpaKwsManifestError::MutableOrInsecureSource);
         }
@@ -74,7 +78,12 @@ impl SherpaKwsModelManifest {
         }
         let mut names = HashSet::with_capacity(self.files.len());
         for file in self.files {
-            if file.name.is_empty() || file.name.contains('/') || file.name.contains('\\') || file.name == "." || file.name == ".." {
+            if file.name.is_empty()
+                || file.name.contains('/')
+                || file.name.contains('\\')
+                || file.name == "."
+                || file.name == ".."
+            {
                 return Err(SherpaKwsManifestError::InvalidFileName(file.name));
             }
             if !SHERPA_KWS_REQUIRED_FILES.contains(&file.name) {
@@ -101,11 +110,31 @@ fn valid_sha256(value: &str) -> bool {
 }
 
 pub const V1_SHERPA_KWS_MODEL_FILES: [SherpaKwsModelFile; 5] = [
-    SherpaKwsModelFile { name: SHERPA_KWS_ENCODER_FILE, bytes: 12174219, sha256: "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693" },
-    SherpaKwsModelFile { name: SHERPA_KWS_DECODER_FILE, bytes: 1063189, sha256: "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3" },
-    SherpaKwsModelFile { name: SHERPA_KWS_JOINER_FILE, bytes: 642462, sha256: "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d" },
-    SherpaKwsModelFile { name: SHERPA_KWS_TOKENS_FILE, bytes: 5006, sha256: "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53" },
-    SherpaKwsModelFile { name: SHERPA_KWS_BPE_FILE, bytes: 244837, sha256: "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24" },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_ENCODER_FILE,
+        bytes: 12174219,
+        sha256: "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_DECODER_FILE,
+        bytes: 1063189,
+        sha256: "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_JOINER_FILE,
+        bytes: 642462,
+        sha256: "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_TOKENS_FILE,
+        bytes: 5006,
+        sha256: "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_BPE_FILE,
+        bytes: 244837,
+        sha256: "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24",
+    },
 ];
 
 pub const V1_SHERPA_KWS_MODEL_MANIFEST: SherpaKwsModelManifest = SherpaKwsModelManifest {
@@ -148,13 +177,21 @@ mod tests {
     fn mutable_or_insecure_sources_are_rejected() {
         let mut manifest = V1_SHERPA_KWS_MODEL_MANIFEST;
         manifest.archive_url = "https://example.invalid/latest/model.tar.bz2";
-        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::MutableOrInsecureSource));
+        assert_eq!(
+            manifest.validate(),
+            Err(SherpaKwsManifestError::MutableOrInsecureSource)
+        );
     }
 
     #[test]
     fn exact_fp32_consumed_file_set_is_required() {
         let mut manifest = V1_SHERPA_KWS_MODEL_MANIFEST;
         manifest.files = &V1_SHERPA_KWS_MODEL_FILES[..4];
-        assert_eq!(manifest.validate(), Err(SherpaKwsManifestError::MissingRequiredFile(SHERPA_KWS_BPE_FILE)));
+        assert_eq!(
+            manifest.validate(),
+            Err(SherpaKwsManifestError::MissingRequiredFile(
+                SHERPA_KWS_BPE_FILE
+            ))
+        );
     }
 }
