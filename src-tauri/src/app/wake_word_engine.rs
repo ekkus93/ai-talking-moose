@@ -319,6 +319,55 @@ mod tests {
         }
     }
 
+    struct CountingEngine {
+        config: SherpaKwsConfig,
+        accepted_batches: usize,
+        accepted_samples: usize,
+    }
+
+    impl SherpaKwsEngine for CountingEngine {
+        fn config(&self) -> &SherpaKwsConfig {
+            &self.config
+        }
+
+        fn accept_pcm16_mono(
+            &mut self,
+            sample_rate_hz: u32,
+            samples: &[i16],
+        ) -> Result<Option<WakeWordDetection>, WakeWordError> {
+            validate_pcm_frame(sample_rate_hz, samples)?;
+            self.accepted_batches = self.accepted_batches.saturating_add(1);
+            self.accepted_samples = self.accepted_samples.saturating_add(samples.len());
+            Ok(None)
+        }
+
+        fn reset_stream(&mut self) -> Result<(), WakeWordError> {
+            Ok(())
+        }
+
+        fn shutdown(&mut self) -> Result<(), WakeWordError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn invalid_pcm_is_rejected_before_kws_feed_mutation() {
+        let mut engine = CountingEngine {
+            config: SherpaKwsConfig::default(),
+            accepted_batches: 0,
+            accepted_samples: 0,
+        };
+
+        assert!(engine.accept_pcm16_mono(48_000, &[1, 2]).is_err());
+        assert!(engine.accept_pcm16_mono(16_000, &[]).is_err());
+        assert_eq!(engine.accepted_batches, 0);
+        assert_eq!(engine.accepted_samples, 0);
+
+        assert!(engine.accept_pcm16_mono(16_000, &[1, 2]).unwrap().is_none());
+        assert_eq!(engine.accepted_batches, 1);
+        assert_eq!(engine.accepted_samples, 2);
+    }
+
     #[test]
     fn engine_boundary_supports_feed_reset_and_idempotent_shutdown_contract() {
         let mut engine = FakeEngine {
