@@ -77,7 +77,10 @@ export const WakeWordSettingsPanel: React.FC = () => {
       </div>
 
       <div className="flex gap-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded p-2">
-        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+        <AlertCircle
+          className="w-3.5 h-3.5 flex-shrink-0"
+          aria-hidden="true"
+        />
         <span>
           Wake Word V1 is disabled by default and has no barge-in support; Moose
           will not listen for wake phrases while it is talking.
