@@ -128,36 +128,38 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-100 — Complete model artifact identities and provenance
 
-- [ ] Obtain the exact selected GigaSpeech KWS model archive through an independently verifiable source.
-- [ ] Run deterministic identity freezing.
-- [ ] Record model archive byte size.
-- [ ] Record model archive SHA-256.
-- [ ] Record exact encoder filename/path, byte size, SHA-256.
-- [ ] Record exact decoder filename/path, byte size, SHA-256.
-- [ ] Record exact joiner filename/path, byte size, SHA-256.
-- [ ] Record exact `tokens.txt` byte size and SHA-256.
-- [ ] Record exact `bpe.model` byte size and SHA-256.
-- [ ] Deterministically generate/freeze the exact `HEY MOOSE` keyword representation required by the native API.
-- [ ] Record keyword artifact bytes/hash if represented as a file.
-- [ ] Populate `wake-word-artifacts.json` with production model entries.
-- [ ] Populate/replace Rust manifest placeholders with real identities or generate Rust data from the authoritative manifest.
-- [ ] Ensure Rust and JSON manifests cannot drift silently.
-- [ ] Remove zero-byte/empty-hash production placeholders.
+- [x] Obtain the exact selected GigaSpeech KWS model archive through an independently verifiable source.
+- [x] Run deterministic identity freezing.
+- [x] Record model archive byte size.
+- [x] Record model archive SHA-256.
+- [x] Record exact encoder filename/path, byte size, SHA-256.
+- [x] Record exact decoder filename/path, byte size, SHA-256.
+- [x] Record exact joiner filename/path, byte size, SHA-256.
+- [x] Record exact `tokens.txt` byte size and SHA-256.
+- [x] Record exact `bpe.model` byte size and SHA-256.
+- [x] Deterministically generate/freeze the exact `HEY MOOSE` keyword representation required by the native API.
+- [x] Record keyword artifact bytes/hash if represented as a file.
+- [x] Populate `wake-word-artifacts.json` with production model entries.
+- [x] Populate/replace Rust manifest placeholders with real identities or generate Rust data from the authoritative manifest.
+- [x] Ensure Rust and JSON manifests cannot drift silently.
+- [x] Remove zero-byte/empty-hash production placeholders.
 
 **Provenance/license**
 
-- [ ] Independently verify model provenance.
-- [ ] Independently verify model license.
-- [ ] Remove any unverified hard-coded license assertion.
-- [ ] Add required model attribution/notices.
-- [ ] Make docs distinguish runtime license from model license.
+- [x] Independently verify model provenance.
+- [x] Independently verify model license.
+- [x] Remove any unverified hard-coded license assertion.
+- [x] Add required model attribution/notices.
+- [x] Make docs distinguish runtime license from model license.
 
 **Acceptance**
 
-- [ ] Every consumed production model/tokenizer/keyword input has immutable identity.
-- [ ] Repository provenance/license information is internally consistent.
-- [ ] Any byte mismatch fails closed.
+- [x] Every consumed production model/tokenizer/keyword input has immutable identity.
+- [x] Repository provenance/license information is internally consistent.
+- [x] Any byte mismatch fails closed.
 
+
+**Evidence:** `docs/evidence/WWR-100_MODEL_IDENTITY_2026-09-17.md`; implementation merged in PR #178 at `2319947000fd629f0f1308389fe40dd074ac1198`. Exact final PR head `18d5c798c06a38c17c93418e2cec0a297d4305ca` passed ordinary CI `35289861261`, Wake Artifact Verification `35289861279`, and Wake Word model identity freeze `35289861291`.
 ---
 
 ## WWR-110 — Complete sherpa native runtime identities and packaging
@@ -498,6 +500,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [ ] Record exact model/runtime identity.
 - [ ] Record score/threshold.
 - [ ] Record positive detections.
+
 - [ ] Record false rejects.
 - [ ] Record negative false accepts.
 - [ ] Version explicit pass/fail criteria.
