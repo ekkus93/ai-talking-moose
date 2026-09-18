@@ -265,23 +265,25 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-210 — Fix PCM validation ordering
 
-- [ ] Validate/canonicalize PCM before ring-buffer append.
-- [ ] Validate/canonicalize PCM before KWS feed.
-- [ ] Validate/canonicalize PCM before live handoff append.
-- [ ] Ensure invalid frames do not mutate Wake Word retained state.
-- [ ] Ensure prior valid pre-roll remains unchanged after invalid input.
+- [x] Validate/canonicalize PCM before ring-buffer append.
+- [x] Validate/canonicalize PCM before KWS feed.
+- [x] Validate/canonicalize PCM before live handoff append.
+- [x] Ensure invalid frames do not mutate Wake Word retained state.
+- [x] Ensure prior valid pre-roll remains unchanged after invalid input.
 
 **Tests**
 
-- [ ] 48-kHz frame is rejected before append.
-- [ ] Empty frame is rejected before append.
-- [ ] Invalid frame is not fed to KWS.
-- [ ] Invalid frame does not alter ring snapshot.
-- [ ] Valid canonical frame is appended/fed exactly once.
+- [x] 48-kHz frame is rejected before append.
+- [x] Empty frame is rejected before append.
+- [x] Invalid frame is not fed to KWS.
+- [x] Invalid frame does not alter ring snapshot.
+- [x] Valid canonical frame is appended/fed exactly once.
 
 **Acceptance**
 
-- [ ] Non-canonical PCM cannot contaminate pre-roll.
+- [x] Non-canonical PCM cannot contaminate pre-roll.
+
+**Evidence:** implementation completed across PR #187 and PR #189. PR #187 merged at `5be1539d0ba03b9a8e072a035752d19df3b872c1` with exact PR-head ordinary CI `35303924318`, adding validation before live wake→ASR handoff retention in `src-tauri/src/asr/wake_word_handoff.rs`. PR #189 merged at `c8b43524b01719454543517ccd21e2fe9a457504` with exact PR-head ordinary CI `35317569091` on `1d9a4bd891aff735caad2aee96f795e79d3e39d6`, adding validation before ring-buffer retention in `WakeWordRuntimeManager::append_listening_pcm_frame` and regression coverage proving invalid 48-kHz/empty input leaves retained pre-roll unchanged; it also adds KWS-feed coverage proving invalid frames fail before engine state mutation.
 
 ---
 
@@ -796,7 +798,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 ### Audio/handoff/lifecycle
 
 - [ ] One authoritative microphone ownership path exists.
-- [ ] PCM is validated before retention.
+- [x] PCM is validated before retention.
 - [ ] Ring buffer and KWS share one chronological canonical stream.
 - [ ] Wake→ASR pre-roll/live handoff is continuous.
 - [ ] First command word is not clipped.
