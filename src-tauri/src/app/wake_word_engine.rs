@@ -170,15 +170,15 @@ const V1_RUNTIME_PLATFORM: &str = "linux-x86_64";
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 const V1_RUNTIME_FILES: [VerifiedArtifact; 2] = [
     VerifiedArtifact {
-        relative_path: "sherpa-onnx/native/linux-x64/libonnxruntime.so",
+        relative_path: "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libonnxruntime.so",
         bytes: 27_026_609,
         sha256: "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e",
         architecture: Some(NativeArchitecture::ElfX86_64),
     },
     VerifiedArtifact {
-        relative_path: "sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so",
-        bytes: 5_166_360,
-        sha256: "adcabd1866f667ec78796a504ff96030eff30fbd80792e892752c64a861bf231",
+        relative_path: "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libsherpa-onnx-c-api.so",
+        bytes: 5_124_192,
+        sha256: "b8351ca1632571ac108adbb317bcc4bf7cfe84b72690e3017316b0da3e1e344f",
         architecture: Some(NativeArchitecture::ElfX86_64),
     },
 ];
@@ -188,25 +188,27 @@ const V1_RUNTIME_PLATFORM: &str = "macos-arm64";
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 const V1_RUNTIME_FILES: [VerifiedArtifact; 2] = [
     VerifiedArtifact {
-        relative_path: "sherpa-onnx/native/osx-aarch64/libonnxruntime.dylib",
-        bytes: 29_006_384,
-        sha256: "b0613d0ae53199a83b05fa48e169211498e9d40d54beaa372068ebe5ec5b0929",
+        relative_path: "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libonnxruntime.dylib",
+        bytes: 28_775_120,
+        sha256: "3567d114f7299d559993e536d605a6f46d7bc9d2542004accc80ee9bf5457f0b",
         architecture: Some(NativeArchitecture::MachOArm64),
     },
     VerifiedArtifact {
-        relative_path: "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-jni.dylib",
-        bytes: 4_218_024,
-        sha256: "e8025656a2680b838dd7ccd7d7ee7e88e5da42a35ad010d8717c22dd7b851ca1",
+        relative_path: "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libsherpa-onnx-c-api.dylib",
+        bytes: 4_172_832,
+        sha256: "ee098d8b419d49b92101cde3c970a333b361066eb2d79a11ab480a116552b908",
         architecture: Some(NativeArchitecture::MachOArm64),
     },
 ];
 
-const SHERPA_KWS_C_API_SYMBOLS: [&str; 7] = [
+const SHERPA_KWS_C_API_SYMBOLS: [&str; 9] = [
     "SherpaOnnxCreateKeywordSpotter",
-    "SherpaOnnxCreateOnlineStream",
+    "SherpaOnnxCreateKeywordStream",
     "SherpaOnnxOnlineStreamAcceptWaveform",
-    "SherpaOnnxDecodeKeywordSpotter",
+    "SherpaOnnxIsKeywordStreamReady",
+    "SherpaOnnxDecodeKeywordStream",
     "SherpaOnnxGetKeywordResult",
+    "SherpaOnnxDestroyKeywordResult",
     "SherpaOnnxDestroyOnlineStream",
     "SherpaOnnxDestroyKeywordSpotter",
 ];
@@ -214,21 +216,23 @@ const SHERPA_KWS_C_API_SYMBOLS: [&str; 7] = [
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct NativeCapiContract {
     library_relative_path: &'static str,
-    required_symbols: &'static [&'static str; 7],
+    required_symbols: &'static [&'static str; 9],
 }
 
 fn native_capi_contract() -> Result<NativeCapiContract, WakeWordError> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
         Ok(NativeCapiContract {
-            library_relative_path: "sherpa-onnx/native/linux-x64/libsherpa-onnx-c-api.so",
+            library_relative_path:
+                "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libsherpa-onnx-c-api.so",
             required_symbols: &SHERPA_KWS_C_API_SYMBOLS,
         })
     }
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
         Ok(NativeCapiContract {
-            library_relative_path: "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-c-api.dylib",
+            library_relative_path:
+                "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libsherpa-onnx-c-api.dylib",
             required_symbols: &SHERPA_KWS_C_API_SYMBOLS,
         })
     }
@@ -285,7 +289,7 @@ impl NativeKwsSession {
         SHERPA_KWS_KEYWORD_REPRESENTATION
     }
 
-    pub fn required_native_c_api_symbols(&self) -> &'static [&'static str; 7] {
+    pub fn required_native_c_api_symbols(&self) -> &'static [&'static str; 9] {
         &SHERPA_KWS_C_API_SYMBOLS
     }
 
@@ -906,13 +910,25 @@ mod tests {
             shutdown: false,
         };
         let symbols = session.required_native_c_api_symbols();
+        assert_eq!(symbols.len(), 9);
         assert!(symbols.contains(&"SherpaOnnxCreateKeywordSpotter"));
-        assert!(symbols.contains(&"SherpaOnnxDecodeKeywordSpotter"));
+        assert!(symbols.contains(&"SherpaOnnxDecodeKeywordStream"));
         assert!(!symbols.iter().any(|symbol| symbol.contains("Transducer")));
         assert!(!symbols
             .iter()
             .any(|symbol| symbol.contains("OfflineRecognizer")));
         assert!(!symbols.iter().any(|symbol| symbol.contains("Whisper")));
+    }
+
+    #[test]
+    fn runtime_contract_uses_shared_c_api_artifacts_not_jni() {
+        let files = runtime_files().unwrap();
+        assert!(files.iter().any(|f| f.relative_path.contains("c-api")));
+        assert!(!files.iter().any(|f| f.relative_path.contains("jni")));
+        let contract = native_capi_contract().unwrap();
+        assert!(contract
+            .library_relative_path
+            .contains("shared/lib/libsherpa-onnx-c-api"));
     }
 
     #[test]
