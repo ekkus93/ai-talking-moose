@@ -668,10 +668,7 @@ mod tests {
         assert_eq!(engine.accepted_batches, 0);
         assert_eq!(engine.accepted_samples, 0);
 
-        assert!(engine
-            .accept_pcm16_mono(16_000, &[1, 2])
-            .unwrap()
-            .is_none());
+        assert!(engine.accept_pcm16_mono(16_000, &[1, 2]).unwrap().is_none());
         assert_eq!(engine.accepted_batches, 1);
         assert_eq!(engine.accepted_samples, 2);
     }
@@ -685,7 +682,9 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(error.kind, WakeWordErrorKind::MissingArtifact);
-        assert!(!error.message.contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!error
+            .message
+            .contains(temp.path().to_string_lossy().as_ref()));
     }
 
     #[test]
