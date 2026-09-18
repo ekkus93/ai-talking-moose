@@ -164,37 +164,39 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-110 — Complete sherpa native runtime identities and packaging
 
-- [ ] Verify the frozen sherpa runtime version used for V1.
-- [ ] Obtain exact Linux x86_64 runtime archive.
-- [ ] Freeze Linux archive byte size/SHA-256.
-- [ ] Freeze all actually loaded Linux native library byte sizes/SHA-256 values.
-- [ ] Verify ELF x86_64 architecture before use.
-- [ ] Obtain exact macOS arm64 runtime archive.
-- [ ] Freeze macOS archive byte size/SHA-256.
-- [ ] Freeze all actually loaded macOS native library byte sizes/SHA-256 values.
-- [ ] Verify Mach-O arm64 architecture before use.
-- [ ] Define deterministic installed runtime directory layout.
-- [ ] Define deterministic package/bundle locations.
-- [ ] Ensure cached artifacts still undergo hash verification.
-- [ ] Produce sanitized unsupported-platform errors.
-- [ ] Add complete sherpa runtime Apache-2.0 attribution/notices.
-- [ ] Do not add additional supported architectures without real acceptance.
+- [x] Verify the frozen sherpa runtime version used for V1.
+- [x] Obtain exact Linux x86_64 runtime archive.
+- [x] Freeze Linux archive byte size/SHA-256.
+- [x] Freeze all actually loaded Linux native library byte sizes/SHA-256 values.
+- [x] Verify ELF x86_64 architecture before use.
+- [x] Obtain exact macOS arm64 runtime archive.
+- [x] Freeze macOS archive byte size/SHA-256.
+- [x] Freeze all actually loaded macOS native library byte sizes/SHA-256 values.
+- [x] Verify Mach-O arm64 architecture before use.
+- [x] Define deterministic installed runtime directory layout.
+- [x] Define deterministic package/bundle locations.
+- [x] Ensure cached artifacts still undergo hash verification.
+- [x] Produce sanitized unsupported-platform errors.
+- [x] Add complete sherpa runtime Apache-2.0 attribution/notices.
+- [x] Do not add additional supported architectures without real acceptance.
 
 **Tests**
 
-- [ ] Wrong Linux architecture fails.
-- [ ] Wrong macOS architecture fails.
-- [ ] Corrupt archive fails.
-- [ ] Corrupt consumed library fails.
-- [ ] Missing required library fails.
-- [ ] Unsupported platform fails with sanitized explicit error.
-- [ ] Offline prepared runtime can be located deterministically.
+- [x] Wrong Linux architecture fails.
+- [x] Wrong macOS architecture fails.
+- [x] Corrupt archive fails.
+- [x] Corrupt consumed library fails.
+- [x] Missing required library fails.
+- [x] Unsupported platform fails with sanitized explicit error.
+- [x] Offline prepared runtime can be located deterministically.
 
 **Acceptance**
 
-- [ ] Claimed packages can locate the exact pinned runtime offline.
-- [ ] No wrong-architecture/corrupt runtime can reach inference.
+- [x] Claimed packages can locate the exact pinned runtime offline.
+- [x] No wrong-architecture/corrupt runtime can reach inference.
 
+
+**Evidence:** `docs/evidence/WWR-110_SHERPA_RUNTIME_IDENTITY_2026-09-17.md`; implementation on PR #184. Frozen identities were independently reproduced by runtime-identity workflow `35294590820` on master `4955d1f1872c310f872219b812f5d95a3887e97e`. Exact PR-head `50c562f6421b73e11f7049fbe87764048730f9be` passed ordinary CI `35296408130`, Wake Artifact Verification `35296408236`, Wake Word model identity freeze `35296408238`, and Wake Word runtime identity freeze `35296408308`. Runtime preparation re-verifies cached archives and installed libraries, rejects unsafe archive members, enforces ELF x86_64 / Mach-O arm64 architecture, supports deterministic offline preparation from an explicit archive, and reports unsupported platforms with sanitized errors.
 ---
 
 ## WWR-120 — Expand artifact CI coverage
@@ -398,6 +400,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [ ] Avoid cooldown unless real acceptance shows it is required.
 - [ ] If cooldown is added, make it bounded/configured and document measured justification.
 - [ ] Keep trigger count privacy-safe.
+
 - [ ] Keep last-trigger timing privacy-safe and monotonic where practical.
 
 **Tests**
