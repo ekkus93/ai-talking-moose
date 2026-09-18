@@ -24,14 +24,26 @@ jobs:
           curl --fail --location --retry 3 --output "$archive" \
             'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2'
           echo 'c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4  '"$archive" | sha256sum --check --status
+          echo "WWR_SHARED_ARCHIVE_BYTES=$(stat -c %s "$archive")"
+          echo "WWR_SHARED_ARCHIVE_SHA256=$(sha256sum "$archive" | cut -d' ' -f1)"
           mkdir "$RUNNER_TEMP/shared-runtime"
           tar -xjf "$archive" -C "$RUNNER_TEMP/shared-runtime"
-      - name: Verify KWS C API exports
+      - name: Verify and report KWS C API runtime identities
         shell: bash
         run: |
           set -euo pipefail
           lib="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libsherpa-onnx-c-api.so' -print -quit)"
+          ort="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libonnxruntime.so' -print -quit)"
           test -n "$lib"
+          test -n "$ort"
+          echo "WWR_C_API_RELATIVE_PATH=${lib#"$RUNNER_TEMP/shared-runtime/"}"
+          echo "WWR_C_API_BYTES=$(stat -c %s "$lib")"
+          echo "WWR_C_API_SHA256=$(sha256sum "$lib" | cut -d' ' -f1)"
+          echo "WWR_ORT_RELATIVE_PATH=${ort#"$RUNNER_TEMP/shared-runtime/"}"
+          echo "WWR_ORT_BYTES=$(stat -c %s "$ort")"
+          echo "WWR_ORT_SHA256=$(sha256sum "$ort" | cut -d' ' -f1)"
+          file "$lib"
+          file "$ort"
           symbols=(
             SherpaOnnxCreateKeywordSpotter
             SherpaOnnxCreateKeywordStream
