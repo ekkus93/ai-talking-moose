@@ -97,10 +97,7 @@ mod tests {
         assert_eq!(diagnostics.runtime_id, "sherpa-onnx-v1.13.8");
         assert_eq!(diagnostics.platform, std::env::consts::OS);
         assert_eq!(diagnostics.architecture, std::env::consts::ARCH);
-        assert_eq!(
-            diagnostics.canonical_sample_rate_hz,
-            V1_KWS_SAMPLE_RATE_HZ
-        );
+        assert_eq!(diagnostics.canonical_sample_rate_hz, V1_KWS_SAMPLE_RATE_HZ);
         assert_eq!(diagnostics.canonical_channels, V1_KWS_CHANNELS as u8);
         assert_eq!(diagnostics.inference_threads, V1_KWS_THREADS as u8);
         assert_eq!(diagnostics.threshold, V1_WAKE_THRESHOLD);
