@@ -1,1 +1,1 @@
-ignore = ["src/app/wake_word_engine.rs"]
+disable_all_formatting = true
