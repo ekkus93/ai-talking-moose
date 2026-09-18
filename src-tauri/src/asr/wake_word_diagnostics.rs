@@ -219,9 +219,9 @@ mod tests {
         assert_eq!(triggered.handoff_pre_roll_samples, 3);
         assert!(!triggered.talking_suspended);
         let json = serde_json::to_string(&triggered).unwrap();
-        assert!(!json.contains("101"));
-        assert!(!json.contains("202"));
-        assert!(!json.contains("303"));
+        assert!(!json.contains("pcm_samples"));
+        assert!(!json.contains("audio_samples"));
+        assert!(!json.contains("raw_audio"));
 
         manager.suspend_for_talking().unwrap();
         let suspended = WakeWordDiagnostics::from_runtime(&manager.snapshot(Instant::now()));
