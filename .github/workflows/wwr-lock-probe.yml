@@ -25,8 +25,7 @@ jobs:
             exit 0
           fi
           cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
-          echo 'WWR_LOCK_GZIP_BASE64_BEGIN'
-          gzip -c src-tauri/Cargo.lock | base64 -w0
-          echo
-          echo 'WWR_LOCK_GZIP_BASE64_END'
+          echo 'WWR_LOCK_DIFF_BEGIN'
+          git diff -- src-tauri/Cargo.lock
+          echo 'WWR_LOCK_DIFF_END'
           exit 1
