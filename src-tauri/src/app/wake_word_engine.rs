@@ -909,7 +909,9 @@ mod tests {
         assert!(symbols.contains(&"SherpaOnnxCreateKeywordSpotter"));
         assert!(symbols.contains(&"SherpaOnnxDecodeKeywordSpotter"));
         assert!(!symbols.iter().any(|symbol| symbol.contains("Transducer")));
-        assert!(!symbols.iter().any(|symbol| symbol.contains("OfflineRecognizer")));
+        assert!(!symbols
+            .iter()
+            .any(|symbol| symbol.contains("OfflineRecognizer")));
         assert!(!symbols.iter().any(|symbol| symbol.contains("Whisper")));
     }
 
@@ -923,7 +925,9 @@ mod tests {
             "missing required Wake Word native C API library"
         );
         assert!(error.retryable);
-        assert!(!error.message.contains(temp.path().to_string_lossy().as_ref()));
+        assert!(!error
+            .message
+            .contains(temp.path().to_string_lossy().as_ref()));
     }
 
     #[test]
