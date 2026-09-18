@@ -9,18 +9,18 @@ permissions:
   contents: read
 
 jobs:
-  emit-lockfile:
+  emit-lockfile-diff:
     if: github.head_ref == 'ralph/wwr-200-native-kws-link'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - name: Generate and emit compressed lockfile
+      - name: Resolve only the stale lockfile and emit its diff
         shell: bash
         run: |
           set -euo pipefail
-          cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
-          echo 'WWR_LOCKFILE_GZIP_BASE64_BEGIN'
-          gzip -9 -c src-tauri/Cargo.lock | base64 -w 120
-          echo 'WWR_LOCKFILE_GZIP_BASE64_END'
+          cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 >/dev/null
+          echo 'WWR_LOCKFILE_DIFF_BEGIN'
+          git diff -- src-tauri/Cargo.lock
+          echo 'WWR_LOCKFILE_DIFF_END'
