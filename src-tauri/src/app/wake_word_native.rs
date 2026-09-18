@@ -503,6 +503,7 @@ pub struct NativeSherpaKwsSession {
 
 unsafe impl Send for NativeSherpaKwsSession {}
 
+
 impl NativeSherpaKwsSession {
     pub fn new(paths: &NativeSherpaPaths, config: &SherpaKwsConfig) -> Result<Self, WakeWordError> {
         config.validate()?;
@@ -803,3 +804,63 @@ mod tests {
         let root = tempdir().unwrap();
         let missing = root.path().join("missing");
         let expected = ExpectedIdentity {
+            bytes: 3,
+            sha256: ring::digest::digest(&SHA256, b"abc")
+                .as_ref()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
+            architecture: None,
+        };
+        assert_eq!(
+            verify_file(&missing, &expected).unwrap_err().kind,
+            WakeWordErrorKind::MissingArtifact
+        );
+
+        let corrupt = root.path().join("artifact");
+        File::create(&corrupt)
+            .unwrap()
+            .write_all(b"abd")
+            .unwrap();
+        assert_eq!(
+            verify_file(&corrupt, &expected).unwrap_err().kind,
+            WakeWordErrorKind::InvalidArtifact
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_load_failure_is_sanitized() {
+        let error = DynamicLibrary::open(Path::new("/definitely/not/a/library.so"), false)
+            .err()
+            .unwrap();
+        assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
+        assert!(!error.message.contains('/'));
+        assert!(!error.message.contains(".so"));
+    }
+
+    #[test]
+    fn v1_native_policy_is_observable() {
+        let config = SherpaKwsConfig::default();
+        assert_eq!(config.threads, 1);
+        assert_eq!(config.score, 1.0);
+        assert_eq!(config.threshold, 0.25);
+        assert_eq!(config.sample_rate_hz, 16_000);
+        assert_eq!(config.feature_dim, 80);
+    }
+
+    #[test]
+    fn production_manifest_names_c_api_not_jni() {
+        let document = manifest().unwrap();
+        let serialized = document.to_string();
+        assert!(serialized.contains("libsherpa-onnx-c-api"));
+        assert!(!serialized.contains("libsherpa-onnx-jni"));
+        assert_eq!(
+            document
+                .get("runtime")
+                .and_then(|r| r.get("abi"))
+                .and_then(Value::as_str),
+            Some("sherpa-onnx-c-api")
+        );
+    }
+}
