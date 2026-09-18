@@ -25,11 +25,7 @@ pub struct WakeWordError {
 impl WakeWordError {
     pub fn sanitized(kind: WakeWordErrorKind, message: impl Into<String>, retryable: bool) -> Self {
         let message = sanitize_error_message(&message.into());
-        Self {
-            kind,
-            message,
-            retryable,
-        }
+        Self { kind, message, retryable }
     }
 }
 
@@ -65,53 +61,25 @@ impl SherpaKwsConfig {
 
     pub fn validate(&self) -> Result<(), WakeWordError> {
         if self.sample_rate_hz != V1_KWS_SAMPLE_RATE_HZ {
-            return Err(WakeWordError::sanitized(
-                WakeWordErrorKind::InvalidConfiguration,
-                "wake KWS sample rate must be 16000 Hz",
-                false,
-            ));
+            return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS sample rate must be 16000 Hz", false));
         }
         if self.channels != V1_KWS_CHANNELS {
-            return Err(WakeWordError::sanitized(
-                WakeWordErrorKind::InvalidConfiguration,
-                "wake KWS input must be mono",
-                false,
-            ));
+            return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS input must be mono", false));
         }
         if self.feature_dim != V1_KWS_FEATURE_DIM {
-            return Err(WakeWordError::sanitized(
-                WakeWordErrorKind::InvalidConfiguration,
-                "wake KWS feature dimension must be 80",
-                false,
-            ));
+            return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS feature dimension must be 80", false));
         }
         if self.threads != V1_KWS_THREADS {
-            return Err(WakeWordError::sanitized(
-                WakeWordErrorKind::InvalidConfiguration,
-                "wake KWS V1 must use one inference thread",
-                false,
-            ));
+            return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS V1 must use one inference thread", false));
         }
         if !self.keyword.trim().eq_ignore_ascii_case(V1_KWS_KEYWORD) {
-            return Err(WakeWordError::sanitized(
-                WakeWordErrorKind::InvalidConfiguration,
-                format!("wake KWS keyword must match {DEFAULT_WAKE_PHRASE}"),
-                false,
-            ));
+            return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, format!("wake KWS keyword must match {DEFAULT_WAKE_PHRASE}"), false));
         }
         if !self.score.is_finite() || self.score != V1_WAKE_SCORE {
-            return Err(WakeWordError::sanitized(
-                WakeWordErrorKind::InvalidConfiguration,
-                "wake KWS V1 score must be 1.0",
-                false,
-            ));
+            return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS V1 score must be 1.0", false));
         }
         if !self.threshold.is_finite() || self.threshold != V1_WAKE_THRESHOLD {
-            return Err(WakeWordError::sanitized(
-                WakeWordErrorKind::InvalidConfiguration,
-                "wake KWS V1 threshold must be 0.25",
-                false,
-            ));
+            return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS V1 threshold must be 0.25", false));
         }
         Ok(())
     }
@@ -125,40 +93,38 @@ pub struct WakeWordDetection {
 
 impl WakeWordDetection {
     pub fn v1_detected(score: f32) -> Self {
-        Self {
-            keyword: DEFAULT_WAKE_PHRASE.to_string(),
-            score,
-        }
+        Self { keyword: DEFAULT_WAKE_PHRASE.to_string(), score }
     }
 }
 
 pub trait SherpaKwsEngine {
     fn config(&self) -> &SherpaKwsConfig;
-    fn accept_pcm16_mono(
-        &mut self,
-        sample_rate_hz: u32,
-        samples: &[i16],
-    ) -> Result<Option<WakeWordDetection>, WakeWordError>;
+    fn accept_pcm16_mono(&mut self, sample_rate_hz: u32, samples: &[i16]) -> Result<Option<WakeWordDetection>, WakeWordError>;
     fn reset_stream(&mut self) -> Result<(), WakeWordError>;
     fn shutdown(&mut self) -> Result<(), WakeWordError>;
 }
 
 pub fn validate_pcm_frame(sample_rate_hz: u32, samples: &[i16]) -> Result<(), WakeWordError> {
     if sample_rate_hz != V1_KWS_SAMPLE_RATE_HZ {
-        return Err(WakeWordError::sanitized(
-            WakeWordErrorKind::InvalidConfiguration,
-            "wake KWS frame sample rate must be 16000 Hz",
-            false,
-        ));
+        return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS frame sample rate must be 16000 Hz", false));
     }
     if samples.is_empty() {
-        return Err(WakeWordError::sanitized(
-            WakeWordErrorKind::InvalidConfiguration,
-            "wake KWS frame must contain at least one sample",
-            false,
-        ));
+        return Err(WakeWordError::sanitized(WakeWordErrorKind::InvalidConfiguration, "wake KWS frame must contain at least one sample", false));
     }
     Ok(())
+}
+
+/// Feed one frame through the canonical Wake Word KWS boundary.
+///
+/// Validation is deliberately performed before invoking the engine so invalid
+/// PCM cannot mutate native/fake stream state or reach inference.
+pub fn accept_validated_pcm16_mono(
+    engine: &mut dyn SherpaKwsEngine,
+    sample_rate_hz: u32,
+    samples: &[i16],
+) -> Result<Option<WakeWordDetection>, WakeWordError> {
+    validate_pcm_frame(sample_rate_hz, samples)?;
+    engine.accept_pcm16_mono(sample_rate_hz, samples)
 }
 
 fn sanitize_error_message(message: &str) -> String {
@@ -166,16 +132,10 @@ fn sanitize_error_message(message: &str) -> String {
     for token in message.split_whitespace() {
         let looks_like_path = token.contains('/') || token.contains('\\');
         let looks_like_secret = token.len() >= 24
-            && token
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'));
-        if looks_like_path {
-            sanitized.push_str("<path>");
-        } else if looks_like_secret {
-            sanitized.push_str("<redacted>");
-        } else {
-            sanitized.push_str(token);
-        }
+            && token.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'));
+        if looks_like_path { sanitized.push_str("<path>"); }
+        else if looks_like_secret { sanitized.push_str("<redacted>"); }
+        else { sanitized.push_str(token); }
         sanitized.push(' ');
     }
     sanitized.trim_end().to_string()
@@ -200,62 +160,24 @@ mod tests {
 
     #[test]
     fn config_rejects_drift_from_frozen_v1_policy() {
-        let config = SherpaKwsConfig {
-            sample_rate_hz: 48_000,
-            ..Default::default()
-        };
-        assert_eq!(
-            config.validate().unwrap_err().kind,
-            WakeWordErrorKind::InvalidConfiguration
-        );
-
-        let config = SherpaKwsConfig {
-            threads: 2,
-            ..Default::default()
-        };
-        assert_eq!(
-            config.validate().unwrap_err().message,
-            "wake KWS V1 must use one inference thread"
-        );
-
-        let config = SherpaKwsConfig {
-            channels: 2,
-            ..Default::default()
-        };
+        let config = SherpaKwsConfig { sample_rate_hz: 48_000, ..Default::default() };
+        assert_eq!(config.validate().unwrap_err().kind, WakeWordErrorKind::InvalidConfiguration);
+        let config = SherpaKwsConfig { threads: 2, ..Default::default() };
+        assert_eq!(config.validate().unwrap_err().message, "wake KWS V1 must use one inference thread");
+        let config = SherpaKwsConfig { channels: 2, ..Default::default() };
         assert!(config.validate().is_err());
-
-        let config = SherpaKwsConfig {
-            score: 0.5,
-            ..Default::default()
-        };
+        let config = SherpaKwsConfig { score: 0.5, ..Default::default() };
         assert!(config.validate().is_err());
-
-        let config = SherpaKwsConfig {
-            keyword: "HEY BRUCE".to_string(),
-            ..Default::default()
-        };
+        let config = SherpaKwsConfig { keyword: "HEY BRUCE".to_string(), ..Default::default() };
         assert!(config.validate().is_err());
-
-        let config = SherpaKwsConfig {
-            threshold: 0.5,
-            ..Default::default()
-        };
+        let config = SherpaKwsConfig { threshold: 0.5, ..Default::default() };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn engine_artifact_contract_matches_manifest_exactly() {
         let config = SherpaKwsConfig::default();
-        assert_eq!(
-            config.required_artifact_files(),
-            &[
-                "encoder-epoch-12-avg-2-chunk-16-left-64.onnx",
-                "decoder-epoch-12-avg-2-chunk-16-left-64.onnx",
-                "joiner-epoch-12-avg-2-chunk-16-left-64.onnx",
-                "tokens.txt",
-                "bpe.model",
-            ]
-        );
+        assert_eq!(config.required_artifact_files(), &["encoder-epoch-12-avg-2-chunk-16-left-64.onnx", "decoder-epoch-12-avg-2-chunk-16-left-64.onnx", "joiner-epoch-12-avg-2-chunk-16-left-64.onnx", "tokens.txt", "bpe.model"]);
     }
 
     #[test]
@@ -274,11 +196,7 @@ mod tests {
 
     #[test]
     fn errors_sanitize_paths_and_token_like_secrets() {
-        let error = WakeWordError::sanitized(
-            WakeWordErrorKind::RuntimeUnavailable,
-            "failed /tmp/private/model.onnx token abcdefghijklmnopqrstuvwxyz123456",
-            true,
-        );
+        let error = WakeWordError::sanitized(WakeWordErrorKind::RuntimeUnavailable, "failed /tmp/private/model.onnx token abcdefghijklmnopqrstuvwxyz123456", true);
         assert_eq!(error.message, "failed <path> token <redacted>");
         assert!(error.retryable);
     }
@@ -287,59 +205,39 @@ mod tests {
         config: SherpaKwsConfig,
         triggered: bool,
         shutdowns: u8,
+        feeds: u8,
     }
 
     impl SherpaKwsEngine for FakeEngine {
-        fn config(&self) -> &SherpaKwsConfig {
-            &self.config
-        }
-
-        fn accept_pcm16_mono(
-            &mut self,
-            sample_rate_hz: u32,
-            samples: &[i16],
-        ) -> Result<Option<WakeWordDetection>, WakeWordError> {
+        fn config(&self) -> &SherpaKwsConfig { &self.config }
+        fn accept_pcm16_mono(&mut self, sample_rate_hz: u32, samples: &[i16]) -> Result<Option<WakeWordDetection>, WakeWordError> {
+            self.feeds = self.feeds.saturating_add(1);
             validate_pcm_frame(sample_rate_hz, samples)?;
-            if self.triggered {
-                Ok(None)
-            } else {
-                self.triggered = true;
-                Ok(Some(WakeWordDetection::v1_detected(V1_WAKE_SCORE)))
-            }
+            if self.triggered { Ok(None) } else { self.triggered = true; Ok(Some(WakeWordDetection::v1_detected(V1_WAKE_SCORE))) }
         }
+        fn reset_stream(&mut self) -> Result<(), WakeWordError> { self.triggered = false; Ok(()) }
+        fn shutdown(&mut self) -> Result<(), WakeWordError> { self.shutdowns = self.shutdowns.saturating_add(1); Ok(()) }
+    }
 
-        fn reset_stream(&mut self) -> Result<(), WakeWordError> {
-            self.triggered = false;
-            Ok(())
-        }
-
-        fn shutdown(&mut self) -> Result<(), WakeWordError> {
-            self.shutdowns = self.shutdowns.saturating_add(1);
-            Ok(())
-        }
+    #[test]
+    fn canonical_feed_rejects_invalid_pcm_before_engine_mutation() {
+        let mut engine = FakeEngine { config: SherpaKwsConfig::default(), triggered: false, shutdowns: 0, feeds: 0 };
+        assert!(accept_validated_pcm16_mono(&mut engine, 48_000, &[1, 2]).is_err());
+        assert!(accept_validated_pcm16_mono(&mut engine, 16_000, &[]).is_err());
+        assert_eq!(engine.feeds, 0);
+        assert!(!engine.triggered);
+        assert!(accept_validated_pcm16_mono(&mut engine, 16_000, &[1, 2]).unwrap().is_some());
+        assert_eq!(engine.feeds, 1);
     }
 
     #[test]
     fn engine_boundary_supports_feed_reset_and_idempotent_shutdown_contract() {
-        let mut engine = FakeEngine {
-            config: SherpaKwsConfig::default(),
-            triggered: false,
-            shutdowns: 0,
-        };
+        let mut engine = FakeEngine { config: SherpaKwsConfig::default(), triggered: false, shutdowns: 0, feeds: 0 };
         engine.config().validate().unwrap();
-        assert!(engine
-            .accept_pcm16_mono(16_000, &[1, 2, 3])
-            .unwrap()
-            .is_some());
-        assert!(engine
-            .accept_pcm16_mono(16_000, &[1, 2, 3])
-            .unwrap()
-            .is_none());
+        assert!(engine.accept_pcm16_mono(16_000, &[1, 2, 3]).unwrap().is_some());
+        assert!(engine.accept_pcm16_mono(16_000, &[1, 2, 3]).unwrap().is_none());
         engine.reset_stream().unwrap();
-        assert!(engine
-            .accept_pcm16_mono(16_000, &[1, 2, 3])
-            .unwrap()
-            .is_some());
+        assert!(engine.accept_pcm16_mono(16_000, &[1, 2, 3]).unwrap().is_some());
         engine.shutdown().unwrap();
         engine.shutdown().unwrap();
         assert_eq!(engine.shutdowns, 2);
