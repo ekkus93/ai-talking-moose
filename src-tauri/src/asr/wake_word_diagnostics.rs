@@ -1,4 +1,7 @@
 use crate::asr::wake_word_runtime::{WakeWordRuntimePhase, WakeWordRuntimeSnapshot};
+use crate::asr::wake_word_sherpa_manifest::{
+    SHERPA_KWS_KEYWORD_SHA256, V1_SHERPA_KWS_MODEL_MANIFEST,
+};
 use crate::wake_word_policy::{
     V1_KWS_CHANNELS, V1_KWS_SAMPLE_RATE_HZ, V1_KWS_THREADS, V1_WAKE_SCORE, V1_WAKE_THRESHOLD,
 };
@@ -8,17 +11,30 @@ use std::time::Duration;
 pub const WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ: u32 = V1_KWS_SAMPLE_RATE_HZ;
 pub const WAKE_WORD_CANONICAL_CHANNELS: u8 = V1_KWS_CHANNELS as u8;
 pub const WAKE_WORD_ENGINE_ID: &str = "sherpa-onnx-kws";
+pub const WAKE_WORD_RUNTIME_ID: &str = "sherpa-onnx-v1.13.8";
+pub const WAKE_WORD_RUNTIME_LICENSE: &str = "Apache-2.0";
+pub const WAKE_WORD_RUNTIME_LINUX_X86_64_C_API_SHA256: &str =
+    "b8351ca1632571ac108adbb317bcc4bf7cfe84b72690e3017316b0da3e1e344f";
+pub const WAKE_WORD_RUNTIME_MACOS_ARM64_C_API_SHA256: &str =
+    "ee098d8b419d49b92101cde3c970a333b361066eb2d79a11ab480a116552b908";
 
 /// Privacy-safe Wake Word V1 runtime diagnostics.
 ///
-/// This intentionally exposes only bounded counters, fixed configuration, and
-/// lifecycle state. Raw PCM, transcripts, credentials, and filesystem paths are
-/// not representable in this type.
+/// This intentionally exposes only bounded counters, fixed configuration,
+/// immutable artifact identities, and lifecycle state. Raw PCM, transcripts,
+/// credentials, and filesystem paths are not representable in this type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WakeWordDiagnostics {
     pub enabled: bool,
     pub runtime_phase: WakeWordRuntimePhase,
     pub engine_id: &'static str,
+    pub model_id: &'static str,
+    pub model_archive_sha256: &'static str,
+    pub model_license: &'static str,
+    pub keyword_sha256: &'static str,
+    pub runtime_id: &'static str,
+    pub runtime_license: &'static str,
+    pub runtime_c_api_sha256: Option<&'static str>,
     pub platform: &'static str,
     pub architecture: &'static str,
     pub canonical_sample_rate_hz: u32,
@@ -46,6 +62,13 @@ impl WakeWordDiagnostics {
             ),
             runtime_phase: snapshot.phase,
             engine_id: WAKE_WORD_ENGINE_ID,
+            model_id: V1_SHERPA_KWS_MODEL_MANIFEST.id,
+            model_archive_sha256: V1_SHERPA_KWS_MODEL_MANIFEST.archive_sha256,
+            model_license: V1_SHERPA_KWS_MODEL_MANIFEST.license,
+            keyword_sha256: SHERPA_KWS_KEYWORD_SHA256,
+            runtime_id: WAKE_WORD_RUNTIME_ID,
+            runtime_license: WAKE_WORD_RUNTIME_LICENSE,
+            runtime_c_api_sha256: platform_runtime_c_api_sha256(),
             platform: std::env::consts::OS,
             architecture: std::env::consts::ARCH,
             canonical_sample_rate_hz: V1_KWS_SAMPLE_RATE_HZ,
@@ -63,6 +86,24 @@ impl WakeWordDiagnostics {
             talking_suspended: snapshot.phase == WakeWordRuntimePhase::SuspendedTalking,
             last_error: snapshot.last_error.map(str::to_string),
         }
+    }
+}
+
+fn platform_runtime_c_api_sha256() -> Option<&'static str> {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        Some(WAKE_WORD_RUNTIME_LINUX_X86_64_C_API_SHA256)
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        Some(WAKE_WORD_RUNTIME_MACOS_ARM64_C_API_SHA256)
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    )))]
+    {
+        None
     }
 }
 
@@ -88,6 +129,15 @@ mod tests {
         assert!(!diagnostics.enabled);
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Disabled);
         assert_eq!(diagnostics.engine_id, "sherpa-onnx-kws");
+        assert_eq!(diagnostics.model_id, V1_SHERPA_KWS_MODEL_MANIFEST.id);
+        assert_eq!(
+            diagnostics.model_archive_sha256,
+            V1_SHERPA_KWS_MODEL_MANIFEST.archive_sha256
+        );
+        assert_eq!(diagnostics.model_license, "Apache-2.0");
+        assert_eq!(diagnostics.keyword_sha256, SHERPA_KWS_KEYWORD_SHA256);
+        assert_eq!(diagnostics.runtime_id, WAKE_WORD_RUNTIME_ID);
+        assert_eq!(diagnostics.runtime_license, "Apache-2.0");
         assert_eq!(diagnostics.platform, std::env::consts::OS);
         assert_eq!(diagnostics.architecture, std::env::consts::ARCH);
         assert_eq!(diagnostics.canonical_sample_rate_hz, V1_KWS_SAMPLE_RATE_HZ);
@@ -108,6 +158,28 @@ mod tests {
         assert!(!json.contains("transcript"));
         assert!(!json.contains("credential"));
         assert!(!json.contains("path"));
+    }
+
+    #[test]
+    fn diagnostics_runtime_identity_matches_platform_or_is_explicitly_unsupported() {
+        let sha = platform_runtime_c_api_sha256();
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            assert_eq!(sha, Some(WAKE_WORD_RUNTIME_LINUX_X86_64_C_API_SHA256));
+        } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            assert_eq!(sha, Some(WAKE_WORD_RUNTIME_MACOS_ARM64_C_API_SHA256));
+        } else {
+            assert_eq!(sha, None);
+        }
+    }
+
+    #[test]
+    fn diagnostic_identity_constants_track_manifest_json() {
+        let manifest = include_str!("../../../wake-word-artifacts.json");
+        assert!(manifest.contains(V1_SHERPA_KWS_MODEL_MANIFEST.id));
+        assert!(manifest.contains(V1_SHERPA_KWS_MODEL_MANIFEST.archive_sha256));
+        assert!(manifest.contains(SHERPA_KWS_KEYWORD_SHA256));
+        assert!(manifest.contains(WAKE_WORD_RUNTIME_LINUX_X86_64_C_API_SHA256));
+        assert!(manifest.contains(WAKE_WORD_RUNTIME_MACOS_ARM64_C_API_SHA256));
     }
 
     #[test]
@@ -147,9 +219,9 @@ mod tests {
         assert_eq!(triggered.handoff_pre_roll_samples, 3);
         assert!(!triggered.talking_suspended);
         let json = serde_json::to_string(&triggered).unwrap();
-        assert!(!json.contains("101"));
-        assert!(!json.contains("202"));
-        assert!(!json.contains("303"));
+        assert!(!json.contains("pcm_samples"));
+        assert!(!json.contains("audio_samples"));
+        assert!(!json.contains("raw_audio"));
 
         manager.suspend_for_talking().unwrap();
         let suspended = WakeWordDiagnostics::from_runtime(&manager.snapshot(Instant::now()));
