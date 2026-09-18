@@ -1,0 +1,12 @@
+name: Wake Word runtime identity freeze
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  freeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/freeze_wake_word_runtime_identity.py
