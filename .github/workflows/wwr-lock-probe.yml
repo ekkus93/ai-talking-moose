@@ -1,0 +1,26 @@
+name: WWR lockfile probe
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  emit-lockfile:
+    if: github.head_ref == 'ralph/wwr-200-native-kws-link'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate and emit compressed lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+          echo 'WWR_LOCKFILE_GZIP_BASE64_BEGIN'
+          gzip -9 -c src-tauri/Cargo.lock | base64 -w 120
+          echo 'WWR_LOCKFILE_GZIP_BASE64_END'
