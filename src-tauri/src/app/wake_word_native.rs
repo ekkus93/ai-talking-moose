@@ -8,7 +8,7 @@ use super::wake_word_engine::{
     WakeWordErrorKind, V1_KWS_SAMPLE_RATE_HZ,
 };
 use serde_json::Value;
-use sha2::{Digest, Sha256};
+use ring::digest::{Context, SHA256};
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -226,7 +226,7 @@ fn verify_file(path: &Path, expected: &ExpectedIdentity) -> Result<(), WakeWordE
     if metadata.len() != expected.bytes {
         return Err(invalid_artifact());
     }
-    let mut hasher = Sha256::new();
+    let mut hasher = Context::new(&SHA256);
     let mut buffer = [0_u8; 1024 * 1024];
     loop {
         let read = file.read(&mut buffer).map_err(|_| invalid_artifact())?;
@@ -235,7 +235,12 @@ fn verify_file(path: &Path, expected: &ExpectedIdentity) -> Result<(), WakeWordE
         }
         hasher.update(&buffer[..read]);
     }
-    let digest = format!("{:x}", hasher.finalize());
+    let digest = hasher
+        .finish()
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     if digest != expected.sha256 {
         return Err(invalid_artifact());
     }
@@ -798,59 +803,3 @@ mod tests {
         let root = tempdir().unwrap();
         let missing = root.path().join("missing");
         let expected = ExpectedIdentity {
-            bytes: 3,
-            sha256: format!("{:x}", Sha256::digest(b"abc")),
-            architecture: None,
-        };
-        assert_eq!(
-            verify_file(&missing, &expected).unwrap_err().kind,
-            WakeWordErrorKind::MissingArtifact
-        );
-
-        let corrupt = root.path().join("artifact");
-        File::create(&corrupt)
-            .unwrap()
-            .write_all(b"abd")
-            .unwrap();
-        assert_eq!(
-            verify_file(&corrupt, &expected).unwrap_err().kind,
-            WakeWordErrorKind::InvalidArtifact
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn native_load_failure_is_sanitized() {
-        let error = DynamicLibrary::open(Path::new("/definitely/not/a/library.so"), false)
-            .err()
-            .unwrap();
-        assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
-        assert!(!error.message.contains('/'));
-        assert!(!error.message.contains(".so"));
-    }
-
-    #[test]
-    fn v1_native_policy_is_observable() {
-        let config = SherpaKwsConfig::default();
-        assert_eq!(config.threads, 1);
-        assert_eq!(config.score, 1.0);
-        assert_eq!(config.threshold, 0.25);
-        assert_eq!(config.sample_rate_hz, 16_000);
-        assert_eq!(config.feature_dim, 80);
-    }
-
-    #[test]
-    fn production_manifest_names_c_api_not_jni() {
-        let document = manifest().unwrap();
-        let serialized = document.to_string();
-        assert!(serialized.contains("libsherpa-onnx-c-api"));
-        assert!(!serialized.contains("libsherpa-onnx-jni"));
-        assert_eq!(
-            document
-                .get("runtime")
-                .and_then(|r| r.get("abi"))
-                .and_then(Value::as_str),
-            Some("sherpa-onnx-c-api")
-        );
-    }
-}

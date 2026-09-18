@@ -10,6 +10,7 @@ import shutil
 import struct
 import sys
 import tempfile
+import tarfile
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
