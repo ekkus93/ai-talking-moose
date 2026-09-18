@@ -5,5 +5,40 @@
     "model_family": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
     "verification": "size-and-sha256-required-before-use"
   },
-  "artifacts": []
+  "artifacts": [
+    {
+      "kind": "kws-model",
+      "id": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
+      "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2",
+      "archive": {
+        "filename": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2",
+        "bytes": 17626723,
+        "sha256": "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a"
+      },
+      "files": [
+        {"name": "encoder-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 12174219, "sha256": "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693"},
+        {"name": "decoder-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 1063189, "sha256": "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3"},
+        {"name": "joiner-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 642462, "sha256": "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d"},
+        {"name": "tokens.txt", "bytes": 5006, "sha256": "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53"},
+        {"name": "bpe.model", "bytes": 244837, "sha256": "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24"}
+      ],
+      "keyword": {
+        "source": "HEY MOOSE",
+        "representation": "▁HE Y ▁MO O SE",
+        "filename": "hey-moose.tokens.txt",
+        "bytes": 19,
+        "sha256": "3b1ad407b63b5e89edd8e253b9c104ac85d74a2a862b0d07ac4a0d4ee27770a6"
+      },
+      "provenance": {
+        "training_dataset": "GigaSpeech XL",
+        "training_recipe": "k2-fsa/icefall pull request 1428",
+        "upstream_documentation": "https://k2-fsa.github.io/sherpa/onnx/kws/pretrained_models/index.html",
+        "independent_distribution": "https://www.modelscope.cn/pkufool/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+      },
+      "model_license": {
+        "spdx": "Apache-2.0",
+        "evidence": "ModelScope model card published by pkufool identifies this model as Apache License 2.0; sherpa-onnx documentation independently identifies pkufool's ModelScope repository as a distribution source. Runtime licensing is separate."
+      }
+    }
+  ]
 }

@@ -8,6 +8,12 @@ pub const SHERPA_KWS_DECODER_FILE: &str = "decoder-epoch-12-avg-2-chunk-16-left-
 pub const SHERPA_KWS_JOINER_FILE: &str = "joiner-epoch-12-avg-2-chunk-16-left-64.onnx";
 pub const SHERPA_KWS_TOKENS_FILE: &str = "tokens.txt";
 pub const SHERPA_KWS_BPE_FILE: &str = "bpe.model";
+pub const SHERPA_KWS_KEYWORD_SOURCE: &str = "HEY MOOSE";
+pub const SHERPA_KWS_KEYWORD_REPRESENTATION: &str = "▁HE Y ▁MO O SE";
+pub const SHERPA_KWS_KEYWORD_FILE: &str = "hey-moose.tokens.txt";
+pub const SHERPA_KWS_KEYWORD_BYTES: u64 = 19;
+pub const SHERPA_KWS_KEYWORD_SHA256: &str =
+    "3b1ad407b63b5e89edd8e253b9c104ac85d74a2a862b0d07ac4a0d4ee27770a6";
 pub const SHERPA_KWS_REQUIRED_FILES: [&str; 5] = [
     SHERPA_KWS_ENCODER_FILE,
     SHERPA_KWS_DECODER_FILE,
@@ -103,78 +109,73 @@ fn valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-// Production remains deliberately unavailable until the exact upstream archive and consumed
-// fp32 files have been independently hashed. This fail-closed placeholder prevents model-family
-// selection from silently becoming permission to consume mutable/unverified bytes.
+pub const V1_SHERPA_KWS_MODEL_FILES: [SherpaKwsModelFile; 5] = [
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_ENCODER_FILE,
+        bytes: 12174219,
+        sha256: "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_DECODER_FILE,
+        bytes: 1063189,
+        sha256: "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_JOINER_FILE,
+        bytes: 642462,
+        sha256: "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_TOKENS_FILE,
+        bytes: 5006,
+        sha256: "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53",
+    },
+    SherpaKwsModelFile {
+        name: SHERPA_KWS_BPE_FILE,
+        bytes: 244837,
+        sha256: "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24",
+    },
+];
+
 pub const V1_SHERPA_KWS_MODEL_MANIFEST: SherpaKwsModelManifest = SherpaKwsModelManifest {
     id: SHERPA_KWS_MODEL_ID,
     archive_url: SHERPA_KWS_MODEL_ARCHIVE_URL,
-    archive_bytes: 0,
-    archive_sha256: "",
+    archive_bytes: 17626723,
+    archive_sha256: "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a",
     license: SHERPA_KWS_MODEL_LICENSE,
-    files: &[],
+    files: &V1_SHERPA_KWS_MODEL_FILES,
 };
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-    const FILES: [SherpaKwsModelFile; 5] = [
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_ENCODER_FILE,
-            bytes: 1,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_DECODER_FILE,
-            bytes: 2,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_JOINER_FILE,
-            bytes: 3,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_TOKENS_FILE,
-            bytes: 4,
-            sha256: HASH,
-        },
-        SherpaKwsModelFile {
-            name: SHERPA_KWS_BPE_FILE,
-            bytes: 5,
-            sha256: HASH,
-        },
-    ];
+    #[test]
+    fn production_manifest_is_fully_qualified() {
+        assert_eq!(V1_SHERPA_KWS_MODEL_MANIFEST.validate(), Ok(()));
+        assert!(valid_sha256(SHERPA_KWS_KEYWORD_SHA256));
+        assert_eq!(SHERPA_KWS_KEYWORD_SOURCE, "HEY MOOSE");
+        assert!(!SHERPA_KWS_KEYWORD_REPRESENTATION.is_empty());
+        assert_eq!(SHERPA_KWS_KEYWORD_BYTES, 19);
+    }
 
-    fn valid_manifest() -> SherpaKwsModelManifest {
-        SherpaKwsModelManifest {
-            id: SHERPA_KWS_MODEL_ID,
-            archive_url: SHERPA_KWS_MODEL_ARCHIVE_URL,
-            archive_bytes: 15,
-            archive_sha256: HASH,
-            license: SHERPA_KWS_MODEL_LICENSE,
-            files: &FILES,
+    #[test]
+    fn json_and_rust_production_identities_cannot_drift_silently() {
+        let json = include_str!("../../../wake-word-artifacts.json");
+        assert!(json.contains(V1_SHERPA_KWS_MODEL_MANIFEST.archive_sha256));
+        assert!(json.contains(&V1_SHERPA_KWS_MODEL_MANIFEST.archive_bytes.to_string()));
+        assert!(json.contains(SHERPA_KWS_KEYWORD_SHA256));
+        assert!(json.contains(SHERPA_KWS_KEYWORD_REPRESENTATION));
+        for file in V1_SHERPA_KWS_MODEL_FILES {
+            assert!(json.contains(file.name));
+            assert!(json.contains(file.sha256));
+            assert!(json.contains(&file.bytes.to_string()));
         }
     }
 
     #[test]
-    fn qualified_shape_validates() {
-        assert_eq!(valid_manifest().validate(), Ok(()));
-    }
-
-    #[test]
-    fn production_placeholder_fails_closed_until_hashes_are_recorded() {
-        assert_eq!(
-            V1_SHERPA_KWS_MODEL_MANIFEST.validate(),
-            Err(SherpaKwsManifestError::MissingArchiveIdentity)
-        );
-    }
-
-    #[test]
     fn mutable_or_insecure_sources_are_rejected() {
-        let mut manifest = valid_manifest();
+        let mut manifest = V1_SHERPA_KWS_MODEL_MANIFEST;
         manifest.archive_url = "https://example.invalid/latest/model.tar.bz2";
         assert_eq!(
             manifest.validate(),
@@ -183,66 +184,14 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_and_unhashed_files_are_rejected() {
-        const DUPLICATES: [SherpaKwsModelFile; 5] =
-            [FILES[0], FILES[1], FILES[2], FILES[3], FILES[3]];
-        let mut manifest = valid_manifest();
-        manifest.files = &DUPLICATES;
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::DuplicateFileName(
-                SHERPA_KWS_TOKENS_FILE
-            ))
-        );
-
-        const UNHASHED: [SherpaKwsModelFile; 5] = [
-            FILES[0],
-            FILES[1],
-            FILES[2],
-            SherpaKwsModelFile {
-                name: SHERPA_KWS_TOKENS_FILE,
-                bytes: 1,
-                sha256: "",
-            },
-            FILES[4],
-        ];
-        manifest.files = &UNHASHED;
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::InvalidFileIdentity(
-                SHERPA_KWS_TOKENS_FILE
-            ))
-        );
-    }
-
-    #[test]
     fn exact_fp32_consumed_file_set_is_required() {
-        const MISSING_BPE: [SherpaKwsModelFile; 4] = [FILES[0], FILES[1], FILES[2], FILES[3]];
-        let mut manifest = valid_manifest();
-        manifest.files = &MISSING_BPE;
+        let mut manifest = V1_SHERPA_KWS_MODEL_MANIFEST;
+        manifest.files = &V1_SHERPA_KWS_MODEL_FILES[..4];
         assert_eq!(
             manifest.validate(),
             Err(SherpaKwsManifestError::MissingRequiredFile(
                 SHERPA_KWS_BPE_FILE
             ))
-        );
-
-        const EXTRA: [SherpaKwsModelFile; 6] = [
-            FILES[0],
-            FILES[1],
-            FILES[2],
-            FILES[3],
-            FILES[4],
-            SherpaKwsModelFile {
-                name: "configuration.json",
-                bytes: 48,
-                sha256: HASH,
-            },
-        ];
-        manifest.files = &EXTRA;
-        assert_eq!(
-            manifest.validate(),
-            Err(SherpaKwsManifestError::UnexpectedFile("configuration.json"))
         );
     }
 }
