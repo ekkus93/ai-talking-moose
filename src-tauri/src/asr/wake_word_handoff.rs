@@ -1,3 +1,4 @@
+use crate::app::wake_word_engine::{validate_pcm_frame, WakeWordError};
 use std::collections::VecDeque;
 
 /// Maximum post-trigger live PCM retained while command ASR starts.
@@ -35,12 +36,21 @@ impl WakeAsrHandoff {
     }
 
     /// Retain post-trigger live PCM while ASR initializes.
-    pub fn append_live(&mut self, samples: &[i16]) {
-        if self.live_capacity_samples == 0 || samples.is_empty() {
+    ///
+    /// Validation occurs before any queue or overflow-counter mutation so a
+    /// non-canonical frame cannot contaminate the command handoff.
+    pub fn append_live(
+        &mut self,
+        sample_rate_hz: u32,
+        samples: &[i16],
+    ) -> Result<(), WakeWordError> {
+        validate_pcm_frame(sample_rate_hz, samples)?;
+
+        if self.live_capacity_samples == 0 {
             self.dropped_live_samples = self
                 .dropped_live_samples
                 .saturating_add(samples.len() as u64);
-            return;
+            return Ok(());
         }
 
         if samples.len() >= self.live_capacity_samples {
@@ -54,7 +64,7 @@ impl WakeAsrHandoff {
                     .iter()
                     .copied(),
             );
-            return;
+            return Ok(());
         }
 
         let overflow = self
@@ -67,6 +77,7 @@ impl WakeAsrHandoff {
             self.dropped_live_samples = self.dropped_live_samples.saturating_add(overflow as u64);
         }
         self.live.extend(samples.iter().copied());
+        Ok(())
     }
 
     /// Consume the handoff exactly once in command-ASR order: pre-roll, then live PCM.
@@ -103,8 +114,8 @@ mod tests {
     #[test]
     fn pre_roll_precedes_live_pcm_without_gap_duplicate_or_inversion() {
         let mut handoff = WakeAsrHandoff::with_capacity(vec![1, 2, 3, 4], 8);
-        handoff.append_live(&[5, 6]);
-        handoff.append_live(&[7, 8]);
+        handoff.append_live(16_000, &[5, 6]).unwrap();
+        handoff.append_live(16_000, &[7, 8]).unwrap();
 
         assert_eq!(
             handoff.take_for_asr().unwrap(),
@@ -115,19 +126,16 @@ mod tests {
 
     #[test]
     fn immediate_command_samples_after_wake_are_retained() {
-        // Model a wake phrase ending at sample 4 and command audio beginning
-        // immediately at sample 5 while command ASR is still starting.
         let mut handoff = WakeAsrHandoff::with_capacity(vec![1, 2, 3, 4], 16);
-        handoff.append_live(&[5, 6, 7]);
-
+        handoff.append_live(16_000, &[5, 6, 7]).unwrap();
         assert_eq!(handoff.take_for_asr().unwrap(), vec![1, 2, 3, 4, 5, 6, 7]);
     }
 
     #[test]
     fn live_startup_buffer_is_bounded_and_reports_overflow_without_pcm() {
         let mut handoff = WakeAsrHandoff::with_capacity(vec![1, 2], 4);
-        handoff.append_live(&[3, 4, 5]);
-        handoff.append_live(&[6, 7, 8]);
+        handoff.append_live(16_000, &[3, 4, 5]).unwrap();
+        handoff.append_live(16_000, &[6, 7, 8]).unwrap();
 
         assert_eq!(handoff.live_samples(), 4);
         assert_eq!(handoff.live_capacity_samples(), 4);
@@ -138,16 +146,30 @@ mod tests {
     #[test]
     fn oversized_live_write_keeps_newest_bounded_samples() {
         let mut handoff = WakeAsrHandoff::with_capacity(vec![10], 3);
-        handoff.append_live(&[11, 12, 13, 14, 15]);
+        handoff.append_live(16_000, &[11, 12, 13, 14, 15]).unwrap();
 
         assert_eq!(handoff.dropped_live_samples(), 2);
         assert_eq!(handoff.take_for_asr().unwrap(), vec![10, 13, 14, 15]);
     }
 
     #[test]
+    fn invalid_live_frame_is_rejected_before_handoff_mutation() {
+        let mut handoff = WakeAsrHandoff::with_capacity(vec![1, 2], 4);
+        handoff.append_live(16_000, &[3, 4]).unwrap();
+        let before_live = handoff.live_samples();
+        let before_dropped = handoff.dropped_live_samples();
+
+        assert!(handoff.append_live(48_000, &[5, 6]).is_err());
+        assert!(handoff.append_live(16_000, &[]).is_err());
+        assert_eq!(handoff.live_samples(), before_live);
+        assert_eq!(handoff.dropped_live_samples(), before_dropped);
+        assert_eq!(handoff.take_for_asr().unwrap(), vec![1, 2, 3, 4]);
+    }
+
+    #[test]
     fn failed_handoff_clear_discards_stale_pre_roll_and_live_audio() {
         let mut handoff = WakeAsrHandoff::with_capacity(vec![1, 2, 3], 8);
-        handoff.append_live(&[4, 5]);
+        handoff.append_live(16_000, &[4, 5]).unwrap();
         handoff.clear();
 
         assert_eq!(handoff.live_samples(), 0);
