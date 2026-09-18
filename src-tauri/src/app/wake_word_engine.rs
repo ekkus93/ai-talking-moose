@@ -378,10 +378,18 @@ fn verify_file_identity(
     expected_architecture: Option<NativeArchitecture>,
 ) -> Result<(), WakeWordError> {
     let mut file = File::open(path).map_err(|_| {
-        WakeWordError::sanitized(missing_kind.clone(), "missing required wake artifact", false)
+        WakeWordError::sanitized(
+            missing_kind.clone(),
+            "missing required wake artifact",
+            false,
+        )
     })?;
     let metadata = file.metadata().map_err(|_| {
-        WakeWordError::sanitized(WakeWordErrorKind::InvalidArtifact, "invalid wake artifact", false)
+        WakeWordError::sanitized(
+            WakeWordErrorKind::InvalidArtifact,
+            "invalid wake artifact",
+            false,
+        )
     })?;
     if metadata.len() != expected_bytes {
         return Err(WakeWordError::sanitized(
