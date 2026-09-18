@@ -1,6 +1,7 @@
 import React from "react";
 import { useMooseStore } from "../../stores/mooseStore";
 import { Keyboard } from "lucide-react";
+import { WakeWordSettingsPanel } from "./WakeWordSettingsPanel";
 
 export const GeneralTab: React.FC = () => {
   const { settings, updateSettingsPatch } = useMooseStore();
@@ -63,6 +64,8 @@ export const GeneralTab: React.FC = () => {
         />
         <span>Restore desktop window position across restarts</span>
       </label>
+
+      <WakeWordSettingsPanel />
 
       <section
         className="border border-black rounded bg-[#fbf9f5] p-3 space-y-2"
