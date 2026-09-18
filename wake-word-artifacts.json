@@ -11,109 +11,44 @@
       "kind": "kws-model",
       "id": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
       "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2",
-      "archive": {
-        "filename": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2",
-        "bytes": 17626723,
-        "sha256": "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a"
-      },
+      "archive": {"filename": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2", "bytes": 17626723, "sha256": "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a"},
       "files": [
-        {
-          "name": "encoder-epoch-12-avg-2-chunk-16-left-64.onnx",
-          "bytes": 12174219,
-          "sha256": "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693"
-        },
-        {
-          "name": "decoder-epoch-12-avg-2-chunk-16-left-64.onnx",
-          "bytes": 1063189,
-          "sha256": "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3"
-        },
-        {
-          "name": "joiner-epoch-12-avg-2-chunk-16-left-64.onnx",
-          "bytes": 642462,
-          "sha256": "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d"
-        },
-        {
-          "name": "tokens.txt",
-          "bytes": 5006,
-          "sha256": "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53"
-        },
-        {
-          "name": "bpe.model",
-          "bytes": 244837,
-          "sha256": "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24"
-        }
+        {"name": "encoder-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 12174219, "sha256": "063fbc1aeae8a9b574607a331a00e60371846ef9eaa3c1d9ea48176665dfc693"},
+        {"name": "decoder-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 1063189, "sha256": "f61ebd3eed3773a44d088d53dfae92dbb6aec4839f4dcaee2d402414741663a3"},
+        {"name": "joiner-epoch-12-avg-2-chunk-16-left-64.onnx", "bytes": 642462, "sha256": "0d7a37e749d8055223029318d6ffae82db1dae2d315d0892a68ba5dad17c1d2d"},
+        {"name": "tokens.txt", "bytes": 5006, "sha256": "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53"},
+        {"name": "bpe.model", "bytes": 244837, "sha256": "c8a2a0129c4ab8e463164c142f82d25649661b122c8cd0b7aab5c9e80b90ad24"}
       ],
-      "keyword": {
-        "source": "HEY MOOSE",
-        "representation": "▁HE Y ▁MO O SE",
-        "filename": "hey-moose.tokens.txt",
-        "bytes": 19,
-        "sha256": "3b1ad407b63b5e89edd8e253b9c104ac85d74a2a862b0d07ac4a0d4ee27770a6"
-      },
-      "provenance": {
-        "training_dataset": "GigaSpeech XL",
-        "training_recipe": "k2-fsa/icefall pull request 1428",
-        "upstream_documentation": "https://k2-fsa.github.io/sherpa/onnx/kws/pretrained_models/index.html",
-        "independent_distribution": "https://www.modelscope.cn/pkufool/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
-      },
-      "model_license": {
-        "spdx": "Apache-2.0",
-        "evidence": "ModelScope model card published by pkufool identifies this model as Apache License 2.0; sherpa-onnx documentation independently identifies pkufool's ModelScope repository as a distribution source. Runtime licensing is separate."
-      }
+      "keyword": {"source": "HEY MOOSE", "representation": "▁HE Y ▁MO O SE", "filename": "hey-moose.tokens.txt", "bytes": 19, "sha256": "3b1ad407b63b5e89edd8e253b9c104ac85d74a2a862b0d07ac4a0d4ee27770a6"},
+      "provenance": {"training_dataset": "GigaSpeech XL", "training_recipe": "k2-fsa/icefall pull request 1428", "upstream_documentation": "https://k2-fsa.github.io/sherpa/onnx/kws/pretrained_models/index.html", "independent_distribution": "https://www.modelscope.cn/pkufool/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"},
+      "model_license": {"spdx": "Apache-2.0", "evidence": "ModelScope model card published by pkufool identifies this model as Apache License 2.0; sherpa-onnx documentation independently identifies pkufool's ModelScope repository as a distribution source. Runtime licensing is separate."}
     }
   ],
   "runtime": {
     "id": "sherpa-onnx-native",
     "version": "v1.13.8",
-    "license": {
-      "spdx": "Apache-2.0",
-      "notice": "docs/licenses/SHERPA_ONNX_RUNTIME_NOTICE.md"
-    },
+    "license": {"spdx": "Apache-2.0", "notice": "docs/licenses/SHERPA_ONNX_RUNTIME_NOTICE.md"},
     "platforms": {
       "linux-x86_64": {
-        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-native-lib-linux-x64-1.13.8.jar",
+        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
         "architecture": "elf-x86_64",
         "install_root": "runtime/sherpa-onnx/v1.13.8/linux-x86_64",
         "bundle_root": "resources/runtime/sherpa-onnx/v1.13.8/linux-x86_64",
-        "archive": {
-          "filename": "sherpa-onnx-native-lib-linux-x64-1.13.8.jar",
-          "bytes": 10515871,
-          "sha256": "30c93b59381113f9c20aedbbf9fc1ad399158f6bc03dddc0f8934a6e28e069ba"
-        },
+        "archive": {"filename": "sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2", "bytes": 28156791, "sha256": "c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4"},
         "files": [
-          {
-            "path": "sherpa-onnx/native/linux-x64/libonnxruntime.so",
-            "bytes": 27026609,
-            "sha256": "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e"
-          },
-          {
-            "path": "sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so",
-            "bytes": 5166360,
-            "sha256": "adcabd1866f667ec78796a504ff96030eff30fbd80792e892752c64a861bf231"
-          }
+          {"path": "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libonnxruntime.so", "bytes": 27026609, "sha256": "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e"},
+          {"path": "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libsherpa-onnx-c-api.so", "bytes": 5124192, "sha256": "b8351ca1632571ac108adbb317bcc4bf7cfe84b72690e3017316b0da3e1e344f"}
         ]
       },
       "macos-arm64": {
-        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-native-lib-osx-aarch64-1.13.8.jar",
+        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2",
         "architecture": "macho-arm64",
         "install_root": "runtime/sherpa-onnx/v1.13.8/macos-arm64",
         "bundle_root": "resources/runtime/sherpa-onnx/v1.13.8/macos-arm64",
-        "archive": {
-          "filename": "sherpa-onnx-native-lib-osx-aarch64-1.13.8.jar",
-          "bytes": 9460832,
-          "sha256": "42e272180c8836127f024f3335d7afcdfb30fe0164b78330d5d449034e34ce34"
-        },
+        "archive": {"filename": "sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2", "bytes": 20314448, "sha256": "b10e5c7e2c30ea03de9c442655d14860d9edc475c6251d58a8f5f06e913a1d56"},
         "files": [
-          {
-            "path": "sherpa-onnx/native/osx-aarch64/libonnxruntime.dylib",
-            "bytes": 29006384,
-            "sha256": "b0613d0ae53199a83b05fa48e169211498e9d40d54beaa372068ebe5ec5b0929"
-          },
-          {
-            "path": "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-jni.dylib",
-            "bytes": 4218024,
-            "sha256": "e8025656a2680b838dd7ccd7d7ee7e88e5da42a35ad010d8717c22dd7b851ca1"
-          }
+          {"path": "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libonnxruntime.dylib", "bytes": 28775120, "sha256": "3567d114f7299d559993e536d605a6f46d7bc9d2542004accc80ee9bf5457f0b"},
+          {"path": "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libsherpa-onnx-c-api.dylib", "bytes": 4172832, "sha256": "ee098d8b419d49b92101cde3c970a333b361066eb2d79a11ab480a116552b908"}
         ]
       }
     }

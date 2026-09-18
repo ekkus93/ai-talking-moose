@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Freeze sherpa-onnx V1 native runtime archive and library identities."""
+"""Freeze sherpa-onnx V1 shared C API runtime archive and library identities."""
 from __future__ import annotations
-import hashlib, json, struct, tempfile, urllib.request, zipfile
+import hashlib, json, struct, tarfile, tempfile, urllib.request
 from pathlib import Path, PurePosixPath
 VERSION = "1.13.8"
 BASE = f"https://github.com/k2-fsa/sherpa-onnx/releases/download/v{VERSION}"
 PLATFORMS = {
- "linux-x86_64":{"filename":f"sherpa-onnx-native-lib-linux-x64-{VERSION}.jar","architecture":"elf-x86_64"},
- "macos-arm64":{"filename":f"sherpa-onnx-native-lib-osx-aarch64-{VERSION}.jar","architecture":"macho-arm64"},
+ "linux-x86_64":{"filename":f"sherpa-onnx-v{VERSION}-linux-x64-shared.tar.bz2","architecture":"elf-x86_64"},
+ "macos-arm64":{"filename":f"sherpa-onnx-v{VERSION}-osx-arm64-shared.tar.bz2","architecture":"macho-arm64"},
 }
 def identity_bytes(data: bytes): return {"bytes":len(data),"sha256":hashlib.sha256(data).hexdigest()}
 def architecture(data: bytes):
@@ -16,16 +16,19 @@ def architecture(data: bytes):
  return None
 def inspect_archive(path: Path, expected: str):
  found=[]
- with zipfile.ZipFile(path) as z:
-  for info in z.infolist():
-   pure=PurePosixPath(info.filename)
+ with tarfile.open(path, mode="r:bz2") as archive:
+  for member in archive.getmembers():
+   pure=PurePosixPath(member.name)
    if pure.is_absolute() or ".." in pure.parts: raise RuntimeError("unsafe archive member")
-   if info.is_dir(): continue
-   data=z.read(info); arch=architecture(data)
+   if not member.isfile(): continue
+   source=archive.extractfile(member)
+   if source is None: continue
+   data=source.read(); arch=architecture(data)
    if arch:
     if arch!=expected: raise RuntimeError("wrong architecture in native member")
-    found.append({"path":info.filename,"architecture":arch,**identity_bytes(data)})
- if not found: raise RuntimeError("no native libraries for expected architecture")
+    if member.name.endswith(("libonnxruntime.so","libsherpa-onnx-c-api.so","libonnxruntime.dylib","libsherpa-onnx-c-api.dylib")):
+     found.append({"path":member.name,"architecture":arch,**identity_bytes(data)})
+ if len(found)!=2: raise RuntimeError("expected exactly C API and onnxruntime native libraries")
  return sorted(found,key=lambda x:str(x["path"]))
 def main():
  result={"schema_version":1,"runtime_version":f"v{VERSION}","license":"Apache-2.0","platforms":{}}
