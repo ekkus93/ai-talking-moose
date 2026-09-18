@@ -668,7 +668,10 @@ mod tests {
         assert_eq!(engine.accepted_batches, 0);
         assert_eq!(engine.accepted_samples, 0);
 
-        assert!(engine.accept_pcm16_mono(16_000, &[1, 2]).unwrap().is_none());
+        assert!(engine
+            .accept_pcm16_mono(16_000, &[1, 2])
+            .unwrap()
+            .is_none());
         assert_eq!(engine.accepted_batches, 1);
         assert_eq!(engine.accepted_samples, 2);
     }
@@ -710,8 +713,8 @@ mod tests {
 
     #[test]
     fn native_runtime_architecture_check_is_sanitized() {
-        let error = verify_native_architecture(&[0_u8; 64], NativeArchitecture::ElfX86_64)
-            .unwrap_err();
+        let error =
+            verify_native_architecture(&[0_u8; 64], NativeArchitecture::ElfX86_64).unwrap_err();
         assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
         assert_eq!(error.message, "native runtime architecture mismatch");
     }
@@ -747,7 +750,10 @@ mod tests {
         };
         let error = session.accept_pcm16_mono(16_000, &[1, 2]).unwrap_err();
         assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
-        assert_eq!(error.message, "wake KWS native inference adapter is not linked yet");
+        assert_eq!(
+            error.message,
+            "wake KWS native inference adapter is not linked yet"
+        );
         assert!(error.retryable);
         session.shutdown().unwrap();
         session.shutdown().unwrap();
