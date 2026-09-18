@@ -17,12 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Prepare exact frozen runtime
-        run: python3 scripts/prepare_wake_word_runtime.py --platform linux-x86_64 --output-root "$RUNNER_TEMP/wake-runtime"
+        run: python3 scripts/prepare_wake_word_runtime.py --platform linux-x86_64 --root "$RUNNER_TEMP/wake-runtime"
       - name: Verify KWS C API exports from consumed native library
         shell: bash
         run: |
           set -euo pipefail
-          lib="$RUNNER_TEMP/wake-runtime/sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so"
+          lib="$RUNNER_TEMP/wake-runtime/runtime/sherpa-onnx/v1.13.8/linux-x86_64/sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so"
           test -f "$lib"
           symbols=(
             SherpaOnnxCreateKeywordSpotter
