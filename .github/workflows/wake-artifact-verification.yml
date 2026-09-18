@@ -6,20 +6,42 @@ on:
       - master
     paths:
       - "wake-word-artifacts.json"
+      - "scripts/freeze_wake_word_model_identity.py"
+      - "scripts/freeze_wake_word_runtime_identity.py"
+      - "tests/test_freeze_wake_word_model_identity.py"
+      - "tests/test_freeze_wake_word_runtime_identity.py"
+      - "scripts/freeze-wake-word-model-identities.py"
+      - "scripts/freeze-wake-word-runtime-identities.py"
+      - "scripts/test-freeze-wake-word-model-identities.py"
+      - "scripts/test-freeze-wake-word-runtime-identities.py"
       - "scripts/prepare-wake-word-artifacts.py"
       - "scripts/verify-wake-word-artifacts.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "scripts/validate_wake_word_artifact_manifest.py"
       - "scripts/test-prepare-wake-word-artifacts.py"
       - "scripts/test-verify-wake-word-artifacts.py"
+      - "tests/test_wake_word_runtime_artifacts.py"
       - ".github/workflows/wake-artifact-verification.yml"
   push:
     branches:
       - master
     paths:
       - "wake-word-artifacts.json"
+      - "scripts/freeze_wake_word_model_identity.py"
+      - "scripts/freeze_wake_word_runtime_identity.py"
+      - "tests/test_freeze_wake_word_model_identity.py"
+      - "tests/test_freeze_wake_word_runtime_identity.py"
+      - "scripts/freeze-wake-word-model-identities.py"
+      - "scripts/freeze-wake-word-runtime-identities.py"
+      - "scripts/test-freeze-wake-word-model-identities.py"
+      - "scripts/test-freeze-wake-word-runtime-identities.py"
       - "scripts/prepare-wake-word-artifacts.py"
       - "scripts/verify-wake-word-artifacts.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "scripts/validate_wake_word_artifact_manifest.py"
       - "scripts/test-prepare-wake-word-artifacts.py"
       - "scripts/test-verify-wake-word-artifacts.py"
+      - "tests/test_wake_word_runtime_artifacts.py"
       - ".github/workflows/wake-artifact-verification.yml"
   workflow_dispatch:
 
@@ -34,11 +56,23 @@ jobs:
   verify:
     name: Deterministic wake artifact gate
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+      - name: Validate production manifest schema and frozen identities
+        run: python3 scripts/validate_wake_word_artifact_manifest.py --production
       - name: Verify artifact verifier behavior
         run: python3 scripts/test-verify-wake-word-artifacts.py
       - name: Verify artifact preparation behavior
         run: python3 scripts/test-prepare-wake-word-artifacts.py
+      - name: Verify legacy model identity freezer behavior
+        run: python3 scripts/test-freeze-wake-word-model-identities.py
+      - name: Verify legacy runtime identity freezer behavior
+        run: python3 scripts/test-freeze-wake-word-runtime-identities.py
+      - name: Verify current model identity freezer behavior
+        run: python3 -m unittest tests/test_freeze_wake_word_model_identity.py
+      - name: Verify current runtime identity freezer behavior
+        run: python3 -m unittest tests/test_freeze_wake_word_runtime_identity.py
+      - name: Verify pinned runtime preparation and cache behavior
+        run: python3 -m unittest tests/test_wake_word_runtime_artifacts.py
