@@ -7,6 +7,8 @@ pub(crate) mod tray;
 pub(crate) mod wake_word;
 #[allow(dead_code)]
 pub(crate) mod wake_word_engine;
+#[allow(dead_code)]
+pub(crate) mod wake_word_native;
 pub(crate) mod wake_word_settings;
 pub(crate) mod window_position;
 pub use state::*;
