@@ -7,6 +7,7 @@ use crate::asr::wake_word_sherpa_manifest::{
     SHERPA_KWS_KEYWORD_SHA256, SHERPA_KWS_REQUIRED_FILES, V1_SHERPA_KWS_MODEL_FILES,
 };
 use ring::digest::{Context, SHA256};
+use std::ffi::CString;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -200,6 +201,50 @@ const V1_RUNTIME_FILES: [VerifiedArtifact; 2] = [
     },
 ];
 
+const SHERPA_KWS_C_API_SYMBOLS: [&str; 7] = [
+    "SherpaOnnxCreateKeywordSpotter",
+    "SherpaOnnxCreateOnlineStream",
+    "SherpaOnnxOnlineStreamAcceptWaveform",
+    "SherpaOnnxDecodeKeywordSpotter",
+    "SherpaOnnxGetKeywordResult",
+    "SherpaOnnxDestroyOnlineStream",
+    "SherpaOnnxDestroyKeywordSpotter",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NativeCapiContract {
+    library_relative_path: &'static str,
+    required_symbols: &'static [&'static str; 7],
+}
+
+fn native_capi_contract() -> Result<NativeCapiContract, WakeWordError> {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        Ok(NativeCapiContract {
+            library_relative_path: "sherpa-onnx/native/linux-x64/libsherpa-onnx-c-api.so",
+            required_symbols: &SHERPA_KWS_C_API_SYMBOLS,
+        })
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        Ok(NativeCapiContract {
+            library_relative_path: "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-c-api.dylib",
+            required_symbols: &SHERPA_KWS_C_API_SYMBOLS,
+        })
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    )))]
+    {
+        Err(WakeWordError::sanitized(
+            WakeWordErrorKind::RuntimeUnavailable,
+            "Wake Word native runtime is unsupported on this platform",
+            false,
+        ))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeKwsSessionPaths {
     pub model_dir: PathBuf,
@@ -210,6 +255,7 @@ pub struct NativeKwsSessionPaths {
 pub struct NativeKwsSession {
     config: SherpaKwsConfig,
     paths: NativeKwsSessionPaths,
+    native_api_checked: bool,
     shutdown: bool,
 }
 
@@ -222,6 +268,7 @@ impl NativeKwsSession {
         Ok(Self {
             config,
             paths,
+            native_api_checked: false,
             shutdown: false,
         })
     }
@@ -236,6 +283,19 @@ impl NativeKwsSession {
 
     pub fn keyword_representation(&self) -> &'static str {
         SHERPA_KWS_KEYWORD_REPRESENTATION
+    }
+
+    pub fn required_native_c_api_symbols(&self) -> &'static [&'static str; 7] {
+        &SHERPA_KWS_C_API_SYMBOLS
+    }
+
+    fn verify_native_c_api_ready(&mut self) -> Result<(), WakeWordError> {
+        if self.native_api_checked {
+            return Ok(());
+        }
+        verify_native_c_api_symbols(&self.paths.runtime_dir)?;
+        self.native_api_checked = true;
+        Ok(())
     }
 }
 
@@ -257,9 +317,10 @@ impl SherpaKwsEngine for NativeKwsSession {
                 false,
             ));
         }
+        self.verify_native_c_api_ready()?;
         Err(WakeWordError::sanitized(
             WakeWordErrorKind::RuntimeUnavailable,
-            "wake KWS native inference adapter is not linked yet",
+            "wake KWS native inference loop is not implemented yet",
             true,
         ))
     }
@@ -279,6 +340,92 @@ impl SherpaKwsEngine for NativeKwsSession {
         self.shutdown = true;
         Ok(())
     }
+}
+
+fn verify_native_c_api_symbols(runtime_dir: &Path) -> Result<(), WakeWordError> {
+    let contract = native_capi_contract()?;
+    let library_path = runtime_dir.join(contract.library_relative_path);
+    if !library_path.is_file() {
+        return Err(WakeWordError::sanitized(
+            WakeWordErrorKind::RuntimeUnavailable,
+            "missing required Wake Word native C API library",
+            true,
+        ));
+    }
+    verify_dynamic_symbols(&library_path, contract.required_symbols)
+}
+
+#[cfg(unix)]
+fn verify_dynamic_symbols(
+    library_path: &Path,
+    required_symbols: &[&str],
+) -> Result<(), WakeWordError> {
+    let path = library_path.to_str().ok_or_else(|| {
+        WakeWordError::sanitized(
+            WakeWordErrorKind::RuntimeUnavailable,
+            "Wake Word native library path is not valid UTF-8",
+            false,
+        )
+    })?;
+    let c_path = CString::new(path).map_err(|_| {
+        WakeWordError::sanitized(
+            WakeWordErrorKind::RuntimeUnavailable,
+            "Wake Word native library path is invalid",
+            false,
+        )
+    })?;
+    unsafe {
+        let handle = libc::dlopen(c_path.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL);
+        if handle.is_null() {
+            return Err(WakeWordError::sanitized(
+                WakeWordErrorKind::RuntimeUnavailable,
+                "failed to load Wake Word native C API library",
+                true,
+            ));
+        }
+        let close_guard = DynamicLibraryHandle(handle);
+        for symbol in required_symbols {
+            let c_symbol = CString::new(*symbol).map_err(|_| {
+                WakeWordError::sanitized(
+                    WakeWordErrorKind::RuntimeUnavailable,
+                    "Wake Word native C API symbol is invalid",
+                    false,
+                )
+            })?;
+            if libc::dlsym(close_guard.0, c_symbol.as_ptr()).is_null() {
+                return Err(WakeWordError::sanitized(
+                    WakeWordErrorKind::RuntimeUnavailable,
+                    "Wake Word native C API is missing a required symbol",
+                    true,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+struct DynamicLibraryHandle(*mut libc::c_void);
+
+#[cfg(unix)]
+impl Drop for DynamicLibraryHandle {
+    fn drop(&mut self) {
+        unsafe {
+            libc::dlclose(self.0);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn verify_dynamic_symbols(
+    _library_path: &Path,
+    _required_symbols: &[&str],
+) -> Result<(), WakeWordError> {
+    Err(WakeWordError::sanitized(
+        WakeWordErrorKind::RuntimeUnavailable,
+        "Wake Word native C API loading is unsupported on this platform",
+        false,
+    ))
 }
 
 pub fn validate_pcm_frame(sample_rate_hz: u32, samples: &[i16]) -> Result<(), WakeWordError> {
@@ -735,6 +882,7 @@ mod tests {
         let session = NativeKwsSession {
             config: SherpaKwsConfig::default(),
             paths: paths.clone(),
+            native_api_checked: false,
             shutdown: false,
         };
         assert_eq!(session.paths(), &paths);
@@ -746,6 +894,43 @@ mod tests {
     }
 
     #[test]
+    fn native_c_api_contract_is_kws_only_and_privacy_bounded() {
+        let paths = NativeKwsSessionPaths {
+            model_dir: PathBuf::from("model"),
+            runtime_dir: PathBuf::from("runtime"),
+        };
+        let session = NativeKwsSession {
+            config: SherpaKwsConfig::default(),
+            paths,
+            native_api_checked: false,
+            shutdown: false,
+        };
+        let symbols = session.required_native_c_api_symbols();
+        assert!(symbols.contains(&"SherpaOnnxCreateKeywordSpotter"));
+        assert!(symbols.contains(&"SherpaOnnxDecodeKeywordSpotter"));
+        assert!(!symbols.iter().any(|symbol| symbol.contains("Transducer")));
+        assert!(!symbols
+            .iter()
+            .any(|symbol| symbol.contains("OfflineRecognizer")));
+        assert!(!symbols.iter().any(|symbol| symbol.contains("Whisper")));
+    }
+
+    #[test]
+    fn missing_native_c_api_library_is_sanitized_before_inference() {
+        let temp = TempDir::new().unwrap();
+        let error = verify_native_c_api_symbols(temp.path()).unwrap_err();
+        assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
+        assert_eq!(
+            error.message,
+            "missing required Wake Word native C API library"
+        );
+        assert!(error.retryable);
+        assert!(!error
+            .message
+            .contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
     fn native_session_shutdown_is_idempotent_and_feed_errors_are_sanitized() {
         let mut session = NativeKwsSession {
             config: SherpaKwsConfig::default(),
@@ -753,13 +938,14 @@ mod tests {
                 model_dir: PathBuf::from("model"),
                 runtime_dir: PathBuf::from("runtime"),
             },
+            native_api_checked: false,
             shutdown: false,
         };
         let error = session.accept_pcm16_mono(16_000, &[1, 2]).unwrap_err();
         assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
         assert_eq!(
             error.message,
-            "wake KWS native inference adapter is not linked yet"
+            "missing required Wake Word native C API library"
         );
         assert!(error.retryable);
         session.shutdown().unwrap();
