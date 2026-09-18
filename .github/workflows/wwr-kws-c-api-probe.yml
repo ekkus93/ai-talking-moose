@@ -1,0 +1,53 @@
+name: WWR KWS C API Probe
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/wwr-kws-c-api-probe.yml'
+      - 'wake-word-artifacts.json'
+      - 'scripts/prepare_wake_word_runtime.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x86_64-kws-c-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact upstream v1.13.8 shared runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2"
+          curl --fail --location --retry 3 --output "$archive" \
+            'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2'
+          echo 'c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4  '"$archive" | sha256sum --check --status
+          mkdir "$RUNNER_TEMP/shared-runtime"
+          tar -xjf "$archive" -C "$RUNNER_TEMP/shared-runtime"
+      - name: Verify KWS C API exports
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libsherpa-onnx-c-api.so' -print -quit)"
+          test -n "$lib"
+          symbols=(
+            SherpaOnnxCreateKeywordSpotter
+            SherpaOnnxCreateKeywordStream
+            SherpaOnnxOnlineStreamAcceptWaveform
+            SherpaOnnxIsKeywordStreamReady
+            SherpaOnnxDecodeKeywordStream
+            SherpaOnnxGetKeywordResult
+            SherpaOnnxDestroyKeywordResult
+            SherpaOnnxDestroyOnlineStream
+            SherpaOnnxDestroyKeywordSpotter
+          )
+          nm -D --defined-only "$lib" > "$RUNNER_TEMP/exports.txt"
+          for symbol in "${symbols[@]}"; do
+            grep -Eq "[[:space:]]${symbol}$" "$RUNNER_TEMP/exports.txt" || {
+              echo "missing required KWS C API export: $symbol" >&2
+              exit 1
+            }
+          done
+          echo "Verified ${#symbols[@]} required KWS-only C API exports in v1.13.8 shared runtime."
