@@ -1,3 +1,4 @@
+use crate::app::wake_word_engine::validate_pcm_frame;
 use crate::audio::pcm_ring_buffer::PcmRingBuffer;
 #[cfg(test)]
 use crate::audio::pcm_ring_buffer::WAKE_PCM_PRE_ROLL_SAMPLES;
@@ -24,6 +25,7 @@ pub enum WakeWordRuntimeErrorKind {
     ShuttingDown,
     Disabled,
     Busy,
+    InvalidPcm,
     InvalidTransition,
     Runtime,
 }
@@ -57,6 +59,13 @@ impl WakeWordRuntimeError {
         Self::new(
             WakeWordRuntimeErrorKind::Busy,
             "A Wake Word interaction is already in progress.",
+        )
+    }
+
+    fn invalid_pcm() -> Self {
+        Self::new(
+            WakeWordRuntimeErrorKind::InvalidPcm,
+            "Wake Word PCM must be non-empty 16 kHz mono audio.",
         )
     }
 
@@ -204,15 +213,30 @@ impl WakeWordRuntimeManager {
     /// Disabled/loading/triggered/suspended/error states intentionally retain no new audio.
     /// The fixed-capacity ring performs no allocation on this append path.
     pub fn append_listening_pcm(&self, samples: &[i16]) -> bool {
-        if samples.is_empty() || self.shutting_down.load(Ordering::SeqCst) {
-            return false;
+        self.append_listening_pcm_frame(crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ, samples)
+            .unwrap_or(false)
+    }
+
+    /// Validate and append one PCM frame while the wake runtime is actively listening.
+    ///
+    /// Validation happens before any retained-state mutation so non-canonical frames cannot
+    /// contaminate Wake Word pre-roll. The input is already canonicalized by policy when it
+    /// reaches this boundary; V1 rejects empty or non-16-kHz frames rather than resampling here.
+    pub fn append_listening_pcm_frame(
+        &self,
+        sample_rate_hz: u32,
+        samples: &[i16],
+    ) -> Result<bool, WakeWordRuntimeError> {
+        validate_pcm_frame(sample_rate_hz, samples).map_err(|_| WakeWordRuntimeError::invalid_pcm())?;
+        if self.shutting_down.load(Ordering::SeqCst) {
+            return Err(WakeWordRuntimeError::shutting_down());
         }
         let state = self.state.lock();
         if state.phase != WakeWordRuntimePhase::Listening {
-            return false;
+            return Ok(false);
         }
         self.ring_buffer.lock().append(samples);
-        true
+        Ok(true)
     }
 
     pub fn accept_trigger(&self, now: Instant) -> Result<bool, WakeWordRuntimeError> {
@@ -393,6 +417,50 @@ mod tests {
             vec![1, 2, 3, 4, 5]
         );
         assert_eq!(manager.take_triggered_pre_roll().unwrap(), None);
+    }
+
+    #[test]
+    fn invalid_listening_pcm_is_rejected_before_ring_mutation() {
+        let manager = WakeWordRuntimeManager::new();
+        manager.begin_enable().unwrap();
+        manager.mark_loaded().unwrap();
+        assert!(manager
+            .append_listening_pcm_frame(16_000, &[1, 2, 3])
+            .unwrap());
+        let before = manager.snapshot(Instant::now());
+
+        let wrong_rate = manager
+            .append_listening_pcm_frame(48_000, &[4, 5])
+            .unwrap_err();
+        assert_eq!(wrong_rate.kind, WakeWordRuntimeErrorKind::InvalidPcm);
+        let empty = manager.append_listening_pcm_frame(16_000, &[]).unwrap_err();
+        assert_eq!(empty.kind, WakeWordRuntimeErrorKind::InvalidPcm);
+
+        let after = manager.snapshot(Instant::now());
+        assert_eq!(after.ring_buffer_samples, before.ring_buffer_samples);
+        assert_eq!(after.handoff_pre_roll_samples, before.handoff_pre_roll_samples);
+        assert!(manager.accept_trigger(Instant::now()).unwrap());
+        assert_eq!(
+            manager.take_triggered_pre_roll().unwrap().unwrap(),
+            vec![1, 2, 3]
+        );
+    }
+
+    #[test]
+    fn valid_canonical_frame_is_appended_exactly_once() {
+        let manager = WakeWordRuntimeManager::new();
+        manager.begin_enable().unwrap();
+        manager.mark_loaded().unwrap();
+
+        assert!(manager
+            .append_listening_pcm_frame(16_000, &[42, 43])
+            .unwrap());
+        assert_eq!(manager.snapshot(Instant::now()).ring_buffer_samples, 2);
+        assert!(manager.accept_trigger(Instant::now()).unwrap());
+        assert_eq!(
+            manager.take_triggered_pre_roll().unwrap().unwrap(),
+            vec![42, 43]
+        );
     }
 
     #[test]
