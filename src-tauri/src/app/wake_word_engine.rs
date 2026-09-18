@@ -2,7 +2,14 @@ pub use super::wake_word::policy::{
     DEFAULT_WAKE_PHRASE, V1_KWS_CHANNELS, V1_KWS_FEATURE_DIM, V1_KWS_KEYWORD,
     V1_KWS_SAMPLE_RATE_HZ, V1_KWS_THREADS, V1_WAKE_SCORE, V1_WAKE_THRESHOLD,
 };
-use crate::asr::wake_word_sherpa_manifest::SHERPA_KWS_REQUIRED_FILES;
+use crate::asr::wake_word_sherpa_manifest::{
+    V1_SHERPA_KWS_MODEL_FILES, SHERPA_KWS_KEYWORD_BYTES, SHERPA_KWS_KEYWORD_FILE,
+    SHERPA_KWS_KEYWORD_REPRESENTATION, SHERPA_KWS_KEYWORD_SHA256, SHERPA_KWS_REQUIRED_FILES,
+};
+use ring::digest::{Context, SHA256};
+use std::fs::File;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WakeWordErrorKind {
@@ -143,6 +150,137 @@ pub trait SherpaKwsEngine {
     fn shutdown(&mut self) -> Result<(), WakeWordError>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct VerifiedArtifact {
+    relative_path: &'static str,
+    bytes: u64,
+    sha256: &'static str,
+    architecture: Option<NativeArchitecture>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NativeArchitecture {
+    ElfX86_64,
+    MachOArm64,
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const V1_RUNTIME_PLATFORM: &str = "linux-x86_64";
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const V1_RUNTIME_FILES: [VerifiedArtifact; 2] = [
+    VerifiedArtifact {
+        relative_path: "sherpa-onnx/native/linux-x64/libonnxruntime.so",
+        bytes: 27_026_609,
+        sha256: "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e",
+        architecture: Some(NativeArchitecture::ElfX86_64),
+    },
+    VerifiedArtifact {
+        relative_path: "sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so",
+        bytes: 5_166_360,
+        sha256: "adcabd1866f667ec78796a504ff96030eff30fbd80792e892752c64a861bf231",
+        architecture: Some(NativeArchitecture::ElfX86_64),
+    },
+];
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const V1_RUNTIME_PLATFORM: &str = "macos-arm64";
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const V1_RUNTIME_FILES: [VerifiedArtifact; 2] = [
+    VerifiedArtifact {
+        relative_path: "sherpa-onnx/native/osx-aarch64/libonnxruntime.dylib",
+        bytes: 29_006_384,
+        sha256: "b0613d0ae53199a83b05fa48e169211498e9d40d54beaa372068ebe5ec5b0929",
+        architecture: Some(NativeArchitecture::MachOArm64),
+    },
+    VerifiedArtifact {
+        relative_path: "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-jni.dylib",
+        bytes: 4_218_024,
+        sha256: "e8025656a2680b838dd7ccd7d7ee7e88e5da42a35ad010d8717c22dd7b851ca1",
+        architecture: Some(NativeArchitecture::MachOArm64),
+    },
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeKwsSessionPaths {
+    pub model_dir: PathBuf,
+    pub runtime_dir: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct NativeKwsSession {
+    config: SherpaKwsConfig,
+    paths: NativeKwsSessionPaths,
+    shutdown: bool,
+}
+
+impl NativeKwsSession {
+    pub fn new(paths: NativeKwsSessionPaths) -> Result<Self, WakeWordError> {
+        let config = SherpaKwsConfig::default();
+        config.validate()?;
+        verify_model_artifacts(&paths.model_dir)?;
+        verify_runtime_artifacts(&paths.runtime_dir)?;
+        Ok(Self {
+            config,
+            paths,
+            shutdown: false,
+        })
+    }
+
+    pub fn paths(&self) -> &NativeKwsSessionPaths {
+        &self.paths
+    }
+
+    pub fn runtime_platform(&self) -> &'static str {
+        runtime_platform_name()
+    }
+
+    pub fn keyword_representation(&self) -> &'static str {
+        SHERPA_KWS_KEYWORD_REPRESENTATION
+    }
+}
+
+impl SherpaKwsEngine for NativeKwsSession {
+    fn config(&self) -> &SherpaKwsConfig {
+        &self.config
+    }
+
+    fn accept_pcm16_mono(
+        &mut self,
+        sample_rate_hz: u32,
+        samples: &[i16],
+    ) -> Result<Option<WakeWordDetection>, WakeWordError> {
+        validate_pcm_frame(sample_rate_hz, samples)?;
+        if self.shutdown {
+            return Err(WakeWordError::sanitized(
+                WakeWordErrorKind::Cancelled,
+                "wake KWS native session is shut down",
+                false,
+            ));
+        }
+        Err(WakeWordError::sanitized(
+            WakeWordErrorKind::RuntimeUnavailable,
+            "wake KWS native inference adapter is not linked yet",
+            true,
+        ))
+    }
+
+    fn reset_stream(&mut self) -> Result<(), WakeWordError> {
+        if self.shutdown {
+            return Err(WakeWordError::sanitized(
+                WakeWordErrorKind::Cancelled,
+                "wake KWS native session is shut down",
+                false,
+            ));
+        }
+        Ok(())
+    }
+
+    fn shutdown(&mut self) -> Result<(), WakeWordError> {
+        self.shutdown = true;
+        Ok(())
+    }
+}
+
 pub fn validate_pcm_frame(sample_rate_hz: u32, samples: &[i16]) -> Result<(), WakeWordError> {
     if sample_rate_hz != V1_KWS_SAMPLE_RATE_HZ {
         return Err(WakeWordError::sanitized(
@@ -159,6 +297,171 @@ pub fn validate_pcm_frame(sample_rate_hz: u32, samples: &[i16]) -> Result<(), Wa
         ));
     }
     Ok(())
+}
+
+fn verify_model_artifacts(model_dir: &Path) -> Result<(), WakeWordError> {
+    for file in V1_SHERPA_KWS_MODEL_FILES {
+        verify_file_identity(
+            &model_dir.join(file.name),
+            file.bytes,
+            file.sha256,
+            WakeWordErrorKind::MissingArtifact,
+            None,
+        )?;
+    }
+    verify_file_identity(
+        &model_dir.join(SHERPA_KWS_KEYWORD_FILE),
+        SHERPA_KWS_KEYWORD_BYTES,
+        SHERPA_KWS_KEYWORD_SHA256,
+        WakeWordErrorKind::MissingArtifact,
+        None,
+    )
+}
+
+fn verify_runtime_artifacts(runtime_dir: &Path) -> Result<(), WakeWordError> {
+    let runtime_files = runtime_files()?;
+    for file in runtime_files {
+        verify_file_identity(
+            &runtime_dir.join(file.relative_path),
+            file.bytes,
+            file.sha256,
+            WakeWordErrorKind::RuntimeUnavailable,
+            file.architecture,
+        )?;
+    }
+    Ok(())
+}
+
+fn runtime_files() -> Result<&'static [VerifiedArtifact], WakeWordError> {
+    #[cfg(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    ))]
+    {
+        Ok(&V1_RUNTIME_FILES)
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    )))]
+    {
+        Err(WakeWordError::sanitized(
+            WakeWordErrorKind::RuntimeUnavailable,
+            "Wake Word native runtime is unsupported on this platform",
+            false,
+        ))
+    }
+}
+
+fn runtime_platform_name() -> &'static str {
+    #[cfg(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    ))]
+    {
+        V1_RUNTIME_PLATFORM
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    )))]
+    {
+        "unsupported"
+    }
+}
+
+fn verify_file_identity(
+    path: &Path,
+    expected_bytes: u64,
+    expected_sha256: &str,
+    missing_kind: WakeWordErrorKind,
+    expected_architecture: Option<NativeArchitecture>,
+) -> Result<(), WakeWordError> {
+    let mut file = File::open(path).map_err(|_| {
+        WakeWordError::sanitized(missing_kind.clone(), "missing required wake artifact", false)
+    })?;
+    let metadata = file.metadata().map_err(|_| {
+        WakeWordError::sanitized(WakeWordErrorKind::InvalidArtifact, "invalid wake artifact", false)
+    })?;
+    if metadata.len() != expected_bytes {
+        return Err(WakeWordError::sanitized(
+            WakeWordErrorKind::InvalidArtifact,
+            "wake artifact identity mismatch",
+            false,
+        ));
+    }
+
+    let mut context = Context::new(&SHA256);
+    let mut header = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let count = file.read(&mut buffer).map_err(|_| {
+            WakeWordError::sanitized(
+                WakeWordErrorKind::InvalidArtifact,
+                "failed to read wake artifact",
+                false,
+            )
+        })?;
+        if count == 0 {
+            break;
+        }
+        if header.len() < 64 {
+            let needed = 64 - header.len();
+            header.extend_from_slice(&buffer[..count.min(needed)]);
+        }
+        context.update(&buffer[..count]);
+    }
+    let digest = hex_digest(context.finish().as_ref());
+    if digest != expected_sha256 {
+        return Err(WakeWordError::sanitized(
+            WakeWordErrorKind::InvalidArtifact,
+            "wake artifact identity mismatch",
+            false,
+        ));
+    }
+    if let Some(expected) = expected_architecture {
+        verify_native_architecture(&header, expected)?;
+    }
+    Ok(())
+}
+
+fn verify_native_architecture(
+    header: &[u8],
+    expected: NativeArchitecture,
+) -> Result<(), WakeWordError> {
+    let actual = if header.len() >= 20
+        && &header[..4] == b"\x7fELF"
+        && header.get(4..6) == Some(&[2, 1])
+        && u16::from_le_bytes([header[18], header[19]]) == 62
+    {
+        Some(NativeArchitecture::ElfX86_64)
+    } else if header.len() >= 8
+        && &header[..4] == b"\xcf\xfa\xed\xfe"
+        && u32::from_le_bytes([header[4], header[5], header[6], header[7]]) == 0x0100000C
+    {
+        Some(NativeArchitecture::MachOArm64)
+    } else {
+        None
+    };
+    if actual == Some(expected) {
+        Ok(())
+    } else {
+        Err(WakeWordError::sanitized(
+            WakeWordErrorKind::RuntimeUnavailable,
+            "native runtime architecture mismatch",
+            false,
+        ))
+    }
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
 }
 
 fn sanitize_error_message(message: &str) -> String {
@@ -184,6 +487,8 @@ fn sanitize_error_message(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn default_config_freezes_v1_sherpa_policy() {
@@ -366,6 +671,90 @@ mod tests {
         assert!(engine.accept_pcm16_mono(16_000, &[1, 2]).unwrap().is_none());
         assert_eq!(engine.accepted_batches, 1);
         assert_eq!(engine.accepted_samples, 2);
+    }
+
+    #[test]
+    fn native_session_rejects_missing_verified_artifacts_before_creation() {
+        let temp = TempDir::new().unwrap();
+        let error = NativeKwsSession::new(NativeKwsSessionPaths {
+            model_dir: temp.path().join("model"),
+            runtime_dir: temp.path().join("runtime"),
+        })
+        .unwrap_err();
+        assert_eq!(error.kind, WakeWordErrorKind::MissingArtifact);
+        assert!(!error.message.contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn native_session_rejects_corrupt_verified_artifact_before_creation() {
+        let temp = TempDir::new().unwrap();
+        let model_dir = temp.path().join("model");
+        fs::create_dir_all(&model_dir).unwrap();
+        for file in V1_SHERPA_KWS_MODEL_FILES {
+            fs::write(model_dir.join(file.name), b"corrupt").unwrap();
+        }
+        fs::write(
+            model_dir.join(SHERPA_KWS_KEYWORD_FILE),
+            SHERPA_KWS_KEYWORD_REPRESENTATION.as_bytes(),
+        )
+        .unwrap();
+
+        let error = NativeKwsSession::new(NativeKwsSessionPaths {
+            model_dir,
+            runtime_dir: temp.path().join("runtime"),
+        })
+        .unwrap_err();
+        assert_eq!(error.kind, WakeWordErrorKind::InvalidArtifact);
+        assert_eq!(error.message, "wake artifact identity mismatch");
+    }
+
+    #[test]
+    fn native_runtime_architecture_check_is_sanitized() {
+        let error = verify_native_architecture(&[0_u8; 64], NativeArchitecture::ElfX86_64)
+            .unwrap_err();
+        assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
+        assert_eq!(error.message, "native runtime architecture mismatch");
+    }
+
+    #[test]
+    fn native_session_exposes_frozen_policy_without_network() {
+        let paths = NativeKwsSessionPaths {
+            model_dir: PathBuf::from("model"),
+            runtime_dir: PathBuf::from("runtime"),
+        };
+        let session = NativeKwsSession {
+            config: SherpaKwsConfig::default(),
+            paths: paths.clone(),
+            shutdown: false,
+        };
+        assert_eq!(session.paths(), &paths);
+        assert_eq!(session.config().threads, 1);
+        assert_eq!(session.config().threshold, 0.25);
+        assert_eq!(session.config().score, 1.0);
+        assert_eq!(session.keyword_representation(), "▁HE Y ▁MO O SE");
+        assert!(!session.runtime_platform().is_empty());
+    }
+
+    #[test]
+    fn native_session_shutdown_is_idempotent_and_feed_errors_are_sanitized() {
+        let mut session = NativeKwsSession {
+            config: SherpaKwsConfig::default(),
+            paths: NativeKwsSessionPaths {
+                model_dir: PathBuf::from("model"),
+                runtime_dir: PathBuf::from("runtime"),
+            },
+            shutdown: false,
+        };
+        let error = session.accept_pcm16_mono(16_000, &[1, 2]).unwrap_err();
+        assert_eq!(error.kind, WakeWordErrorKind::RuntimeUnavailable);
+        assert_eq!(error.message, "wake KWS native inference adapter is not linked yet");
+        assert!(error.retryable);
+        session.shutdown().unwrap();
+        session.shutdown().unwrap();
+        assert_eq!(
+            session.accept_pcm16_mono(16_000, &[1]).unwrap_err().kind,
+            WakeWordErrorKind::Cancelled
+        );
     }
 
     #[test]
