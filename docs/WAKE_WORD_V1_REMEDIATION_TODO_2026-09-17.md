@@ -201,24 +201,26 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-120 — Expand artifact CI coverage
 
-- [ ] Update Wake artifact workflow path filters to include:
-  - [ ] model identity freezer;
-  - [ ] runtime identity freezer;
-  - [ ] their test files;
-  - [ ] production manifest(s);
-  - [ ] preparation script;
-  - [ ] verification script.
-- [ ] Run all four Wake artifact Python test suites in CI.
-- [ ] Add manifest consistency/schema validation.
-- [ ] Add a check that production-required identities are non-placeholder when production mode is enabled.
-- [ ] Add test coverage for safe extraction/path traversal rejection.
-- [ ] Add test coverage proving cache cannot bypass identity verification.
+- [x] Update Wake artifact workflow path filters to include:
+  - [x] model identity freezer;
+  - [x] runtime identity freezer;
+  - [x] their test files;
+  - [x] production manifest(s);
+  - [x] preparation script;
+  - [x] verification script.
+- [x] Run all four Wake artifact Python test suites in CI.
+- [x] Add manifest consistency/schema validation.
+- [x] Add a check that production-required identities are non-placeholder when production mode is enabled.
+- [x] Add test coverage for safe extraction/path traversal rejection.
+- [x] Add test coverage proving cache cannot bypass identity verification.
 
 **Acceptance**
 
-- [ ] A change to either freezer script triggers and exercises the Wake artifact workflow.
-- [ ] Artifact tooling regression cannot merge behind a skipped path filter.
+- [x] A change to either freezer script triggers and exercises the Wake artifact workflow.
+- [x] Artifact tooling regression cannot merge behind a skipped path filter.
 
+
+**Evidence:** `docs/evidence/WWR-120_ARTIFACT_CI_COVERAGE_2026-09-17.md`; implementation head `761f94352d3ca7b385a6a3eca1a7f8ec61197288` passed ordinary CI `35298008399`, Wake Artifact Verification `35298008347`, Wake Word model identity freeze `35298008322`, and Wake Word runtime identity freeze `35298008340`. The artifact workflow runs the four pre-existing Wake artifact suites plus focused current-freezer/runtime tests, validates the production manifest and non-placeholder identities, rejects malicious extraction paths, and proves cached runtime state cannot bypass identity verification.
 ---
 
 ## WWR-200 — Implement the real native sherpa KWS session
@@ -398,6 +400,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [ ] Reset KWS stream at the verified lifecycle point.
 - [ ] Permit a later phrase after return to Listening.
 - [ ] Avoid cooldown unless real acceptance shows it is required.
+
 - [ ] If cooldown is added, make it bounded/configured and document measured justification.
 - [ ] Keep trigger count privacy-safe.
 
