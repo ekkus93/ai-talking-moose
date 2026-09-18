@@ -44,7 +44,10 @@ pub struct WakeWordDiagnostics {
 impl WakeWordDiagnostics {
     pub fn from_runtime(snapshot: &WakeWordRuntimeSnapshot) -> Self {
         Self {
-            enabled: !matches!(snapshot.phase, WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::ShuttingDown),
+            enabled: !matches!(
+                snapshot.phase,
+                WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::ShuttingDown
+            ),
             runtime_phase: snapshot.phase,
             engine_id: WAKE_WORD_ENGINE_ID,
             model_id: SHERPA_KWS_MODEL_ID,
@@ -94,7 +97,10 @@ mod tests {
         assert_eq!(diagnostics.runtime_id, "sherpa-onnx-v1.13.8");
         assert_eq!(diagnostics.platform, std::env::consts::OS);
         assert_eq!(diagnostics.architecture, std::env::consts::ARCH);
-        assert_eq!(diagnostics.canonical_sample_rate_hz, V1_KWS_SAMPLE_RATE_HZ);
+        assert_eq!(
+            diagnostics.canonical_sample_rate_hz,
+            V1_KWS_SAMPLE_RATE_HZ
+        );
         assert_eq!(diagnostics.canonical_channels, V1_KWS_CHANNELS as u8);
         assert_eq!(diagnostics.inference_threads, V1_KWS_THREADS as u8);
         assert_eq!(diagnostics.threshold, V1_WAKE_THRESHOLD);
@@ -117,7 +123,10 @@ mod tests {
     fn pinned_model_and_runtime_identities_are_observable_without_paths() {
         let manager = WakeWordRuntimeManager::new();
         let diagnostics = WakeWordDiagnostics::from_runtime(&manager.snapshot(Instant::now()));
-        assert_eq!(diagnostics.model_id, "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01");
+        assert_eq!(
+            diagnostics.model_id,
+            "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+        );
         assert_eq!(diagnostics.runtime_id, "sherpa-onnx-v1.13.8");
         let json = serde_json::to_string(&diagnostics).unwrap();
         assert!(json.contains(SHERPA_KWS_MODEL_ID));
@@ -131,8 +140,12 @@ mod tests {
         let manager = WakeWordRuntimeManager::new();
         let started = Instant::now();
         manager.begin_enable_at(started).unwrap();
-        manager.mark_loaded_at(started + Duration::from_millis(42)).unwrap();
-        let diagnostics = WakeWordDiagnostics::from_runtime(&manager.snapshot(started + Duration::from_millis(42)));
+        manager
+            .mark_loaded_at(started + Duration::from_millis(42))
+            .unwrap();
+        let diagnostics = WakeWordDiagnostics::from_runtime(
+            &manager.snapshot(started + Duration::from_millis(42)),
+        );
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Listening);
         assert_eq!(diagnostics.runtime_initialization_ms, Some(42));
         let json = serde_json::to_string(&diagnostics).unwrap();
@@ -148,7 +161,9 @@ mod tests {
         assert!(manager.append_listening_pcm(&[101, 202, 303]));
         let triggered_at = Instant::now();
         assert!(manager.accept_trigger(triggered_at).unwrap());
-        let triggered = WakeWordDiagnostics::from_runtime(&manager.snapshot(triggered_at + Duration::from_millis(25)));
+        let triggered = WakeWordDiagnostics::from_runtime(
+            &manager.snapshot(triggered_at + Duration::from_millis(25)),
+        );
         assert!(triggered.enabled);
         assert_eq!(triggered.trigger_count, 1);
         assert_eq!(triggered.last_trigger_age_ms, Some(25));
@@ -173,6 +188,9 @@ mod tests {
         manager.record_runtime_error();
         let diagnostics = WakeWordDiagnostics::from_runtime(&manager.snapshot(Instant::now()));
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Error);
-        assert_eq!(diagnostics.last_error.as_deref(), Some("The Wake Word runtime encountered an internal error."));
+        assert_eq!(
+            diagnostics.last_error.as_deref(),
+            Some("The Wake Word runtime encountered an internal error.")
+        );
     }
 }
