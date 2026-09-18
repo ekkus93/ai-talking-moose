@@ -1,5 +1,10 @@
 name: Wake Word runtime identity freeze
 on:
+  push:
+    branches: [master]
+    paths:
+      - "scripts/freeze_wake_word_runtime_identity.py"
+      - ".github/workflows/wake-word-runtime-identity.yml"
   workflow_dispatch:
 permissions:
   contents: read
