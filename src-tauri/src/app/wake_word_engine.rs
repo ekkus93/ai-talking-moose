@@ -161,6 +161,19 @@ pub fn validate_pcm_frame(sample_rate_hz: u32, samples: &[i16]) -> Result<(), Wa
     Ok(())
 }
 
+/// Feed one frame through the canonical Wake Word KWS boundary.
+///
+/// Validation is deliberately performed before invoking the engine so invalid
+/// PCM cannot mutate native/fake stream state or reach inference.
+pub fn accept_validated_pcm16_mono(
+    engine: &mut dyn SherpaKwsEngine,
+    sample_rate_hz: u32,
+    samples: &[i16],
+) -> Result<Option<WakeWordDetection>, WakeWordError> {
+    validate_pcm_frame(sample_rate_hz, samples)?;
+    engine.accept_pcm16_mono(sample_rate_hz, samples)
+}
+
 fn sanitize_error_message(message: &str) -> String {
     let mut sanitized = String::with_capacity(message.len());
     for token in message.split_whitespace() {
@@ -287,6 +300,7 @@ mod tests {
         config: SherpaKwsConfig,
         triggered: bool,
         shutdowns: u8,
+        feeds: u8,
     }
 
     impl SherpaKwsEngine for FakeEngine {
@@ -299,6 +313,7 @@ mod tests {
             sample_rate_hz: u32,
             samples: &[i16],
         ) -> Result<Option<WakeWordDetection>, WakeWordError> {
+            self.feeds = self.feeds.saturating_add(1);
             validate_pcm_frame(sample_rate_hz, samples)?;
             if self.triggered {
                 Ok(None)
@@ -320,11 +335,30 @@ mod tests {
     }
 
     #[test]
+    fn canonical_feed_rejects_invalid_pcm_before_engine_mutation() {
+        let mut engine = FakeEngine {
+            config: SherpaKwsConfig::default(),
+            triggered: false,
+            shutdowns: 0,
+            feeds: 0,
+        };
+        assert!(accept_validated_pcm16_mono(&mut engine, 48_000, &[1, 2]).is_err());
+        assert!(accept_validated_pcm16_mono(&mut engine, 16_000, &[]).is_err());
+        assert_eq!(engine.feeds, 0);
+        assert!(!engine.triggered);
+        assert!(accept_validated_pcm16_mono(&mut engine, 16_000, &[1, 2])
+            .unwrap()
+            .is_some());
+        assert_eq!(engine.feeds, 1);
+    }
+
+    #[test]
     fn engine_boundary_supports_feed_reset_and_idempotent_shutdown_contract() {
         let mut engine = FakeEngine {
             config: SherpaKwsConfig::default(),
             triggered: false,
             shutdowns: 0,
+            feeds: 0,
         };
         engine.config().validate().unwrap();
         assert!(engine
