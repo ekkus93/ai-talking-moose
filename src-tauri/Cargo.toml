@@ -61,10 +61,6 @@ llama-cpp-2 = { version = "=0.1.154", default-features = false }
 # llama-cpp-2 0.1.154 declares ^0.1.154 for its sys crate; pin the exact
 # matching release because 0.1.155 changed sampler FFI signatures.
 llama-cpp-sys-2 = { version = "=0.1.154", default-features = false }
-# WWR-200: exact upstream safe Rust wrapper for the pinned sherpa-onnx v1.13.8
-# KWS C API. Static linking avoids the previously frozen JVM/JNI-only runtime
-# package, which cannot provide a production Rust KWS session by itself.
-sherpa-onnx = { version = "=1.13.8" }
 # KTT-301: exact P0-selected Local TTS inference stack. The `load-dynamic`
 # feature keeps ONNX Runtime app-owned: the verified KTT-200 runtime artifact
 # is loaded explicitly instead of linking or downloading a system runtime.
