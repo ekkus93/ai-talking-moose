@@ -1,4 +1,5 @@
 use crate::asr::wake_word_runtime::{WakeWordRuntimePhase, WakeWordRuntimeSnapshot};
+use crate::asr::wake_word_sherpa_manifest::SHERPA_KWS_MODEL_ID;
 use crate::wake_word_policy::{
     V1_KWS_CHANNELS, V1_KWS_SAMPLE_RATE_HZ, V1_KWS_THREADS, V1_WAKE_SCORE, V1_WAKE_THRESHOLD,
 };
@@ -8,17 +9,20 @@ use std::time::Duration;
 pub const WAKE_WORD_CANONICAL_SAMPLE_RATE_HZ: u32 = V1_KWS_SAMPLE_RATE_HZ;
 pub const WAKE_WORD_CANONICAL_CHANNELS: u8 = V1_KWS_CHANNELS as u8;
 pub const WAKE_WORD_ENGINE_ID: &str = "sherpa-onnx-kws";
+pub const WAKE_WORD_RUNTIME_ID: &str = "sherpa-onnx-v1.13.8";
 
 /// Privacy-safe Wake Word V1 runtime diagnostics.
 ///
-/// This intentionally exposes only bounded counters, fixed configuration, and
-/// lifecycle state. Raw PCM, transcripts, credentials, and filesystem paths are
-/// not representable in this type.
+/// This intentionally exposes only bounded counters, immutable identities, fixed
+/// configuration, and lifecycle state. Raw PCM, transcripts, credentials, and
+/// filesystem paths are not representable in this type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WakeWordDiagnostics {
     pub enabled: bool,
     pub runtime_phase: WakeWordRuntimePhase,
     pub engine_id: &'static str,
+    pub model_id: &'static str,
+    pub runtime_id: &'static str,
     pub platform: &'static str,
     pub architecture: &'static str,
     pub canonical_sample_rate_hz: u32,
@@ -46,6 +50,8 @@ impl WakeWordDiagnostics {
             ),
             runtime_phase: snapshot.phase,
             engine_id: WAKE_WORD_ENGINE_ID,
+            model_id: SHERPA_KWS_MODEL_ID,
+            runtime_id: WAKE_WORD_RUNTIME_ID,
             platform: std::env::consts::OS,
             architecture: std::env::consts::ARCH,
             canonical_sample_rate_hz: V1_KWS_SAMPLE_RATE_HZ,
@@ -88,6 +94,8 @@ mod tests {
         assert!(!diagnostics.enabled);
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Disabled);
         assert_eq!(diagnostics.engine_id, "sherpa-onnx-kws");
+        assert_eq!(diagnostics.model_id, SHERPA_KWS_MODEL_ID);
+        assert_eq!(diagnostics.runtime_id, "sherpa-onnx-v1.13.8");
         assert_eq!(diagnostics.platform, std::env::consts::OS);
         assert_eq!(diagnostics.architecture, std::env::consts::ARCH);
         assert_eq!(diagnostics.canonical_sample_rate_hz, V1_KWS_SAMPLE_RATE_HZ);
@@ -108,6 +116,22 @@ mod tests {
         assert!(!json.contains("transcript"));
         assert!(!json.contains("credential"));
         assert!(!json.contains("path"));
+    }
+
+    #[test]
+    fn pinned_model_and_runtime_identities_are_observable_without_paths() {
+        let manager = WakeWordRuntimeManager::new();
+        let diagnostics = WakeWordDiagnostics::from_runtime(&manager.snapshot(Instant::now()));
+        assert_eq!(
+            diagnostics.model_id,
+            "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+        );
+        assert_eq!(diagnostics.runtime_id, "sherpa-onnx-v1.13.8");
+        let json = serde_json::to_string(&diagnostics).unwrap();
+        assert!(json.contains(SHERPA_KWS_MODEL_ID));
+        assert!(json.contains(WAKE_WORD_RUNTIME_ID));
+        assert!(!json.contains("model_path"));
+        assert!(!json.contains("runtime_path"));
     }
 
     #[test]
