@@ -81,3 +81,5 @@ jobs:
           nm -gU "$lib" > "$RUNNER_TEMP/exports.txt"
           for symbol in "${symbols[@]}"; do grep -Eq "[[:space:]]_?${symbol}$" "$RUNNER_TEMP/exports.txt" || exit 1; done
           echo "Verified ${#symbols[@]} required KWS-only C API exports in v1.13.8 shared runtime."
+
+# WWR-200: this probe is the source of immutable shared-runtime identities consumed by the production manifest.
