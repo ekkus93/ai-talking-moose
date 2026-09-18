@@ -16,14 +16,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare exact frozen runtime
-        run: python3 scripts/prepare_wake_word_runtime.py --platform linux-x86_64 --root "$RUNNER_TEMP/wake-runtime"
-      - name: Verify KWS C API exports from consumed native library
+      - name: Download exact upstream v1.13.8 shared runtime
         shell: bash
         run: |
           set -euo pipefail
-          lib="$RUNNER_TEMP/wake-runtime/runtime/sherpa-onnx/v1.13.8/linux-x86_64/sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so"
-          test -f "$lib"
+          archive="$RUNNER_TEMP/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2"
+          curl --fail --location --retry 3 --output "$archive" \
+            'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2'
+          echo 'c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4  '"$archive" | sha256sum --check --status
+          mkdir "$RUNNER_TEMP/shared-runtime"
+          tar -xjf "$archive" -C "$RUNNER_TEMP/shared-runtime"
+      - name: Verify KWS C API exports
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib="$(find "$RUNNER_TEMP/shared-runtime" -type f -name 'libsherpa-onnx-c-api.so' -print -quit)"
+          test -n "$lib"
           symbols=(
             SherpaOnnxCreateKeywordSpotter
             SherpaOnnxCreateKeywordStream
@@ -42,4 +50,4 @@ jobs:
               exit 1
             }
           done
-          echo "Verified ${#symbols[@]} required KWS-only C API exports in frozen runtime."
+          echo "Verified ${#symbols[@]} required KWS-only C API exports in v1.13.8 shared runtime."
