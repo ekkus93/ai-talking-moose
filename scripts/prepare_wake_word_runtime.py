@@ -142,23 +142,49 @@ def prepare_runtime(
     with tempfile.TemporaryDirectory(prefix="wake-runtime-stage-") as td:
         stage = Path(td)
         try:
-            with zipfile.ZipFile(cached_archive) as archive:
-                names = {info.filename for info in archive.infolist()}
-                for name in names:
-                    _safe_member(name)
-                for item in cfg["files"]:
-                    member_name = item["path"]
-                    if member_name not in names:
-                        raise RuntimePreparationError("missing required native runtime library")
-                    data = archive.read(member_name)
-                    target = stage / PurePosixPath(member_name)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(data)
-                    _verify_identity(target, item, "native runtime library")
-                    _verify_architecture(target, cfg["architecture"])
+            archive_type = cfg["archive"].get("archive_type", "zip")
+            if archive_type == "tar.bz2":
+                with tarfile.open(cached_archive, "r:bz2") as archive:
+                    members = {member.name: member for member in archive.getmembers()}
+                    for name, member in members.items():
+                        _safe_member(name)
+                        if member.issym() or member.islnk():
+                            if any(item["path"] == name for item in cfg["files"]):
+                                raise RuntimePreparationError("required native runtime library is a link")
+                    for item in cfg["files"]:
+                        member_name = item["path"]
+                        member = members.get(member_name)
+                        if member is None or not member.isfile():
+                            raise RuntimePreparationError("missing required native runtime library")
+                        source = archive.extractfile(member)
+                        if source is None:
+                            raise RuntimePreparationError("missing required native runtime library")
+                        data = source.read()
+                        target = stage / PurePosixPath(member_name)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(data)
+                        _verify_identity(target, item, "native runtime library")
+                        _verify_architecture(target, cfg["architecture"])
+            elif archive_type == "zip":
+                with zipfile.ZipFile(cached_archive) as archive:
+                    names = {info.filename for info in archive.infolist()}
+                    for name in names:
+                        _safe_member(name)
+                    for item in cfg["files"]:
+                        member_name = item["path"]
+                        if member_name not in names:
+                            raise RuntimePreparationError("missing required native runtime library")
+                        data = archive.read(member_name)
+                        target = stage / PurePosixPath(member_name)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(data)
+                        _verify_identity(target, item, "native runtime library")
+                        _verify_architecture(target, cfg["architecture"])
+            else:
+                raise RuntimePreparationError("unsupported native runtime archive format")
         except RuntimePreparationError:
             raise
-        except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        except (OSError, tarfile.TarError, zipfile.BadZipFile, KeyError) as exc:
             raise RuntimePreparationError("invalid Wake Word native runtime archive") from exc
 
         install_root.parent.mkdir(parents=True, exist_ok=True)

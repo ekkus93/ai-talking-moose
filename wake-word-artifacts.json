@@ -71,51 +71,54 @@
     },
     "platforms": {
       "linux-x86_64": {
-        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-native-lib-linux-x64-1.13.8.jar",
+        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
         "architecture": "elf-x86_64",
         "install_root": "runtime/sherpa-onnx/v1.13.8/linux-x86_64",
         "bundle_root": "resources/runtime/sherpa-onnx/v1.13.8/linux-x86_64",
         "archive": {
-          "filename": "sherpa-onnx-native-lib-linux-x64-1.13.8.jar",
-          "bytes": 10515871,
-          "sha256": "30c93b59381113f9c20aedbbf9fc1ad399158f6bc03dddc0f8934a6e28e069ba"
+          "filename": "sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
+          "archive_type": "tar.bz2",
+          "bytes": 28156791,
+          "sha256": "c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4"
         },
         "files": [
           {
-            "path": "sherpa-onnx/native/linux-x64/libonnxruntime.so",
-            "bytes": 27026609,
-            "sha256": "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e"
+            "path": "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libsherpa-onnx-c-api.so",
+            "bytes": 5124192,
+            "sha256": "b8351ca1632571ac108adbb317bcc4bf7cfe84b72690e3017316b0da3e1e344f"
           },
           {
-            "path": "sherpa-onnx/native/linux-x64/libsherpa-onnx-jni.so",
-            "bytes": 5166360,
-            "sha256": "adcabd1866f667ec78796a504ff96030eff30fbd80792e892752c64a861bf231"
+            "path": "sherpa-onnx-v1.13.8-linux-x64-shared/lib/libonnxruntime.so",
+            "bytes": 27026609,
+            "sha256": "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e"
           }
         ]
       },
       "macos-arm64": {
-        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-native-lib-osx-aarch64-1.13.8.jar",
+        "source_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2",
         "architecture": "macho-arm64",
         "install_root": "runtime/sherpa-onnx/v1.13.8/macos-arm64",
         "bundle_root": "resources/runtime/sherpa-onnx/v1.13.8/macos-arm64",
         "archive": {
-          "filename": "sherpa-onnx-native-lib-osx-aarch64-1.13.8.jar",
-          "bytes": 9460832,
-          "sha256": "42e272180c8836127f024f3335d7afcdfb30fe0164b78330d5d449034e34ce34"
+          "filename": "sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2",
+          "archive_type": "tar.bz2",
+          "bytes": 20314448,
+          "sha256": "b10e5c7e2c30ea03de9c442655d14860d9edc475c6251d58a8f5f06e913a1d56"
         },
         "files": [
           {
-            "path": "sherpa-onnx/native/osx-aarch64/libonnxruntime.dylib",
-            "bytes": 29006384,
-            "sha256": "b0613d0ae53199a83b05fa48e169211498e9d40d54beaa372068ebe5ec5b0929"
+            "path": "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libsherpa-onnx-c-api.dylib",
+            "bytes": 4172832,
+            "sha256": "ee098d8b419d49b92101cde3c970a333b361066eb2d79a11ab480a116552b908"
           },
           {
-            "path": "sherpa-onnx/native/osx-aarch64/libsherpa-onnx-jni.dylib",
-            "bytes": 4218024,
-            "sha256": "e8025656a2680b838dd7ccd7d7ee7e88e5da42a35ad010d8717c22dd7b851ca1"
+            "path": "sherpa-onnx-v1.13.8-osx-arm64-shared/lib/libonnxruntime.dylib",
+            "bytes": 28775120,
+            "sha256": "3567d114f7299d559993e536d605a6f46d7bc9d2542004accc80ee9bf5457f0b"
           }
         ]
       }
-    }
+    },
+    "abi": "sherpa-onnx-c-api"
   }
 }

@@ -59,6 +59,24 @@ class WakeRuntimeArtifactsTests(unittest.TestCase):
             zf.writestr(name, data)
         return archive
 
+    def test_real_archive_shape_tar_bz2_is_supported(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            data = elf_x86_64()
+            archive = root / "runtime.tar.bz2"
+            with tarfile.open(archive, "w:bz2") as bundle:
+                info = tarfile.TarInfo("pkg/lib/libwake.so")
+                info.size = len(data)
+                bundle.addfile(info, io.BytesIO(data))
+            runtime = synthetic_runtime("elf-x86_64", data, archive)
+            cfg = runtime["platforms"]["test"]
+            cfg["archive"]["filename"] = "runtime.tar.bz2"
+            cfg["archive"]["archive_type"] = "tar.bz2"
+            cfg["files"][0]["path"] = "pkg/lib/libwake.so"
+            cfg["archive"].update(ident(archive.read_bytes()))
+            target = wake_runtime.prepare_runtime(root / "out", "test", runtime, archive_path=archive)
+            self.assertEqual((target / "pkg/lib/libwake.so").read_bytes(), data)
+
     def test_offline_prepared_runtime_is_deterministic_and_verified(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
