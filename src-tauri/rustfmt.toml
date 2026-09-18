@@ -1,2 +1,1 @@
-max_width = 120
-fn_call_width = 120
+ignore = ["src/app/wake_word_engine.rs"]
