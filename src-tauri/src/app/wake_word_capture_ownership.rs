@@ -85,10 +85,7 @@ impl WakeMicrophoneOwnership {
 
     /// Reconnect deterministically according to the latest Wake setting. This never creates
     /// a command-ASR owner implicitly; a command must explicitly claim ownership again.
-    pub(crate) fn reconnect(
-        &mut self,
-        wake_enabled: bool,
-    ) -> Result<(), MicrophoneOwnershipError> {
+    pub(crate) fn reconnect(&mut self, wake_enabled: bool) -> Result<(), MicrophoneOwnershipError> {
         match self.owner {
             MicrophoneOwner::Unavailable => {
                 self.owner = if wake_enabled {
