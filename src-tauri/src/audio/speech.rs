@@ -51,9 +51,8 @@ impl StandaloneSpeechController {
     }
 
     /// Return whether `token` still owns the authoritative standalone slot,
-    /// regardless of whether that current token has been cancelled. Terminal
-    /// cleanup uses this to distinguish cancellation of the current utterance
-    /// from cleanup of an utterance superseded by a newer one.
+    /// including after cancellation. Terminal lifecycle cleanup uses this to
+    /// distinguish current cancellation from cleanup of superseded speech.
     pub fn owns_slot(&self, token: &CancellationToken) -> bool {
         let current = self.current.lock();
         &*current == token
@@ -130,107 +129,114 @@ pub async fn synthesize_and_queue_cancellable(
         playback.flush();
         return Err(STANDALONE_SPEECH_CANCELLED.to_string());
     }
-    playback
-        .enqueue(&audio.samples, audio.sample_rate_hz)
-        .map_err(|error_value| error_value.to_string())
+
+    let report = playback
+        .enqueue_pcm_bytes(&audio.pcm_bytes, audio.sample_rate)
+        .map_err(|error_value| error_value.to_string())?;
+    if cancellation.is_cancelled() {
+        playback.flush();
+        return Err(STANDALONE_SPEECH_CANCELLED.to_string());
+    }
+    Ok(report)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::traits::SpeechSynthesizer;
-    use crate::ai::types::{AudioBuffer, ProviderError};
+    use crate::ai::types::{AudioStreamData, ProviderError};
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
     struct NeverSynthesizer;
 
+    struct OversizedSynthesizer;
+
+    struct ErrorSynthesizer {
+        kind: ProviderErrorKind,
+        calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl SpeechSynthesizer for OversizedSynthesizer {
+        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
+            let samples = 24_000 * (crate::audio::playback::MAX_QUEUED_PLAYBACK_SECONDS + 2);
+            Ok(AudioStreamData {
+                pcm_bytes: vec![0_u8; samples * 2],
+                sample_rate: 24_000,
+            })
+        }
+    }
+
     #[async_trait]
     impl SpeechSynthesizer for NeverSynthesizer {
-        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioBuffer, ProviderError> {
-            futures::future::pending().await
+        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
+            std::future::pending().await
         }
-
-        async fn synthesize_cancellable(
-            &self,
-            _request: TtsRequest,
-            cancellation: &CancellationToken,
-        ) -> Result<AudioBuffer, ProviderError> {
-            cancellation.cancelled().await;
-            Err(ProviderError::cancelled("cancelled"))
-        }
-    }
-
-    struct CountingFailSynthesizer {
-        calls: Arc<AtomicUsize>,
-        error: ProviderError,
     }
 
     #[async_trait]
-    impl SpeechSynthesizer for CountingFailSynthesizer {
-        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioBuffer, ProviderError> {
+    impl SpeechSynthesizer for ErrorSynthesizer {
+        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Err(self.error.clone())
+            Err(ProviderError::from_kind(self.kind))
         }
     }
 
     #[tokio::test]
-    async fn standalone_speech_starts_playback_and_queues_audio() {
-        struct StaticSynthesizer;
-
-        #[async_trait]
-        impl SpeechSynthesizer for StaticSynthesizer {
-            async fn synthesize(&self, _request: TtsRequest) -> Result<AudioBuffer, ProviderError> {
-                Ok(AudioBuffer {
-                    samples: vec![0.25, -0.25, 0.5],
-                    sample_rate_hz: 24_000,
-                })
-            }
-        }
-
+    async fn standalone_speech_queue_overload_is_bounded_and_reported() {
         let playback = AudioPlayback::new_mock();
         let report = synthesize_and_queue(
-            &StaticSynthesizer,
+            &OversizedSynthesizer,
             &playback,
             TtsRequest {
-                text: "Hello".to_string(),
-                voice_name: None,
-                speaking_rate: None,
-                pitch: None,
+                text: "oversized speech".to_string(),
+                voice_name: Some("Fenrir".to_string()),
+                speaking_rate: Some(1.0),
+                pitch: Some(0.0),
             },
             None,
         )
         .await
         .unwrap();
 
-        assert!(playback.is_playing());
-        assert_eq!(report.queued_samples, 3);
-        assert_eq!(report.source_sample_rate_hz, 24_000);
+        assert_eq!(report.queued_samples, playback.max_queued_samples());
+        assert!(report.dropped_samples > 0);
+        assert_eq!(playback.queue_length(), playback.max_queued_samples());
+        assert_eq!(
+            playback.dropped_samples(),
+            u64::try_from(report.dropped_samples).unwrap()
+        );
+
+        StandaloneSpeechController::new().cancel(&playback);
+        assert_eq!(playback.queue_length(), 0);
+        assert!(!playback.is_playing());
     }
 
     #[tokio::test]
-    async fn provider_failures_propagate_without_fallback() {
-        for (kind, expected) in [
-            (ProviderErrorKind::Auth, "auth failure"),
-            (ProviderErrorKind::RateLimit, "rate limit"),
-            (ProviderErrorKind::Network, "network failure"),
-            (ProviderErrorKind::InvalidRequest, "invalid request"),
-            (ProviderErrorKind::Other, "provider failure"),
+    async fn provider_failures_propagate_once_without_fallback_or_audio() {
+        for kind in [
+            ProviderErrorKind::Setup,
+            ProviderErrorKind::Model,
+            ProviderErrorKind::Internal,
+            ProviderErrorKind::Auth,
+            ProviderErrorKind::Network,
+            ProviderErrorKind::Protocol,
         ] {
             let calls = Arc::new(AtomicUsize::new(0));
-            let synthesizer = CountingFailSynthesizer {
+            let synthesizer = ErrorSynthesizer {
+                kind,
                 calls: calls.clone(),
-                error: ProviderError::new(kind, expected),
             };
             let playback = AudioPlayback::new_mock();
+            let expected = ProviderError::from_kind(kind).message;
             let error = synthesize_and_queue(
                 &synthesizer,
                 &playback,
                 TtsRequest {
-                    text: "No fallback".to_string(),
+                    text: "provider failure must never fallback".to_string(),
                     voice_name: None,
-                    speaking_rate: None,
+                    speaking_rate: Some(1.0),
                     pitch: None,
                 },
                 None,
