@@ -1,4 +1,7 @@
 use crate::app::state::AppSettings;
+use crate::app::wake_word_composition::{
+    application_wake_word_runtime, initialize_application_wake_word_runtime,
+};
 #[cfg(any(target_os = "macos", test))]
 use std::path::Path;
 use tauri::{Manager, Runtime};
@@ -127,6 +130,7 @@ pub(crate) fn apply_startup_runtime_preferences<R: Runtime>(
     app: &tauri::AppHandle<R>,
     settings: &AppSettings,
 ) -> Result<(), String> {
+    initialize_application_wake_word_runtime(settings)?;
     sync_launch_at_login(app, settings.launch_at_login)?;
     set_always_on_top(app, settings.always_on_top)
 }
@@ -139,15 +143,32 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     let launch_changed = previous.launch_at_login != next.launch_at_login;
     let window_changed = previous.always_on_top != next.always_on_top;
     let tray_changed = previous.show_in_menu_bar != next.show_in_menu_bar;
+    let wake_word_changed = previous.wake_word_enabled != next.wake_word_enabled;
+
+    if wake_word_changed {
+        application_wake_word_runtime()?
+            .apply_enabled_setting(next.wake_word_enabled)
+            .map_err(|error| error.to_string())?;
+    }
 
     if launch_changed {
-        sync_launch_at_login(app, next.launch_at_login)?;
+        if let Err(error) = sync_launch_at_login(app, next.launch_at_login) {
+            if wake_word_changed {
+                let _ = application_wake_word_runtime()
+                    .and_then(|runtime| runtime.apply_enabled_setting(previous.wake_word_enabled).map_err(|error| error.to_string()));
+            }
+            return Err(error);
+        }
     }
 
     if window_changed {
         if let Err(error) = set_always_on_top(app, next.always_on_top) {
             if launch_changed {
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
+            }
+            if wake_word_changed {
+                let _ = application_wake_word_runtime()
+                    .and_then(|runtime| runtime.apply_enabled_setting(previous.wake_word_enabled).map_err(|error| error.to_string()));
             }
             return Err(error);
         }
@@ -160,6 +181,10 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
             }
             if launch_changed {
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
+            }
+            if wake_word_changed {
+                let _ = application_wake_word_runtime()
+                    .and_then(|runtime| runtime.apply_enabled_setting(previous.wake_word_enabled).map_err(|error| error.to_string()));
             }
             return Err(error);
         }
