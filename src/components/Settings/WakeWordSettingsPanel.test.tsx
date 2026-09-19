@@ -1,12 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WakeWordSettingsPanel } from "./WakeWordSettingsPanel";
 import { frontendDefaultSettings } from "../../lib/backendContract";
 import {
   resetSettingsPersistenceForTests,
   useMooseStore,
 } from "../../stores/mooseStore";
+import { WakeWordSettingsPanel } from "./WakeWordSettingsPanel";
 
 const renderPanel = (wakeWordEnabled = false) => {
   resetSettingsPersistenceForTests();
@@ -36,9 +36,7 @@ describe("WakeWordSettingsPanel", () => {
     expect(screen.getByLabelText("Wake word phrase")).toHaveTextContent(
       "Hey, Moose",
     );
-    expect(
-      screen.queryByDisplayValue("Hey, Moose"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Hey, Moose")).not.toBeInTheDocument();
     expect(
       screen.getByText(/local\/offline keyword spotting/i),
     ).toBeInTheDocument();
@@ -55,9 +53,7 @@ describe("WakeWordSettingsPanel", () => {
   it("persists the fixed phrase when the user enables Wake Word", async () => {
     renderPanel(false);
 
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /enable wake word/i }),
-    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /enable wake word/i }));
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
@@ -79,9 +75,7 @@ describe("WakeWordSettingsPanel", () => {
   it("persists the fixed phrase when the user disables Wake Word", async () => {
     renderPanel(true);
 
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /enable wake word/i }),
-    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /enable wake word/i }));
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
