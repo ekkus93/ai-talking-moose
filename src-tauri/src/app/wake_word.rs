@@ -10,6 +10,7 @@
 // consume every facade component.
 #![allow(unused_imports)]
 
+pub(crate) use super::wake_word_composition as composition;
 pub(crate) use super::wake_word_engine as engine;
 pub(crate) use super::wake_word_settings as settings;
 pub(crate) use crate::asr::wake_word_diagnostics as diagnostics;
