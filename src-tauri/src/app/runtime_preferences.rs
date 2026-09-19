@@ -29,7 +29,7 @@ fn launch_agent_contents(executable: &Path) -> Result<String, String> {
     let executable = plist_escape(executable);
     Ok(format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD Plist 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
@@ -154,8 +154,11 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     if launch_changed {
         if let Err(error) = sync_launch_at_login(app, next.launch_at_login) {
             if wake_word_changed {
-                let _ = application_wake_word_runtime()
-                    .and_then(|runtime| runtime.apply_enabled_setting(previous.wake_word_enabled).map_err(|error| error.to_string()));
+                let _ = application_wake_word_runtime().and_then(|runtime| {
+                    runtime
+                        .apply_enabled_setting(previous.wake_word_enabled)
+                        .map_err(|error| error.to_string())
+                });
             }
             return Err(error);
         }
@@ -167,8 +170,11 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
             }
             if wake_word_changed {
-                let _ = application_wake_word_runtime()
-                    .and_then(|runtime| runtime.apply_enabled_setting(previous.wake_word_enabled).map_err(|error| error.to_string()));
+                let _ = application_wake_word_runtime().and_then(|runtime| {
+                    runtime
+                        .apply_enabled_setting(previous.wake_word_enabled)
+                        .map_err(|error| error.to_string())
+                });
             }
             return Err(error);
         }
@@ -183,8 +189,11 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
             }
             if wake_word_changed {
-                let _ = application_wake_word_runtime()
-                    .and_then(|runtime| runtime.apply_enabled_setting(previous.wake_word_enabled).map_err(|error| error.to_string()));
+                let _ = application_wake_word_runtime().and_then(|runtime| {
+                    runtime
+                        .apply_enabled_setting(previous.wake_word_enabled)
+                        .map_err(|error| error.to_string())
+                });
             }
             return Err(error);
         }
