@@ -7,6 +7,7 @@ pub(crate) mod tray;
 pub(crate) mod wake_word;
 #[allow(dead_code)]
 pub(crate) mod wake_word_composition;
+pub(crate) mod wake_word_state;
 #[allow(dead_code)]
 #[rustfmt::skip]
 pub(crate) mod wake_word_engine;
