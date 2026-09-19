@@ -341,8 +341,11 @@ pub(crate) fn schedule_standalone_completion<R: Runtime>(
                 .with_current(|| {
                     clear_speech_bubble(&app);
                     if *character_state.read() == CharacterState::Talking {
-                        let _ =
-                            transition_and_emit(character_state.as_ref(), &app, CharacterState::Idle);
+                        let _ = transition_and_emit(
+                            character_state.as_ref(),
+                            &app,
+                            CharacterState::Idle,
+                        );
                     }
                 })
                 .is_some()
