@@ -2,6 +2,7 @@ use super::wake_word::engine::{
     validate_pcm_frame, SherpaKwsEngine, WakeWordDetection, WakeWordError,
 };
 use super::wake_word::runtime::{WakeWordRuntimeError, WakeWordRuntimeManager};
+use crate::asr::wake_word_handoff::WakeAsrHandoff;
 use std::time::Instant;
 
 /// Result of routing one canonical microphone chunk through the Wake Word listening path.
@@ -10,6 +11,7 @@ pub(crate) struct WakePcmRouteOutcome {
     pub retained: bool,
     pub detection: Option<WakeWordDetection>,
     pub trigger_accepted: bool,
+    pub live_handoff_retained: bool,
 }
 
 #[derive(Debug)]
@@ -28,11 +30,16 @@ pub(crate) enum WakePcmRouteError {
 pub(crate) struct CanonicalWakePcmRouter<E: SherpaKwsEngine> {
     runtime: WakeWordRuntimeManager,
     engine: E,
+    handoff: Option<WakeAsrHandoff>,
 }
 
 impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
     pub(crate) fn new(runtime: WakeWordRuntimeManager, engine: E) -> Self {
-        Self { runtime, engine }
+        Self {
+            runtime,
+            engine,
+            handoff: None,
+        }
     }
 
     pub(crate) fn route(
@@ -44,6 +51,18 @@ impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
         // Reject non-canonical input before either consumer can mutate state.
         validate_pcm_frame(sample_rate_hz, samples).map_err(WakePcmRouteError::Engine)?;
 
+        if let Some(handoff) = self.handoff.as_mut() {
+            handoff
+                .append_live(sample_rate_hz, samples)
+                .map_err(WakePcmRouteError::Engine)?;
+            return Ok(WakePcmRouteOutcome {
+                retained: false,
+                detection: None,
+                trigger_accepted: false,
+                live_handoff_retained: true,
+            });
+        }
+
         let retained = self
             .runtime
             .append_listening_pcm_frame(sample_rate_hz, samples)
@@ -53,6 +72,7 @@ impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
                 retained: false,
                 detection: None,
                 trigger_accepted: false,
+                live_handoff_retained: false,
             });
         }
 
@@ -68,12 +88,39 @@ impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
         } else {
             false
         };
+        if trigger_accepted {
+            if let Some(pre_roll) = self
+                .runtime
+                .take_triggered_pre_roll()
+                .map_err(WakePcmRouteError::Runtime)?
+            {
+                self.handoff = Some(WakeAsrHandoff::new(pre_roll));
+            }
+        }
 
         Ok(WakePcmRouteOutcome {
             retained,
             detection,
             trigger_accepted,
+            live_handoff_retained: false,
         })
+    }
+
+    pub(crate) fn take_handoff_for_asr(&mut self) -> Option<Vec<i16>> {
+        self.handoff.as_mut().and_then(WakeAsrHandoff::take_for_asr)
+    }
+
+    pub(crate) fn clear_handoff(&mut self) {
+        if let Some(handoff) = self.handoff.as_mut() {
+            handoff.clear();
+        }
+        self.handoff = None;
+    }
+
+    pub(crate) fn handoff_live_samples(&self) -> usize {
+        self.handoff
+            .as_ref()
+            .map_or(0, WakeAsrHandoff::live_samples)
     }
 
     pub(crate) fn runtime(&self) -> &WakeWordRuntimeManager {
@@ -176,7 +223,7 @@ mod tests {
     }
 
     #[test]
-    fn detection_atomically_moves_runtime_out_of_listening_for_later_chunks() {
+    fn detection_atomically_moves_runtime_out_of_listening_and_starts_handoff() {
         let runtime = listening_runtime();
         let engine = RecordingEngine {
             detect_next: true,
@@ -193,16 +240,69 @@ mod tests {
             router.runtime().snapshot(now).phase,
             WakeWordRuntimePhase::Triggered
         );
+        assert_eq!(router.handoff_live_samples(), 0);
+        assert_eq!(router.engine_mut().frames, vec![vec![11, 12]]);
+    }
 
+    #[test]
+    fn post_trigger_chunks_are_preserved_for_command_asr_without_refeeding_kws() {
+        let runtime = listening_runtime();
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut router = CanonicalWakePcmRouter::new(runtime, engine);
+        let now = Instant::now();
+
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[11, 12], now).unwrap();
         let after = router.route(V1_KWS_SAMPLE_RATE_HZ, &[13, 14], now).unwrap();
         assert!(!after.retained);
         assert!(after.detection.is_none());
         assert!(!after.trigger_accepted);
+        assert!(after.live_handoff_retained);
         assert_eq!(router.engine_mut().frames, vec![vec![11, 12]]);
-        assert_eq!(
-            router.runtime().take_triggered_pre_roll().unwrap().unwrap(),
-            vec![11, 12]
-        );
+        assert_eq!(router.handoff_live_samples(), 2);
+        assert_eq!(router.take_handoff_for_asr().unwrap(), vec![11, 12, 13, 14]);
+    }
+
+    #[test]
+    fn invalid_post_trigger_frame_does_not_mutate_live_handoff() {
+        let runtime = listening_runtime();
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut router = CanonicalWakePcmRouter::new(runtime, engine);
+        let now = Instant::now();
+
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[21, 22], now).unwrap();
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[23, 24], now).unwrap();
+        let before_live = router.handoff_live_samples();
+
+        assert!(router.route(48_000, &[25, 26], now).is_err());
+        assert!(router.route(V1_KWS_SAMPLE_RATE_HZ, &[], now).is_err());
+        assert_eq!(router.handoff_live_samples(), before_live);
+        assert_eq!(router.take_handoff_for_asr().unwrap(), vec![21, 22, 23, 24]);
+    }
+
+    #[test]
+    fn clearing_handoff_drops_stale_audio_after_failed_startup() {
+        let runtime = listening_runtime();
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut router = CanonicalWakePcmRouter::new(runtime, engine);
+        let now = Instant::now();
+
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[31, 32], now).unwrap();
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[33, 34], now).unwrap();
+        assert_eq!(router.handoff_live_samples(), 2);
+
+        router.clear_handoff();
+
+        assert_eq!(router.handoff_live_samples(), 0);
+        assert_eq!(router.take_handoff_for_asr(), None);
     }
 
     #[test]
@@ -214,6 +314,7 @@ mod tests {
             .unwrap();
         assert!(!outcome.retained);
         assert!(outcome.detection.is_none());
+        assert!(!outcome.live_handoff_retained);
         assert!(router.engine_mut().frames.is_empty());
     }
 }
