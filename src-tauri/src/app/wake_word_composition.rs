@@ -1,5 +1,7 @@
 use super::state::AppSettings;
-use super::wake_word::runtime::{WakeWordRuntimeError, WakeWordRuntimeManager, WakeWordRuntimePhase, WakeWordRuntimeSnapshot};
+use super::wake_word::runtime::{
+    WakeWordRuntimeError, WakeWordRuntimeManager, WakeWordRuntimePhase, WakeWordRuntimeSnapshot,
+};
 use std::time::Instant;
 
 /// Authoritative application-level owner for the Wake Word V1 runtime.
