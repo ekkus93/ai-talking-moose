@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Mic2 } from "lucide-react";
+import { tauriBridge } from "../../lib/tauriBridge";
 import { useMooseStore } from "../../stores/mooseStore";
+import type { WakeWordDiagnostics, WakeWordRuntimePhase } from "../../types/moose";
 
 const WAKE_WORD_PHRASE = "Hey, Moose";
 
@@ -16,8 +18,52 @@ const COPY = {
   noBargeIn: "Wake Word V1 has no barge-in support while Moose talks.",
 };
 
+const RUNTIME_PHASE_LABELS: Record<WakeWordRuntimePhase, string> = {
+  disabled: "Disabled",
+  loading: "Loading",
+  listening: "Listening",
+  triggered: "Triggered",
+  suspended_talking: "Suspended while Moose talks",
+  error: "Error",
+  shutting_down: "Shutting down",
+};
+
+const runtimeStatusText = (
+  diagnostics: WakeWordDiagnostics | null,
+  fallbackEnabled: boolean,
+) => {
+  if (!diagnostics) {
+    return fallbackEnabled ? "Runtime status pending." : "Runtime disabled.";
+  }
+
+  return `Runtime: ${RUNTIME_PHASE_LABELS[diagnostics.runtime_phase]}`;
+};
+
 export const WakeWordSettingsPanel: React.FC = () => {
   const { settings, updateSettingsPatch } = useMooseStore();
+  const [diagnostics, setDiagnostics] = useState<WakeWordDiagnostics | null>(
+    null,
+  );
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+
+  const refreshDiagnostics = useCallback(async () => {
+    setDiagnosticsLoading(true);
+    try {
+      setDiagnostics(await tauriBridge.getWakeWordDiagnostics());
+      setDiagnosticsError(null);
+    } catch {
+      setDiagnostics(null);
+      setDiagnosticsError("Wake Word runtime status is unavailable.");
+    } finally {
+      setDiagnosticsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshDiagnostics();
+  }, [refreshDiagnostics, settings?.wake_word_enabled]);
+
   if (!settings) return null;
 
   const status = settings.wake_word_enabled
@@ -28,7 +74,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
     void updateSettingsPatch({
       wake_word_enabled: enabled,
       wake_word_phrase: WAKE_WORD_PHRASE,
-    });
+    }).then(refreshDiagnostics);
   };
 
   return (
@@ -53,7 +99,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
             type="checkbox"
             checked={settings.wake_word_enabled}
             onChange={(event) => toggleWakeWord(event.target.checked)}
-            aria-describedby="wake-word-status wake-word-disclosure"
+            aria-describedby="wake-word-status wake-word-runtime-status wake-word-disclosure"
           />
           <span>Enable wake word</span>
         </label>
@@ -66,7 +112,22 @@ export const WakeWordSettingsPanel: React.FC = () => {
         <dd id="wake-word-status" aria-live="polite">
           {status}
         </dd>
+        <dt className="font-bold">Runtime</dt>
+        <dd id="wake-word-runtime-status" aria-live="polite">
+          {diagnosticsLoading
+            ? "Refreshing runtime status…"
+            : runtimeStatusText(diagnostics, settings.wake_word_enabled)}
+        </dd>
       </dl>
+
+      {(diagnosticsError || diagnostics?.last_error) && (
+        <div
+          role="status"
+          className="border border-amber-700 bg-amber-50 text-amber-900 rounded p-2 text-[11px]"
+        >
+          {diagnosticsError ?? diagnostics?.last_error}
+        </div>
+      )}
 
       <div id="wake-word-disclosure" className="space-y-1 text-[11px]">
         <p>{COPY.local}</p>

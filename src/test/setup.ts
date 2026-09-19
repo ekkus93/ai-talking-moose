@@ -11,6 +11,7 @@ import type {
   AsrModelDescriptor,
   AudioDiagnostics,
   LocalModelDescriptor,
+  WakeWordDiagnostics,
 } from "../types/moose";
 
 // Production-like frontend tests must select the same Tauri/IPC branch as the
@@ -43,6 +44,35 @@ const mockAudioDiagnostics: AudioDiagnostics = {
     last_error: null,
   },
 };
+
+const mockWakeWordDiagnostics = (): WakeWordDiagnostics => ({
+  enabled: false,
+  runtime_phase: "disabled",
+  engine_id: "sherpa-onnx-kws",
+  model_id: "sherpa-onnx-kws-gigaspeech-v1",
+  model_archive_sha256: "test-model-sha256",
+  model_license: "Apache-2.0",
+  keyword_sha256: "test-keyword-sha256",
+  runtime_id: "sherpa-onnx-v1.13.8",
+  runtime_license: "Apache-2.0",
+  runtime_c_api_sha256: null,
+  platform: "test",
+  architecture: "test",
+  canonical_sample_rate_hz: 16_000,
+  canonical_channels: 1,
+  inference_threads: 1,
+  threshold: 0.25,
+  score: 1.0,
+  ring_buffer_capacity_samples: 32_000,
+  ring_buffer_capacity_ms: 2_000,
+  ring_buffer_samples: 0,
+  handoff_pre_roll_samples: 0,
+  trigger_count: 0,
+  last_trigger_age_ms: null,
+  runtime_initialization_ms: null,
+  talking_suspended: false,
+  last_error: null,
+});
 
 const mockAsrModels: AsrModelDescriptor[] = [
   {
@@ -158,6 +188,7 @@ const dispatchTauriCommand = async (
   if (cmd === "get_microphone_permission") return "granted";
   if (cmd === "request_microphone_access") return "granted";
   if (cmd === "get_audio_diagnostics") return mockAudioDiagnostics;
+  if (cmd === "get_wake_word_diagnostics") return mockWakeWordDiagnostics();
   if (cmd === "test_microphone") {
     return { peak_level: 0.42, diagnostics: mockAudioDiagnostics };
   }

@@ -44,7 +44,7 @@ describe("WakeWordSettingsPanel", () => {
     vi.clearAllMocks();
   });
 
-  it("shows disabled-by-default controls and privacy disclosures", () => {
+  it("shows disabled-by-default controls and privacy disclosures", async () => {
     renderPanel(false);
 
     expect(wakeToggle()).not.toBeChecked();
@@ -57,6 +57,7 @@ describe("WakeWordSettingsPanel", () => {
     expect(screen.getByText(/not full-time cloud/i)).toBeInTheDocument();
     expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
     expect(screen.getByText(/manual start remains/i)).toBeInTheDocument();
+    expect(await screen.findByText(/runtime: disabled/i)).toBeInTheDocument();
   });
 
   it("persists the fixed phrase when enabling Wake Word", async () => {
