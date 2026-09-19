@@ -1,4 +1,6 @@
-use super::wake_word::engine::{validate_pcm_frame, SherpaKwsEngine, WakeWordDetection, WakeWordError};
+use super::wake_word::engine::{
+    validate_pcm_frame, SherpaKwsEngine, WakeWordDetection, WakeWordError,
+};
 use super::wake_word::runtime::{WakeWordRuntimeError, WakeWordRuntimeManager};
 use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 use std::time::Instant;
@@ -165,7 +167,10 @@ mod tests {
 
         assert_eq!(router.engine_mut().frames, vec![vec![7, 8]]);
         assert_eq!(
-            router.runtime().snapshot(Instant::now()).ring_buffer_samples,
+            router
+                .runtime()
+                .snapshot(Instant::now())
+                .ring_buffer_samples,
             before.ring_buffer_samples
         );
     }
@@ -180,9 +185,7 @@ mod tests {
         let mut router = CanonicalWakePcmRouter::new(runtime, engine);
         let now = Instant::now();
 
-        let detected = router
-            .route(V1_KWS_SAMPLE_RATE_HZ, &[11, 12], now)
-            .unwrap();
+        let detected = router.route(V1_KWS_SAMPLE_RATE_HZ, &[11, 12], now).unwrap();
         assert!(detected.retained);
         assert!(detected.detection.is_some());
         assert!(detected.trigger_accepted);
@@ -191,9 +194,7 @@ mod tests {
             WakeWordRuntimePhase::Triggered
         );
 
-        let after = router
-            .route(V1_KWS_SAMPLE_RATE_HZ, &[13, 14], now)
-            .unwrap();
+        let after = router.route(V1_KWS_SAMPLE_RATE_HZ, &[13, 14], now).unwrap();
         assert!(!after.retained);
         assert!(after.detection.is_none());
         assert!(!after.trigger_accepted);
