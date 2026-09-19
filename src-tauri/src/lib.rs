@@ -102,6 +102,8 @@ pub fn run() {
             })?;
 
             let app_state = AppState::new(Some(db_path)).map_err(io::Error::other)?;
+            app::wake_word_state::initialize_from_app_state(&app_state)
+                .map_err(io::Error::other)?;
             let startup_settings = app_state.settings.read().clone();
             if let Err(error) = app::runtime_preferences::apply_startup_runtime_preferences(
                 app.handle(),
@@ -273,6 +275,9 @@ pub fn run() {
             if let Some(state) = app_handle.try_state::<AppState>() {
                 state.local_llm_runtime.begin_shutdown();
                 state.local_tts_runtime.begin_shutdown();
+                if let Ok(wake_runtime) = app::wake_word_state::runtime_from_app_state(&state) {
+                    wake_runtime.begin_shutdown();
+                }
             }
             let handle = app_handle.clone();
             let exit_code = code.unwrap_or(0);
