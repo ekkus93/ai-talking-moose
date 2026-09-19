@@ -2,7 +2,10 @@ import React, { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Mic2 } from "lucide-react";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { useMooseStore } from "../../stores/mooseStore";
-import type { WakeWordDiagnostics, WakeWordRuntimePhase } from "../../types/moose";
+import type {
+  WakeWordDiagnostics,
+  WakeWordRuntimePhase,
+} from "../../types/moose";
 
 const WAKE_WORD_PHRASE = "Hey, Moose";
 
