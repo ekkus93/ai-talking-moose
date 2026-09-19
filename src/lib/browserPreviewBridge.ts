@@ -22,6 +22,7 @@ import type {
   ToolAuditRecord,
   TtsCatalog,
   TtsProvider,
+  WakeWordDiagnostics,
 } from "../types/moose";
 import type {
   LocalTtsDiagnostics,
@@ -89,6 +90,35 @@ const previewAsrDiagnostics = (): AsrDiagnostics => ({
   baseline_resident_memory_bytes: null,
   resident_memory_bytes: null,
   peak_resident_memory_bytes: null,
+});
+
+const previewWakeWordDiagnostics = (): WakeWordDiagnostics => ({
+  enabled: false,
+  runtime_phase: "disabled",
+  engine_id: "sherpa-onnx-kws",
+  model_id: "sherpa-onnx-kws-gigaspeech-v1",
+  model_archive_sha256: "preview",
+  model_license: "Apache-2.0",
+  keyword_sha256: "preview",
+  runtime_id: "sherpa-onnx-v1.13.8",
+  runtime_license: "Apache-2.0",
+  runtime_c_api_sha256: null,
+  platform: "browser-preview",
+  architecture: "browser-preview",
+  canonical_sample_rate_hz: 16_000,
+  canonical_channels: 1,
+  inference_threads: 1,
+  threshold: 0.25,
+  score: 1.0,
+  ring_buffer_capacity_samples: 32_000,
+  ring_buffer_capacity_ms: 2_000,
+  ring_buffer_samples: 0,
+  handoff_pre_roll_samples: 0,
+  trigger_count: 0,
+  last_trigger_age_ms: null,
+  runtime_initialization_ms: null,
+  talking_suspended: false,
+  last_error: null,
 });
 
 const previewAsrModels = (): AsrModelDescriptor[] => [
@@ -432,6 +462,10 @@ export const browserPreviewBridge = {
 
   async getAudioDiagnostics(): Promise<AudioDiagnostics> {
     return previewAudioDiagnostics();
+  },
+
+  async getWakeWordDiagnostics(): Promise<WakeWordDiagnostics> {
+    return previewWakeWordDiagnostics();
   },
 
   async testMicrophone(): Promise<MicrophoneTestResult> {

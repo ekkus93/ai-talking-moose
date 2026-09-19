@@ -105,6 +105,44 @@ export interface AsrDiagnostics {
   peak_resident_memory_bytes: number | null;
 }
 
+export type WakeWordRuntimePhase =
+  | "disabled"
+  | "loading"
+  | "listening"
+  | "triggered"
+  | "suspended_talking"
+  | "error"
+  | "shutting_down";
+
+export interface WakeWordDiagnostics {
+  enabled: boolean;
+  runtime_phase: WakeWordRuntimePhase;
+  engine_id: string;
+  model_id: string;
+  model_archive_sha256: string;
+  model_license: string;
+  keyword_sha256: string;
+  runtime_id: string;
+  runtime_license: string;
+  runtime_c_api_sha256: string | null;
+  platform: string;
+  architecture: string;
+  canonical_sample_rate_hz: number;
+  canonical_channels: number;
+  inference_threads: number;
+  threshold: number;
+  score: number;
+  ring_buffer_capacity_samples: number;
+  ring_buffer_capacity_ms: number;
+  ring_buffer_samples: number;
+  handoff_pre_roll_samples: number;
+  trigger_count: number;
+  last_trigger_age_ms: number | null;
+  runtime_initialization_ms: number | null;
+  talking_suspended: boolean;
+  last_error: string | null;
+}
+
 export interface AsrModelProgressEvent {
   mode: Exclude<AsrMode, "gemini_live_audio">;
   install_state: Extract<AsrModelInstallState, "downloading" | "verifying">;

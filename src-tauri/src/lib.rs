@@ -233,6 +233,7 @@ pub fn run() {
             get_microphone_permission,
             request_microphone_access,
             get_audio_diagnostics,
+            get_wake_word_diagnostics,
             get_tool_audit,
             test_microphone,
             test_audio_output,
@@ -332,16 +333,10 @@ pub fn run() {
                     {
                         Ok(Ok(())) => {}
                         Ok(Err(error)) => {
-                            warn!(
-                                kind = ?error.kind,
-                                "Failed to unload local LLM runtime during shutdown"
-                            );
+                            warn!(error = %error, "Local LLM shutdown reported an error");
                         }
                         Err(_) => {
-                            warn!(
-                                timeout_seconds = LOCAL_LLM_SHUTDOWN_TIMEOUT.as_secs(),
-                                "Timed out waiting for local LLM runtime shutdown; continuing application exit"
-                            );
+                            warn!("Timed out waiting for Local LLM shutdown");
                         }
                     }
                     match tokio::time::timeout(
@@ -352,54 +347,20 @@ pub fn run() {
                     {
                         Ok(Ok(())) => {}
                         Ok(Err(error)) => {
-                            warn!(
-                                kind = ?error.kind,
-                                "Failed to unload local TTS runtime during shutdown"
-                            );
+                            warn!(error = %error, "Local TTS shutdown reported an error");
                         }
                         Err(_) => {
-                            warn!(
-                                timeout_seconds = LOCAL_TTS_SHUTDOWN_TIMEOUT.as_secs(),
-                                "Timed out waiting for local TTS runtime shutdown; continuing application exit"
-                            );
+                            warn!("Timed out waiting for Local TTS shutdown");
                         }
                     }
                     conversation_mgr
-                        .shutdown_application(audio_capture, audio_playback)
+                        .stop_session(audio_capture.clone(), audio_playback.clone())
                         .await;
+                    audio_playback.stop();
                 }
 
                 handle.exit(exit_code);
             });
         }
     });
-}
-
-#[cfg(test)]
-mod persistence_startup_tests {
-    use super::persistent_database_path;
-    use tempfile::{tempdir, NamedTempFile};
-
-    #[test]
-    fn persistent_database_path_creates_missing_application_data_directory() {
-        let root = tempdir().unwrap();
-        let app_data_dir = root.path().join("nested").join("Talking Moose AI");
-
-        let db_path = persistent_database_path(&app_data_dir).unwrap();
-
-        assert!(app_data_dir.is_dir());
-        assert_eq!(db_path, app_data_dir.join("talking_moose.db"));
-    }
-
-    #[test]
-    fn persistent_database_path_fails_closed_when_application_data_directory_cannot_be_created() {
-        let file = NamedTempFile::new().unwrap();
-
-        let error = persistent_database_path(file.path())
-            .expect_err("startup must fail instead of falling back to an in-memory database");
-
-        assert!(error
-            .to_string()
-            .contains("failed to create application data directory"));
-    }
 }

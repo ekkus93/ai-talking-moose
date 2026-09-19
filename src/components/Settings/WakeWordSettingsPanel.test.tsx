@@ -38,13 +38,17 @@ const expectPersistedWakeSetting = async (enabled: boolean) => {
   });
 };
 
+const waitForRuntimeDiagnostics = async () => {
+  expect(await screen.findByText(/runtime: disabled/i)).toBeInTheDocument();
+};
+
 describe("WakeWordSettingsPanel", () => {
   beforeEach(() => {
     resetSettingsPersistenceForTests();
     vi.clearAllMocks();
   });
 
-  it("shows disabled-by-default controls and privacy disclosures", () => {
+  it("shows disabled-by-default controls and privacy disclosures", async () => {
     renderPanel(false);
 
     expect(wakeToggle()).not.toBeChecked();
@@ -57,10 +61,12 @@ describe("WakeWordSettingsPanel", () => {
     expect(screen.getByText(/not full-time cloud/i)).toBeInTheDocument();
     expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
     expect(screen.getByText(/manual start remains/i)).toBeInTheDocument();
+    await waitForRuntimeDiagnostics();
   });
 
   it("persists the fixed phrase when enabling Wake Word", async () => {
     renderPanel(false);
+    await waitForRuntimeDiagnostics();
 
     fireEvent.click(wakeToggle());
 
@@ -71,6 +77,7 @@ describe("WakeWordSettingsPanel", () => {
 
   it("persists the fixed phrase when disabling Wake Word", async () => {
     renderPanel(true);
+    await waitForRuntimeDiagnostics();
 
     fireEvent.click(wakeToggle());
 
