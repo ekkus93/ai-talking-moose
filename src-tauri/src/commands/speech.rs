@@ -3,6 +3,8 @@ use crate::ai::local_tts::LocalSpeechSynthesizer;
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{TtsProvider, TtsRequest};
 use crate::app::state::AppState;
+use crate::app::wake_word::composition::application_wake_word_runtime;
+use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::audio::playback::AudioPlayback;
 use crate::audio::speech::{synthesize_and_queue_cancellable, StandaloneSpeechController};
 use crate::character::state::CharacterState;
@@ -20,6 +22,7 @@ pub(crate) struct StandaloneSpeechPlayback {
     duration: Duration,
     cancellation: CancellationToken,
     controller: StandaloneSpeechController,
+    wake_word_suspended: bool,
 }
 
 impl StandaloneSpeechPlayback {
@@ -45,6 +48,16 @@ impl StandaloneSpeechPlayback {
     pub(crate) fn cancel_if_current(&self, playback: &AudioPlayback) -> bool {
         self.controller
             .cancel_if_current(playback, &self.cancellation)
+    }
+
+    pub(crate) fn owns_slot(&self) -> bool {
+        self.controller.owns_slot(&self.cancellation)
+    }
+
+    fn resume_wake_word_after_terminal_tts(&self) {
+        if self.wake_word_suspended {
+            resume_wake_word_after_standalone_talking();
+        }
     }
 }
 
@@ -166,6 +179,7 @@ async fn synthesize_standalone(
         duration,
         cancellation,
         controller: controller.clone(),
+        wake_word_suspended: false,
     })
 }
 
@@ -178,7 +192,7 @@ async fn invoke_standalone_speech_snapshot<R: Runtime>(
     let request = snapshot.request(text);
     let output_device = snapshot.output_device.clone();
     let synthesizer = synthesizer_for_snapshot(state, &snapshot);
-    let playback = synthesize_standalone(
+    let mut playback = synthesize_standalone(
         synthesizer.as_ref(),
         state.audio_playback.as_ref(),
         &state.standalone_speech,
@@ -188,21 +202,60 @@ async fn invoke_standalone_speech_snapshot<R: Runtime>(
     .await?;
 
     state.ambient_scheduler.claim_foreground_presentation();
-    if let Err(error) = surface_standalone_playback(state, app, text) {
-        playback.cancel_if_current(state.audio_playback.as_ref());
-        return Err(error);
+    match surface_standalone_playback(state, app, text) {
+        Ok(wake_word_suspended) => {
+            playback.wake_word_suspended = wake_word_suspended;
+            Ok(playback)
+        }
+        Err(error) => {
+            playback.cancel_if_current(state.audio_playback.as_ref());
+            Err(error)
+        }
     }
-    Ok(playback)
+}
+
+fn suspend_wake_word_for_standalone_talking() -> Result<bool, String> {
+    let Ok(runtime) = application_wake_word_runtime() else {
+        return Ok(false);
+    };
+
+    match runtime.phase() {
+        WakeWordRuntimePhase::Listening | WakeWordRuntimePhase::Triggered => {
+            runtime
+                .suspend_for_talking()
+                .map_err(|error| error.to_string())?;
+            Ok(true)
+        }
+        WakeWordRuntimePhase::SuspendedTalking => Ok(true),
+        WakeWordRuntimePhase::Disabled
+        | WakeWordRuntimePhase::Loading
+        | WakeWordRuntimePhase::Error
+        | WakeWordRuntimePhase::ShuttingDown => Ok(false),
+    }
+}
+
+fn resume_wake_word_after_standalone_talking() {
+    let Ok(runtime) = application_wake_word_runtime() else {
+        return;
+    };
+    let wake_word_enabled = runtime.phase() != WakeWordRuntimePhase::Disabled;
+    let _ = runtime.resume_after_interaction(wake_word_enabled);
 }
 
 fn surface_standalone_playback<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
     text: &str,
-) -> Result<(), String> {
-    transition_and_emit(&state.character_state, app, CharacterState::Talking)?;
+) -> Result<bool, String> {
+    let wake_word_suspended = suspend_wake_word_for_standalone_talking()?;
+    if let Err(error) = transition_and_emit(&state.character_state, app, CharacterState::Talking) {
+        if wake_word_suspended {
+            resume_wake_word_after_standalone_talking();
+        }
+        return Err(error);
+    }
     let _ = app.emit("moose://speech-bubble", text);
-    Ok(())
+    Ok(wake_word_suspended)
 }
 
 /// Authoritative standalone speech invocation for ambient remarks, character
@@ -231,7 +284,7 @@ pub(crate) async fn invoke_standalone_speech_for_ambient<R: Runtime>(
     let request = snapshot.request(text);
     let output_device = snapshot.output_device.clone();
     let synthesizer = synthesizer_for_snapshot(state, &snapshot);
-    let playback = synthesize_standalone(
+    let mut playback = synthesize_standalone(
         synthesizer.as_ref(),
         state.audio_playback.as_ref(),
         &state.standalone_speech,
@@ -249,11 +302,16 @@ pub(crate) async fn invoke_standalone_speech_for_ambient<R: Runtime>(
         playback.cancel_if_current(state.audio_playback.as_ref());
         return Ok(None);
     };
-    if let Err(error) = presentation {
-        playback.cancel_if_current(state.audio_playback.as_ref());
-        return Err(error);
+    match presentation {
+        Ok(wake_word_suspended) => {
+            playback.wake_word_suspended = wake_word_suspended;
+            Ok(Some(playback))
+        }
+        Err(error) => {
+            playback.cancel_if_current(state.audio_playback.as_ref());
+            Err(error)
+        }
     }
-    Ok(Some(playback))
 }
 
 /// Provider-guarded standalone invocation used by voice audition. The provider is not an override:
@@ -278,15 +336,25 @@ pub(crate) fn schedule_standalone_completion<R: Runtime>(
     playback: StandaloneSpeechPlayback,
 ) {
     tauri::async_runtime::spawn(async move {
-        if !playback.completed_without_cancellation().await {
+        if playback.completed_without_cancellation().await {
+            if playback
+                .with_current(|| {
+                    clear_speech_bubble(&app);
+                    if *character_state.read() == CharacterState::Talking {
+                        let _ =
+                            transition_and_emit(character_state.as_ref(), &app, CharacterState::Idle);
+                    }
+                })
+                .is_some()
+            {
+                playback.resume_wake_word_after_terminal_tts();
+            }
             return;
         }
-        let _ = playback.with_current(|| {
-            clear_speech_bubble(&app);
-            if *character_state.read() == CharacterState::Talking {
-                let _ = transition_and_emit(character_state.as_ref(), &app, CharacterState::Idle);
-            }
-        });
+
+        if playback.owns_slot() {
+            playback.resume_wake_word_after_terminal_tts();
+        }
     });
 }
 
@@ -435,6 +503,7 @@ mod tests {
             duration: Duration::from_millis(25),
             cancellation: current,
             controller: controller.clone(),
+            wake_word_suspended: false,
         };
 
         let _newer_utterance = controller.begin(&audio_playback);
