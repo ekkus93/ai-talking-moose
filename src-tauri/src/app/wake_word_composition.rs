@@ -73,6 +73,16 @@ impl WakeWordApplicationRuntime {
         }
     }
 
+    /// Fail Wake Word closed when the one authoritative microphone capture reports an error.
+    ///
+    /// This boundary deliberately does not reopen or replace `AudioCapture`: device reconnect
+    /// remains the responsibility of the single application capture owner. Wake Word drops all
+    /// retained PCM and enters a recoverable sanitized error state, avoiding retry spin and
+    /// preventing a second capture stream from being created as an error-recovery side effect.
+    pub fn record_capture_error(&self) {
+        self.manager.record_runtime_error();
+    }
+
     pub fn record_runtime_error(&self) {
         self.manager.record_runtime_error();
     }
@@ -198,6 +208,27 @@ mod tests {
         owner.record_runtime_error();
         assert_eq!(owner.phase(), WakeWordRuntimePhase::Error);
 
+        owner.apply_enabled_setting(true).unwrap();
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Loading);
+    }
+
+    #[test]
+    fn capture_error_fails_closed_without_restarting_or_retaining_audio() {
+        let owner = enabled_owner();
+        assert!(owner.manager().append_listening_pcm(&[7, 8, 9]));
+
+        owner.record_capture_error();
+
+        let failed = owner.snapshot(Instant::now());
+        assert_eq!(failed.phase, WakeWordRuntimePhase::Error);
+        assert_eq!(failed.ring_buffer_samples, 0);
+        assert_eq!(failed.handoff_pre_roll_samples, 0);
+        assert_eq!(
+            failed.last_error,
+            Some("The Wake Word runtime encountered an internal error.")
+        );
+
+        // Recovery is explicit and returns to Loading; this boundary never opens a stream.
         owner.apply_enabled_setting(true).unwrap();
         assert_eq!(owner.phase(), WakeWordRuntimePhase::Loading);
     }
