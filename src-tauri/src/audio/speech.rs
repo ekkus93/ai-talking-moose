@@ -50,6 +50,14 @@ impl StandaloneSpeechController {
         true
     }
 
+    /// Return whether `token` still owns the authoritative standalone slot,
+    /// including after cancellation. Terminal lifecycle cleanup uses this to
+    /// distinguish current cancellation from cleanup of superseded speech.
+    pub fn owns_slot(&self, token: &CancellationToken) -> bool {
+        let current = self.current.lock();
+        &*current == token
+    }
+
     pub fn is_current(&self, token: &CancellationToken) -> bool {
         let current = self.current.lock();
         !current.is_cancelled() && &*current == token
@@ -256,6 +264,26 @@ mod tests {
 
         assert!(controller.cancel_if_current(&playback, &foreground));
         assert!(foreground.is_cancelled());
+    }
+
+    #[test]
+    fn slot_ownership_survives_current_cancellation_but_not_supersession() {
+        let playback = AudioPlayback::new_mock();
+        let controller = StandaloneSpeechController::new();
+        let first = controller.begin(&playback);
+
+        assert!(controller.is_current(&first));
+        assert!(controller.owns_slot(&first));
+
+        assert!(controller.cancel_if_current(&playback, &first));
+        assert!(!controller.is_current(&first));
+        assert!(controller.owns_slot(&first));
+
+        let second = controller.begin(&playback);
+        assert!(!controller.is_current(&first));
+        assert!(!controller.owns_slot(&first));
+        assert!(controller.is_current(&second));
+        assert!(controller.owns_slot(&second));
     }
 
     #[tokio::test]
