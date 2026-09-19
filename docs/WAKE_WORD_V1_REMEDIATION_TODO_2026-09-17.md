@@ -225,34 +225,34 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-200 — Implement the real native sherpa KWS session
 
-- [ ] Implement the real native `NativeKwsSession`/equivalent adapter.
-- [ ] Load the exact verified sherpa native runtime.
-- [ ] Load exact verified encoder.
-- [ ] Load exact verified decoder.
-- [ ] Load exact verified joiner.
-- [ ] Load exact verified `tokens.txt`.
-- [ ] Load exact verified `bpe.model`.
-- [ ] Configure deterministic `HEY MOOSE` keyword representation.
-- [ ] Configure one inference thread.
-- [ ] Configure score `1.0`.
-- [ ] Configure threshold `0.25`.
-- [ ] Feed streaming 16-kHz mono PCM.
-- [ ] Emit bounded Wake Word detection event with no raw audio.
-- [ ] Reset stream state after accepted recognition.
-- [ ] Implement idempotent shutdown.
-- [ ] Add cancellation/interrupt behavior where native API permits.
-- [ ] Map native errors to sanitized Wake Word errors.
-- [ ] Ensure normal inference has no network dependency.
-- [ ] Ensure engine never performs full transcription.
+- [x] Implement the real native `NativeKwsSession`/equivalent adapter.
+- [x] Load the exact verified sherpa native runtime.
+- [x] Load exact verified encoder.
+- [x] Load exact verified decoder.
+- [x] Load exact verified joiner.
+- [x] Load exact verified `tokens.txt`.
+- [x] Load exact verified `bpe.model`.
+- [x] Configure deterministic `HEY MOOSE` keyword representation.
+- [x] Configure one inference thread.
+- [x] Configure score `1.0`.
+- [x] Configure threshold `0.25`.
+- [x] Feed streaming 16-kHz mono PCM.
+- [x] Emit bounded Wake Word detection event with no raw audio.
+- [x] Reset stream state after accepted recognition.
+- [x] Implement idempotent shutdown.
+- [x] Add cancellation/interrupt behavior where native API permits.
+- [x] Map native errors to sanitized Wake Word errors.
+- [x] Ensure normal inference has no network dependency.
+- [x] Ensure engine never performs full transcription.
 
 **Tests**
 
-- [ ] Missing verified artifact fails before native session creation.
-- [ ] Corrupt verified artifact fails before native session creation.
-- [ ] Wrong architecture fails before native load.
-- [ ] Native load failure is sanitized.
-- [ ] Thread/threshold/score policy is observable.
-- [ ] Fake-session tests remain for deterministic unit coverage.
+- [x] Missing verified artifact fails before native session creation.
+- [x] Corrupt verified artifact fails before native session creation.
+- [x] Wrong architecture fails before native load.
+- [x] Native load failure is sanitized.
+- [x] Thread/threshold/score policy is observable.
+- [x] Fake-session tests remain for deterministic unit coverage.
 - [ ] Real positive fixture triggers.
 - [ ] Real negative fixture does not trigger.
 
@@ -260,6 +260,10 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 - [ ] Production engine can execute real pinned sherpa KWS offline.
 - [ ] Fake session is not used by production composition.
+
+---
+
+**Evidence (implementation):** `src-tauri/src/app/wake_word_engine.rs` now contains the real verified native sherpa C-API session, fail-closed model/runtime identity and architecture checks, frozen V1 policy, bounded detection, reset/shutdown behavior, and deterministic fake-session/unit coverage. Real positive/negative fixture acceptance and production composition remain open and must not be inferred from component tests.
 
 ---
 
@@ -289,8 +293,8 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-300 — Integrate one authoritative microphone routing path
 
-- [ ] Re-audit current `AudioCapture` ownership on the post-consolidation source.
-- [ ] Select and document the final one-stream/routing strategy.
+- [x] Re-audit current `AudioCapture` ownership on the post-consolidation source.
+- [x] Select and document the final one-stream/routing strategy.
 - [ ] Wire Wake Word manager into production application state/composition.
 - [ ] Ensure Wake Word does not open a competing continuous microphone stream.
 - [ ] Canonicalize/resample microphone PCM once where practical.
@@ -316,6 +320,10 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 - [ ] Exactly one authoritative microphone ownership model exists in production.
 - [ ] No simultaneous competing capture opens occur.
+
+---
+
+**Evidence (audit/strategy):** `docs/evidence/WWR-300_AUDIO_CAPTURE_OWNERSHIP_AUDIT_2026-09-19.md`; audit merged in PR #223 at `f182f688d94e384780fc28024ca3ae3f5680829f`. The remaining WWR-300 items are production wiring and acceptance, not documentation.
 
 ---
 
@@ -698,6 +706,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 - [ ] Original TODO is no longer stale.
 - [ ] Reconciliation does not create evidence-only recursion.
+
 
 ---
 
