@@ -47,7 +47,9 @@ describe("WakeWordSettingsPanel", () => {
       screen.getByText(/not full-time cloud transcription/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
-    expect(screen.getByText(/manual start remains available/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/manual start remains available/i),
+    ).toBeInTheDocument();
   });
 
   it("persists the fixed phrase when the user enables Wake Word", async () => {
@@ -91,6 +93,8 @@ describe("WakeWordSettingsPanel", () => {
     expect(
       screen.getByRole("checkbox", { name: /enable wake word/i }),
     ).not.toBeChecked();
-    expect(screen.getByText(/manual start remains available/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/manual start remains available/i),
+    ).toBeInTheDocument();
   });
 });
