@@ -2,7 +2,6 @@ use super::wake_word::engine::{
     validate_pcm_frame, SherpaKwsEngine, WakeWordDetection, WakeWordError,
 };
 use super::wake_word::runtime::{WakeWordRuntimeError, WakeWordRuntimeManager};
-use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 use std::time::Instant;
 
 /// Result of routing one canonical microphone chunk through the Wake Word listening path.
@@ -91,6 +90,7 @@ mod tests {
     use super::*;
     use crate::app::wake_word::engine::{SherpaKwsConfig, WakeWordDetection};
     use crate::app::wake_word::runtime::WakeWordRuntimePhase;
+    use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 
     #[derive(Default)]
     struct RecordingEngine {
