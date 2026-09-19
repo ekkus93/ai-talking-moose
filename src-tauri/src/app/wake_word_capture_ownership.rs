@@ -55,7 +55,10 @@ impl WakeMicrophoneOwnership {
 
     /// Return capture entitlement after every terminal command outcome. The latest setting
     /// wins so disabling Wake Word during an interaction cannot accidentally resume it.
-    pub(crate) fn return_after_command(&mut self, wake_enabled: bool) -> Result<(), MicrophoneOwnershipError> {
+    pub(crate) fn return_after_command(
+        &mut self,
+        wake_enabled: bool,
+    ) -> Result<(), MicrophoneOwnershipError> {
         match self.owner {
             MicrophoneOwner::CommandAsr => {
                 self.owner = if wake_enabled {
@@ -82,7 +85,10 @@ impl WakeMicrophoneOwnership {
 
     /// Reconnect deterministically according to the latest Wake setting. This never creates
     /// a command-ASR owner implicitly; a command must explicitly claim ownership again.
-    pub(crate) fn reconnect(&mut self, wake_enabled: bool) -> Result<(), MicrophoneOwnershipError> {
+    pub(crate) fn reconnect(
+        &mut self,
+        wake_enabled: bool,
+    ) -> Result<(), MicrophoneOwnershipError> {
         match self.owner {
             MicrophoneOwner::Unavailable => {
                 self.owner = if wake_enabled {
@@ -99,7 +105,10 @@ impl WakeMicrophoneOwnership {
 
     /// Cancellation uses the same terminal return policy as success/failure, preventing a
     /// cancelled command from leaving an orphaned command owner.
-    pub(crate) fn cancel_command(&mut self, wake_enabled: bool) -> Result<(), MicrophoneOwnershipError> {
+    pub(crate) fn cancel_command(
+        &mut self,
+        wake_enabled: bool,
+    ) -> Result<(), MicrophoneOwnershipError> {
         self.return_after_command(wake_enabled)
     }
 
