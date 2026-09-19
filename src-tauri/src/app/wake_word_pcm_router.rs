@@ -107,9 +107,7 @@ impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
     }
 
     pub(crate) fn take_handoff_for_asr(&mut self) -> Option<Vec<i16>> {
-        self.handoff
-            .as_mut()
-            .and_then(WakeAsrHandoff::take_for_asr)
+        self.handoff.as_mut().and_then(WakeAsrHandoff::take_for_asr)
     }
 
     pub(crate) fn clear_handoff(&mut self) {
