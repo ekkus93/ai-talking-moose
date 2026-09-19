@@ -73,6 +73,14 @@ impl WakeWordApplicationRuntime {
         }
     }
 
+    /// Transition Wake Word into a sanitized recoverable error after microphone capture fails.
+    ///
+    /// `AudioCapture` remains the sole physical stream owner; this method records only the
+    /// Wake-side lifecycle effect and never opens, restarts, or duplicates a capture stream.
+    pub fn record_capture_error(&self) {
+        self.manager.record_runtime_error();
+    }
+
     pub fn record_runtime_error(&self) {
         self.manager.record_runtime_error();
     }
@@ -190,6 +198,27 @@ mod tests {
         owner.suspend_for_talking().unwrap();
         owner.resume_after_interaction(false).unwrap();
         assert_eq!(owner.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
+    fn capture_error_is_sanitized_clears_audio_and_remains_recoverable() {
+        let owner = enabled_owner();
+        assert!(owner.manager().append_listening_pcm(&[9, 10, 11]));
+        assert_eq!(owner.snapshot(Instant::now()).ring_buffer_samples, 3);
+
+        owner.record_capture_error();
+
+        let errored = owner.snapshot(Instant::now());
+        assert_eq!(errored.phase, WakeWordRuntimePhase::Error);
+        assert_eq!(errored.ring_buffer_samples, 0);
+        assert_eq!(errored.handoff_pre_roll_samples, 0);
+        assert_eq!(
+            errored.last_error,
+            Some("The Wake Word runtime encountered an internal error.")
+        );
+
+        owner.apply_enabled_setting(true).unwrap();
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Loading);
     }
 
     #[test]
