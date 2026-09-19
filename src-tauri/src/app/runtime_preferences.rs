@@ -1,6 +1,7 @@
 use crate::app::state::AppSettings;
 use crate::app::wake_word_composition::{
     application_wake_word_runtime, initialize_application_wake_word_runtime,
+    WakeWordApplicationRuntime,
 };
 #[cfg(any(target_os = "macos", test))]
 use std::path::Path;
@@ -126,6 +127,23 @@ fn set_tray_visible<R: Runtime>(app: &tauri::AppHandle<R>, visible: bool) -> Res
     tray.set_visible(visible).map_err(|error| error.to_string())
 }
 
+fn apply_wake_word_setting_change(
+    runtime: &WakeWordApplicationRuntime,
+    previous_enabled: bool,
+    next_enabled: bool,
+) -> Result<(), String> {
+    if previous_enabled == next_enabled {
+        return Ok(());
+    }
+    runtime
+        .apply_enabled_setting(next_enabled)
+        .map_err(|error| error.to_string())
+}
+
+fn rollback_wake_word_setting(runtime: &WakeWordApplicationRuntime, enabled: bool) {
+    let _ = runtime.apply_enabled_setting(enabled);
+}
+
 pub(crate) fn apply_startup_runtime_preferences<R: Runtime>(
     app: &tauri::AppHandle<R>,
     settings: &AppSettings,
@@ -144,21 +162,18 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     let window_changed = previous.always_on_top != next.always_on_top;
     let tray_changed = previous.show_in_menu_bar != next.show_in_menu_bar;
     let wake_word_changed = previous.wake_word_enabled != next.wake_word_enabled;
+    let wake_runtime = application_wake_word_runtime()?;
 
-    if wake_word_changed {
-        application_wake_word_runtime()?
-            .apply_enabled_setting(next.wake_word_enabled)
-            .map_err(|error| error.to_string())?;
-    }
+    apply_wake_word_setting_change(
+        wake_runtime,
+        previous.wake_word_enabled,
+        next.wake_word_enabled,
+    )?;
 
     if launch_changed {
         if let Err(error) = sync_launch_at_login(app, next.launch_at_login) {
             if wake_word_changed {
-                let _ = application_wake_word_runtime().and_then(|runtime| {
-                    runtime
-                        .apply_enabled_setting(previous.wake_word_enabled)
-                        .map_err(|error| error.to_string())
-                });
+                rollback_wake_word_setting(wake_runtime, previous.wake_word_enabled);
             }
             return Err(error);
         }
@@ -170,11 +185,7 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
             }
             if wake_word_changed {
-                let _ = application_wake_word_runtime().and_then(|runtime| {
-                    runtime
-                        .apply_enabled_setting(previous.wake_word_enabled)
-                        .map_err(|error| error.to_string())
-                });
+                rollback_wake_word_setting(wake_runtime, previous.wake_word_enabled);
             }
             return Err(error);
         }
@@ -189,11 +200,7 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
             }
             if wake_word_changed {
-                let _ = application_wake_word_runtime().and_then(|runtime| {
-                    runtime
-                        .apply_enabled_setting(previous.wake_word_enabled)
-                        .map_err(|error| error.to_string())
-                });
+                rollback_wake_word_setting(wake_runtime, previous.wake_word_enabled);
             }
             return Err(error);
         }
@@ -205,6 +212,7 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
 
     #[test]
     fn launch_agent_round_trip_is_idempotent_and_removable() {
@@ -224,5 +232,41 @@ mod tests {
         sync_launch_agent_file(directory.path(), &executable, false).unwrap();
         assert!(!path.exists());
         sync_launch_agent_file(directory.path(), &executable, false).unwrap();
+    }
+
+    #[test]
+    fn wake_setting_change_applies_immediately_without_capture_ownership() {
+        let runtime = WakeWordApplicationRuntime::from_settings(&AppSettings::default()).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+
+        apply_wake_word_setting_change(&runtime, false, true).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Loading);
+
+        runtime.mark_loaded().unwrap();
+        apply_wake_word_setting_change(&runtime, true, false).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
+    fn unchanged_wake_setting_does_not_disturb_runtime_phase() {
+        let settings = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
+        runtime.mark_loaded().unwrap();
+
+        apply_wake_word_setting_change(&runtime, true, true).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
+    }
+
+    #[test]
+    fn wake_setting_rollback_restores_previous_disabled_state() {
+        let runtime = WakeWordApplicationRuntime::from_settings(&AppSettings::default()).unwrap();
+        apply_wake_word_setting_change(&runtime, false, true).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Loading);
+
+        rollback_wake_word_setting(&runtime, false);
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
     }
 }
