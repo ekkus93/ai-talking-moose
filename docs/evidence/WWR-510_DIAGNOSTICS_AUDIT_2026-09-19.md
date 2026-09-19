@@ -4,7 +4,7 @@ Base commit: `a61108401d585c1685f76a47fa7444c9fd3d884e`
 
 ## Scope
 
-This audit compares `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md` WWR-510 against the current authoritative implementation in `src-tauri/src/asr/wake_word_diagnostics.rs` and `src-tauri/src/asr/wake_word_runtime.rs`.
+This audit compares `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md` WWR-510 against the current authoritative implementation in `src-tauri/src/asr/wake_word_diagnostics.rs`, `src-tauri/src/asr/wake_word_runtime.rs`, and the production native KWS boundary in `src-tauri/src/app/wake_word_engine.rs`.
 
 ## Already implemented
 
@@ -27,11 +27,24 @@ This audit compares `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md` WWR-510 a
 
 The diagnostics type intentionally has no field capable of carrying raw PCM, transcripts, credentials, or filesystem paths. Unit coverage serializes diagnostics and asserts those classes of data are absent. Runtime errors are represented by the fixed sanitized message `The Wake Word runtime encountered an internal error.` rather than propagating arbitrary underlying error text.
 
+## Native KWS error/privacy audit
+
+The production `NativeKwsSession` boundary was re-audited on master `446da3d7df3b60560384e5bc8637ff92ba0d73c3`.
+
+- Artifact verification converts open/read/identity/architecture failures to fixed bounded messages; it does not include the model or runtime path in those errors.
+- Missing native C-API library errors are fixed and have a regression test proving the temporary runtime directory is absent from the returned message.
+- `WakeWordError::sanitized` replaces path-like whitespace-delimited tokens with `<path>` and long secret-like tokens with `<redacted>` before an error can cross the Wake Word engine boundary.
+- Native feed/reset/shutdown errors are bounded to setup/runtime/cancellation semantics; no PCM samples are formatted into an error.
+- Native keyword detection only emits the fixed V1 keyword identity plus score. The sherpa result JSON/tokens/timestamps are not copied into `WakeWordDetection` or diagnostics.
+- The diagnostics serializer has no raw-audio, transcript, credential, model-path, or runtime-path field.
+
+This closes the focused native KWS portion of the WWR-510 path/credential/audio-content audit. It does not claim that unrelated repository logging has been exhaustively audited; the final repository-wide sweep remains shared with WWR-900.
+
 ## Remaining WWR-510 work
 
 The current implementation does **not** yet provide optional measured CPU, memory, inference-latency, or handoff-latency fields. Those TODO entries are explicitly optional (`as available`) and should only be added when a trustworthy measurement boundary exists.
 
-A final repository-wide log/error audit is still required before WWR-510 can be marked completely closed. In particular, production KWS artifact/runtime load failures should be checked end-to-end to ensure no unnecessary absolute model/runtime path is surfaced outside internal setup evidence.
+A final repository-wide log/error audit is still required before WWR-510 can be marked completely closed. WWR-900 should perform that cross-cutting sweep rather than treating this focused native-boundary review as evidence for unrelated modules.
 
 ## Qualification boundary
 
