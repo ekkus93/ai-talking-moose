@@ -9,6 +9,10 @@ use super::wake_word_composition::{
 /// Initialization is seeded from the already-normalized persisted settings held by
 /// `AppState`. The runtime owns lifecycle/KWS state only; physical microphone capture
 /// remains exclusively owned by `AppState::audio_capture`.
+#[expect(
+    dead_code,
+    reason = "WWR-300 introduces the AppState binding before the subsequent routing slice calls it from production startup"
+)]
 pub(crate) fn initialize_from_app_state(
     state: &AppState,
 ) -> Result<&'static WakeWordApplicationRuntime, String> {
@@ -17,6 +21,10 @@ pub(crate) fn initialize_from_app_state(
 }
 
 /// Access the process-wide Wake Word runtime after application composition.
+#[expect(
+    dead_code,
+    reason = "WWR-300 exposes the authoritative state lookup before later lifecycle wiring consumes it"
+)]
 pub(crate) fn runtime_from_app_state(
     _state: &AppState,
 ) -> Result<&'static WakeWordApplicationRuntime, String> {
