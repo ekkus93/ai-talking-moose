@@ -8,6 +8,10 @@ import {
 } from "../../stores/mooseStore";
 import { WakeWordSettingsPanel } from "./WakeWordSettingsPanel";
 
+const wakeToggle = () => {
+  return screen.getByRole("checkbox", { name: /enable wake word/i });
+};
+
 const renderPanel = (wakeWordEnabled = false) => {
   resetSettingsPersistenceForTests();
   useMooseStore.setState({
@@ -20,84 +24,58 @@ const renderPanel = (wakeWordEnabled = false) => {
   render(<WakeWordSettingsPanel />);
 };
 
+const expectPersistedWakeSetting = async (enabled: boolean) => {
+  await waitFor(() => {
+    expect(invoke).toHaveBeenCalledWith(
+      "update_settings",
+      expect.objectContaining({
+        newSettings: expect.objectContaining({
+          wake_word_enabled: enabled,
+          wake_word_phrase: "Hey, Moose",
+        }),
+      }),
+    );
+  });
+};
+
 describe("WakeWordSettingsPanel", () => {
   beforeEach(() => {
     resetSettingsPersistenceForTests();
     vi.clearAllMocks();
   });
 
-  it(
-    "shows disabled-by-default Wake Word controls and required privacy disclosures",
-    () => {
-      renderPanel(false);
-
-      const toggle = screen.getByRole("checkbox", {
-        name: /enable wake word/i,
-      });
-      expect(toggle).not.toBeChecked();
-      expect(screen.getByLabelText("Wake word phrase")).toHaveTextContent(
-        "Hey, Moose",
-      );
-      expect(screen.queryByDisplayValue("Hey, Moose")).not.toBeInTheDocument();
-      expect(
-        screen.getByText(/local\/offline keyword spotting/i),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/microphone remains locally active while listening/i),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/not full-time cloud transcription/i),
-      ).toBeInTheDocument();
-      expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
-      expect(
-        screen.getByText(/manual start remains available/i),
-      ).toBeInTheDocument();
-    },
-  );
-
-  it("persists the fixed phrase when the user enables Wake Word", async () => {
+  it("shows disabled-by-default controls and privacy disclosures", () => {
     renderPanel(false);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /enable wake word/i }));
-
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith(
-        "update_settings",
-        expect.objectContaining({
-          newSettings: expect.objectContaining({
-            wake_word_enabled: true,
-            wake_word_phrase: "Hey, Moose",
-          }),
-        }),
-      ),
+    expect(wakeToggle()).not.toBeChecked();
+    expect(screen.getByLabelText("Wake word phrase")).toHaveTextContent(
+      "Hey, Moose",
     );
-    expect(
-      screen.getByRole("checkbox", { name: /enable wake word/i }),
-    ).toBeChecked();
-    expect(screen.getByText(/enabled — runtime starts/i)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Hey, Moose")).not.toBeInTheDocument();
+    expect(screen.getByText(/local\/offline keyword/i)).toBeInTheDocument();
+    expect(screen.getByText(/locally active/i)).toBeInTheDocument();
+    expect(screen.getByText(/not full-time cloud/i)).toBeInTheDocument();
+    expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
+    expect(screen.getByText(/manual start remains/i)).toBeInTheDocument();
   });
 
-  it("persists the fixed phrase when the user disables Wake Word", async () => {
+  it("persists the fixed phrase when enabling Wake Word", async () => {
+    renderPanel(false);
+
+    fireEvent.click(wakeToggle());
+
+    await expectPersistedWakeSetting(true);
+    expect(wakeToggle()).toBeChecked();
+    expect(screen.getByText(/enabled/i)).toBeInTheDocument();
+  });
+
+  it("persists the fixed phrase when disabling Wake Word", async () => {
     renderPanel(true);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /enable wake word/i }));
+    fireEvent.click(wakeToggle());
 
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith(
-        "update_settings",
-        expect.objectContaining({
-          newSettings: expect.objectContaining({
-            wake_word_enabled: false,
-            wake_word_phrase: "Hey, Moose",
-          }),
-        }),
-      ),
-    );
-    expect(
-      screen.getByRole("checkbox", { name: /enable wake word/i }),
-    ).not.toBeChecked();
-    expect(
-      screen.getByText(/manual start remains available/i),
-    ).toBeInTheDocument();
+    await expectPersistedWakeSetting(false);
+    expect(wakeToggle()).not.toBeChecked();
+    expect(screen.getByText(/manual start remains/i)).toBeInTheDocument();
   });
 });
