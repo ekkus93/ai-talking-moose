@@ -326,10 +326,7 @@ mod tests {
 
         let resumed = router.route(V1_KWS_SAMPLE_RATE_HZ, &[17, 18], now).unwrap();
         assert!(resumed.retained);
-        assert_eq!(
-            router.engine_mut().frames,
-            vec![vec![11, 12], vec![17, 18]]
-        );
+        assert_eq!(router.engine_mut().frames, vec![vec![11, 12], vec![17, 18]]);
     }
 
     #[test]
