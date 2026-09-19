@@ -92,8 +92,8 @@ impl WakeWordApplicationRuntime {
 pub fn initialize_application_wake_word_runtime(
     settings: &AppSettings,
 ) -> Result<&'static WakeWordApplicationRuntime, String> {
-    let runtime = WakeWordApplicationRuntime::from_settings(settings)
-        .map_err(|error| error.to_string())?;
+    let runtime =
+        WakeWordApplicationRuntime::from_settings(settings).map_err(|error| error.to_string())?;
     APPLICATION_WAKE_WORD_RUNTIME
         .set(runtime)
         .map_err(|_| "Wake Word application runtime is already initialized".to_string())?;
