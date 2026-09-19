@@ -106,8 +106,18 @@ impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
         })
     }
 
+    /// Transfer the accumulated wake pre-roll plus post-trigger live PCM to command ASR once.
+    ///
+    /// Removing the handoff as part of transfer makes ownership explicit: after this call the
+    /// router no longer buffers live startup audio and the command-ASR side owns the returned
+    /// chronological sample vector.
+    pub(crate) fn transfer_handoff_to_asr(&mut self) -> Option<Vec<i16>> {
+        let mut handoff = self.handoff.take()?;
+        handoff.take_for_asr()
+    }
+
     pub(crate) fn take_handoff_for_asr(&mut self) -> Option<Vec<i16>> {
-        self.handoff.as_mut().and_then(WakeAsrHandoff::take_for_asr)
+        self.transfer_handoff_to_asr()
     }
 
     pub(crate) fn clear_handoff(&mut self) {
@@ -115,6 +125,20 @@ impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
             handoff.clear();
         }
         self.handoff = None;
+    }
+
+    /// Return ownership from command ASR to wake listening after interaction completion/failure.
+    ///
+    /// The KWS stream is reset before the runtime can listen again so stale inference state cannot
+    /// trigger on samples from the previous command interaction.
+    pub(crate) fn return_to_wake_listening(&mut self) -> Result<(), WakePcmRouteError> {
+        self.clear_handoff();
+        self.engine
+            .reset_stream()
+            .map_err(WakePcmRouteError::Engine)?;
+        self.runtime
+            .resume_after_interaction()
+            .map_err(WakePcmRouteError::Runtime)
     }
 
     pub(crate) fn handoff_live_samples(&self) -> usize {
@@ -144,6 +168,7 @@ mod tests {
         config: SherpaKwsConfig,
         frames: Vec<Vec<i16>>,
         detect_next: bool,
+        reset_count: usize,
     }
 
     impl SherpaKwsEngine for RecordingEngine {
@@ -166,6 +191,7 @@ mod tests {
         }
 
         fn reset_stream(&mut self) -> Result<(), WakeWordError> {
+            self.reset_count += 1;
             Ok(())
         }
 
@@ -262,7 +288,48 @@ mod tests {
         assert!(after.live_handoff_retained);
         assert_eq!(router.engine_mut().frames, vec![vec![11, 12]]);
         assert_eq!(router.handoff_live_samples(), 2);
-        assert_eq!(router.take_handoff_for_asr().unwrap(), vec![11, 12, 13, 14]);
+        assert_eq!(
+            router.transfer_handoff_to_asr().unwrap(),
+            vec![11, 12, 13, 14]
+        );
+    }
+
+    #[test]
+    fn handoff_transfer_is_single_use_and_return_resumes_listening() {
+        let runtime = listening_runtime();
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut router = CanonicalWakePcmRouter::new(runtime, engine);
+        let now = Instant::now();
+
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[11, 12], now).unwrap();
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[13, 14], now).unwrap();
+        assert_eq!(
+            router.transfer_handoff_to_asr().unwrap(),
+            vec![11, 12, 13, 14]
+        );
+        assert_eq!(router.transfer_handoff_to_asr(), None);
+
+        let during_transfer = router.route(V1_KWS_SAMPLE_RATE_HZ, &[15, 16], now).unwrap();
+        assert!(!during_transfer.retained);
+        assert!(!during_transfer.live_handoff_retained);
+        assert_eq!(router.engine_mut().frames, vec![vec![11, 12]]);
+
+        router.return_to_wake_listening().unwrap();
+        assert_eq!(
+            router.runtime().snapshot(now).phase,
+            WakeWordRuntimePhase::Listening
+        );
+        assert_eq!(router.engine_mut().reset_count, 1);
+
+        let resumed = router.route(V1_KWS_SAMPLE_RATE_HZ, &[17, 18], now).unwrap();
+        assert!(resumed.retained);
+        assert_eq!(
+            router.engine_mut().frames,
+            vec![vec![11, 12], vec![17, 18]]
+        );
     }
 
     #[test]
