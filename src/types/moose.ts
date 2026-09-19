@@ -240,67 +240,25 @@ export interface LocalRuntimeDiagnostics {
 
 export interface LocalLlmDiagnostics {
   installer: LocalModelDiagnostics;
-  selected_install_state: LocalModelInstallState;
+  selected_install_state: LocalModelInstallState | null;
   runtime: LocalRuntimeDiagnostics;
 }
 
 export interface LocalModelInstallProgress {
   model_id: string;
-  install_state: Extract<
-    LocalModelInstallState,
-    "downloading" | "verifying" | "promoting"
-  >;
+  install_state: Extract<LocalModelInstallState, "downloading" | "verifying">;
   downloaded_bytes: number;
   total_bytes: number;
-  current_file: string | null;
-}
-
-export interface GoogleModelDescriptor {
-  id: string;
-  display_name: string;
-  capabilities: string[];
-}
-
-export interface GoogleTtsVoiceDescriptor {
-  id: string;
-  display_name: string;
-  style: string;
-}
-
-export interface TtsVoiceDescriptor {
-  id: string;
-  display_name: string;
-  style: string;
-}
-
-export interface TtsModelDescriptor {
-  id: string;
-  display_name: string;
-  voices: TtsVoiceDescriptor[];
-}
-
-export interface TtsProviderDescriptor {
-  id: TtsProvider;
-  display_name: string;
-  local: boolean;
-  models: TtsModelDescriptor[];
-}
-
-export interface TtsCatalog {
-  providers: TtsProviderDescriptor[];
-}
-
-export interface AudioDeviceInfo {
-  name: string;
-  is_default: boolean;
 }
 
 export type MicrophonePermissionState =
-  | "not_determined"
-  | "granted"
-  | "denied"
-  | "restricted"
-  | "unavailable";
+  "not_requested" | "granted" | "denied" | "unavailable";
+
+export interface AudioDeviceInfo {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
 
 export interface AudioCaptureDiagnostics {
   selected_device: string | null;
@@ -326,6 +284,33 @@ export interface AudioPlaybackDiagnostics {
   last_error: string | null;
 }
 
+export type ToolPermissionLevel =
+  "safe_read_only" | "character_action" | "memory_mutation" | "denied";
+
+export type ToolPermissionOutcome =
+  "not_evaluated" | "allowed" | "denied" | "confirmation_required";
+
+export type ToolResultCategory =
+  | "success"
+  | "not_found"
+  | "input_too_large"
+  | "invalid_arguments"
+  | "permission_denied"
+  | "confirmation_required"
+  | "concurrency_limit"
+  | "timeout"
+  | "output_too_large"
+  | "execution_failed";
+
+export interface ToolAuditRecord {
+  tool_name: string;
+  timestamp: string;
+  duration_ms: number;
+  permission: ToolPermissionLevel;
+  permission_outcome: ToolPermissionOutcome;
+  result_category: ToolResultCategory;
+}
+
 export interface AudioDiagnostics {
   configured_input_device: string | null;
   configured_output_device: string | null;
@@ -339,11 +324,6 @@ export interface MicrophoneTestResult {
   diagnostics: AudioDiagnostics;
 }
 
-export interface ConnectionTestResult {
-  success: boolean;
-  message: string;
-}
-
 export interface OnboardingStatus {
   current_version: number;
   acknowledged_version: number | null;
@@ -353,12 +333,15 @@ export interface OnboardingStatus {
 export interface AppSettings {
   settings_version: number;
   asr_mode: AsrMode;
+
   wake_word_enabled: boolean;
   wake_word_phrase: string;
+
   launch_at_login: boolean;
   show_in_menu_bar: boolean;
   always_on_top: boolean;
   restore_position: boolean;
+
   unsolicited_comments: boolean;
   talkativeness: number;
   quiet_hours_enabled: boolean;
@@ -370,6 +353,7 @@ export interface AppSettings {
   idle_banter_initial_delay_minutes: number;
   idle_banter_repeat_interval_minutes: number;
   idle_banter_seed_topics: string[];
+
   input_device: string | null;
   output_device: string | null;
   volume: number;
@@ -379,16 +363,19 @@ export interface AppSettings {
   live_voice: string;
   speaking_rate: number;
   pitch: number;
+
   text_provider: TextProvider;
   live_model: string;
   google_text_model: string;
   local_text_model: string;
   google_tts_model: string;
   local_tts_model: string;
+
   active_app_observation: boolean;
   window_title_observation: boolean;
   memory_enabled: boolean;
   save_transcripts: boolean;
+
   dry: number;
   sarcastic: number;
   friendly: number;
@@ -399,93 +386,73 @@ export interface AppSettings {
 
 export interface MemoryRecord {
   id: number;
-  content: string;
+  fact: string;
   category: string;
-  importance: number;
+  source: string;
+  confidence: number;
   created_at: string;
-  last_accessed: string;
+  updated_at: string;
 }
 
 export interface TranscriptRecord {
   id: number;
   session_id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
+  role: "user" | "moose";
+  text: string;
+  created_at: string;
 }
 
-export interface ToolAuditRecord {
-  tool_name: string;
-  started_at_ms: number;
-  duration_ms: number;
-  outcome: string;
-}
+export type GoogleModelCapability = "live_audio" | "text_generation";
 
-export type InstallState =
-  | "not_installed"
-  | "downloading"
-  | "verifying"
-  | "installed"
-  | "failed";
-
-export interface LocalLlmModelInfo {
+export interface GoogleModelDescriptor {
   id: string;
-  name: string;
-  size: number;
-  installed: boolean;
-  install_state: InstallState;
-  progress: number;
+  display_name: string;
+  capabilities: GoogleModelCapability[];
 }
 
-export interface InstallProgress {
-  model_id: string;
-  install_state: InstallState;
-  downloaded_bytes: number;
-  total_bytes: number;
-  current_file: string | null;
+export interface GoogleTtsVoiceDescriptor {
+  id: string;
+  style: string;
 }
 
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
+export interface TtsModelDescriptor {
+  id: string;
+  display_name: string;
 }
 
-export interface ToolCall {
-  name: string;
-  arguments: Record<string, unknown>;
+export interface TtsVoiceDescriptor {
+  id: string;
+  display_name: string;
+  style: string | null;
 }
 
-export interface ToolResult {
+export interface TtsProviderDescriptor {
+  id: TtsProvider;
+  display_name: string;
+  is_local: boolean;
+  models: TtsModelDescriptor[];
+  voices: TtsVoiceDescriptor[];
+  sample_rate_hz: number;
+  supports_speaking_rate: boolean;
+  supports_pitch: boolean;
+  install_required: boolean;
+  license_summary: string;
+}
+
+export interface GeminiLiveVoiceCatalog {
+  display_name: string;
+  is_local: boolean;
+  sample_rate_hz: number;
+  voices: TtsVoiceDescriptor[];
+  license_summary: string;
+}
+
+export interface TtsCatalog {
+  providers: TtsProviderDescriptor[];
+  gemini_live: GeminiLiveVoiceCatalog;
+}
+
+export interface ConnectionTestResult {
   success: boolean;
-  content: string;
-}
-
-export interface MemoryContext {
-  relevant_memories: MemoryRecord[];
-  recent_transcripts: TranscriptRecord[];
-}
-
-export interface SessionInfo {
-  id: string;
-  started_at: string;
-  ended_at: string | null;
-  message_count: number;
-}
-
-export interface ConversationMessage {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-}
-
-export interface ConversationHistory {
-  session: SessionInfo;
-  messages: ConversationMessage[];
-}
-
-export interface AppInfo {
-  version: string;
-  platform: string;
-  arch: string;
+  message: string;
 }
