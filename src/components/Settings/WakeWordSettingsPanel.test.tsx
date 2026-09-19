@@ -26,31 +26,34 @@ describe("WakeWordSettingsPanel", () => {
     vi.clearAllMocks();
   });
 
-  it("shows disabled-by-default Wake Word controls and required privacy disclosures", () => {
-    renderPanel(false);
+  it(
+    "shows disabled-by-default Wake Word controls and required privacy disclosures",
+    () => {
+      renderPanel(false);
 
-    const toggle = screen.getByRole("checkbox", {
-      name: /enable wake word/i,
-    });
-    expect(toggle).not.toBeChecked();
-    expect(screen.getByLabelText("Wake word phrase")).toHaveTextContent(
-      "Hey, Moose",
-    );
-    expect(screen.queryByDisplayValue("Hey, Moose")).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/local\/offline keyword spotting/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/microphone remains locally active while listening/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/not full-time cloud transcription/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/manual start remains available/i),
-    ).toBeInTheDocument();
-  });
+      const toggle = screen.getByRole("checkbox", {
+        name: /enable wake word/i,
+      });
+      expect(toggle).not.toBeChecked();
+      expect(screen.getByLabelText("Wake word phrase")).toHaveTextContent(
+        "Hey, Moose",
+      );
+      expect(screen.queryByDisplayValue("Hey, Moose")).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/local\/offline keyword spotting/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/microphone remains locally active while listening/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/not full-time cloud transcription/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/manual start remains available/i),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("persists the fixed phrase when the user enables Wake Word", async () => {
     renderPanel(false);
