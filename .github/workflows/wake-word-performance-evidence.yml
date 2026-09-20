@@ -1,0 +1,32 @@
+name: Wake Word performance evidence
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docs/wake-word-performance-evidence.json"
+      - "scripts/check_wake_word_performance_evidence.mjs"
+      - ".github/workflows/wake-word-performance-evidence.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "docs/wake-word-performance-evidence.json"
+      - "scripts/check_wake_word_performance_evidence.mjs"
+      - ".github/workflows/wake-word-performance-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-performance-evidence:
+    name: Validate Wake Word performance evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Validate performance evidence policy/report
+        run: node scripts/check_wake_word_performance_evidence.mjs
