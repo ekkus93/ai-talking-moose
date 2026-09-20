@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::test_support::{assert_log_capture_live, capture_logs};
 use base64::Engine as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -229,6 +230,41 @@ async fn converts_capture_i16_le_to_engine_f32() {
         assert!((received[0][2] - (32767.0 / 32768.0)).abs() < 0.0001);
     }
     pipeline.stop_and_join().await.unwrap();
+}
+
+#[tokio::test]
+async fn wake_handoff_is_first_local_asr_audio_without_reordering() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline = fake_pipeline(state.clone()).await;
+    let wake_samples = vec![i16::MIN, -1234, 0, 1234, i16::MAX];
+    let handoff = WakeCommandHandoffAudio::new(16_000, wake_samples.clone()).unwrap();
+
+    pipeline.prime_wake_handoff(handoff).unwrap();
+    pipeline
+        .test_sender()
+        .try_send(AudioResampler::i16_to_bytes(&[2222, -2222]))
+        .unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 2);
+
+    {
+        let received = state.received_pcm.lock().unwrap();
+        assert_eq!(received.len(), 2);
+        assert_eq!(received[0], AudioResampler::i16_to_f32(&wake_samples));
+        assert_eq!(received[1], AudioResampler::i16_to_f32(&[2222, -2222]));
+    }
+    pipeline.stop_and_join().await.unwrap();
+}
+
+#[tokio::test]
+async fn wake_handoff_fails_closed_when_local_asr_is_stopped() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline = fake_pipeline(state).await;
+    pipeline.stop_and_join().await.unwrap();
+    let handoff = WakeCommandHandoffAudio::new(16_000, vec![1, 2]).unwrap();
+
+    let error = pipeline.prime_wake_handoff(handoff).unwrap_err();
+
+    assert_eq!(error.kind, AsrErrorKind::InvalidState);
 }
 
 #[tokio::test]

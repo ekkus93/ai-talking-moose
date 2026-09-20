@@ -1,3 +1,4 @@
+use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrResource;
 use crate::asr::moonshine::{
     MoonshineModelArchitecture, MoonshineModelInstaller, MoonshineSmallEngine, MoonshineTinyEngine,
@@ -159,6 +160,36 @@ impl LocalAsrPipeline {
                 kind: AsrErrorKind::AudioInput,
                 message: format!("Failed to start local-ASR microphone capture: {error}"),
                 retryable: true,
+            })
+    }
+
+    /// Queue the single-use wake pre-roll/live payload before subsequent command PCM.
+    ///
+    /// This is the local command-ASR side of the WWR-310 ownership transfer. It deliberately
+    /// reuses the existing bounded Moonshine ingress rather than opening or restarting capture.
+    /// The payload is converted to the same PCM16-LE representation emitted by `AudioCapture`,
+    /// preserving exact sample order. A full queue fails closed so callers can recover Wake Word
+    /// ownership instead of silently clipping the beginning of the command.
+    pub fn prime_wake_handoff(&self, audio: WakeCommandHandoffAudio) -> Result<(), AsrError> {
+        if !self.is_running() {
+            return Err(invalid_state_error(
+                "Local ASR inference is not running; wake handoff was not accepted.",
+            ));
+        }
+        let sender = self.pcm_sender.as_ref().ok_or_else(|| {
+            invalid_state_error("Local ASR input is closed; wake handoff was not accepted.")
+        })?;
+        sender
+            .try_send(audio.to_pcm16_le_bytes())
+            .map_err(|error| match error {
+                mpsc::error::TrySendError::Full(_) => AsrError {
+                    kind: AsrErrorKind::InvalidState,
+                    message: "Local ASR input is full; wake handoff was not accepted.".to_string(),
+                    retryable: true,
+                },
+                mpsc::error::TrySendError::Closed(_) => {
+                    invalid_state_error("Local ASR input is closed; wake handoff was not accepted.")
+                }
             })
     }
 
