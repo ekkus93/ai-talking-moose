@@ -1,4 +1,5 @@
 pub(crate) mod request_snapshot;
+#[rustfmt::skip]
 pub(crate) mod runtime_preferences;
 pub(crate) mod settings_policy;
 #[rustfmt::skip]
