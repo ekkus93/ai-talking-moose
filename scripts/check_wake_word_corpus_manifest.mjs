@@ -62,6 +62,9 @@ if (policy.sample_format !== "pcm_s16le") {
 if (policy.fixture_root !== "docs/fixtures/wake-word-v1") {
   fail("policy.fixture_root must be docs/fixtures/wake-word-v1");
 }
+if (policy.fixture_schema_version !== 1) {
+  fail("policy.fixture_schema_version must be 1");
+}
 if (!String(policy.privacy ?? "").includes("Do not commit private room audio")) {
   fail("policy.privacy must explicitly forbid private room audio");
 }
@@ -69,6 +72,9 @@ if (!String(policy.privacy ?? "").includes("Do not commit private room audio")) 
 const criteria = manifest.acceptance_criteria;
 if (!criteria || typeof criteria !== "object" || Array.isArray(criteria)) {
   fail("acceptance_criteria must be an object");
+}
+if (criteria.criteria_version !== 1) {
+  fail("acceptance_criteria.criteria_version must be 1");
 }
 if (criteria.criteria_status !== "pending_real_fixture_calibration") {
   fail("criteria_status must remain pending_real_fixture_calibration until real fixtures exist");
@@ -135,5 +141,5 @@ if (manifest.fixtures.length > 0) {
 }
 
 console.log(
-  `Wake Word corpus manifest: schema OK, ${manifest.fixtures.length} fixture(s), criteria=${criteria.criteria_status}.`,
+  `Wake Word corpus manifest: schema OK, fixture_schema=${policy.fixture_schema_version}, criteria=${criteria.criteria_version}/${criteria.criteria_status}, ${manifest.fixtures.length} fixture(s).`,
 );
