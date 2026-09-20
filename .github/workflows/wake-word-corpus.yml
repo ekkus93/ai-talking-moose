@@ -1,0 +1,42 @@
+name: Wake Word corpus validation
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "docs/wake-word-corpus.json"
+      - "docs/fixtures/wake-word-v1/**"
+      - "scripts/check_wake_word_corpus_manifest.mjs"
+      - ".github/workflows/wake-word-corpus.yml"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "docs/wake-word-corpus.json"
+      - "docs/fixtures/wake-word-v1/**"
+      - "scripts/check_wake_word_corpus_manifest.mjs"
+      - ".github/workflows/wake-word-corpus.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wake-word-corpus-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manifest:
+    name: Deterministic corpus manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Validate Wake Word corpus manifest
+        run: node scripts/check_wake_word_corpus_manifest.mjs
