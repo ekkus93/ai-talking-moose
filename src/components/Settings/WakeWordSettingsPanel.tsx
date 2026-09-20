@@ -152,7 +152,8 @@ export const WakeWordSettingsPanel: React.FC = () => {
         <p>Wake Word V1 has no barge-in support while Moose talks.</p>
         <p>
           Manual start remains available. Existing command ASR still starts only
-          through the normal conversation path after Wake Word accepts a trigger.
+          through the normal conversation path after Wake Word accepts a
+          trigger.
         </p>
       </section>
 
