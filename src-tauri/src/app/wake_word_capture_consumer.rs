@@ -229,8 +229,12 @@ mod tests {
         let mut consumer = consumer_with_engine(engine);
         let now = Instant::now();
 
-        consumer.route_capture_chunk(&bytes(&[21, 22]), now).unwrap();
-        consumer.route_capture_chunk(&bytes(&[23, 24]), now).unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[21, 22]), now)
+            .unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[23, 24]), now)
+            .unwrap();
         assert!(consumer.transfer_handoff_audio_to_asr().unwrap().is_some());
 
         consumer.return_to_wake_listening().unwrap();
@@ -240,7 +244,9 @@ mod tests {
             WakeWordRuntimePhase::Listening
         );
 
-        consumer.route_capture_chunk(&bytes(&[25, 26]), now).unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[25, 26]), now)
+            .unwrap();
         assert_eq!(
             consumer.router_mut().engine_mut().frames,
             vec![vec![21, 22], vec![25, 26]]
