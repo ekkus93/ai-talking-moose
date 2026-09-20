@@ -1,9 +1,10 @@
-name: Wake Word corpus contract
+name: Wake Word corpus compatibility contract
 
 on:
   pull_request:
     paths:
       - 'wake-word-corpus.json'
+      - 'docs/wake-word-corpus.json'
       - 'scripts/validate_wake_word_corpus.py'
       - 'scripts/test_validate_wake_word_corpus.py'
       - '.github/workflows/wake-word-corpus-contract.yml'
@@ -11,6 +12,7 @@ on:
     branches: [master]
     paths:
       - 'wake-word-corpus.json'
+      - 'docs/wake-word-corpus.json'
       - 'scripts/validate_wake_word_corpus.py'
       - 'scripts/test_validate_wake_word_corpus.py'
       - '.github/workflows/wake-word-corpus-contract.yml'
@@ -26,7 +28,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate corpus contract
+      - name: Validate canonical-manifest pointer
         run: |
           python scripts/validate_wake_word_corpus.py
           PYTHONPATH=scripts python -m unittest scripts/test_validate_wake_word_corpus.py
+      - name: Validate canonical corpus manifest
+        run: node scripts/check_wake_word_corpus_manifest.mjs
