@@ -1,0 +1,63 @@
+name: Wake Word native packaging architecture
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "wake-word-artifacts.json"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "scripts/validate_wake_word_artifact_manifest.py"
+      - "tests/test_wake_word_runtime_artifacts.py"
+      - ".github/workflows/wake-word-native-packaging.yml"
+  push:
+    branches: [master]
+    paths:
+      - "wake-word-artifacts.json"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "scripts/validate_wake_word_artifact_manifest.py"
+      - "tests/test_wake_word_runtime_artifacts.py"
+      - ".github/workflows/wake-word-native-packaging.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wake-word-native-packaging-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-packaging-policy:
+    name: Native packaging policy (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+          - platform: macos-arm64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Record runner architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "platform=${{ matrix.platform }}"
+          uname -a
+          uname -m
+      - name: Validate production Wake artifact manifest
+        run: python3 scripts/validate_wake_word_artifact_manifest.py --production
+      - name: Verify pinned runtime preparation, architecture, and cache policy
+        run: python3 -m unittest tests/test_wake_word_runtime_artifacts.py
+      - name: State acceptance boundary
+        shell: bash
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          This gate validates the frozen native packaging/architecture policy on the target OS.
+          It does not by itself prove real KWS inference or packaged-application loading; WWR-610/620
+          real positive/negative inference acceptance remains required before platform support closes.
+          EOF
