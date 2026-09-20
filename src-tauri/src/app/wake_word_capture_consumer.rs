@@ -1,8 +1,27 @@
 use super::wake_word::engine::SherpaKwsEngine;
 use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 use super::wake_word_pcm_router::{CanonicalWakePcmRouter, WakePcmRouteError, WakePcmRouteOutcome};
+use crate::audio::capture::{AudioCapture, AudioCaptureError};
 use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 use std::time::Instant;
+use tokio::sync::mpsc;
+
+const WAKE_CAPTURE_QUEUE_CHUNKS: usize = 16;
+
+/// Start Wake Word capture through the application's one authoritative `AudioCapture` owner.
+///
+/// `AudioCapture::start` replaces any stream already owned by that same object before opening the
+/// requested stream, so this boundary cannot create a second independently-owned microphone
+/// stream. Capture performs the one source->mono->16 kHz canonicalization and this module only
+/// decodes the resulting PCM16-LE bytes.
+pub(crate) fn start_authoritative_wake_capture(
+    capture: &mut AudioCapture,
+    device_name: Option<String>,
+) -> Result<mpsc::Receiver<Vec<u8>>, AudioCaptureError> {
+    let (pcm_sender, pcm_receiver) = mpsc::channel(WAKE_CAPTURE_QUEUE_CHUNKS);
+    capture.start(device_name, V1_KWS_SAMPLE_RATE_HZ, pcm_sender, None)?;
+    Ok(pcm_receiver)
+}
 
 /// Byte-level consumer for the one authoritative `AudioCapture` microphone stream.
 ///
@@ -28,10 +47,6 @@ impl<E: SherpaKwsEngine> WakeCapturePcmConsumer<E> {
         Self { router }
     }
 
-    /// Decode one canonical PCM16-LE microphone chunk and route it through Wake Word.
-    ///
-    /// The conversion is intentionally lossless and local to this boundary. Invalid byte chunks
-    /// fail before the router can mutate ring, KWS, or handoff state.
     pub(crate) fn route_capture_chunk(
         &mut self,
         pcm16_le: &[u8],
@@ -43,7 +58,6 @@ impl<E: SherpaKwsEngine> WakeCapturePcmConsumer<E> {
             .map_err(WakeCapturePcmError::Route)
     }
 
-    /// Transfer accumulated wake pre-roll plus post-trigger live PCM to the command-ASR payload.
     pub(crate) fn transfer_handoff_audio_to_asr(
         &mut self,
     ) -> Result<Option<WakeCommandHandoffAudio>, WakeCapturePcmError> {
@@ -98,6 +112,7 @@ mod tests {
         validate_pcm_frame, SherpaKwsConfig, WakeWordDetection, WakeWordError,
     };
     use crate::app::wake_word::runtime::{WakeWordRuntimeManager, WakeWordRuntimePhase};
+    use crate::audio::capture::AudioCaptureMode;
 
     #[derive(Default)]
     struct RecordingEngine {
@@ -108,9 +123,7 @@ mod tests {
     }
 
     impl SherpaKwsEngine for RecordingEngine {
-        fn config(&self) -> &SherpaKwsConfig {
-            &self.config
-        }
+        fn config(&self) -> &SherpaKwsConfig { &self.config }
 
         fn accept_pcm16_mono(
             &mut self,
@@ -131,9 +144,7 @@ mod tests {
             Ok(())
         }
 
-        fn shutdown(&mut self) -> Result<(), WakeWordError> {
-            Ok(())
-        }
+        fn shutdown(&mut self) -> Result<(), WakeWordError> { Ok(()) }
     }
 
     fn listening_runtime() -> WakeWordRuntimeManager {
@@ -148,10 +159,37 @@ mod tests {
     }
 
     fn bytes(samples: &[i16]) -> Vec<u8> {
-        samples
-            .iter()
-            .flat_map(|sample| sample.to_le_bytes())
-            .collect()
+        samples.iter().flat_map(|sample| sample.to_le_bytes()).collect()
+    }
+
+    #[test]
+    fn authoritative_wake_capture_uses_existing_owner_and_canonical_rate() {
+        let mut capture = AudioCapture::new_mock();
+
+        let _receiver = start_authoritative_wake_capture(&mut capture, None).unwrap();
+
+        assert_eq!(capture.mode(), AudioCaptureMode::Mock);
+        assert!(capture.is_active());
+        let diagnostics = capture.diagnostics();
+        assert_eq!(diagnostics.sample_rate_hz, Some(V1_KWS_SAMPLE_RATE_HZ));
+        assert_eq!(diagnostics.channels, Some(1));
+        assert_eq!(diagnostics.sample_format.as_deref(), Some("I16"));
+    }
+
+    #[test]
+    fn restarting_wake_capture_replaces_stream_on_same_owner() {
+        let mut capture = AudioCapture::new_mock();
+        let first_receiver = start_authoritative_wake_capture(&mut capture, None).unwrap();
+        assert!(capture.is_active());
+
+        let second_receiver = start_authoritative_wake_capture(&mut capture, None).unwrap();
+
+        assert!(capture.is_active());
+        assert_eq!(capture.diagnostics().sample_rate_hz, Some(V1_KWS_SAMPLE_RATE_HZ));
+        drop(first_receiver);
+        drop(second_receiver);
+        capture.stop();
+        assert!(!capture.is_active());
     }
 
     #[test]
@@ -167,11 +205,7 @@ mod tests {
             vec![vec![1, -2], vec![3, -4]]
         );
         assert_eq!(
-            consumer
-                .router()
-                .runtime()
-                .snapshot(now)
-                .ring_buffer_samples,
+            consumer.router().runtime().snapshot(now).ring_buffer_samples,
             4
         );
     }
@@ -194,36 +228,25 @@ mod tests {
 
         assert_eq!(consumer.router_mut().engine_mut().frames, vec![vec![7, 8]]);
         assert_eq!(
-            consumer
-                .router()
-                .runtime()
-                .snapshot(now)
-                .ring_buffer_samples,
+            consumer.router().runtime().snapshot(now).ring_buffer_samples,
             before.ring_buffer_samples
         );
     }
 
     #[test]
     fn trigger_then_live_capture_transfers_one_command_payload() {
-        let engine = RecordingEngine {
-            detect_next: true,
-            ..Default::default()
-        };
+        let engine = RecordingEngine { detect_next: true, ..Default::default() };
         let mut consumer = consumer_with_engine(engine);
         let now = Instant::now();
 
-        let trigger = consumer
-            .route_capture_chunk(&bytes(&[11, 12]), now)
-            .unwrap();
+        let trigger = consumer.route_capture_chunk(&bytes(&[11, 12]), now).unwrap();
         assert!(trigger.trigger_accepted);
         assert_eq!(
             consumer.router().runtime().snapshot(now).phase,
             WakeWordRuntimePhase::Triggered
         );
 
-        let live = consumer
-            .route_capture_chunk(&bytes(&[13, 14]), now)
-            .unwrap();
+        let live = consumer.route_capture_chunk(&bytes(&[13, 14]), now).unwrap();
         assert!(live.live_handoff_retained);
         assert_eq!(consumer.handoff_live_samples(), 2);
 
@@ -239,19 +262,12 @@ mod tests {
 
     #[test]
     fn returning_to_wake_resets_kws_and_allows_later_capture() {
-        let engine = RecordingEngine {
-            detect_next: true,
-            ..Default::default()
-        };
+        let engine = RecordingEngine { detect_next: true, ..Default::default() };
         let mut consumer = consumer_with_engine(engine);
         let now = Instant::now();
 
-        consumer
-            .route_capture_chunk(&bytes(&[21, 22]), now)
-            .unwrap();
-        consumer
-            .route_capture_chunk(&bytes(&[23, 24]), now)
-            .unwrap();
+        consumer.route_capture_chunk(&bytes(&[21, 22]), now).unwrap();
+        consumer.route_capture_chunk(&bytes(&[23, 24]), now).unwrap();
         assert!(consumer.transfer_handoff_audio_to_asr().unwrap().is_some());
 
         consumer.return_to_wake_listening().unwrap();
@@ -261,9 +277,7 @@ mod tests {
             WakeWordRuntimePhase::Listening
         );
 
-        consumer
-            .route_capture_chunk(&bytes(&[25, 26]), now)
-            .unwrap();
+        consumer.route_capture_chunk(&bytes(&[25, 26]), now).unwrap();
         assert_eq!(
             consumer.router_mut().engine_mut().frames,
             vec![vec![21, 22], vec![25, 26]]
