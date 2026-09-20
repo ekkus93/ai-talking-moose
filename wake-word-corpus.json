@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "corpus_version": "wwr-v1-2026-09-20",
+  "wake_phrase": "Hey, Moose",
+  "sample_rate_hz": 16000,
+  "channels": 1,
+  "score": 1.0,
+  "threshold": 0.25,
+  "fixtures": [
+    {"id":"positive-clean","class":"positive","text":"Hey Moose","variant":"clean","provenance":"generated-or-recorded-for-project","license":"CC0-1.0","path":"fixtures/wake-word/positive-clean.wav"},
+    {"id":"positive-command","class":"positive","text":"Hey Moose, tell me the time","variant":"immediate-command","provenance":"generated-or-recorded-for-project","license":"CC0-1.0","path":"fixtures/wake-word/positive-command.wav"},
+    {"id":"negative-speech","class":"negative","text":"ordinary speech without wake phrase","variant":"ordinary-speech","provenance":"generated-or-recorded-for-project","license":"CC0-1.0","path":"fixtures/wake-word/negative-speech.wav"},
+    {"id":"negative-moose","class":"negative","text":"Moose","variant":"near-miss","provenance":"generated-or-recorded-for-project","license":"CC0-1.0","path":"fixtures/wake-word/negative-moose.wav"},
+    {"id":"negative-hey-bruce","class":"negative","text":"Hey Bruce","variant":"near-miss","provenance":"generated-or-recorded-for-project","license":"CC0-1.0","path":"fixtures/wake-word/negative-hey-bruce.wav"},
+    {"id":"negative-hey-moosey","class":"negative","text":"Hey Moosey","variant":"near-miss","provenance":"generated-or-recorded-for-project","license":"CC0-1.0","path":"fixtures/wake-word/negative-hey-moosey.wav"}
+  ],
+  "acceptance": {"minimum_positive_recall": 1.0, "maximum_negative_false_accept_rate": 0.0}
+}
