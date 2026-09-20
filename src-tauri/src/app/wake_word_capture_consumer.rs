@@ -199,14 +199,18 @@ mod tests {
         let mut consumer = consumer_with_engine(engine);
         let now = Instant::now();
 
-        let trigger = consumer.route_capture_chunk(&bytes(&[11, 12]), now).unwrap();
+        let trigger = consumer
+            .route_capture_chunk(&bytes(&[11, 12]), now)
+            .unwrap();
         assert!(trigger.trigger_accepted);
         assert_eq!(
             consumer.router().runtime().snapshot(now).phase,
             WakeWordRuntimePhase::Triggered
         );
 
-        let live = consumer.route_capture_chunk(&bytes(&[13, 14]), now).unwrap();
+        let live = consumer
+            .route_capture_chunk(&bytes(&[13, 14]), now)
+            .unwrap();
         assert!(live.live_handoff_retained);
         assert_eq!(consumer.handoff_live_samples(), 2);
 
