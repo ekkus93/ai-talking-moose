@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "corpus_id": "wake-word-v1-deterministic-corpus",
+  "wake_phrase": "Hey, Moose",
+  "policy": {
+    "sample_rate_hz": 16000,
+    "channels": 1,
+    "sample_format": "pcm_s16le",
+    "fixture_root": "docs/fixtures/wake-word-v1",
+    "privacy": "Fixtures must be licensable, redistributable, and intentionally recorded or generated for Wake Word acceptance. Do not commit private room audio, transcripts beyond fixture labels, credentials, or user recordings captured incidentally.",
+    "pass_fail_scope": "This manifest records corpus metadata and acceptance criteria. It does not claim real positive/negative KWS acceptance until fixture files are present and a platform acceptance job records exact run evidence."
+  },
+  "required_labels": [
+    "positive_wake_phrase",
+    "positive_wake_phrase_with_command",
+    "negative_ordinary_speech",
+    "negative_near_miss"
+  ],
+  "acceptance_criteria": {
+    "positive_recall_minimum": null,
+    "negative_false_accepts_maximum": null,
+    "criteria_status": "pending_real_fixture_calibration",
+    "notes": "Thresholds remain null until real redistributable fixtures are added and measured. The manifest checker fails closed if fixture entries omit provenance, license, hash, byte size, or expected detection outcome."
+  },
+  "fixtures": []
+}
