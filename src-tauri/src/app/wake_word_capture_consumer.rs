@@ -157,14 +157,25 @@ mod tests {
         let mut consumer = consumer_with_engine(RecordingEngine::default());
         let now = Instant::now();
 
-        consumer.route_capture_chunk(&bytes(&[1, -2]), now).unwrap();
-        consumer.route_capture_chunk(&bytes(&[3, -4]), now).unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[1, -2]), now)
+            .unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[3, -4]), now)
+            .unwrap();
 
         assert_eq!(
             consumer.router_mut().engine_mut().frames,
             vec![vec![1, -2], vec![3, -4]]
         );
-        assert_eq!(consumer.router().runtime().snapshot(now).ring_buffer_samples, 4);
+        assert_eq!(
+            consumer
+                .router()
+                .runtime()
+                .snapshot(now)
+                .ring_buffer_samples,
+            4
+        );
     }
 
     #[test]
@@ -185,7 +196,11 @@ mod tests {
 
         assert_eq!(consumer.router_mut().engine_mut().frames, vec![vec![7, 8]]);
         assert_eq!(
-            consumer.router().runtime().snapshot(now).ring_buffer_samples,
+            consumer
+                .router()
+                .runtime()
+                .snapshot(now)
+                .ring_buffer_samples,
             before.ring_buffer_samples
         );
     }
