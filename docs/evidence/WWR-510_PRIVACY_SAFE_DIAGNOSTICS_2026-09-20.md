@@ -1,54 +1,18 @@
 # WWR-510 — Privacy-safe Wake Word diagnostics evidence
 
-Evidence head reviewed: `ed2a88c0811b6f650ebfa96f53378666c281c591`.
+Date: 2026-09-20
+Baseline: `facd54e82a3ee75c0a9ad5812e9f84726edea5a9`
 
-## Authoritative diagnostics surface
+## Source evidence
 
-`src-tauri/src/asr/wake_word_diagnostics.rs` defines `WakeWordDiagnostics` as the privacy-safe serialized runtime diagnostics surface. The type intentionally exposes bounded counters, immutable artifact identities, fixed configuration, and lifecycle state only.
+`src-tauri/src/asr/wake_word_diagnostics.rs` defines the bounded `WakeWordDiagnostics` serialization surface. It exposes enabled/runtime phase, exact model archive and keyword identities, pinned sherpa runtime identity and platform-specific C API hash, platform/architecture, one-thread policy, canonical sample rate/channels, threshold/score, ring capacity/current retained sample count, handoff pre-roll sample count, trigger count, bounded last-trigger age, initialization duration, Talking suspension, and sanitized last error.
 
-The diagnostics surface exposes the WWR-510 required fields:
+The diagnostics type cannot represent raw PCM, transcripts, credentials, or filesystem paths. Unit coverage serializes snapshots and explicitly rejects `pcm`, `transcript`, `credential`, `path`, `model_path`, `runtime_path`, `pcm_samples`, `audio_samples`, and `raw_audio` tokens. Runtime errors are reduced to the fixed sanitized message `The Wake Word runtime encountered an internal error.`
 
-- Wake Word enabled state: `enabled`.
-- Authoritative runtime state: `runtime_phase`.
-- Exact model identity: `engine_id`, `model_id`, `model_archive_sha256`, `model_license`, and `keyword_sha256`.
-- Exact runtime identity: `runtime_id`, `runtime_license`, and platform-specific `runtime_c_api_sha256`.
-- Platform and architecture: `platform` and `architecture`.
-- One-thread policy: `inference_threads`.
-- Canonical sample policy: `canonical_sample_rate_hz` and `canonical_channels`.
-- Ring duration/capacity: `ring_buffer_capacity_samples`, `ring_buffer_capacity_ms`, `ring_buffer_samples`, and `handoff_pre_roll_samples`.
-- Threshold and score: `threshold` and `score`.
-- Trigger count and last-trigger age: `trigger_count` and `last_trigger_age_ms`.
-- Initialization duration: `runtime_initialization_ms`.
-- Talking suspension: `talking_suspended`.
-- Sanitized last error: `last_error`.
+`src-tauri/src/commands/wake_word_diagnostics.rs` reads the authoritative AppState-owned `WakeWordApplicationRuntime` and converts its snapshot to the privacy-safe diagnostics representation. Command-level tests cover disabled/audio-free serialization and sanitized runtime errors.
 
-Optional CPU/memory/inference/handoff timing metrics are not yet represented beyond `runtime_initialization_ms`, so the optional measured timing task remains open until measured performance evidence is added.
+## WWR-510 coverage
 
-## Privacy and serialization bounds
+The current source objectively implements all required non-optional WWR-510 diagnostics fields: enabled state, authoritative runtime state, model/runtime identity, platform/architecture, one-thread policy, canonical sample format, ring capacity/duration, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension, and sanitized last error. Raw PCM is structurally absent from the serialized type.
 
-The diagnostics type documentation states that raw PCM, transcripts, credentials, and filesystem paths are not representable in `WakeWordDiagnostics`.
-
-Focused Rust diagnostics tests verify:
-
-- disabled diagnostics are fail-closed and serialize without `pcm`, `transcript`, `credential`, or `path` substrings;
-- model/runtime/keyword identities match the manifest rather than drift silently;
-- initialization duration is observable without serializing model/runtime paths;
-- trigger count, last-trigger age, and Talking suspension are observable without raw audio content;
-- Talking suspension clears retained ring/pre-roll samples;
-- runtime errors expose only the fixed sanitized message `The Wake Word runtime encountered an internal error.`
-
-The dedicated Wake Word privacy audit workflow additionally checks that:
-
-- `WakeWordDiagnostics` does not contain raw PCM/transcript/credential/path-like serialized fields;
-- the required privacy-safe fields remain present;
-- engine-side sanitizer evidence for path and token-like redaction remains present;
-- documentation continues to state that diagnostics do not expose raw PCM, transcripts, credentials, or private audio content;
-- the corpus manifest continues to forbid private room audio and remains pending real fixture calibration.
-
-## Qualification evidence
-
-Current merged master `ed2a88c0811b6f650ebfa96f53378666c281c591` passed ordinary CI run `35487447538`.
-
-The latest exact-master Wake Word privacy audit evidence before this review was run `35487357710` on `01a45ce95720eac25f7fa8f22b788eaadba1786a`, and the diagnostics source reviewed here is unchanged in the WWR-500 evidence-only merge to `ed2a88c0811b6f650ebfa96f53378666c281c591`.
-
-This evidence closes the concrete WWR-510 diagnostics field/privacy requirements except optional measured CPU/memory/inference/handoff timing fields, which remain dependent on WWR-630 performance evidence.
+The optional CPU/memory/inference/handoff timing fields remain optional by specification and are not claimed here. Broader repository-wide log/error audits remain part of WWR-900 and final qualification; this evidence does not claim those audits complete.
