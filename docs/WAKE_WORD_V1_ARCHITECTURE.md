@@ -1,47 +1,61 @@
 # Wake Word V1 architecture
 
-This document describes the Wake Word subsystem that exists on `master`. It deliberately distinguishes implemented component behavior from production integration and acceptance work that is still open in `WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`.
+This document describes the Wake Word implementation that exists on `master`. It intentionally distinguishes implemented component behavior from acceptance work that is still open.
 
 ## User-visible policy
 
-Wake Word V1 uses the fixed phrase **`Hey, Moose`** and is disabled by default. Arbitrary phrase editing and sensitivity controls are not V1 features. Keyword spotting is designed to run locally/offline. When Wake Word is eventually enabled end-to-end, the microphone must remain locally active while the runtime is listening for the phrase; this does not mean continuous cloud transcription is active.
+Wake Word V1 uses the fixed phrase **Hey, Moose** and is disabled by default. Settings exposes an enable/disable control but does not expose arbitrary phrase editing or sensitivity tuning.
 
-V1 has no barge-in. Wake activation must be suspended before/during Moose speech so playback cannot wake the application. After a terminal interaction/TTS outcome, the Wake Word runtime may resume only if the latest setting still enables it.
+Keyword spotting is designed to run locally/offline. While Wake Word is enabled and listening, the microphone is expected to remain locally active for keyword spotting; that does **not** mean full-time cloud transcription is active. V1 does not support Wake Word barge-in while Moose is talking.
 
-The wake phrase and immediately following prompt are intentionally retained in the memory-only pre-roll/live handoff. V1 does not acoustically trim `Hey, Moose` before command ASR. Depending on the selected command-ASR provider, that command audio may later be processed by that provider; local Wake Word detection itself must not silently introduce a cloud dependency.
+## Authoritative ownership
 
-## Authoritative source ownership
+`AppState::wake_word_runtime` is the sole application-level `WakeWordApplicationRuntime` owner. The process-global duplicate runtime owner was removed. The canonical Wake Word facade is `src-tauri/src/app/wake_word.rs`, which exposes the authoritative runtime manager, engine policy, handoff, diagnostics, settings, and artifact manifest boundaries.
 
-The authoritative runtime state machine is `src-tauri/src/asr/wake_word_runtime.rs` (`WakeWordRuntimeManager`). The application composition wrapper is `src-tauri/src/app/wake_word_composition.rs` (`WakeWordApplicationRuntime`). KWS configuration/engine policy lives under the consolidated `src-tauri/src/app/wake_word*` and `src-tauri/src/asr/wake_word*` modules; removed legacy stacks are not alternative authorities.
+Wake Word does not own a second microphone capture object. `AppState::audio_capture` remains the authoritative application capture owner. Production conversation startup uses that same capture object for command ASR.
 
-`WakeWordRuntimeManager` owns the bounded canonical-PCM ring/pre-roll state and lifecycle phases. Accepted triggers transition out of `Listening`, which makes repeated positive KWS frames non-activating until the interaction lifecycle explicitly returns the manager to listening. Trigger count and monotonic trigger age are diagnostics; raw PCM is not part of the diagnostics representation.
+## Runtime lifecycle
 
-`WakeWordApplicationRuntime` is intentionally not a microphone owner. `AppState::audio_capture` remains the production capture owner. WWR-300 must route that one canonical capture stream into Wake Word rather than opening a second capture device.
+The runtime phases are `Disabled`, `Loading`, `Listening`, `Triggered`, `SuspendedTalking`, `Error`, and `ShuttingDown`.
 
-## Current integration status
+Persisted disabled settings construct a `Disabled` runtime. Persisted enabled settings enter `Loading`; the runtime must not claim `Listening` until loading has actually completed.
 
-The runtime and application-composition components exist and have deterministic component tests, including disabled startup, enabled startup through `Loading`, Talking suspension, stale-audio clearing, terminal-outcome resume, disable-during-Talking precedence, recoverable error re-entry, and one-manager clone semantics.
+Normal command-conversation startup suspends an already-listening Wake runtime before command ASR takes ownership. Terminal command outcomes resolve the runtime against the latest persisted enable setting. Explicit stop and conversation-start failure also resolve a suspended runtime. Entering the Talking suspension boundary clears retained Wake audio. Wake Word errors are sanitized and fail closed rather than creating a replacement capture stream.
 
-Production integration is **not yet complete**. At the time this document was added, `AppState` does not yet own `WakeWordApplicationRuntime`, the live settings transaction does not yet drive that owner, the canonical microphone stream is not yet routed through KWS, and wake-to-command-ASR pre-roll/live handoff is not yet wired end-to-end. Therefore this document does not claim that Wake Word V1 is currently usable end-to-end.
+## Audio and privacy policy
 
-## Audio and privacy invariants
+The frozen V1 KWS format is 16 kHz mono PCM, one inference thread, score `1.0`, threshold `0.25`, and a two-second pre-roll policy. PCM is validated before Wake retention. Retained pre-roll is memory-only component state; diagnostics cannot serialize raw PCM, transcripts, credentials, or filesystem paths.
 
-The canonical Wake Word input is 16 kHz mono PCM. Retained wake audio is bounded and memory-only by design. Entering Talking, disabling Wake Word, resuming an interaction, runtime errors, and shutdown must clear stale ring/pre-roll state at the defined lifecycle boundary. Diagnostics and errors must not serialize raw audio, credentials, or unnecessary absolute filesystem paths.
+Diagnostics expose bounded operational information such as enabled/runtime state, model/runtime identity, platform/architecture, sample format, ring capacity, score/threshold, trigger count, last-trigger age, initialization duration, Talking suspension, and sanitized last error.
 
-Wake Word must never create an independent full-time ASR path merely to detect the phrase. It must not silently fall back to cloud recognition if local KWS is unavailable. Manual interaction must remain available when Wake Word is disabled or has a recoverable error.
+The Wake phrase plus immediately following command audio is intentionally not acoustically trimmed in V1. When the production wake-to-ASR handoff is complete, command ASR may therefore receive the Wake phrase together with the command utterance.
 
-## Platform and acceptance claims
+## Artifact/runtime identity
 
-Do not infer platform support merely because source compiles or artifacts are described. Linux x86_64 and macOS arm64 Wake Word support claims require the real sherpa KWS acceptance tracks in the remediation TODO, including exact artifact/runtime hashes, native architecture verification, positive and negative fixtures, offline inference, and recorded run/platform evidence.
+The production KWS model and sherpa runtime identities are pinned and hash verified. Preparation verifies cached artifacts rather than trusting cache presence. Supported native architecture claims must remain limited to platforms backed by the repository's real acceptance evidence.
 
-Likewise, do not make subjective accuracy or performance claims until deterministic corpus and performance evidence exists. The final feature head requires the specialized Wake gates in addition to ordinary CI.
+## Current acceptance boundary
 
-## Troubleshooting boundaries
+The following must **not** be inferred merely from the component architecture above:
 
-Useful diagnostics include enabled/runtime state, exact model/runtime identity, platform/architecture, one-thread policy, canonical sample format, ring capacity, score/threshold, trigger count, last-trigger age, initialization duration, Talking suspension, and sanitized last error. Optional CPU, memory, inference, and handoff timing fields should be populated only from measured evidence.
+- production continuous microphone routing into the KWS engine;
+- complete wake-trigger to normal command-ASR activation;
+- gap-free pre-roll/live PCM handoff and first-command-word preservation;
+- real positive/negative corpus acceptance on every claimed platform;
+- final repeated end-to-end lifecycle/resource stability;
+- final performance baselines;
+- final repository-wide privacy/security audit.
 
-If Wake Word remains `Loading`, investigate artifact/runtime preparation rather than claiming it is listening. If it enters `Error`, manual interaction should remain usable. A stuck `SuspendedTalking` state, duplicate capture stream, duplicate command activation, or retained stale pre-roll is a lifecycle defect and must not be hidden by an arbitrary cooldown timer.
+Those remain tracked by `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`. User-facing documentation must not describe Wake Word V1 as fully production-qualified until those acceptance items are complete.
 
-## Related evidence
+## Relevant source boundaries
 
-See `docs/evidence/WWR-400_APPSTATE_RUNTIME_OWNER_AUDIT_2026-09-19.md` for the production composition gap, `docs/evidence/WWR-410_DEBOUNCE_TRIGGER_SEMANTICS_2026-09-19.md` for debounce evidence, and the WWR-510 evidence documents for privacy-safe diagnostic/error audits. The remediation TODO remains authoritative for incomplete work and final acceptance.
+- `src-tauri/src/app/state.rs` — authoritative application composition.
+- `src-tauri/src/app/wake_word.rs` — canonical Wake Word facade.
+- `src-tauri/src/app/wake_word_composition.rs` — application runtime owner.
+- `src-tauri/src/asr/wake_word_runtime.rs` — runtime state machine and bounded pre-roll ownership.
+- `src-tauri/src/app/wake_word_engine.rs` — pinned sherpa KWS engine/session implementation.
+- `src-tauri/src/asr/wake_word_handoff.rs` — wake-to-ASR handoff component.
+- `src-tauri/src/asr/wake_word_diagnostics.rs` — privacy-safe diagnostics representation.
+- `src-tauri/src/commands/conversation/core.rs` — production command-interaction lifecycle wiring.
+- `src/components/Settings/WakeWordSettingsPanel.tsx` — user-facing Wake Word settings surface.
