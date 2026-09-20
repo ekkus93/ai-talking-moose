@@ -60,7 +60,9 @@ describe("WakeWordSettingsPanel", () => {
     expect(screen.getByText(/locally active/i)).toBeInTheDocument();
     expect(screen.getByText(/not full-time cloud/i)).toBeInTheDocument();
     expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
-    expect(screen.getByText(/manual start remains/i)).toBeInTheDocument();
+    expect(
+      screen.getByText("Disabled — manual start remains available."),
+    ).toBeInTheDocument();
     await waitForRuntimeDiagnostics();
   });
 
@@ -72,7 +74,11 @@ describe("WakeWordSettingsPanel", () => {
 
     await expectPersistedWakeSetting(true);
     expect(wakeToggle()).toBeChecked();
-    expect(screen.getByText(/enabled/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Enabled — runtime starts when local KWS artifacts and lifecycle state permit.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("persists the fixed phrase when disabling Wake Word", async () => {
@@ -83,6 +89,8 @@ describe("WakeWordSettingsPanel", () => {
 
     await expectPersistedWakeSetting(false);
     expect(wakeToggle()).not.toBeChecked();
-    expect(screen.getByText(/manual start remains/i)).toBeInTheDocument();
+    expect(
+      screen.getByText("Disabled — manual start remains available."),
+    ).toBeInTheDocument();
   });
 });
