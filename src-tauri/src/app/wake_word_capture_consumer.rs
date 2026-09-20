@@ -79,13 +79,15 @@ fn decode_pcm16_le_chunk(pcm16_le: &[u8]) -> Result<Vec<i16>, WakeCapturePcmErro
     if pcm16_le.is_empty() {
         return Err(WakeCapturePcmError::EmptyChunk);
     }
-    if pcm16_le.len() % 2 != 0 {
+    if !pcm16_le.len().is_multiple_of(2) {
         return Err(WakeCapturePcmError::OddByteLength);
     }
 
-    Ok(pcm16_le
-        .chunks_exact(2)
-        .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]))
+    let (sample_bytes, remainder) = pcm16_le.as_chunks::<2>();
+    debug_assert!(remainder.is_empty());
+    Ok(sample_bytes
+        .iter()
+        .map(|bytes| i16::from_le_bytes(*bytes))
         .collect())
 }
 
