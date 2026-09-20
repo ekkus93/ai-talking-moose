@@ -1,6 +1,14 @@
 use super::wake_word::runtime::WakeWordRuntimePhase;
 use super::wake_word_composition::WakeWordApplicationRuntime;
 
+/// Terminal outcomes that all release command-interaction ownership back to Wake Word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CommandInteractionTerminalOutcome {
+    Success,
+    Cancelled,
+    RecoverableFailure,
+}
+
 /// Guard the V1 Wake Word runtime while the normal command interaction owns the microphone.
 ///
 /// V1 deliberately has no barge-in. Once command ASR starts, Wake Word must remain suspended
@@ -32,6 +40,19 @@ pub(crate) fn resume_after_command_interaction(
     runtime
         .resume_after_interaction(wake_word_enabled)
         .map_err(|error| error.to_string())
+}
+
+/// Release command ownership for every recoverable terminal path through one policy boundary.
+///
+/// V1 intentionally treats success, cancellation, and recoverable failure identically for Wake
+/// ownership: stale pre-roll/KWS state is cleared by `resume_after_interaction`, and the latest
+/// enabled setting decides whether the runtime returns to Listening or remains Disabled.
+pub(crate) fn complete_command_interaction(
+    runtime: &WakeWordApplicationRuntime,
+    wake_word_enabled: bool,
+    _outcome: CommandInteractionTerminalOutcome,
+) -> Result<(), String> {
+    resume_after_command_interaction(runtime, wake_word_enabled)
 }
 
 #[cfg(test)]
@@ -84,5 +105,34 @@ mod tests {
         assert!(suspend_for_command_interaction(&runtime).unwrap());
         assert!(suspend_for_command_interaction(&runtime).unwrap());
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+    }
+
+    #[test]
+    fn every_recoverable_terminal_outcome_returns_to_listening_when_enabled() {
+        for outcome in [
+            CommandInteractionTerminalOutcome::Success,
+            CommandInteractionTerminalOutcome::Cancelled,
+            CommandInteractionTerminalOutcome::RecoverableFailure,
+        ] {
+            let runtime = listening_runtime();
+            assert!(suspend_for_command_interaction(&runtime).unwrap());
+            complete_command_interaction(&runtime, true, outcome).unwrap();
+            assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
+        }
+    }
+
+    #[test]
+    fn every_terminal_outcome_honors_disable_during_interaction() {
+        for outcome in [
+            CommandInteractionTerminalOutcome::Success,
+            CommandInteractionTerminalOutcome::Cancelled,
+            CommandInteractionTerminalOutcome::RecoverableFailure,
+        ] {
+            let runtime = listening_runtime();
+            assert!(suspend_for_command_interaction(&runtime).unwrap());
+            runtime.apply_enabled_setting(false).unwrap();
+            complete_command_interaction(&runtime, false, outcome).unwrap();
+            assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+        }
     }
 }
