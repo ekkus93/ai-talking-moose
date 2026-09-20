@@ -24,13 +24,6 @@ Policy:
 
 Workflow: `.github/workflows/wake-word-corpus.yml`
 
-Inputs guarded by path filters:
-
-- `docs/wake-word-corpus.json`
-- `docs/fixtures/wake-word-v1/**`
-- `scripts/check_wake_word_corpus_manifest.mjs`
-- `.github/workflows/wake-word-corpus.yml`
-
 Current check:
 
 ```bash
@@ -39,123 +32,134 @@ node scripts/check_wake_word_corpus_manifest.mjs
 
 Purpose:
 
-- enforce the corpus manifest schema version
-- enforce the fixture schema version
-- enforce the acceptance criteria version
+- enforce corpus, fixture, and acceptance-criteria schema versions
 - enforce fixed Wake Word policy: 16 kHz, mono, `pcm_s16le`, fixed fixture root
-- reject private-room-audio policy omissions
-- require fixture provenance, redistributable license evidence, byte size, SHA-256, and expected detection outcome for any committed fixture
+- require fixture provenance, redistributable license evidence, byte size, SHA-256, and expected detection outcome for committed fixtures
 - reject fixture paths outside `docs/fixtures/wake-word-v1`
 - keep recall/false-accept thresholds pending until real redistributable fixtures exist
 
-Merge policy:
+Policy:
 
 - This gate must pass when its path filters select it.
-- A skipped corpus gate is acceptable only for changes that do not touch corpus inputs, checker, fixture tree, or workflow.
-- A skipped corpus gate must not be treated as proof that real corpus acceptance passed.
+- A skipped corpus gate is not evidence that real corpus acceptance passed.
 
-## Pending required gates
+### Lifecycle stability gate
 
-The following gates are still required before final Wake Word V1 closeout, but are not yet implemented as complete acceptance gates on `master`.
+Workflow: `.github/workflows/wake-word-lifecycle-stability.yml`
+
+Current check:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_stability -- --nocapture
+```
+
+Purpose:
+
+- exact-head targeted execution of the deterministic Wake Word runtime-manager stability tests
+- exercise bounded lifecycle/state-machine invariants independently of broad ordinary CI
+
+Policy:
+
+- Changes to the authoritative Wake runtime/lifecycle paths select this gate.
+- A successful deterministic stability run is prerequisite evidence, not proof of the full production audio soak required by WWR-640.
+- A skipped lifecycle workflow is not lifecycle acceptance evidence.
+
+### Performance evidence policy gate
+
+Workflow: `.github/workflows/wake-word-performance-evidence.yml`
+
+Current check:
+
+```bash
+node scripts/check_wake_word_performance_evidence.mjs
+```
+
+Purpose:
+
+- version the performance-report schema and measurement policy
+- require Linux x86_64 and macOS arm64 measurements before the report can move out of its pending state
+- define required metrics for idle CPU, memory, inference latency, wake-to-ASR latency, pre-roll startup, repeated-cycle resource behavior, and continuous-ASR comparison
+- preserve the one-thread inference policy
+
+Current status:
+
+- `docs/wake-word-performance-evidence.json` is intentionally `pending_measurement` with no measurements.
+- A passing policy gate proves report structure/policy validity only; it does not prove WWR-630 performance acceptance.
+
+### Privacy/security source audit gate
+
+Workflow: `.github/workflows/wake-word-privacy-audit.yml`
+
+Current check:
+
+```bash
+node scripts/check_wake_word_privacy_audit.mjs
+```
+
+Purpose:
+
+- fail closed if Wake diagnostics gain raw PCM/transcript/credential/private-audio fields
+- require sanitized runtime error behavior and path/token-like-secret sanitizer evidence
+- prevent filesystem-path serialization from the diagnostics module
+- require truthful privacy documentation and the corpus private-room-audio prohibition
+
+Policy:
+
+- This is an automated source/privacy guardrail.
+- It supplements, but does not replace, the final WWR-900 source/privacy/security audit.
+
+## Pending required gates and acceptance evidence
+
+The following evidence is still required before final Wake Word V1 closeout. Implemented policy or component gates above must not be confused with these production acceptance scenarios.
 
 ### Linux x86_64 real KWS acceptance
 
-Required future proof:
+Required proof:
 
-- prepare the exact pinned model and runtime
-- verify every hash before inference
+- prepare the exact pinned model and runtime and verify every hash
 - verify ELF x86_64 runtime architecture
-- verify CPU-only production path
-- verify one-thread policy
-- run at least one real positive Wake Word fixture
-- run at least one real negative fixture
+- verify CPU-only production path and one-thread policy
+- run real positive and negative Wake Word fixtures
 - prove inference succeeds offline after artifact preparation
-- upload or record privacy-safe diagnostics/evidence
-- record exact commit, manifest, runner/platform details, and run ID
+- record privacy-safe diagnostics, exact commit, manifest, runner/platform details, and run ID
 
 A component test or manifest check is not sufficient for this claim.
 
 ### macOS arm64 real KWS acceptance
 
-Required future proof:
-
-- prepare the exact pinned model and runtime
-- verify every hash before inference
-- verify Mach-O arm64 runtime architecture
-- verify CPU-only production path
-- verify one-thread policy
-- run at least one real positive Wake Word fixture
-- run at least one real negative fixture
-- prove inference succeeds offline after artifact preparation
-- upload or record privacy-safe diagnostics/evidence
-- record exact commit, manifest, runner/platform details, and run ID
-
-A Linux-only result must not be reused as macOS arm64 evidence.
+Required proof mirrors Linux acceptance but must verify the Mach-O arm64 runtime and execute on macOS arm64. Linux evidence must not be reused as macOS evidence.
 
 ### Native packaging/architecture gate
 
-Required future proof:
+Required proof:
 
 - verify packaged runtime layout for each supported platform
 - verify architecture of the runtime library actually loaded by the packaged build
 - verify cached artifacts cannot bypass size/hash checks
 - fail closed for unsupported platforms
 
-Existing model/runtime identity and packaging component tests are useful prerequisites but not final packaged acceptance by themselves.
+### Integrated production lifecycle acceptance
 
-### Integrated lifecycle stability gate
+The deterministic lifecycle workflow is implemented, but WWR-640 still requires integrated repeated wake→ASR→Thinking→Talking→wake cycles, resource-count observations, TTS success/cancel/failure resume behavior, disable/enable cycles, shutdown scenarios, and bounded soak behavior.
 
-Required future proof:
+### Measured performance acceptance
 
-- repeated wake→ASR→Thinking→Talking→wake cycles
-- no native runtime/session growth
-- no capture-stream multiplication
-- bounded ring-buffer memory
-- successful TTS resumes Wake Word when enabled
-- cancelled TTS resumes Wake Word when enabled
-- recoverable TTS failure resumes Wake Word when enabled
-- repeated disable/enable cycles
-- shutdown while Listening
-- shutdown during handoff
-- bounded soak/false-trigger behavior where practical
+The performance evidence policy gate is implemented, but WWR-630 remains pending until representative Linux and macOS measurements populate `docs/wake-word-performance-evidence.json` and demonstrate that idle KWS is lighter than continuously running full ASR.
 
-Current deterministic runtime-manager stability tests cover important state-machine invariants, but they are not the full production audio/lifecycle acceptance gate.
+### Final source/privacy/security audit
 
-### Performance evidence gate
+The automated privacy source gate is implemented, but final WWR-900 still requires review of runtime ownership, microphone transitions, cancellation/shutdown, ring clearing, Wake-disabled behavior, Talking suspension/resume, one-trigger/one-command behavior, provider separation, exact artifact loading, architecture verification, offline idle inference, and documentation truthfulness.
 
-Required future proof:
+## Specialized runners and hardware
 
-- idle Wake Word CPU utilization on representative Linux and macOS environments
-- memory overhead
-- inference timing/real-time behavior
-- wake detection to command-ASR activation latency
-- pre-roll replay/startup timing
-- repeated-cycle resource behavior
-- comparison with continuously running full ASR
-
-No performance claim should be made until measured evidence is recorded.
-
-### Privacy/security final audit gate
-
-Required future proof:
-
-- single Wake runtime ownership
-- microphone ownership transitions
-- cancellation/shutdown
-- ring-buffer clearing
-- Wake-disabled behavior
-- Talking suspension/resume
-- one-trigger/one-command invariant
-- provider separation/no cloud fallback
-- exact artifact/runtime loading
-- native architecture verification
-- diagnostics/logs/errors do not expose raw audio, secrets, or unnecessary paths
-- no network dependency during idle KWS inference
-- no full-time ASR merely for wake detection
-- user-facing docs do not overstate acceptance
+- Deterministic corpus, performance-policy, and privacy-source gates run on ordinary hosted CI and do not constitute real KWS acceptance.
+- Deterministic lifecycle stability currently runs on hosted Linux CI and does not constitute a production audio soak.
+- Linux x86_64 real KWS acceptance requires a runner/environment capable of loading and executing the pinned Linux native runtime and real redistributable fixtures.
+- macOS arm64 real KWS acceptance requires an arm64 macOS runner/environment capable of loading and executing the pinned macOS native runtime and the same acceptance corpus policy.
+- Representative performance evidence must be recorded on the acceptance environments; hosted policy validation cannot manufacture those measurements.
 
 ## Final merge eligibility
 
-A final Wake Word V1 feature head is not eligible based on ordinary CI alone. Final closeout must record exact PR-head and exact merged-master evidence for all required Wake-specific gates that apply to the final feature claim.
+A final Wake Word V1 feature head is not eligible based on ordinary CI alone. Final closeout must record exact PR-head and exact merged-master evidence for every required Wake-specific gate and acceptance scenario applicable to the final feature claim.
 
-A workflow with conclusion `skipped` is evidence only that its path filter or condition did not select that workflow. It is not evidence that the acceptance scenario passed.
+A workflow with conclusion `skipped` is evidence only that its path filter or condition did not select that workflow. It is not evidence that the acceptance scenario passed. Likewise, a passing policy/schema gate is not evidence that still-pending real-world measurements or native acceptance passed.
