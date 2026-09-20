@@ -123,7 +123,9 @@ mod tests {
     }
 
     impl SherpaKwsEngine for RecordingEngine {
-        fn config(&self) -> &SherpaKwsConfig { &self.config }
+        fn config(&self) -> &SherpaKwsConfig {
+            &self.config
+        }
 
         fn accept_pcm16_mono(
             &mut self,
@@ -144,7 +146,9 @@ mod tests {
             Ok(())
         }
 
-        fn shutdown(&mut self) -> Result<(), WakeWordError> { Ok(()) }
+        fn shutdown(&mut self) -> Result<(), WakeWordError> {
+            Ok(())
+        }
     }
 
     fn listening_runtime() -> WakeWordRuntimeManager {
@@ -159,7 +163,10 @@ mod tests {
     }
 
     fn bytes(samples: &[i16]) -> Vec<u8> {
-        samples.iter().flat_map(|sample| sample.to_le_bytes()).collect()
+        samples
+            .iter()
+            .flat_map(|sample| sample.to_le_bytes())
+            .collect()
     }
 
     #[test]
@@ -185,7 +192,10 @@ mod tests {
         let second_receiver = start_authoritative_wake_capture(&mut capture, None).unwrap();
 
         assert!(capture.is_active());
-        assert_eq!(capture.diagnostics().sample_rate_hz, Some(V1_KWS_SAMPLE_RATE_HZ));
+        assert_eq!(
+            capture.diagnostics().sample_rate_hz,
+            Some(V1_KWS_SAMPLE_RATE_HZ)
+        );
         drop(first_receiver);
         drop(second_receiver);
         capture.stop();
@@ -205,7 +215,11 @@ mod tests {
             vec![vec![1, -2], vec![3, -4]]
         );
         assert_eq!(
-            consumer.router().runtime().snapshot(now).ring_buffer_samples,
+            consumer
+                .router()
+                .runtime()
+                .snapshot(now)
+                .ring_buffer_samples,
             4
         );
     }
@@ -228,25 +242,36 @@ mod tests {
 
         assert_eq!(consumer.router_mut().engine_mut().frames, vec![vec![7, 8]]);
         assert_eq!(
-            consumer.router().runtime().snapshot(now).ring_buffer_samples,
+            consumer
+                .router()
+                .runtime()
+                .snapshot(now)
+                .ring_buffer_samples,
             before.ring_buffer_samples
         );
     }
 
     #[test]
     fn trigger_then_live_capture_transfers_one_command_payload() {
-        let engine = RecordingEngine { detect_next: true, ..Default::default() };
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
         let mut consumer = consumer_with_engine(engine);
         let now = Instant::now();
 
-        let trigger = consumer.route_capture_chunk(&bytes(&[11, 12]), now).unwrap();
+        let trigger = consumer
+            .route_capture_chunk(&bytes(&[11, 12]), now)
+            .unwrap();
         assert!(trigger.trigger_accepted);
         assert_eq!(
             consumer.router().runtime().snapshot(now).phase,
             WakeWordRuntimePhase::Triggered
         );
 
-        let live = consumer.route_capture_chunk(&bytes(&[13, 14]), now).unwrap();
+        let live = consumer
+            .route_capture_chunk(&bytes(&[13, 14]), now)
+            .unwrap();
         assert!(live.live_handoff_retained);
         assert_eq!(consumer.handoff_live_samples(), 2);
 
@@ -262,12 +287,19 @@ mod tests {
 
     #[test]
     fn returning_to_wake_resets_kws_and_allows_later_capture() {
-        let engine = RecordingEngine { detect_next: true, ..Default::default() };
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
         let mut consumer = consumer_with_engine(engine);
         let now = Instant::now();
 
-        consumer.route_capture_chunk(&bytes(&[21, 22]), now).unwrap();
-        consumer.route_capture_chunk(&bytes(&[23, 24]), now).unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[21, 22]), now)
+            .unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[23, 24]), now)
+            .unwrap();
         assert!(consumer.transfer_handoff_audio_to_asr().unwrap().is_some());
 
         consumer.return_to_wake_listening().unwrap();
@@ -277,7 +309,9 @@ mod tests {
             WakeWordRuntimePhase::Listening
         );
 
-        consumer.route_capture_chunk(&bytes(&[25, 26]), now).unwrap();
+        consumer
+            .route_capture_chunk(&bytes(&[25, 26]), now)
+            .unwrap();
         assert_eq!(
             consumer.router_mut().engine_mut().frames,
             vec![vec![21, 22], vec![25, 26]]
