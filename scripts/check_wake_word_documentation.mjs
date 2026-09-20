@@ -15,7 +15,7 @@ const behaviorRequirements = [
   "defaults to disabled",
   "local keyword-spotting",
   "microphone",
-  "no barge-in",
+  "does **not** implement wake-word barge-in",
   "in-memory ring/pre-roll",
   "diagnostics",
   "Live settings-to-runtime application is still a remediation item",
