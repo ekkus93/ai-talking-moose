@@ -170,10 +170,7 @@ impl LocalAsrPipeline {
     /// The payload is converted to the same PCM16-LE representation emitted by `AudioCapture`,
     /// preserving exact sample order. A full queue fails closed so callers can recover Wake Word
     /// ownership instead of silently clipping the beginning of the command.
-    pub(crate) fn prime_wake_handoff(
-        &self,
-        audio: WakeCommandHandoffAudio,
-    ) -> Result<(), AsrError> {
+    pub fn prime_wake_handoff(&self, audio: WakeCommandHandoffAudio) -> Result<(), AsrError> {
         if !self.is_running() {
             return Err(invalid_state_error(
                 "Local ASR inference is not running; wake handoff was not accepted.",
