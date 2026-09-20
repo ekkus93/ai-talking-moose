@@ -122,7 +122,9 @@ export const WakeWordSettingsPanel: React.FC = () => {
         </label>
 
         <div>
-          <div className="font-bold block mb-1 text-[11px]">Wake word phrase</div>
+          <div className="font-bold block mb-1 text-[11px]">
+            Wake word phrase
+          </div>
           <div
             aria-label="Wake word phrase"
             className="w-full px-2 py-1 border border-black rounded bg-gray-100 font-mono"
