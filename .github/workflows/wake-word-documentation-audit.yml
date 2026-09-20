@@ -1,0 +1,38 @@
+name: Wake Word documentation audit
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md"
+      - "docs/WAKE_WORD_V1_CI_GATES.md"
+      - "docs/wake-word-performance-evidence.json"
+      - "src/components/Settings/WakeWordSettingsPanel.tsx"
+      - "scripts/check_wake_word_documentation.mjs"
+      - ".github/workflows/wake-word-documentation-audit.yml"
+  push:
+    branches: [master]
+    paths:
+      - "docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md"
+      - "docs/WAKE_WORD_V1_CI_GATES.md"
+      - "docs/wake-word-performance-evidence.json"
+      - "src/components/Settings/WakeWordSettingsPanel.tsx"
+      - "scripts/check_wake_word_documentation.mjs"
+      - ".github/workflows/wake-word-documentation-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation-audit:
+    name: Wake Word documentation truthfulness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Audit Wake Word documentation truthfulness
+        run: node scripts/check_wake_word_documentation.mjs
