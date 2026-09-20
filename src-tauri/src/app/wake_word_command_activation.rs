@@ -33,6 +33,16 @@ pub(crate) fn activate_wake_command_once(
     }
 }
 
+/// Resolve cancellation before or during command activation without retaining stale Wake audio.
+pub(crate) fn cancel_wake_command(
+    runtime: &WakeWordApplicationRuntime,
+    handoff: &mut WakeCommandAsrHandoff,
+    wake_word_enabled: bool,
+) -> Result<(), String> {
+    handoff.cancel();
+    resume_after_command_interaction(runtime, wake_word_enabled)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,6 +131,30 @@ mod tests {
 
         activate_wake_command_once(&runtime, &mut handoff, &mut ingress, false).unwrap_err();
 
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
+    fn cancellation_clears_pending_audio_and_returns_to_listening() {
+        let runtime = listening_runtime();
+        let mut handoff = handoff();
+        suspend_for_command_interaction(&runtime).unwrap();
+
+        cancel_wake_command(&runtime, &mut handoff, true).unwrap();
+
+        assert!(!handoff.is_pending());
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
+    }
+
+    #[test]
+    fn cancellation_honors_disable_and_never_replays_pending_audio() {
+        let runtime = listening_runtime();
+        let mut handoff = handoff();
+        suspend_for_command_interaction(&runtime).unwrap();
+
+        cancel_wake_command(&runtime, &mut handoff, false).unwrap();
+
+        assert!(!handoff.is_pending());
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
     }
 }

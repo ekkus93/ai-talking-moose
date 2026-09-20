@@ -34,6 +34,11 @@ impl WakeCommandAsrHandoff {
         Ok(true)
     }
 
+    /// Discard any not-yet-delivered Wake audio at a cancellation boundary.
+    pub(crate) fn cancel(&mut self) {
+        self.audio.take();
+    }
+
     pub(crate) fn is_pending(&self) -> bool {
         self.audio.is_some()
     }
@@ -101,6 +106,18 @@ mod tests {
         assert!(!transfer.is_pending());
 
         ingress.fail = false;
+        assert!(!transfer.deliver_once(&mut ingress).unwrap());
+        assert!(ingress.accepted.is_empty());
+    }
+
+    #[test]
+    fn cancellation_discards_pending_audio_without_delivery() {
+        let mut transfer = WakeCommandAsrHandoff::new(handoff(&[30, 31, 32]));
+        let mut ingress = RecordingIngress::default();
+
+        transfer.cancel();
+
+        assert!(!transfer.is_pending());
         assert!(!transfer.deliver_once(&mut ingress).unwrap());
         assert!(ingress.accepted.is_empty());
     }
