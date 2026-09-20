@@ -157,12 +157,8 @@ mod tests {
         let mut consumer = consumer_with_engine(RecordingEngine::default());
         let now = Instant::now();
 
-        consumer
-            .route_capture_chunk(&bytes(&[1, -2]), now)
-            .unwrap();
-        consumer
-            .route_capture_chunk(&bytes(&[3, -4]), now)
-            .unwrap();
+        consumer.route_capture_chunk(&bytes(&[1, -2]), now).unwrap();
+        consumer.route_capture_chunk(&bytes(&[3, -4]), now).unwrap();
 
         assert_eq!(
             consumer.router_mut().engine_mut().frames,
