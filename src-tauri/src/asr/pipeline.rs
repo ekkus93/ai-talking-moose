@@ -1,3 +1,4 @@
+use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrResource;
 use crate::asr::moonshine::{
     MoonshineModelArchitecture, MoonshineModelInstaller, MoonshineSmallEngine, MoonshineTinyEngine,
@@ -135,6 +136,42 @@ impl LocalAsrPipeline {
             None,
         )
         .await
+    }
+
+    /// Prime the existing Moonshine command-ASR ingress with the exact wake
+    /// pre-roll plus post-trigger live PCM before microphone ownership moves to
+    /// `start_capture`. This preserves chronological ordering without acoustic
+    /// wake-phrase trimming or a second inference path.
+    pub(crate) fn prime_wake_handoff(
+        &self,
+        handoff: WakeCommandHandoffAudio,
+    ) -> Result<(), AsrError> {
+        if !self.is_running() {
+            return Err(invalid_state_error(
+                "Local ASR inference is not running; wake handoff was not accepted.",
+            ));
+        }
+        if handoff.sample_rate_hz() != self.input_sample_rate_hz {
+            return Err(invalid_state_error(
+                "Wake handoff sample rate does not match local ASR input.",
+            ));
+        }
+        let sender = self.pcm_sender.as_ref().ok_or_else(|| {
+            invalid_state_error("Local ASR input is closed; wake handoff was not accepted.")
+        })?;
+        sender
+            .try_send(handoff.to_pcm16_le_bytes())
+            .map_err(|error| match error {
+                mpsc::error::TrySendError::Full(_) => AsrError {
+                    kind: AsrErrorKind::AudioInput,
+                    message: "Local ASR input queue is full; wake handoff was not accepted."
+                        .to_string(),
+                    retryable: true,
+                },
+                mpsc::error::TrySendError::Closed(_) => invalid_state_error(
+                    "Local ASR input is closed; wake handoff was not accepted.",
+                ),
+            })
     }
 
     /// Start the existing authoritative microphone on this pipeline's bounded
