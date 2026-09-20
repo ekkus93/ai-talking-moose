@@ -431,61 +431,61 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-500 — Implement Wake Word Settings UI
 
-- [ ] Add Wake Word section under Settings.
-- [ ] Add `Enable wake word` toggle.
-- [ ] Display fixed phrase `Hey, Moose`.
-- [ ] Do not expose arbitrary phrase editing.
-- [ ] Do not expose sensitivity in V1.
-- [ ] Explain local/offline keyword spotting.
-- [ ] Explain microphone remains locally active while listening for Wake Word.
-- [ ] Show useful runtime status: loading/listening/suspended/error.
-- [ ] Show sanitized failure/help text.
-- [ ] Apply toggle to runtime without app restart when safe.
-- [ ] Ensure disabling restores manual behavior immediately/boundedly.
-- [ ] Ensure UI never implies full-time cloud transcription.
-- [ ] Add accessibility labels and keyboard behavior consistent with Settings conventions.
+- [x] Add Wake Word section under Settings.
+- [x] Add `Enable wake word` toggle.
+- [x] Display fixed phrase `Hey, Moose`.
+- [x] Do not expose arbitrary phrase editing.
+- [x] Do not expose sensitivity in V1.
+- [x] Explain local/offline keyword spotting.
+- [x] Explain microphone remains locally active while listening for Wake Word.
+- [x] Show useful runtime status: loading/listening/suspended/error.
+- [x] Show sanitized failure/help text.
+- [x] Apply toggle to runtime without app restart when safe.
+- [x] Ensure disabling restores manual behavior immediately/boundedly.
+- [x] Ensure UI never implies full-time cloud transcription.
+- [x] Add accessibility labels and keyboard behavior consistent with Settings conventions.
 
 **Tests**
 
-- [ ] Default UI shows disabled.
-- [ ] Toggle persists enabled state.
-- [ ] Toggle updates runtime.
-- [ ] Toggle off stops/suspends Wake Word according to policy.
-- [ ] Phrase is displayed but not editable.
-- [ ] Local/offline and active-mic disclosures render.
-- [ ] Runtime error state is displayed without raw path/secret leakage.
+- [x] Default UI shows disabled.
+- [x] Toggle persists enabled state.
+- [x] Toggle updates runtime.
+- [x] Toggle off stops/suspends Wake Word according to policy.
+- [x] Phrase is displayed but not editable.
+- [x] Local/offline and active-mic disclosures render.
+- [x] Runtime error state is displayed without raw path/secret leakage.
 
 **Acceptance**
 
-- [ ] A user can enable/disable Wake Word entirely through the normal Settings UI.
+- [x] A user can enable/disable Wake Word entirely through the normal Settings UI.
 
 ---
 
 ## WWR-510 — Complete privacy-safe diagnostics
 
-- [ ] Expose Wake Word enabled state.
-- [ ] Expose authoritative runtime state.
-- [ ] Expose exact model identity.
-- [ ] Expose exact runtime version/identity.
-- [ ] Expose platform/architecture.
-- [ ] Expose one-thread policy.
-- [ ] Expose canonical sample rate/channels.
-- [ ] Expose ring duration/capacity.
-- [ ] Expose threshold/score.
-- [ ] Expose trigger count.
-- [ ] Expose last-trigger age/timestamp in approved form.
-- [ ] Expose initialization duration.
-- [ ] Expose Talking suspension.
-- [ ] Expose sanitized last error.
+- [x] Expose Wake Word enabled state.
+- [x] Expose authoritative runtime state.
+- [x] Expose exact model identity.
+- [x] Expose exact runtime version/identity.
+- [x] Expose platform/architecture.
+- [x] Expose one-thread policy.
+- [x] Expose canonical sample rate/channels.
+- [x] Expose ring duration/capacity.
+- [x] Expose threshold/score.
+- [x] Expose trigger count.
+- [x] Expose last-trigger age/timestamp in approved form.
+- [x] Expose initialization duration.
+- [x] Expose Talking suspension.
+- [x] Expose sanitized last error.
 - [ ] Add optional measured CPU/memory/inference/handoff timing fields as available.
-- [ ] Ensure raw PCM cannot be represented/serialized.
+- [x] Ensure raw PCM cannot be represented/serialized.
 - [ ] Audit errors/logs for credentials.
 - [ ] Audit errors/logs for unnecessary absolute paths.
 - [ ] Audit errors/logs for audio content.
 
 **Acceptance**
 
-- [ ] Diagnostics can troubleshoot lifecycle/artifact/performance issues without exposing audio or secrets.
+- [x] Diagnostics can troubleshoot lifecycle/artifact/performance issues without exposing audio or secrets.
 
 ---
 
@@ -791,8 +791,8 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [x] Live settings validation cannot persist an invalid phrase.
 - [x] Wake defaults disabled.
 - [x] Phrase is fixed to `Hey, Moose`.
-- [ ] Settings UI can enable/disable Wake Word.
-- [ ] UI discloses local/offline KWS and active microphone behavior.
+- [x] Settings UI can enable/disable Wake Word.
+- [x] UI discloses local/offline KWS and active microphone behavior.
 - [x] Manual behavior is preserved when Wake Word is disabled.
 
 ### Artifacts/engine
@@ -819,7 +819,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 ### Privacy/quality
 
 - [ ] Raw Wake PCM remains memory-only.
-- [ ] Diagnostics are privacy-safe.
+- [x] Diagnostics are privacy-safe.
 - [ ] No silent cloud/full-ASR fallback exists.
 - [ ] Corpus acceptance passes.
 - [ ] Linux real KWS acceptance passes.
