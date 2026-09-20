@@ -57,16 +57,28 @@ impl WakeWordApplicationRuntime {
     /// Resume after any terminal interaction/TTS outcome while honoring the latest setting.
     ///
     /// The explicit setting argument is intentional: disabling Wake Word while Talking must
-    /// resolve to `Disabled`, never an unconditional resume to `Listening`.
+    /// resolve to `Disabled`, never an unconditional resume to `Listening`. Conversely, if Wake
+    /// Word was enabled while a manual interaction owned the microphone, the runtime can still be
+    /// `Disabled`; terminal resolution starts its normal `Loading` path instead of failing the
+    /// interaction teardown.
     pub fn resume_after_interaction(
         &self,
         wake_word_enabled: bool,
     ) -> Result<(), WakeWordRuntimeError> {
-        if wake_word_enabled {
-            self.manager.resume_after_interaction()
-        } else {
+        if !wake_word_enabled {
             self.manager.disable();
-            Ok(())
+            return Ok(());
+        }
+
+        match self.phase() {
+            WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::Error => {
+                self.manager.begin_enable()
+            }
+            WakeWordRuntimePhase::Loading => Ok(()),
+            WakeWordRuntimePhase::Listening
+            | WakeWordRuntimePhase::Triggered
+            | WakeWordRuntimePhase::SuspendedTalking => self.manager.resume_after_interaction(),
+            WakeWordRuntimePhase::ShuttingDown => self.manager.resume_after_interaction(),
         }
     }
 
@@ -166,6 +178,30 @@ mod tests {
         owner.suspend_for_talking().unwrap();
         owner.resume_after_interaction(true).unwrap();
         assert_eq!(owner.phase(), WakeWordRuntimePhase::Listening);
+    }
+
+    #[test]
+    fn terminal_interaction_starts_loading_when_wake_was_enabled_while_disabled() {
+        let owner = WakeWordApplicationRuntime::from_settings(&AppSettings::default()).unwrap();
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Disabled);
+
+        owner.resume_after_interaction(true).unwrap();
+
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Loading);
+    }
+
+    #[test]
+    fn terminal_interaction_preserves_loading_for_deferred_enable() {
+        let settings = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        let owner = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Loading);
+
+        owner.resume_after_interaction(true).unwrap();
+
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Loading);
     }
 
     #[test]
