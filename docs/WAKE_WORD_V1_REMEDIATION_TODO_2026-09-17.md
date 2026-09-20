@@ -363,8 +363,8 @@ The ordering is intentional. Do not implement later integration around unresolve
 ## WWR-400 — Integrate Wake Word with application lifecycle
 
 - [x] Add one Wake Word runtime owner to `AppState` or equivalent authoritative application composition.
-- [ ] Initialize runtime from persisted settings.
-- [ ] Keep runtime disabled when setting is false.
+- [x] Initialize runtime from persisted settings.
+- [x] Keep runtime disabled when setting is false.
 - [ ] Start/load/listen when enabled and lifecycle permits.
 - [ ] Ensure one wake trigger starts exactly one normal command interaction.
 - [ ] Prevent wake activation while command ASR is active.
