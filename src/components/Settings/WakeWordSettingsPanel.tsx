@@ -144,15 +144,13 @@ export const WakeWordSettingsPanel: React.FC = () => {
         <div className="flex items-center gap-1 font-bold">
           <Shield className="w-3.5 h-3.5" /> Privacy boundary
         </div>
+        <p>Wake Word V1 uses local/offline keyword spotting.</p>
+        <p>The microphone remains locally active while listening.</p>
+        <p>Wake detection is not full-time cloud transcription.</p>
+        <p>Wake Word V1 has no barge-in support while Moose talks.</p>
         <p>
-          Wake Word keyword spotting is local/offline. While enabled and the
-          lifecycle permits listening, the microphone can remain locally active
-          so Moose can detect <strong>Hey, Moose</strong>.
-        </p>
-        <p>
-          This panel does not enable full-time cloud transcription. Existing
-          command ASR still starts only through the normal conversation path
-          after Wake Word accepts a trigger.
+          Existing command ASR still starts only through the normal conversation
+          path after Wake Word accepts a trigger.
         </p>
       </section>
 
