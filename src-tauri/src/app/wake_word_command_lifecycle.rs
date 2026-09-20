@@ -1,0 +1,88 @@
+use super::wake_word::runtime::WakeWordRuntimePhase;
+use super::wake_word_composition::WakeWordApplicationRuntime;
+
+/// Guard the V1 Wake Word runtime while the normal command interaction owns the microphone.
+///
+/// V1 deliberately has no barge-in. Once command ASR starts, Wake Word must remain suspended
+/// through ASR, Thinking, and Talking until the interaction reaches a terminal outcome.
+pub(crate) fn suspend_for_command_interaction(
+    runtime: &WakeWordApplicationRuntime,
+) -> Result<bool, String> {
+    match runtime.phase() {
+        WakeWordRuntimePhase::Listening | WakeWordRuntimePhase::Triggered => {
+            runtime
+                .suspend_for_talking()
+                .map_err(|error| error.to_string())?;
+            Ok(true)
+        }
+        WakeWordRuntimePhase::SuspendedTalking => Ok(true),
+        WakeWordRuntimePhase::Disabled
+        | WakeWordRuntimePhase::Loading
+        | WakeWordRuntimePhase::Error
+        | WakeWordRuntimePhase::ShuttingDown => Ok(false),
+    }
+}
+
+/// Resolve the terminal command-interaction boundary against the latest persisted enable state.
+/// Disabling Wake Word during an interaction therefore wins over an otherwise normal resume.
+pub(crate) fn resume_after_command_interaction(
+    runtime: &WakeWordApplicationRuntime,
+    wake_word_enabled: bool,
+) -> Result<(), String> {
+    runtime
+        .resume_after_interaction(wake_word_enabled)
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::state::AppSettings;
+
+    fn listening_runtime() -> WakeWordApplicationRuntime {
+        let settings = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
+        runtime.mark_loaded().unwrap();
+        runtime
+    }
+
+    #[test]
+    fn command_interaction_suspends_wake_until_terminal_resume() {
+        let runtime = listening_runtime();
+        assert!(suspend_for_command_interaction(&runtime).unwrap());
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+
+        resume_after_command_interaction(&runtime, true).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
+    }
+
+    #[test]
+    fn disabling_during_command_interaction_wins_over_terminal_resume() {
+        let runtime = listening_runtime();
+        assert!(suspend_for_command_interaction(&runtime).unwrap());
+        runtime.apply_enabled_setting(false).unwrap();
+
+        resume_after_command_interaction(&runtime, false).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
+    fn disabled_manual_interaction_never_enables_wake() {
+        let runtime = WakeWordApplicationRuntime::from_settings(&AppSettings::default()).unwrap();
+        assert!(!suspend_for_command_interaction(&runtime).unwrap());
+
+        resume_after_command_interaction(&runtime, false).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
+    fn suspended_runtime_remains_guarded_across_asr_and_thinking() {
+        let runtime = listening_runtime();
+        assert!(suspend_for_command_interaction(&runtime).unwrap());
+        assert!(suspend_for_command_interaction(&runtime).unwrap());
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+    }
+}
