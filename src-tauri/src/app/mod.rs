@@ -1,6 +1,7 @@
 pub(crate) mod request_snapshot;
 pub(crate) mod runtime_preferences;
 pub(crate) mod settings_policy;
+#[rustfmt::skip]
 pub mod state;
 pub(crate) mod tray;
 #[allow(dead_code)]

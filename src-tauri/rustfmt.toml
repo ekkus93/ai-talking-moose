@@ -1,5 +1,0 @@
-# Ralph Bridge cannot patch partial files; state.rs has a two-line rustfmt drift from
-# the AppState Wake runtime ownership migration on PR #267. Keep the formatting
-# gate from rewriting this large state module until a whole-file format commit can
-# safely replace it.
-ignore = ["src/app/state.rs"]
