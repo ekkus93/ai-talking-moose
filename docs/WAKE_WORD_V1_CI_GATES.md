@@ -24,11 +24,7 @@ Policy:
 
 Workflow: `.github/workflows/wake-word-corpus.yml`
 
-Current check:
-
-```bash
-node scripts/check_wake_word_corpus_manifest.mjs
-```
+Current check: `node scripts/check_wake_word_corpus_manifest.mjs`.
 
 Purpose:
 
@@ -43,24 +39,43 @@ Policy:
 - This gate must pass when its path filters select it.
 - A skipped corpus gate is not evidence that real corpus acceptance passed.
 
+### Native packaging/architecture policy gate
+
+Workflow: `.github/workflows/wake-word-native-packaging.yml`
+
+Matrix: hosted Linux x86_64 and macOS arm64.
+
+Current checks:
+
+- `python3 scripts/validate_wake_word_artifact_manifest.py --production`
+- `python3 -m unittest tests/test_wake_word_runtime_artifacts.py`
+- runner OS/architecture recording
+
+Purpose:
+
+- exercise the frozen production manifest and pinned runtime preparation policy on both target operating systems
+- verify architecture rejection and cache/hash behavior represented by the runtime-artifact tests
+- bind packaging-policy changes to an exact-head specialized workflow
+
+Policy:
+
+- This gate does not by itself prove real KWS inference or that a packaged application loaded the native runtime.
+- WWR-610/620 real positive/negative inference and final packaged-runtime evidence remain separate acceptance requirements.
+
 ### Lifecycle stability gate
 
 Workflow: `.github/workflows/wake-word-lifecycle-stability.yml`
 
-Current check:
-
-```bash
-cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_stability -- --nocapture
-```
+Current check: `cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_stability -- --nocapture`.
 
 Purpose:
 
-- exact-head targeted execution of the deterministic Wake Word runtime-manager stability tests
+- exact-head targeted execution of deterministic Wake Word runtime-manager stability tests
 - exercise bounded lifecycle/state-machine invariants independently of broad ordinary CI
 
 Policy:
 
-- Changes to the authoritative Wake runtime/lifecycle paths select this gate.
+- Changes to authoritative Wake runtime/lifecycle paths select this gate.
 - A successful deterministic stability run is prerequisite evidence, not proof of the full production audio soak required by WWR-640.
 - A skipped lifecycle workflow is not lifecycle acceptance evidence.
 
@@ -68,11 +83,7 @@ Policy:
 
 Workflow: `.github/workflows/wake-word-performance-evidence.yml`
 
-Current check:
-
-```bash
-node scripts/check_wake_word_performance_evidence.mjs
-```
+Current check: `node scripts/check_wake_word_performance_evidence.mjs`.
 
 Purpose:
 
@@ -90,11 +101,7 @@ Current status:
 
 Workflow: `.github/workflows/wake-word-privacy-audit.yml`
 
-Current check:
-
-```bash
-node scripts/check_wake_word_privacy_audit.mjs
-```
+Current check: `node scripts/check_wake_word_privacy_audit.mjs`.
 
 Purpose:
 
@@ -108,7 +115,19 @@ Policy:
 - This is an automated source/privacy guardrail.
 - It supplements, but does not replace, the final WWR-900 source/privacy/security audit.
 
-## Pending required gates and acceptance evidence
+### Documentation truthfulness audit
+
+Workflow: `.github/workflows/wake-word-documentation-audit.yml`
+
+Current check: `node scripts/check_wake_word_documentation.mjs`.
+
+Purpose:
+
+- keep current-behavior documentation aligned with implemented and still-pending production integration
+- preserve local/offline, active-microphone, cloud-boundary, and no-barge-in Settings disclosures
+- reject unqualified final-acceptance claims while real fixtures/platform acceptance/performance remain pending
+
+## Pending required acceptance evidence
 
 The following evidence is still required before final Wake Word V1 closeout. Implemented policy or component gates above must not be confused with these production acceptance scenarios.
 
@@ -129,14 +148,9 @@ A component test or manifest check is not sufficient for this claim.
 
 Required proof mirrors Linux acceptance but must verify the Mach-O arm64 runtime and execute on macOS arm64. Linux evidence must not be reused as macOS evidence.
 
-### Native packaging/architecture gate
+### Packaged-runtime load acceptance
 
-Required proof:
-
-- verify packaged runtime layout for each supported platform
-- verify architecture of the runtime library actually loaded by the packaged build
-- verify cached artifacts cannot bypass size/hash checks
-- fail closed for unsupported platforms
+The native packaging/architecture policy workflow is implemented. Final packaging acceptance still must verify the runtime library actually loaded by a packaged build on each claimed platform and must remain fail-closed for unsupported platforms.
 
 ### Integrated production lifecycle acceptance
 
@@ -152,7 +166,8 @@ The automated privacy source gate is implemented, but final WWR-900 still requir
 
 ## Specialized runners and hardware
 
-- Deterministic corpus, performance-policy, and privacy-source gates run on ordinary hosted CI and do not constitute real KWS acceptance.
+- Deterministic corpus, performance-policy, privacy-source, and documentation gates run on ordinary hosted CI and do not constitute real KWS acceptance.
+- Native packaging policy runs on hosted Linux x86_64 and macOS arm64; it validates policy/tests rather than real KWS audio acceptance.
 - Deterministic lifecycle stability currently runs on hosted Linux CI and does not constitute a production audio soak.
 - Linux x86_64 real KWS acceptance requires a runner/environment capable of loading and executing the pinned Linux native runtime and real redistributable fixtures.
 - macOS arm64 real KWS acceptance requires an arm64 macOS runner/environment capable of loading and executing the pinned macOS native runtime and the same acceptance corpus policy.
