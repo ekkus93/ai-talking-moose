@@ -2,6 +2,10 @@ use crate::ai::types::{LiveOutboundDiagnostics, LiveSessionConfig};
 use crate::app::request_snapshot::TextRequestSettingsSnapshot;
 use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
+use crate::app::wake_word::runtime::WakeWordRuntimePhase;
+use crate::app::wake_word_command_lifecycle::{
+    resume_after_command_interaction, suspend_for_command_interaction,
+};
 #[cfg(test)]
 use crate::asr::AsrMode;
 use crate::character::prompt::PromptBuilder;
@@ -125,6 +129,8 @@ pub async fn start_conversation<R: Runtime>(
     // start request is still constructing or activating the old graph.
     let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
+    let wake_runtime = state.wake_word_runtime.clone();
+    let wake_guarded = suspend_for_command_interaction(&wake_runtime)?;
     state.ambient_scheduler.claim_foreground_presentation();
     prepare_character_for_conversation(state.inner(), &app)?;
     let provider = state.get_live_provider();
@@ -145,6 +151,8 @@ pub async fn start_conversation<R: Runtime>(
     let character_state = state.character_state.clone();
     let app_state = app.clone();
     let app_lifecycle = app.clone();
+    let wake_runtime_for_lifecycle = wake_runtime.clone();
+    let settings_for_lifecycle = state.settings.clone();
     let app_provider_error = app.clone();
     let app_transcript = app.clone();
     let app_bubble = app.clone();
@@ -173,6 +181,22 @@ pub async fn start_conversation<R: Runtime>(
             },
             move |lifecycle: ConversationLifecycle| {
                 let _ = app_lifecycle.emit("moose://conversation/lifecycle", lifecycle);
+                if wake_guarded
+                    && matches!(
+                        lifecycle,
+                        ConversationLifecycle::Idle | ConversationLifecycle::Failed
+                    )
+                    && wake_runtime_for_lifecycle.phase()
+                        == WakeWordRuntimePhase::SuspendedTalking
+                {
+                    let wake_word_enabled = settings_for_lifecycle.read().wake_word_enabled;
+                    if let Err(error_value) = resume_after_command_interaction(
+                        &wake_runtime_for_lifecycle,
+                        wake_word_enabled,
+                    ) {
+                        warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
+                    }
+                }
             },
             move |session_id: String, role: String, text: String| {
                 let _ = app_transcript.emit(&format!("moose://transcript/{role}"), &text);
@@ -200,7 +224,20 @@ pub async fn start_conversation<R: Runtime>(
         ),
     };
 
-    let session_id = state.conversation_mgr.start_session(request).await?;
+    let session_id = match state.conversation_mgr.start_session(request).await {
+        Ok(session_id) => session_id,
+        Err(error_value) => {
+            if wake_guarded && wake_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
+                let wake_word_enabled = state.settings.read().wake_word_enabled;
+                if let Err(resume_error) =
+                    resume_after_command_interaction(&wake_runtime, wake_word_enabled)
+                {
+                    warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
+                }
+            }
+            return Err(error_value);
+        }
+    };
 
     info!(session_id = %session_id, "Conversation session started");
     Ok(session_id)
@@ -216,6 +253,10 @@ pub async fn stop_conversation(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
+    if state.wake_word_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
+        let wake_word_enabled = state.settings.read().wake_word_enabled;
+        resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
+    }
 
     state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Idle)
