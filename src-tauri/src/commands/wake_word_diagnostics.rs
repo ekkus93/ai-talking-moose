@@ -16,7 +16,7 @@ fn wake_word_diagnostics_snapshot(
 pub fn get_wake_word_diagnostics(
     state: State<'_, AppState>,
 ) -> Result<WakeWordDiagnostics, String> {
-    let runtime = wake_word_state::runtime_from_app_state(state.inner())?;
+    let runtime = wake_word_state::runtime_from_app_state(state.inner());
     Ok(wake_word_diagnostics_snapshot(runtime, Instant::now()))
 }
 

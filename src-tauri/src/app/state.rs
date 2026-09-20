@@ -14,6 +14,7 @@ use crate::app::wake_word_settings::{
     WakeWordSettings, DEFAULT_WAKE_PHRASE, WAKE_WORD_ENABLED_FIELD, WAKE_WORD_PHRASE_FIELD,
 };
 use crate::asr::moonshine::MoonshineModelInstaller;
+use crate::app::wake_word_composition::WakeWordApplicationRuntime;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
@@ -389,6 +390,7 @@ pub struct AppState {
     pub ambient_scheduler: AmbientScheduler,
     pub idle_banter_runtime: Arc<Mutex<IdleBanterRuntime>>,
     pub audio_capture: Arc<Mutex<AudioCapture>>,
+    pub wake_word_runtime: WakeWordApplicationRuntime,
     pub audio_playback: Arc<AudioPlayback>,
     pub standalone_speech: StandaloneSpeechController,
     pub conversation_mgr: Arc<ConversationManager>,
@@ -498,6 +500,7 @@ impl AppState {
                 })?)
             } else {
                 Arc::new(Database::new_in_memory().map_err(|error| error.to_string())?)
+
             };
 
         let memory = Arc::new(MemoryManager::new(db.clone()));
@@ -532,6 +535,8 @@ impl AppState {
             .apply_to_character_config(&mut character_config);
         let behavior_engine = Arc::new(Mutex::new(BehaviorEngine::new(character_config.clone())));
         let audio_capture = Arc::new(Mutex::new(AudioCapture::new()));
+        let wake_word_runtime = WakeWordApplicationRuntime::from_settings(&settings.read())
+            .map_err(|error| error.to_string())?;
         let audio_playback = Arc::new(AudioPlayback::new());
         audio_playback.set_volume(settings.read().volume);
         let standalone_speech = StandaloneSpeechController::new();
@@ -559,6 +564,7 @@ impl AppState {
             ambient_scheduler: AmbientScheduler::new(),
             idle_banter_runtime,
             audio_capture,
+            wake_word_runtime,
             audio_playback,
             standalone_speech,
             conversation_mgr,
@@ -998,6 +1004,7 @@ mod tests {
         assert!(migrated);
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
         assert!(settings.idle_banter_enabled);
+
         assert_eq!(settings.idle_banter_initial_delay_minutes, 60);
         assert_eq!(settings.idle_banter_repeat_interval_minutes, 30);
         assert_eq!(
