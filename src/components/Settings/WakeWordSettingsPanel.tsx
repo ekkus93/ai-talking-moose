@@ -1,45 +1,34 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Mic2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { AlertCircle, CheckCircle, Mic, RefreshCw, Shield } from "lucide-react";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { useMooseStore } from "../../stores/mooseStore";
-import type {
-  WakeWordDiagnostics,
-  WakeWordRuntimePhase,
-} from "../../types/moose";
+import type { WakeWordDiagnostics, WakeWordRuntimePhase } from "../../types/moose";
 
-const WAKE_WORD_PHRASE = "Hey, Moose";
-
-const COPY = {
-  enabledStatus: "Enabled — runtime starts.",
-  disabledStatus: "Disabled — manual start remains available.",
-  summary: "Say Hey, Moose to start a normal command once listening.",
-  local: "Wake Word V1 uses local/offline keyword spotting.",
-  fixed: "The phrase is fixed and sensitivity is not exposed in V1.",
-  microphone: "The microphone remains locally active while listening.",
-  cloud: "Wake detection is not full-time cloud transcription.",
-  handoff: "The wake phrase plus immediate command may enter normal ASR.",
-  noBargeIn: "Wake Word V1 has no barge-in support while Moose talks.",
-};
-
-const RUNTIME_PHASE_LABELS: Record<WakeWordRuntimePhase, string> = {
+const RUNTIME_LABELS: Record<WakeWordRuntimePhase, string> = {
   disabled: "Disabled",
   loading: "Loading",
-  listening: "Listening",
-  triggered: "Triggered",
+  listening: "Listening locally",
+  triggered: "Triggered / handing off",
   suspended_talking: "Suspended while Moose talks",
   error: "Error",
   shutting_down: "Shutting down",
 };
 
-const runtimeStatusText = (
-  diagnostics: WakeWordDiagnostics | null,
-  fallbackEnabled: boolean,
-) => {
-  if (!diagnostics) {
-    return fallbackEnabled ? "Runtime status pending." : "Runtime disabled.";
+const statusTone = (phase: WakeWordRuntimePhase) => {
+  switch (phase) {
+    case "listening":
+      return "bg-green-50 text-green-900 border-green-800";
+    case "loading":
+    case "triggered":
+    case "suspended_talking":
+      return "bg-amber-50 text-amber-900 border-amber-800";
+    case "error":
+      return "bg-red-50 text-red-900 border-red-800";
+    case "disabled":
+    case "shutting_down":
+    default:
+      return "bg-gray-50 text-gray-900 border-gray-500";
   }
-
-  return `Runtime: ${RUNTIME_PHASE_LABELS[diagnostics.runtime_phase]}`;
 };
 
 export const WakeWordSettingsPanel: React.FC = () => {
@@ -47,103 +36,194 @@ export const WakeWordSettingsPanel: React.FC = () => {
   const [diagnostics, setDiagnostics] = useState<WakeWordDiagnostics | null>(
     null,
   );
-  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
-  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const refreshDiagnostics = useCallback(async () => {
-    setDiagnosticsLoading(true);
+  const refreshDiagnostics = async () => {
+    setIsRefreshing(true);
+    setError(null);
     try {
       setDiagnostics(await tauriBridge.getWakeWordDiagnostics());
-      setDiagnosticsError(null);
-    } catch {
-      setDiagnostics(null);
-      setDiagnosticsError("Wake Word runtime status is unavailable.");
+    } catch (refreshError) {
+      setError(String(refreshError));
     } finally {
-      setDiagnosticsLoading(false);
+      setIsRefreshing(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     void refreshDiagnostics();
-  }, [refreshDiagnostics, settings?.wake_word_enabled]);
+  }, []);
 
   if (!settings) return null;
 
-  const status = settings.wake_word_enabled
-    ? COPY.enabledStatus
-    : COPY.disabledStatus;
+  const phase = diagnostics?.runtime_phase ?? "disabled";
+  const enabled = settings.wake_word_enabled;
 
-  const toggleWakeWord = (enabled: boolean) => {
-    void updateSettingsPatch({
-      wake_word_enabled: enabled,
-      wake_word_phrase: WAKE_WORD_PHRASE,
-    }).then(refreshDiagnostics);
+  const setEnabled = async (nextEnabled: boolean) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await updateSettingsPatch({
+        wake_word_enabled: nextEnabled,
+        wake_word_phrase: "Hey, Moose",
+      });
+      await refreshDiagnostics();
+    } catch (saveError) {
+      setError(String(saveError));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <section
-      aria-labelledby="wake-word-settings-heading"
-      className="border border-black rounded p-3 space-y-3"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div
-            id="wake-word-settings-heading"
-            className="flex items-center gap-1.5 font-bold"
-          >
-            <Mic2 className="w-3.5 h-3.5" aria-hidden="true" />
-            Wake Word
-          </div>
-          <p className="text-[11px] text-gray-700">{COPY.summary}</p>
-        </div>
-
-        <label className="flex items-center gap-2 font-bold">
-          <input
-            type="checkbox"
-            checked={settings.wake_word_enabled}
-            onChange={(event) => toggleWakeWord(event.target.checked)}
-            aria-describedby="wake-word-status wake-word-runtime-status wake-word-disclosure"
+    <div className="space-y-4">
+      <div className="flex items-center justify-between border-b border-black pb-1">
+        <h3 className="font-bold text-sm">Wake Word</h3>
+        <button
+          type="button"
+          onClick={() => void refreshDiagnostics()}
+          disabled={isRefreshing}
+          className="p-1 border border-black rounded hover:bg-gray-100 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-black"
+          title="Refresh Wake Word status"
+          aria-label="Refresh Wake Word status"
+        >
+          <RefreshCw
+            aria-hidden="true"
+            className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
           />
-          <span>Enable wake word</span>
-        </label>
+        </button>
       </div>
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-[11px]">
-        <dt className="font-bold">Phrase</dt>
-        <dd aria-label="Wake word phrase">{WAKE_WORD_PHRASE}</dd>
-        <dt className="font-bold">Status</dt>
-        <dd id="wake-word-status" aria-live="polite">
-          {status}
-        </dd>
-        <dt className="font-bold">Runtime</dt>
-        <dd id="wake-word-runtime-status" aria-live="polite">
-          {diagnosticsLoading
-            ? "Refreshing runtime status…"
-            : runtimeStatusText(diagnostics, settings.wake_word_enabled)}
-        </dd>
-      </dl>
+      <section className="border border-black rounded p-3 space-y-3">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={isSaving}
+            onChange={(event) => void setEnabled(event.currentTarget.checked)}
+            className="mt-1 accent-black focus-visible:ring-2 focus-visible:ring-black"
+            aria-describedby="wake-word-toggle-description"
+          />
+          <span className="flex-1">
+            <span className="font-bold block">Enable wake word</span>
+            <span
+              id="wake-word-toggle-description"
+              className="text-[11px] text-gray-700 block"
+            >
+              Listen locally for the fixed phrase before starting a normal Moose
+              interaction.
+            </span>
+          </span>
+        </label>
 
-      {(diagnosticsError || diagnostics?.last_error) && (
+        <div>
+          <label
+            htmlFor="wake-word-phrase"
+            className="font-bold block mb-1 text-[11px]"
+          >
+            Wake phrase
+          </label>
+          <input
+            id="wake-word-phrase"
+            type="text"
+            readOnly
+            value="Hey, Moose"
+            aria-readonly="true"
+            className="w-full px-2 py-1 border border-black rounded bg-gray-100 font-mono"
+          />
+          <p className="mt-1 text-[11px] text-gray-700">
+            V1 uses a fixed phrase. Custom phrases and sensitivity controls are
+            intentionally not exposed.
+          </p>
+        </div>
+      </section>
+
+      <section className="p-3 bg-gray-50 border border-gray-300 rounded text-[11px] space-y-2">
+        <div className="flex items-center gap-1 font-bold">
+          <Shield className="w-3.5 h-3.5" /> Privacy boundary
+        </div>
+        <p>
+          Wake Word keyword spotting is local/offline. While enabled and the
+          lifecycle permits listening, the microphone can remain locally active
+          so Moose can detect <strong>Hey, Moose</strong>.
+        </p>
+        <p>
+          This panel does not enable full-time cloud transcription. Existing
+          command ASR still starts only through the normal conversation path
+          after Wake Word accepts a trigger.
+        </p>
+      </section>
+
+      <section className="border rounded p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-bold flex items-center gap-1">
+            <Mic className="w-3.5 h-3.5" /> Runtime status
+          </span>
+          <span
+            role="status"
+            aria-live="polite"
+            className={`px-2 py-0.5 border rounded font-bold ${statusTone(phase)}`}
+          >
+            {RUNTIME_LABELS[phase]}
+          </span>
+        </div>
+        {diagnostics ? (
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+            <dt className="font-bold">Engine</dt>
+            <dd>{diagnostics.engine_id}</dd>
+            <dt className="font-bold">Model</dt>
+            <dd>{diagnostics.model_id}</dd>
+            <dt className="font-bold">Sample format</dt>
+            <dd>
+              {diagnostics.canonical_sample_rate_hz.toLocaleString()} Hz / {" "}
+              {diagnostics.canonical_channels} channel
+            </dd>
+            <dt className="font-bold">Policy</dt>
+            <dd>
+              {diagnostics.inference_threads} thread, threshold {" "}
+              {diagnostics.threshold}, score {diagnostics.score}
+            </dd>
+          </dl>
+        ) : (
+          <p className="text-gray-600 text-[11px]">
+            Wake Word diagnostics are not loaded yet.
+          </p>
+        )}
+      </section>
+
+      {diagnostics?.last_error && (
         <div
-          role="status"
-          className="border border-amber-700 bg-amber-50 text-amber-900 rounded p-2 text-[11px]"
+          role="alert"
+          className="p-2 border border-red-600 bg-red-50 text-red-800 rounded flex gap-2 items-start"
         >
-          {diagnosticsError ?? diagnostics?.last_error}
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{diagnostics.last_error}</span>
         </div>
       )}
 
-      <div id="wake-word-disclosure" className="space-y-1 text-[11px]">
-        <p>{COPY.local}</p>
-        <p>{COPY.fixed}</p>
-        <p>{COPY.microphone}</p>
-        <p>{COPY.cloud}</p>
-        <p>{COPY.handoff}</p>
-      </div>
+      {error && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="p-2 border border-red-600 bg-red-50 text-red-800 rounded flex gap-2 items-start"
+        >
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
-      <div className="flex gap-2 text-[11px]">
-        <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
-        <span>{COPY.noBargeIn}</span>
-      </div>
-    </section>
+      {!error && enabled && diagnostics?.last_error === null && (
+        <div
+          className="text-green-800 flex gap-1 items-center text-[11px]"
+          aria-live="polite"
+        >
+          <CheckCircle className="w-3.5 h-3.5" /> Wake Word preference is
+          enabled. Runtime availability still depends on the verified local KWS
+          artifacts and lifecycle state.
+        </div>
+      )}
+    </div>
   );
 };
