@@ -3,7 +3,6 @@ use crate::ai::local_tts::LocalSpeechSynthesizer;
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{TtsProvider, TtsRequest};
 use crate::app::state::AppState;
-use crate::app::wake_word::composition::application_wake_word_runtime;
 use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::audio::playback::AudioPlayback;
 use crate::audio::speech::{synthesize_and_queue_cancellable, StandaloneSpeechController};
@@ -23,6 +22,8 @@ pub(crate) struct StandaloneSpeechPlayback {
     cancellation: CancellationToken,
     controller: StandaloneSpeechController,
     wake_word_suspended: bool,
+    wake_word_runtime: Option<crate::app::wake_word_composition::WakeWordApplicationRuntime>,
+    settings: Option<Arc<parking_lot::RwLock<crate::app::state::AppSettings>>>,
 }
 
 impl StandaloneSpeechPlayback {
@@ -56,7 +57,10 @@ impl StandaloneSpeechPlayback {
 
     fn resume_wake_word_after_terminal_tts(&self) {
         if self.wake_word_suspended {
-            resume_wake_word_after_standalone_talking();
+            if let (Some(runtime), Some(settings)) = (&self.wake_word_runtime, &self.settings) {
+                let enabled = settings.read().wake_word_enabled;
+                let _ = runtime.resume_after_interaction(enabled);
+            }
         }
     }
 }
@@ -180,6 +184,8 @@ async fn synthesize_standalone(
         cancellation,
         controller: controller.clone(),
         wake_word_suspended: false,
+        wake_word_runtime: None,
+        settings: None,
     })
 }
 
@@ -205,6 +211,10 @@ async fn invoke_standalone_speech_snapshot<R: Runtime>(
     match surface_standalone_playback(state, app, text) {
         Ok(wake_word_suspended) => {
             playback.wake_word_suspended = wake_word_suspended;
+            if wake_word_suspended {
+                playback.wake_word_runtime = Some(state.wake_word_runtime.clone());
+                playback.settings = Some(state.settings.clone());
+            }
             Ok(playback)
         }
         Err(error) => {
@@ -214,10 +224,8 @@ async fn invoke_standalone_speech_snapshot<R: Runtime>(
     }
 }
 
-fn suspend_wake_word_for_standalone_talking() -> Result<bool, String> {
-    let Ok(runtime) = application_wake_word_runtime() else {
-        return Ok(false);
-    };
+fn suspend_wake_word_for_standalone_talking(state: &AppState) -> Result<bool, String> {
+    let runtime = &state.wake_word_runtime;
 
     match runtime.phase() {
         WakeWordRuntimePhase::Listening | WakeWordRuntimePhase::Triggered => {
@@ -234,23 +242,16 @@ fn suspend_wake_word_for_standalone_talking() -> Result<bool, String> {
     }
 }
 
-fn resume_wake_word_after_standalone_talking() {
-    let Ok(runtime) = application_wake_word_runtime() else {
-        return;
-    };
-    let wake_word_enabled = runtime.phase() != WakeWordRuntimePhase::Disabled;
-    let _ = runtime.resume_after_interaction(wake_word_enabled);
-}
-
 fn surface_standalone_playback<R: Runtime>(
     state: &AppState,
     app: &tauri::AppHandle<R>,
     text: &str,
 ) -> Result<bool, String> {
-    let wake_word_suspended = suspend_wake_word_for_standalone_talking()?;
+    let wake_word_suspended = suspend_wake_word_for_standalone_talking(state)?;
     if let Err(error) = transition_and_emit(&state.character_state, app, CharacterState::Talking) {
         if wake_word_suspended {
-            resume_wake_word_after_standalone_talking();
+            let enabled = state.settings.read().wake_word_enabled;
+            let _ = state.wake_word_runtime.resume_after_interaction(enabled);
         }
         return Err(error);
     }
@@ -305,6 +306,10 @@ pub(crate) async fn invoke_standalone_speech_for_ambient<R: Runtime>(
     match presentation {
         Ok(wake_word_suspended) => {
             playback.wake_word_suspended = wake_word_suspended;
+            if wake_word_suspended {
+                playback.wake_word_runtime = Some(state.wake_word_runtime.clone());
+                playback.settings = Some(state.settings.clone());
+            }
             Ok(Some(playback))
         }
         Err(error) => {
@@ -507,6 +512,8 @@ mod tests {
             cancellation: current,
             controller: controller.clone(),
             wake_word_suspended: false,
+            wake_word_runtime: None,
+            settings: None,
         };
 
         let _newer_utterance = controller.begin(&audio_playback);
