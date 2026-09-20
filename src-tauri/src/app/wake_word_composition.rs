@@ -2,7 +2,6 @@ use super::state::AppSettings;
 use super::wake_word::runtime::{
     WakeWordRuntimeError, WakeWordRuntimeManager, WakeWordRuntimePhase, WakeWordRuntimeSnapshot,
 };
-use std::sync::OnceLock;
 use std::time::Instant;
 
 /// Authoritative application-level owner for the Wake Word V1 runtime.
@@ -14,8 +13,6 @@ use std::time::Instant;
 pub struct WakeWordApplicationRuntime {
     manager: WakeWordRuntimeManager,
 }
-
-static APPLICATION_WAKE_WORD_RUNTIME: OnceLock<WakeWordApplicationRuntime> = OnceLock::new();
 
 impl WakeWordApplicationRuntime {
     /// Build the production Wake Word owner from the already-normalized persisted settings.
@@ -94,29 +91,6 @@ impl WakeWordApplicationRuntime {
     pub fn phase(&self) -> WakeWordRuntimePhase {
         self.snapshot(Instant::now()).phase
     }
-}
-
-/// Install the one process-wide Wake Word application runtime after persisted settings have
-/// been normalized. Repeated initialization is rejected rather than silently replacing the
-/// authoritative owner.
-pub fn initialize_application_wake_word_runtime(
-    settings: &AppSettings,
-) -> Result<&'static WakeWordApplicationRuntime, String> {
-    let runtime =
-        WakeWordApplicationRuntime::from_settings(settings).map_err(|error| error.to_string())?;
-    APPLICATION_WAKE_WORD_RUNTIME
-        .set(runtime)
-        .map_err(|_| "Wake Word application runtime is already initialized".to_string())?;
-    Ok(APPLICATION_WAKE_WORD_RUNTIME
-        .get()
-        .expect("Wake Word runtime was just initialized"))
-}
-
-/// Return the authoritative production Wake Word runtime after application composition.
-pub fn application_wake_word_runtime() -> Result<&'static WakeWordApplicationRuntime, String> {
-    APPLICATION_WAKE_WORD_RUNTIME
-        .get()
-        .ok_or_else(|| "Wake Word application runtime is not initialized".to_string())
 }
 
 #[cfg(test)]
