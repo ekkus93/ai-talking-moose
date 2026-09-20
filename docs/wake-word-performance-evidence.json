@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "status": "pending_measurement",
+  "policy": {
+    "inference_threads": 1,
+    "required_platforms": ["linux-x86_64", "macos-arm64"],
+    "required_metrics": [
+      "idle_cpu_percent",
+      "runtime_memory_mib",
+      "inference_latency_ms",
+      "wake_to_command_asr_ms",
+      "pre_roll_startup_ms",
+      "repeated_cycle_resource_delta",
+      "continuous_asr_idle_cpu_percent"
+    ]
+  },
+  "measurements": []
+}
