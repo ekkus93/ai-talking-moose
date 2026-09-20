@@ -2,7 +2,9 @@ use super::wake_word::engine::{
     validate_pcm_frame, SherpaKwsEngine, WakeWordDetection, WakeWordError,
 };
 use super::wake_word::runtime::{WakeWordRuntimeError, WakeWordRuntimeManager};
+use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::wake_word_handoff::WakeAsrHandoff;
+use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 use std::time::Instant;
 
 /// Result of routing one canonical microphone chunk through the Wake Word listening path.
@@ -116,6 +118,18 @@ impl<E: SherpaKwsEngine> CanonicalWakePcmRouter<E> {
         handoff.take_for_asr()
     }
 
+    /// Transfer handoff PCM as the validated command-ASR payload boundary.
+    ///
+    /// This preserves the same single-use ownership semantics as `transfer_handoff_to_asr`, but
+    /// returns the provider-neutral payload type consumed by the normal command-ASR integration.
+    pub(crate) fn transfer_handoff_audio_to_asr(
+        &mut self,
+    ) -> Result<Option<WakeCommandHandoffAudio>, String> {
+        self.transfer_handoff_to_asr()
+            .map(|samples| WakeCommandHandoffAudio::new(V1_KWS_SAMPLE_RATE_HZ, samples))
+            .transpose()
+    }
+
     pub(crate) fn take_handoff_for_asr(&mut self) -> Option<Vec<i16>> {
         self.transfer_handoff_to_asr()
     }
@@ -161,7 +175,6 @@ mod tests {
     use super::*;
     use crate::app::wake_word::engine::{SherpaKwsConfig, WakeWordDetection};
     use crate::app::wake_word::runtime::WakeWordRuntimePhase;
-    use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 
     #[derive(Default)]
     struct RecordingEngine {
@@ -292,6 +305,26 @@ mod tests {
             router.transfer_handoff_to_asr().unwrap(),
             vec![11, 12, 13, 14]
         );
+    }
+
+    #[test]
+    fn handoff_transfer_can_return_validated_command_audio_payload() {
+        let runtime = listening_runtime();
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut router = CanonicalWakePcmRouter::new(runtime, engine);
+        let now = Instant::now();
+
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[11, 12], now).unwrap();
+        router.route(V1_KWS_SAMPLE_RATE_HZ, &[13, 14], now).unwrap();
+
+        let audio = router.transfer_handoff_audio_to_asr().unwrap().unwrap();
+        assert_eq!(audio.sample_rate_hz(), V1_KWS_SAMPLE_RATE_HZ);
+        assert_eq!(audio.samples_i16(), &[11, 12, 13, 14]);
+        assert_eq!(audio.to_pcm16_le_bytes(), vec![11, 0, 12, 0, 13, 0, 14, 0]);
+        assert!(router.transfer_handoff_audio_to_asr().unwrap().is_none());
     }
 
     #[test]
