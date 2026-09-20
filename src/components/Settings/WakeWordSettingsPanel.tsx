@@ -176,9 +176,13 @@ export const WakeWordSettingsPanel: React.FC = () => {
             <dt className="font-bold">Model</dt>
             <dd>{diagnostics.model_id}</dd>
             <dt className="font-bold">Sample format</dt>
-            <dd>{`${diagnostics.canonical_sample_rate_hz.toLocaleString()} Hz / ${diagnostics.canonical_channels} channel`}</dd>
+            <dd>
+              {`${diagnostics.canonical_sample_rate_hz.toLocaleString()} Hz / ${diagnostics.canonical_channels} channel`}
+            </dd>
             <dt className="font-bold">Policy</dt>
-            <dd>{`${diagnostics.inference_threads} thread, threshold ${diagnostics.threshold}, score ${diagnostics.score}`}</dd>
+            <dd>
+              {`${diagnostics.inference_threads} thread, threshold ${diagnostics.threshold}, score ${diagnostics.score}`}
+            </dd>
           </dl>
         ) : (
           <p className="text-gray-600 text-[11px]">
