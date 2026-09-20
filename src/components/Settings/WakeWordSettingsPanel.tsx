@@ -63,6 +63,9 @@ export const WakeWordSettingsPanel: React.FC = () => {
 
   const phase = diagnostics?.runtime_phase ?? "disabled";
   const enabled = settings.wake_word_enabled;
+  const preferenceStatus = enabled
+    ? "Enabled — runtime starts when local KWS artifacts and lifecycle state permit."
+    : "Disabled — manual start remains available.";
 
   const setEnabled = async (nextEnabled: boolean) => {
     setIsSaving(true);
@@ -136,11 +139,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
             intentionally not exposed.
           </p>
         </div>
-        <p className="text-[11px] font-bold">
-          {enabled
-            ? "Enabled — runtime starts when local KWS artifacts and lifecycle state permit."
-            : "Disabled — manual start remains available."}
-        </p>
+        <p className="text-[11px] font-bold">{preferenceStatus}</p>
       </section>
 
       <section className="p-3 bg-gray-50 border border-gray-300 rounded text-[11px] space-y-2">
@@ -177,15 +176,9 @@ export const WakeWordSettingsPanel: React.FC = () => {
             <dt className="font-bold">Model</dt>
             <dd>{diagnostics.model_id}</dd>
             <dt className="font-bold">Sample format</dt>
-            <dd>
-              {diagnostics.canonical_sample_rate_hz.toLocaleString()} Hz /{" "}
-              {diagnostics.canonical_channels} channel
-            </dd>
+            <dd>{`${diagnostics.canonical_sample_rate_hz.toLocaleString()} Hz / ${diagnostics.canonical_channels} channel`}</dd>
             <dt className="font-bold">Policy</dt>
-            <dd>
-              {diagnostics.inference_threads} thread, threshold{" "}
-              {diagnostics.threshold}, score {diagnostics.score}
-            </dd>
+            <dd>{`${diagnostics.inference_threads} thread, threshold ${diagnostics.threshold}, score ${diagnostics.score}`}</dd>
           </dl>
         ) : (
           <p className="text-gray-600 text-[11px]">
