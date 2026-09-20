@@ -1,7 +1,5 @@
-use crate::app::state::AppSettings;
-use crate::app::wake_word_composition::{
-    application_wake_word_runtime, WakeWordApplicationRuntime,
-};
+use crate::app::state::{AppSettings, AppState};
+use crate::app::wake_word_composition::WakeWordApplicationRuntime;
 #[cfg(any(target_os = "macos", test))]
 use std::path::Path;
 use tauri::{Manager, Runtime};
@@ -160,11 +158,12 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     let window_changed = previous.always_on_top != next.always_on_top;
     let tray_changed = previous.show_in_menu_bar != next.show_in_menu_bar;
     let wake_word_changed = previous.wake_word_enabled != next.wake_word_enabled;
-    let wake_runtime = if wake_word_changed {
-        Some(application_wake_word_runtime()?)
+    let managed_state = if wake_word_changed {
+        Some(app.try_state::<AppState>().ok_or_else(|| "application state is unavailable".to_string())?)
     } else {
         None
     };
+    let wake_runtime = managed_state.as_ref().map(|state| &state.wake_word_runtime);
 
     if let Some(runtime) = wake_runtime {
         apply_wake_word_setting_change(
