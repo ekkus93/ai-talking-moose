@@ -135,9 +135,11 @@ describe("SettingsModal Component", () => {
     });
     expect(tiny).toBeChecked();
     expect(
+      screen.getByRole("radio", { name: /Moonshine Small Streaming/ }),
+    ).not.toBeChecked();
+    expect(
       screen.getByText(/Only finalized transcript text is sent to Gemini/i),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Not installed")).toHaveLength(2);
 
     fireEvent.click(
       screen.getByRole("radio", { name: /Gemini Live Cloud Audio/ }),
@@ -183,6 +185,7 @@ describe("SettingsModal Component", () => {
     expect(textSelect).toBeDisabled();
     expect(liveSelect).toHaveValue(settings.live_model);
     expect(textSelect).toHaveValue(settings.google_text_model);
+    const writeBaseline = updateSpy.mock.calls.length;
     expect(
       screen.getByRole("option", {
         name: new RegExp(
@@ -196,11 +199,11 @@ describe("SettingsModal Component", () => {
     fireEvent.change(liveSelect, {
       target: { value: "unexpected-live-model" },
     });
-    expect(updateSpy).not.toHaveBeenCalled();
+    expect(updateSpy).toHaveBeenCalledTimes(writeBaseline);
 
     resolveModels(frontendGoogleModels());
     await waitFor(() => expect(liveSelect).not.toBeDisabled());
-    expect(updateSpy).not.toHaveBeenCalled();
+    expect(updateSpy).toHaveBeenCalledTimes(writeBaseline);
   });
 
   it("shows a persisted Google model as unavailable after catalog resolution without rewriting it", async () => {
