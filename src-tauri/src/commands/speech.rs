@@ -3,8 +3,8 @@ use crate::ai::local_tts::LocalSpeechSynthesizer;
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::{TtsProvider, TtsRequest};
 use crate::app::state::AppState;
-use crate::app::wake_word_composition::WakeWordApplicationRuntime;
 use crate::app::wake_word::runtime::WakeWordRuntimePhase;
+use crate::app::wake_word_composition::WakeWordApplicationRuntime;
 use crate::audio::playback::AudioPlayback;
 use crate::audio::speech::{synthesize_and_queue_cancellable, StandaloneSpeechController};
 use crate::character::state::CharacterState;
@@ -244,8 +244,7 @@ fn surface_standalone_playback<R: Runtime>(
     app: &tauri::AppHandle<R>,
     text: &str,
 ) -> Result<bool, String> {
-    let wake_word_suspended =
-        suspend_wake_word_for_standalone_talking(&state.wake_word_runtime)?;
+    let wake_word_suspended = suspend_wake_word_for_standalone_talking(&state.wake_word_runtime)?;
     if let Err(error) = transition_and_emit(&state.character_state, app, CharacterState::Talking) {
         if wake_word_suspended {
             resume_wake_word_after_standalone_talking(&state.wake_word_runtime);
@@ -528,7 +527,10 @@ mod tests {
         );
 
         resume_wake_word_after_standalone_talking(&state.wake_word_runtime);
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Listening);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Listening
+        );
     }
 
     #[test]
@@ -537,7 +539,10 @@ mod tests {
 
         assert!(!suspend_wake_word_for_standalone_talking(&state.wake_word_runtime).unwrap());
         resume_wake_word_after_standalone_talking(&state.wake_word_runtime);
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
     }
 
     #[test]
