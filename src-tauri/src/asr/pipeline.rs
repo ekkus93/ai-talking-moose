@@ -190,9 +190,9 @@ impl LocalAsrPipeline {
                     message: "Local ASR input is full; wake handoff was not accepted.".to_string(),
                     retryable: true,
                 },
-                mpsc::error::TrySendError::Closed(_) => invalid_state_error(
-                    "Local ASR input is closed; wake handoff was not accepted.",
-                ),
+                mpsc::error::TrySendError::Closed(_) => {
+                    invalid_state_error("Local ASR input is closed; wake handoff was not accepted.")
+                }
             })
     }
 
