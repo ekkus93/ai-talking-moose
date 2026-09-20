@@ -183,7 +183,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
             </dd>
             <dt className="font-bold">Policy</dt>
             <dd>
-              {diagnostics.inference_threads} thread, threshold {" "}
+              {diagnostics.inference_threads} thread, threshold{" "}
               {diagnostics.threshold}, score {diagnostics.score}
             </dd>
           </dl>
