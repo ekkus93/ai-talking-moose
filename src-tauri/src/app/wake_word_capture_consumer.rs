@@ -1,8 +1,27 @@
 use super::wake_word::engine::SherpaKwsEngine;
 use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 use super::wake_word_pcm_router::{CanonicalWakePcmRouter, WakePcmRouteError, WakePcmRouteOutcome};
+use crate::audio::capture::{AudioCapture, AudioCaptureError};
 use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 use std::time::Instant;
+use tokio::sync::mpsc;
+
+const WAKE_CAPTURE_QUEUE_CHUNKS: usize = 16;
+
+/// Start Wake Word capture through the application's one authoritative `AudioCapture` owner.
+///
+/// `AudioCapture::start` replaces any stream already owned by that same object before opening the
+/// requested stream, so this boundary cannot create a second independently-owned microphone
+/// stream. Capture performs the one source->mono->16 kHz canonicalization and this module only
+/// decodes the resulting PCM16-LE bytes.
+pub(crate) fn start_authoritative_wake_capture(
+    capture: &mut AudioCapture,
+    device_name: Option<String>,
+) -> Result<mpsc::Receiver<Vec<u8>>, AudioCaptureError> {
+    let (pcm_sender, pcm_receiver) = mpsc::channel(WAKE_CAPTURE_QUEUE_CHUNKS);
+    capture.start(device_name, V1_KWS_SAMPLE_RATE_HZ, pcm_sender, None)?;
+    Ok(pcm_receiver)
+}
 
 /// Byte-level consumer for the one authoritative `AudioCapture` microphone stream.
 ///
@@ -28,10 +47,6 @@ impl<E: SherpaKwsEngine> WakeCapturePcmConsumer<E> {
         Self { router }
     }
 
-    /// Decode one canonical PCM16-LE microphone chunk and route it through Wake Word.
-    ///
-    /// The conversion is intentionally lossless and local to this boundary. Invalid byte chunks
-    /// fail before the router can mutate ring, KWS, or handoff state.
     pub(crate) fn route_capture_chunk(
         &mut self,
         pcm16_le: &[u8],
@@ -43,7 +58,6 @@ impl<E: SherpaKwsEngine> WakeCapturePcmConsumer<E> {
             .map_err(WakeCapturePcmError::Route)
     }
 
-    /// Transfer accumulated wake pre-roll plus post-trigger live PCM to the command-ASR payload.
     pub(crate) fn transfer_handoff_audio_to_asr(
         &mut self,
     ) -> Result<Option<WakeCommandHandoffAudio>, WakeCapturePcmError> {
@@ -98,6 +112,7 @@ mod tests {
         validate_pcm_frame, SherpaKwsConfig, WakeWordDetection, WakeWordError,
     };
     use crate::app::wake_word::runtime::{WakeWordRuntimeManager, WakeWordRuntimePhase};
+    use crate::audio::capture::AudioCaptureMode;
 
     #[derive(Default)]
     struct RecordingEngine {
@@ -152,6 +167,39 @@ mod tests {
             .iter()
             .flat_map(|sample| sample.to_le_bytes())
             .collect()
+    }
+
+    #[test]
+    fn authoritative_wake_capture_uses_existing_owner_and_canonical_rate() {
+        let mut capture = AudioCapture::new_mock();
+
+        let _receiver = start_authoritative_wake_capture(&mut capture, None).unwrap();
+
+        assert_eq!(capture.mode(), AudioCaptureMode::Mock);
+        assert!(capture.is_active());
+        let diagnostics = capture.diagnostics();
+        assert_eq!(diagnostics.sample_rate_hz, Some(V1_KWS_SAMPLE_RATE_HZ));
+        assert_eq!(diagnostics.channels, Some(1));
+        assert_eq!(diagnostics.sample_format.as_deref(), Some("I16"));
+    }
+
+    #[test]
+    fn restarting_wake_capture_replaces_stream_on_same_owner() {
+        let mut capture = AudioCapture::new_mock();
+        let first_receiver = start_authoritative_wake_capture(&mut capture, None).unwrap();
+        assert!(capture.is_active());
+
+        let second_receiver = start_authoritative_wake_capture(&mut capture, None).unwrap();
+
+        assert!(capture.is_active());
+        assert_eq!(
+            capture.diagnostics().sample_rate_hz,
+            Some(V1_KWS_SAMPLE_RATE_HZ)
+        );
+        drop(first_receiver);
+        drop(second_receiver);
+        capture.stop();
+        assert!(!capture.is_active());
     }
 
     #[test]
