@@ -7,6 +7,7 @@ import { GeneralTab } from "./GeneralTab";
 import { BehaviorTab } from "./BehaviorTab";
 import { VoiceTab } from "./VoiceTab";
 import { AsrSettingsPanel } from "./AsrSettingsPanel";
+import { WakeWordSettingsPanel } from "./WakeWordSettingsPanel";
 import { PersonalityTab } from "./PersonalityTab";
 import { AiTab, type AiTabTestResult } from "./AiTab";
 import { PrivacyTab } from "./PrivacyTab";
@@ -23,6 +24,7 @@ import {
   Activity,
   X,
   Sparkles,
+  Ear,
 } from "lucide-react";
 
 export const SettingsModal: React.FC = () => {
@@ -40,6 +42,7 @@ export const SettingsModal: React.FC = () => {
     | "behavior"
     | "voice"
     | "speech"
+    | "wake"
     | "personality"
     | "ai"
     | "privacy"
@@ -134,6 +137,7 @@ export const SettingsModal: React.FC = () => {
             { id: "behavior", label: "Behavior", icon: Sparkles },
             { id: "voice", label: "Voice & Audio", icon: Volume2 },
             { id: "speech", label: "Speech Recognition", icon: Mic },
+            { id: "wake", label: "Wake Word", icon: Ear },
             { id: "personality", label: "Personality", icon: Brain },
             { id: "ai", label: "AI & Models", icon: Key },
             { id: "privacy", label: "Privacy", icon: Shield },
@@ -172,6 +176,7 @@ export const SettingsModal: React.FC = () => {
             />
           )}
           {activeTab === "speech" && <AsrSettingsPanel />}
+          {activeTab === "wake" && <WakeWordSettingsPanel />}
           {activeTab === "personality" && <PersonalityTab />}
           {activeTab === "ai" && (
             <AiTab

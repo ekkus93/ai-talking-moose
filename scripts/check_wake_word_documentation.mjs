@@ -30,7 +30,8 @@ for (const token of behaviorRequirements) {
 
 const runtimeEvidence = [
   "apply_wake_word_setting_change",
-  "application_wake_word_runtime()?",
+  "app.try_state::<AppState>()",
+  "state.wake_word_runtime",
   "rollback_wake_word_setting",
   "previous.wake_word_enabled != next.wake_word_enabled",
 ];
