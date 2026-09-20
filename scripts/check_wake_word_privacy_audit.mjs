@@ -109,5 +109,5 @@ if (corpus.acceptance_criteria?.criteria_status !== "pending_real_fixture_calibr
 }
 
 console.log(
-  `Wake Word privacy audit: ${diagnosticFields.length} diagnostic field(s), sanitizer and documentation evidence OK.`,
+  `Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), sanitizer evidence, documentation, and corpus privacy policy are OK.`,
 );
