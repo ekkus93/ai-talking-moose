@@ -18,9 +18,8 @@ Wake Word V1 is a local keyword-spotting feature for the fixed phrase **`Hey, Mo
 - The phrase is fixed to **`Hey, Moose`**.
 - V1 does not expose arbitrary phrase editing.
 - V1 does not expose a sensitivity control.
-- The Settings UI can enable or disable Wake Word and persists the setting through the normal settings transaction.
-- Live enable/disable changes are applied to the authoritative runtime without requiring an app restart.
-- If a later settings persistence step fails, reversible runtime preference changes are rolled back.
+- The Settings UI can enable or disable the persisted Wake Word setting through the normal settings transaction.
+- Live settings-to-runtime application is still a remediation item: changing the persisted toggle does not yet constitute proof that the authoritative runtime has started or stopped without restart.
 - When Wake Word is disabled, manual listen/start behavior remains available.
 
 ## Local/offline microphone behavior
@@ -34,18 +33,22 @@ V1 disclosure requirements:
 - Raw Wake Word PCM is retained only in bounded in-memory ring/pre-roll buffers.
 - Wake Word diagnostics do not serialize or expose raw PCM.
 
+The one-stream production microphone routing and continuous wake→command-ASR handoff remain remediation work; these statements describe the required behavior and implemented runtime boundaries, not completed real-audio acceptance.
+
 ## Lifecycle policy
+
+The authoritative runtime manager implements these state-machine rules, while full production audio/lifecycle integration acceptance remains pending:
 
 - Listening begins only after the runtime has been enabled and loaded.
 - One accepted wake event moves the runtime to the triggered/handoff state.
-- Repeated positive frames while already triggered do not create duplicate trigger counts or duplicate command activations.
-- Talking suspends Wake Word activation.
+- Repeated positive frames while already triggered do not create duplicate trigger counts.
+- Talking suspends Wake Word activation at the runtime boundary.
 - Entry to Talking clears retained Wake Word audio.
-- Wake Word remains suspended while Moose is talking.
 - Resume paths clear stale pre-roll before returning to listening when enabled.
 - Disabling Wake Word during a triggered or suspended interaction leaves the runtime disabled and prevents a later completion/resume path from unintentionally restoring listening.
-- Wake Word errors preserve manual interaction behavior.
 - Wake Word V1 does **not** implement wake-word barge-in while Moose is talking.
+
+These runtime-manager invariants must not be described as proof that the production microphone/conversation/TTS graph is fully integrated; WWR-300/310/400/410 and WWR-640 remain the acceptance authority for that claim.
 
 ## Artifacts, model, runtime, and licenses
 
@@ -71,23 +74,7 @@ Runtime and model licensing are tracked separately. The pinned sherpa-onnx runti
 
 ## Diagnostics and troubleshooting
 
-Wake Word diagnostics expose privacy-safe state useful for lifecycle and artifact troubleshooting, including:
-
-- enabled state
-- authoritative runtime phase
-- exact model identity
-- exact runtime identity
-- platform/architecture
-- one-thread policy
-- canonical sample rate/channels
-- ring-buffer capacity and current retained sample count
-- handoff pre-roll retained sample count
-- threshold/score
-- trigger count
-- last-trigger age
-- initialization duration
-- Talking suspension state
-- sanitized last error
+Wake Word diagnostics expose privacy-safe state useful for lifecycle and artifact troubleshooting, including enabled state, authoritative runtime phase, exact model/runtime identity, platform/architecture, one-thread policy, canonical sample rate/channels, bounded ring/pre-roll counts, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension state, and sanitized last error.
 
 Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content.
 
@@ -101,6 +88,9 @@ Current limitations:
 - Positive recall and negative false-accept thresholds are intentionally `null` until real fixtures are added and calibrated.
 - Linux x86_64 real KWS acceptance is not yet claimed complete.
 - macOS arm64 real KWS acceptance is not yet claimed complete.
+- Integrated one-stream microphone routing and wake→command-ASR handoff are not yet claimed complete.
+- Live persisted-toggle application to the authoritative runtime is not yet claimed complete.
+- Integrated production lifecycle stability acceptance is not yet claimed complete.
 - Performance measurements are not yet claimed.
 
-Do not describe Wake Word V1 as fully user-ready or fully accepted until the real fixture, platform acceptance, lifecycle stability, performance, and final audit tasks are complete.
+Do not describe Wake Word V1 as fully user-ready or fully accepted until the real fixture, platform acceptance, production integration, lifecycle stability, performance, and final audit tasks are complete.

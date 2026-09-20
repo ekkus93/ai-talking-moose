@@ -12,12 +12,14 @@ const performance = JSON.parse(read("docs/wake-word-performance-evidence.json"))
 
 const behaviorRequirements = [
   "Hey, Moose",
-  "disabled by default",
-  "local/offline",
+  "defaults to disabled",
+  "local keyword-spotting",
   "microphone",
   "no barge-in",
-  "memory",
+  "in-memory ring/pre-roll",
   "diagnostics",
+  "Live settings-to-runtime application is still a remediation item",
+  "one-stream production microphone routing",
 ];
 for (const token of behaviorRequirements) {
   if (!behavior.toLowerCase().includes(token.toLowerCase())) {
@@ -38,7 +40,7 @@ for (const sentence of uiRequirements) {
 }
 
 const gateRequirements = [
-  "ordinary CI alone is not final Wake Word V1 qualification",
+  "Ordinary CI alone is not final Wake Word V1 qualification",
   "A skipped corpus gate is not evidence that real corpus acceptance passed",
   "does not by itself prove real KWS inference",
   "pending_measurement",
@@ -58,7 +60,7 @@ if (!Array.isArray(performance.measurements) || performance.measurements.length 
 }
 
 const forbiddenClaims = [
-  /fully user[- ]ready/i,
+  /wake word v1 is fully user[- ]ready/i,
   /wake word v1 is fully accepted/i,
   /production acceptance (?:is )?complete/i,
   /real kws acceptance (?:has )?passed/i,
