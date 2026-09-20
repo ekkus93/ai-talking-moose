@@ -1,34 +1,27 @@
 import copy
 import json
 import unittest
-from pathlib import Path
 
-from validate_wake_word_corpus import MANIFEST, validate
+from validate_wake_word_corpus import POINTER, validate
 
 
-class WakeWordCorpusContractTests(unittest.TestCase):
+class WakeWordCorpusPointerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.data = json.loads(Path(MANIFEST).read_text(encoding="utf-8"))
+        cls.data = json.loads(POINTER.read_text(encoding="utf-8"))
 
-    def test_repository_manifest_is_valid(self):
+    def test_repository_pointer_is_valid(self):
         validate(copy.deepcopy(self.data))
 
-    def test_duplicate_fixture_id_fails(self):
+    def test_pointer_cannot_claim_independent_policy(self):
         data = copy.deepcopy(self.data)
-        data["fixtures"].append(copy.deepcopy(data["fixtures"][0]))
+        data["threshold"] = 0.25
         with self.assertRaises(AssertionError):
             validate(data)
 
-    def test_missing_required_near_miss_fails(self):
+    def test_pointer_cannot_target_another_manifest(self):
         data = copy.deepcopy(self.data)
-        data["fixtures"] = [item for item in data["fixtures"] if item["text"] != "Hey Bruce"]
-        with self.assertRaises(AssertionError):
-            validate(data)
-
-    def test_policy_drift_fails(self):
-        data = copy.deepcopy(self.data)
-        data["threshold"] = 0.5
+        data["canonical_manifest"] = "other.json"
         with self.assertRaises(AssertionError):
             validate(data)
 
