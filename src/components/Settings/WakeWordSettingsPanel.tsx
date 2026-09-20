@@ -122,25 +122,23 @@ export const WakeWordSettingsPanel: React.FC = () => {
         </label>
 
         <div>
-          <label
-            htmlFor="wake-word-phrase"
-            className="font-bold block mb-1 text-[11px]"
-          >
-            Wake phrase
-          </label>
-          <input
-            id="wake-word-phrase"
-            type="text"
-            readOnly
-            value="Hey, Moose"
-            aria-readonly="true"
+          <div className="font-bold block mb-1 text-[11px]">Wake word phrase</div>
+          <div
+            aria-label="Wake word phrase"
             className="w-full px-2 py-1 border border-black rounded bg-gray-100 font-mono"
-          />
+          >
+            Hey, Moose
+          </div>
           <p className="mt-1 text-[11px] text-gray-700">
             V1 uses a fixed phrase. Custom phrases and sensitivity controls are
             intentionally not exposed.
           </p>
         </div>
+        <p className="text-[11px] font-bold">
+          {enabled
+            ? "Enabled — runtime starts when local KWS artifacts and lifecycle state permit."
+            : "Disabled — manual start remains available."}
+        </p>
       </section>
 
       <section className="p-3 bg-gray-50 border border-gray-300 rounded text-[11px] space-y-2">
@@ -152,8 +150,8 @@ export const WakeWordSettingsPanel: React.FC = () => {
         <p>Wake detection is not full-time cloud transcription.</p>
         <p>Wake Word V1 has no barge-in support while Moose talks.</p>
         <p>
-          Existing command ASR still starts only through the normal conversation
-          path after Wake Word accepts a trigger.
+          Manual start remains available. Existing command ASR still starts only
+          through the normal conversation path after Wake Word accepts a trigger.
         </p>
       </section>
 
@@ -167,7 +165,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
             aria-live="polite"
             className={`px-2 py-0.5 border rounded font-bold ${statusTone(phase)}`}
           >
-            {RUNTIME_LABELS[phase]}
+            Runtime: {RUNTIME_LABELS[phase]}
           </span>
         </div>
         {diagnostics ? (
