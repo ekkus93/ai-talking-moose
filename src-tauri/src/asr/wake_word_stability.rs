@@ -1,4 +1,6 @@
-use super::wake_word_runtime::{WakeWordRuntimeErrorKind, WakeWordRuntimeManager, WakeWordRuntimePhase};
+use super::wake_word_runtime::{
+    WakeWordRuntimeErrorKind, WakeWordRuntimeManager, WakeWordRuntimePhase,
+};
 use crate::audio::pcm_ring_buffer::WAKE_PCM_PRE_ROLL_SAMPLES;
 use std::time::{Duration, Instant};
 
