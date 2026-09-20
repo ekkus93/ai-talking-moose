@@ -67,11 +67,9 @@ mod tests {
 
     #[test]
     fn preserves_exact_sample_order_without_v1_trimming() {
-        let audio = WakeCommandHandoffAudio::new(
-            V1_KWS_SAMPLE_RATE_HZ,
-            vec![100, -200, 300, -400, 500],
-        )
-        .unwrap();
+        let audio =
+            WakeCommandHandoffAudio::new(V1_KWS_SAMPLE_RATE_HZ, vec![100, -200, 300, -400, 500])
+                .unwrap();
 
         assert_eq!(audio.sample_rate_hz(), V1_KWS_SAMPLE_RATE_HZ);
         assert_eq!(audio.samples_i16(), &[100, -200, 300, -400, 500]);
