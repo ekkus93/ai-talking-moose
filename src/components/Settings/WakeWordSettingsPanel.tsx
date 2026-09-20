@@ -2,7 +2,10 @@ import React, { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle, Mic, RefreshCw, Shield } from "lucide-react";
 import { tauriBridge } from "../../lib/tauriBridge";
 import { useMooseStore } from "../../stores/mooseStore";
-import type { WakeWordDiagnostics, WakeWordRuntimePhase } from "../../types/moose";
+import type {
+  WakeWordDiagnostics,
+  WakeWordRuntimePhase,
+} from "../../types/moose";
 
 const RUNTIME_LABELS: Record<WakeWordRuntimePhase, string> = {
   disabled: "Disabled",
@@ -175,7 +178,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
             <dd>{diagnostics.model_id}</dd>
             <dt className="font-bold">Sample format</dt>
             <dd>
-              {diagnostics.canonical_sample_rate_hz.toLocaleString()} Hz / {" "}
+              {diagnostics.canonical_sample_rate_hz.toLocaleString()} Hz /{" "}
               {diagnostics.canonical_channels} channel
             </dd>
             <dt className="font-bold">Policy</dt>
