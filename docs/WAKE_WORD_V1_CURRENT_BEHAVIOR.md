@@ -18,8 +18,9 @@ Wake Word V1 is a local keyword-spotting feature for the fixed phrase **`Hey, Mo
 - The phrase is fixed to **`Hey, Moose`**.
 - V1 does not expose arbitrary phrase editing.
 - V1 does not expose a sensitivity control.
-- The Settings UI can enable or disable the persisted Wake Word setting through the normal settings transaction.
-- Live settings-to-runtime application is still a remediation item: changing the persisted toggle does not yet constitute proof that the authoritative runtime has started or stopped without restart.
+- The Settings UI can enable or disable Wake Word and persists the setting through the normal settings transaction.
+- Live enable/disable changes are applied to the authoritative runtime without requiring an app restart through `apply_changed_runtime_preferences`.
+- Wake runtime changes are reversible with the other runtime preferences if a later preference side effect or persistence step fails.
 - When Wake Word is disabled, manual listen/start behavior remains available.
 
 ## Local/offline microphone behavior
@@ -52,23 +53,9 @@ These runtime-manager invariants must not be described as proof that the product
 
 ## Artifacts, model, runtime, and licenses
 
-The production KWS policy is frozen to:
+The production KWS policy is frozen to 16 kHz mono, feature dimension 80, one inference thread, phrase `HEY MOOSE`, score 1.0, threshold 0.25, and two seconds of pre-roll.
 
-- sample rate: 16 kHz
-- channels: mono
-- feature dimension: 80
-- inference threads: 1
-- phrase: `HEY MOOSE`
-- score: 1.0
-- threshold: 0.25
-- pre-roll: 2 seconds
-
-Model/runtime identity and provenance are recorded in:
-
-- `wake-word-artifacts.json`
-- `docs/evidence/WWR-100_MODEL_IDENTITY_2026-09-17.md`
-- `docs/evidence/WWR-110_SHERPA_RUNTIME_IDENTITY_2026-09-17.md`
-- `docs/licenses/SHERPA_ONNX_RUNTIME_NOTICE.md`
+Model/runtime identity and provenance are recorded in `wake-word-artifacts.json`, `docs/evidence/WWR-100_MODEL_IDENTITY_2026-09-17.md`, `docs/evidence/WWR-110_SHERPA_RUNTIME_IDENTITY_2026-09-17.md`, and `docs/licenses/SHERPA_ONNX_RUNTIME_NOTICE.md`.
 
 Runtime and model licensing are tracked separately. The pinned sherpa-onnx runtime is Apache-2.0. The selected GigaSpeech KWS model provenance/license evidence is documented in the artifact manifest and WWR-100 evidence.
 
@@ -89,7 +76,6 @@ Current limitations:
 - Linux x86_64 real KWS acceptance is not yet claimed complete.
 - macOS arm64 real KWS acceptance is not yet claimed complete.
 - Integrated one-stream microphone routing and wake→command-ASR handoff are not yet claimed complete.
-- Live persisted-toggle application to the authoritative runtime is not yet claimed complete.
 - Integrated production lifecycle stability acceptance is not yet claimed complete.
 - Performance measurements are not yet claimed.
 
