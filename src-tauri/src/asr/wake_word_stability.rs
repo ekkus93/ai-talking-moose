@@ -1,4 +1,4 @@
-use super::wake_word_runtime::{WakeWordRuntimeManager, WakeWordRuntimePhase};
+use super::wake_word_runtime::{WakeWordRuntimeErrorKind, WakeWordRuntimeManager, WakeWordRuntimePhase};
 use crate::audio::pcm_ring_buffer::WAKE_PCM_PRE_ROLL_SAMPLES;
 use std::time::{Duration, Instant};
 
@@ -68,6 +68,58 @@ fn repeated_disable_enable_cycles_return_to_one_clean_listening_state() {
     assert_eq!(
         manager.snapshot(Instant::now()).phase,
         WakeWordRuntimePhase::Listening
+    );
+}
+
+#[test]
+fn disabling_during_handoff_prevents_unintended_resume() {
+    let manager = WakeWordRuntimeManager::new();
+    manager.begin_enable().unwrap();
+    manager.mark_loaded().unwrap();
+    assert!(manager.append_listening_pcm(&[1, 2, 3, 4]));
+    assert!(manager.accept_trigger(Instant::now()).unwrap());
+    assert_eq!(
+        manager.snapshot(Instant::now()).phase,
+        WakeWordRuntimePhase::Triggered
+    );
+
+    manager.disable();
+    let disabled = manager.snapshot(Instant::now());
+    assert_eq!(disabled.phase, WakeWordRuntimePhase::Disabled);
+    assert_eq!(disabled.ring_buffer_samples, 0);
+    assert_eq!(disabled.handoff_pre_roll_samples, 0);
+
+    let resume = manager.resume_after_interaction().unwrap_err();
+    assert_eq!(resume.kind, WakeWordRuntimeErrorKind::Disabled);
+    assert_eq!(
+        manager.snapshot(Instant::now()).phase,
+        WakeWordRuntimePhase::Disabled
+    );
+}
+
+#[test]
+fn disabling_during_talking_prevents_unintended_resume() {
+    let manager = WakeWordRuntimeManager::new();
+    manager.begin_enable().unwrap();
+    manager.mark_loaded().unwrap();
+    assert!(manager.append_listening_pcm(&[7, 8, 9]));
+    manager.suspend_for_talking().unwrap();
+    assert_eq!(
+        manager.snapshot(Instant::now()).phase,
+        WakeWordRuntimePhase::SuspendedTalking
+    );
+
+    manager.disable();
+    let disabled = manager.snapshot(Instant::now());
+    assert_eq!(disabled.phase, WakeWordRuntimePhase::Disabled);
+    assert_eq!(disabled.ring_buffer_samples, 0);
+    assert_eq!(disabled.handoff_pre_roll_samples, 0);
+
+    let resume = manager.resume_after_interaction().unwrap_err();
+    assert_eq!(resume.kind, WakeWordRuntimeErrorKind::Disabled);
+    assert_eq!(
+        manager.snapshot(Instant::now()).phase,
+        WakeWordRuntimePhase::Disabled
     );
 }
 
