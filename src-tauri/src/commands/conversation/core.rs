@@ -244,9 +244,9 @@ pub async fn start_conversation<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn stop_conversation(
+pub async fn stop_conversation<R: Runtime>(
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
     state.record_user_interaction();
     state
@@ -345,7 +345,7 @@ pub async fn send_text_message<R: Runtime>(
 ) -> Result<String, String> {
     let Some(msg_trimmed) = normalize_text_message(message)? else {
         return Ok(String::new());
-    };
+    }
     state.record_user_interaction();
     let request_snapshot = state.capture_text_request_settings();
     let settings = &request_snapshot.settings;
