@@ -35,12 +35,22 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         device_name: Option<String>,
         consumer: WakeCapturePcmConsumer<E>,
     ) -> Result<(), WakeCaptureOrchestratorError> {
-        let orchestrator = {
+        let mut wake = self.wake.lock().await;
+        let result = {
             let mut capture = self.capture.lock();
-            WakeCaptureOrchestrator::start(&mut capture, device_name, consumer)?
+            WakeCaptureOrchestrator::start(&mut capture, device_name, consumer)
         };
-        *self.wake.lock().await = Some(orchestrator);
-        Ok(())
+        match result {
+            Ok(orchestrator) => {
+                *wake = Some(orchestrator);
+                Ok(())
+            }
+            Err(error) => {
+                self.capture.lock().stop();
+                *wake = None;
+                Err(error)
+            }
+        }
     }
 
     pub(crate) async fn route_next(
@@ -199,6 +209,23 @@ mod tests {
 
         owner.disable().await;
         assert!(!app_capture.lock().is_active());
+    }
+
+    #[tokio::test]
+    async fn failed_start_clears_wake_state_and_leaves_capture_stopped() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        let result = owner
+            .start_wake(
+                Some("definitely-not-a-real-wake-test-microphone".to_string()),
+                consumer(),
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert!(owner.shares_capture_with(&app_capture));
+        assert!(!app_capture.lock().is_active());
+        assert!(owner.wake.lock().await.is_none());
     }
 
     #[tokio::test]
