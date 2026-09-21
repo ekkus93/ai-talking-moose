@@ -468,6 +468,26 @@ mod tests {
     }
 
     #[test]
+    fn runtime_snapshot_reports_counts_not_retained_pcm_payloads() {
+        let manager = WakeWordRuntimeManager::new();
+        manager.begin_enable().unwrap();
+        manager.mark_loaded().unwrap();
+        assert!(manager.append_listening_pcm(&[31_001, -31_002, 31_003]));
+        assert!(manager.accept_trigger(Instant::now()).unwrap());
+
+        let snapshot = manager.snapshot(Instant::now());
+        assert_eq!(snapshot.ring_buffer_samples, 3);
+        assert_eq!(snapshot.handoff_pre_roll_samples, 3);
+
+        let snapshot_debug = format!("{snapshot:?}");
+        assert!(snapshot_debug.contains("ring_buffer_samples: 3"));
+        assert!(snapshot_debug.contains("handoff_pre_roll_samples: 3"));
+        assert!(!snapshot_debug.contains("31001"));
+        assert!(!snapshot_debug.contains("-31002"));
+        assert!(!snapshot_debug.contains("31003"));
+    }
+
+    #[test]
     fn repeated_positive_frames_create_one_trigger_until_interaction_resets() {
         let manager = WakeWordRuntimeManager::new();
         manager.begin_enable().unwrap();
