@@ -328,6 +328,86 @@ mod tests {
     }
 
     #[test]
+    fn handoff_audio_preserves_wake_phrase_tail_and_first_command_word_contiguously() {
+        let runtime = listening_runtime();
+        let mut router = CanonicalWakePcmRouter::new(runtime, RecordingEngine::default());
+        let now = Instant::now();
+
+        let wake_phrase_head = [1000, 1001, 1002];
+        let wake_phrase_tail_and_trigger = [1003, 1004, 1005];
+        let immediate_first_command_word = [1006, 1007, 1008, 1009];
+
+        router
+            .route(V1_KWS_SAMPLE_RATE_HZ, &wake_phrase_head, now)
+            .unwrap();
+        router.engine_mut().detect_next = true;
+        router
+            .route(V1_KWS_SAMPLE_RATE_HZ, &wake_phrase_tail_and_trigger, now)
+            .unwrap();
+        router
+            .route(V1_KWS_SAMPLE_RATE_HZ, &immediate_first_command_word, now)
+            .unwrap();
+
+        let audio = router.transfer_handoff_audio_to_asr().unwrap().unwrap();
+        assert_eq!(audio.sample_rate_hz(), V1_KWS_SAMPLE_RATE_HZ);
+        assert_eq!(
+            audio.samples_i16(),
+            &[1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009]
+        );
+        assert_eq!(
+            audio.samples_i16().windows(2).collect::<Vec<_>>(),
+            vec![
+                &[1000, 1001][..],
+                &[1001, 1002][..],
+                &[1002, 1003][..],
+                &[1003, 1004][..],
+                &[1004, 1005][..],
+                &[1005, 1006][..],
+                &[1006, 1007][..],
+                &[1007, 1008][..],
+                &[1008, 1009][..],
+            ]
+        );
+        assert_eq!(
+            router.engine_mut().frames,
+            vec![wake_phrase_head.to_vec(), wake_phrase_tail_and_trigger.to_vec()]
+        );
+    }
+
+    #[test]
+    fn repeated_positive_frames_after_trigger_do_not_duplicate_command_activation() {
+        let runtime = listening_runtime();
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut router = CanonicalWakePcmRouter::new(runtime, engine);
+        let now = Instant::now();
+
+        let first = router.route(V1_KWS_SAMPLE_RATE_HZ, &[200, 201], now).unwrap();
+        assert!(first.trigger_accepted);
+        router.engine_mut().detect_next = true;
+
+        let repeated_positive_pcm = router
+            .route(V1_KWS_SAMPLE_RATE_HZ, &[202, 203], now)
+            .unwrap();
+        assert!(!repeated_positive_pcm.retained);
+        assert!(repeated_positive_pcm.detection.is_none());
+        assert!(!repeated_positive_pcm.trigger_accepted);
+        assert!(repeated_positive_pcm.live_handoff_retained);
+        assert_eq!(router.engine_mut().frames, vec![vec![200, 201]]);
+        assert_eq!(
+            router.transfer_handoff_to_asr().unwrap(),
+            vec![200, 201, 202, 203]
+        );
+        assert_eq!(
+            router.runtime().snapshot(now).phase,
+            WakeWordRuntimePhase::Triggered
+        );
+        assert_eq!(router.runtime().snapshot(now).trigger_count, 1);
+    }
+
+    #[test]
     fn handoff_transfer_is_single_use_and_return_resumes_listening() {
         let runtime = listening_runtime();
         let engine = RecordingEngine {
