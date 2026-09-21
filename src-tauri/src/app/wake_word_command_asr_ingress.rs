@@ -99,6 +99,25 @@ mod tests {
     }
 
     #[test]
+    fn synthetic_snapshot_live_boundary_is_exact_without_gap_duplicate_or_inversion() {
+        // Distinct monotonic ranges make any boundary defect immediately visible: the pre-roll
+        // snapshot ends at 104 and the post-trigger live range starts at 105.
+        let pre_roll = [100, 101, 102, 103, 104];
+        let live = [105, 106, 107, 108, 109];
+        let expected: Vec<i16> = pre_roll.into_iter().chain(live).collect();
+        let mut transfer = WakeCommandAsrHandoff::new(handoff(&expected));
+        let mut ingress = RecordingIngress::default();
+
+        assert!(transfer.deliver_once(&mut ingress).unwrap());
+        assert_eq!(ingress.accepted.len(), 1);
+        assert_eq!(ingress.accepted[0], expected);
+        assert!(ingress.accepted[0]
+            .windows(2)
+            .all(|pair| pair[1] == pair[0] + 1));
+        assert!(!transfer.deliver_once(&mut ingress).unwrap());
+    }
+
+    #[test]
     fn failed_startup_consumes_payload_instead_of_replaying_stale_audio() {
         let mut transfer = WakeCommandAsrHandoff::new(handoff(&[7, 8, 9]));
         let mut ingress = RecordingIngress {
