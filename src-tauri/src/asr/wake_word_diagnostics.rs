@@ -46,6 +46,7 @@ pub struct WakeWordDiagnostics {
     pub ring_buffer_capacity_ms: u64,
     pub ring_buffer_samples: usize,
     pub handoff_pre_roll_samples: usize,
+    pub handoff_pre_roll_duration_ms: u64,
     pub trigger_count: u64,
     pub last_trigger_age_ms: Option<u64>,
     pub runtime_initialization_ms: Option<u64>,
@@ -80,6 +81,7 @@ impl WakeWordDiagnostics {
             ring_buffer_capacity_ms: samples_to_ms(snapshot.ring_buffer_capacity_samples),
             ring_buffer_samples: snapshot.ring_buffer_samples,
             handoff_pre_roll_samples: snapshot.handoff_pre_roll_samples,
+            handoff_pre_roll_duration_ms: samples_to_ms(snapshot.handoff_pre_roll_samples),
             trigger_count: snapshot.trigger_count,
             last_trigger_age_ms: snapshot.last_trigger_age.map(duration_ms),
             runtime_initialization_ms: snapshot.initialization_duration.map(duration_ms),
@@ -148,6 +150,7 @@ mod tests {
         assert_eq!(diagnostics.ring_buffer_capacity_ms, 2_000);
         assert_eq!(diagnostics.ring_buffer_samples, 0);
         assert_eq!(diagnostics.handoff_pre_roll_samples, 0);
+        assert_eq!(diagnostics.handoff_pre_roll_duration_ms, 0);
         assert_eq!(diagnostics.trigger_count, 0);
         assert_eq!(diagnostics.runtime_initialization_ms, None);
         assert!(!diagnostics.talking_suspended);
@@ -206,7 +209,8 @@ mod tests {
         let manager = WakeWordRuntimeManager::new();
         manager.begin_enable().unwrap();
         manager.mark_loaded().unwrap();
-        assert!(manager.append_listening_pcm(&[101, 202, 303]));
+        let samples = vec![101_i16; 1_600];
+        assert!(manager.append_listening_pcm(&samples));
         let triggered_at = Instant::now();
         assert!(manager.accept_trigger(triggered_at).unwrap());
 
@@ -216,18 +220,21 @@ mod tests {
         assert!(triggered.enabled);
         assert_eq!(triggered.trigger_count, 1);
         assert_eq!(triggered.last_trigger_age_ms, Some(25));
-        assert_eq!(triggered.handoff_pre_roll_samples, 3);
+        assert_eq!(triggered.handoff_pre_roll_samples, 1_600);
+        assert_eq!(triggered.handoff_pre_roll_duration_ms, 100);
         assert!(!triggered.talking_suspended);
         let json = serde_json::to_string(&triggered).unwrap();
         assert!(!json.contains("pcm_samples"));
         assert!(!json.contains("audio_samples"));
         assert!(!json.contains("raw_audio"));
+        assert!(!json.contains("101"));
 
         manager.suspend_for_talking().unwrap();
         let suspended = WakeWordDiagnostics::from_runtime(&manager.snapshot(Instant::now()));
         assert!(suspended.talking_suspended);
         assert_eq!(suspended.ring_buffer_samples, 0);
         assert_eq!(suspended.handoff_pre_roll_samples, 0);
+        assert_eq!(suspended.handoff_pre_roll_duration_ms, 0);
     }
 
     #[test]
