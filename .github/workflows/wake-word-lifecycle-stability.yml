@@ -72,5 +72,7 @@ jobs:
             ${{ runner.os }}-cargo-
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
-      - name: Run Wake Word lifecycle stability tests
+      - name: Run Wake Word runtime stability tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_stability -- --nocapture
+      - name: Run Wake Word application lifecycle stability tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_lifecycle_stability -- --nocapture
