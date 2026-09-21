@@ -56,12 +56,22 @@ fn repeated_terminal_tts_outcomes_resume_cleanly_without_retained_audio() {
 
         for cycle in 0_i16..64 {
             let samples = [cycle, cycle.saturating_add(1), cycle.saturating_add(2)];
-            assert!(runtime.manager().append_listening_pcm(&samples), "{outcome}");
-            assert!(runtime.manager().accept_trigger(Instant::now()).unwrap(), "{outcome}");
+            assert!(
+                runtime.manager().append_listening_pcm(&samples),
+                "{outcome}"
+            );
+            assert!(
+                runtime.manager().accept_trigger(Instant::now()).unwrap(),
+                "{outcome}"
+            );
             runtime.suspend_for_talking().unwrap();
 
             let suspended = runtime.snapshot(Instant::now());
-            assert_eq!(suspended.phase, WakeWordRuntimePhase::SuspendedTalking, "{outcome}");
+            assert_eq!(
+                suspended.phase,
+                WakeWordRuntimePhase::SuspendedTalking,
+                "{outcome}"
+            );
             assert_eq!(suspended.ring_buffer_samples, 0, "{outcome}");
             assert_eq!(suspended.handoff_pre_roll_samples, 0, "{outcome}");
 
