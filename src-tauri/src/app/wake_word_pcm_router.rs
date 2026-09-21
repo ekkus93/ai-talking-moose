@@ -448,6 +448,39 @@ mod tests {
     }
 
     #[test]
+    fn later_phrase_after_return_to_listening_yields_second_trigger_without_cooldown() {
+        let runtime = listening_runtime();
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut router = CanonicalWakePcmRouter::new(runtime, engine);
+        let now = Instant::now();
+
+        let first = router.route(V1_KWS_SAMPLE_RATE_HZ, &[41, 42], now).unwrap();
+        assert!(first.trigger_accepted);
+        assert_eq!(router.runtime().snapshot(now).trigger_count, 1);
+        assert_eq!(router.transfer_handoff_to_asr().unwrap(), vec![41, 42]);
+        router.return_to_wake_listening().unwrap();
+        assert_eq!(
+            router.runtime().snapshot(now).phase,
+            WakeWordRuntimePhase::Listening
+        );
+        assert_eq!(router.engine_mut().reset_count, 1);
+
+        router.engine_mut().detect_next = true;
+        let second = router.route(V1_KWS_SAMPLE_RATE_HZ, &[43, 44], now).unwrap();
+        assert!(second.trigger_accepted);
+        assert_eq!(router.runtime().snapshot(now).trigger_count, 2);
+        assert_eq!(router.transfer_handoff_to_asr().unwrap(), vec![43, 44]);
+        assert_eq!(router.engine_mut().reset_count, 1);
+        assert_eq!(
+            router.engine_mut().frames,
+            vec![vec![41, 42], vec![43, 44]]
+        );
+    }
+
+    #[test]
     fn invalid_post_trigger_frame_does_not_mutate_live_handoff() {
         let runtime = listening_runtime();
         let engine = RecordingEngine {
