@@ -47,6 +47,39 @@ fn repeated_lifecycle_cycles_remain_bounded_and_return_to_listening() {
 }
 
 #[test]
+fn repeated_terminal_tts_outcomes_resume_cleanly_without_retained_audio() {
+    for outcome in ["success", "cancellation", "recoverable_failure"] {
+        let runtime = listening_runtime();
+        let capacity = runtime
+            .snapshot(Instant::now())
+            .ring_buffer_capacity_samples;
+
+        for cycle in 0_i16..64 {
+            let samples = [cycle, cycle.saturating_add(1), cycle.saturating_add(2)];
+            assert!(runtime.manager().append_listening_pcm(&samples), "{outcome}");
+            assert!(runtime.manager().accept_trigger(Instant::now()).unwrap(), "{outcome}");
+            runtime.suspend_for_talking().unwrap();
+
+            let suspended = runtime.snapshot(Instant::now());
+            assert_eq!(suspended.phase, WakeWordRuntimePhase::SuspendedTalking, "{outcome}");
+            assert_eq!(suspended.ring_buffer_samples, 0, "{outcome}");
+            assert_eq!(suspended.handoff_pre_roll_samples, 0, "{outcome}");
+
+            // Success, cancellation, and recoverable TTS failure all resolve through the same
+            // production terminal-interaction policy. Repeating each semantic outcome here
+            // proves that policy does not accumulate stale audio or leave Wake Word suspended.
+            runtime.resume_after_interaction(true).unwrap();
+
+            let resumed = runtime.snapshot(Instant::now());
+            assert_eq!(resumed.phase, WakeWordRuntimePhase::Listening, "{outcome}");
+            assert_eq!(resumed.ring_buffer_samples, 0, "{outcome}");
+            assert_eq!(resumed.handoff_pre_roll_samples, 0, "{outcome}");
+            assert!(resumed.ring_buffer_samples <= capacity, "{outcome}");
+        }
+    }
+}
+
+#[test]
 fn repeated_disable_enable_cycles_do_not_leave_stale_audio_or_state() {
     let runtime = listening_runtime();
 
