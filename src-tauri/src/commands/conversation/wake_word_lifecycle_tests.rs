@@ -74,3 +74,46 @@ fn production_manual_start_failure_keeps_disabled_wake_runtime_disabled() {
 
     assert_eq!(wake_runtime.phase(), WakeWordRuntimePhase::Disabled);
 }
+
+#[test]
+fn stop_lifecycle_boundary_resumes_suspended_enabled_wake_runtime() {
+    let app_state = AppState::new_for_tests().unwrap();
+    app_state.settings.write().wake_word_enabled = true;
+    app_state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+    app_state.wake_word_runtime.mark_loaded().unwrap();
+    app_state.wake_word_runtime.suspend_for_talking().unwrap();
+    assert_eq!(
+        app_state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::SuspendedTalking
+    );
+
+    let wake_word_enabled = app_state.settings.read().wake_word_enabled;
+    resume_after_command_interaction(&app_state.wake_word_runtime, wake_word_enabled).unwrap();
+
+    assert_eq!(
+        app_state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Listening
+    );
+}
+
+#[test]
+fn stop_lifecycle_boundary_honors_disabled_setting_after_suspension() {
+    let app_state = AppState::new_for_tests().unwrap();
+    app_state.settings.write().wake_word_enabled = true;
+    app_state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+    app_state.wake_word_runtime.mark_loaded().unwrap();
+    app_state.wake_word_runtime.suspend_for_talking().unwrap();
+    app_state.settings.write().wake_word_enabled = false;
+    assert_eq!(
+        app_state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::SuspendedTalking
+    );
+
+    let wake_word_enabled = app_state.settings.read().wake_word_enabled;
+    resume_after_command_interaction(&app_state.wake_word_runtime, wake_word_enabled).unwrap();
+
+    assert_eq!(
+        app_state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Disabled
+    );
+}
