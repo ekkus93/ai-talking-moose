@@ -3,14 +3,14 @@ name: Wake Word corpus contract
 on:
   pull_request:
     paths:
-      - 'wake-word-corpus.json'
+      - 'docs/wake-word-corpus.json'
       - 'scripts/validate_wake_word_corpus.py'
       - 'scripts/test_validate_wake_word_corpus.py'
       - '.github/workflows/wake-word-corpus-contract.yml'
   push:
     branches: [master]
     paths:
-      - 'wake-word-corpus.json'
+      - 'docs/wake-word-corpus.json'
       - 'scripts/validate_wake_word_corpus.py'
       - 'scripts/test_validate_wake_word_corpus.py'
       - '.github/workflows/wake-word-corpus-contract.yml'
@@ -22,8 +22,8 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Validate corpus contract
