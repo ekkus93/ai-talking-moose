@@ -100,6 +100,22 @@ mod tests {
     }
 
     #[test]
+    fn loading_wake_does_not_claim_command_ownership() {
+        let settings = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Loading);
+
+        assert!(!suspend_for_command_interaction(&runtime).unwrap());
+        complete_command_interaction(&runtime, true, CommandInteractionTerminalOutcome::Success)
+            .unwrap();
+
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Loading);
+    }
+
+    #[test]
     fn wake_error_does_not_block_manual_command_guard() {
         let runtime = listening_runtime();
         runtime.record_runtime_error();
