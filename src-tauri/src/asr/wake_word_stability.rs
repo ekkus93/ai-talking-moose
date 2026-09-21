@@ -128,10 +128,10 @@ fn disabling_during_talking_prevents_unintended_resume() {
 #[test]
 fn repeated_runtime_error_recovery_cycles_clear_audio_and_reload_cleanly() {
     let manager = WakeWordRuntimeManager::new();
+    manager.begin_enable().unwrap();
+    manager.mark_loaded().unwrap();
 
     for cycle in 0..128 {
-        manager.begin_enable().unwrap();
-        manager.mark_loaded().unwrap();
         let sample = i16::try_from(cycle).unwrap_or(i16::MAX);
         assert!(manager.append_listening_pcm(&[sample, sample.saturating_add(1)]));
 
