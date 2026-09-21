@@ -474,10 +474,7 @@ mod tests {
         assert_eq!(router.runtime().snapshot(now).trigger_count, 2);
         assert_eq!(router.transfer_handoff_to_asr().unwrap(), vec![43, 44]);
         assert_eq!(router.engine_mut().reset_count, 1);
-        assert_eq!(
-            router.engine_mut().frames,
-            vec![vec![41, 42], vec![43, 44]]
-        );
+        assert_eq!(router.engine_mut().frames, vec![vec![41, 42], vec![43, 44]]);
     }
 
     #[test]
