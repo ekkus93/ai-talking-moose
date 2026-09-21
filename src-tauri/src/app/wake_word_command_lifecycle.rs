@@ -100,6 +100,23 @@ mod tests {
     }
 
     #[test]
+    fn wake_error_does_not_block_manual_command_guard() {
+        let runtime = listening_runtime();
+        runtime.record_runtime_error();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Error);
+
+        assert!(!suspend_for_command_interaction(&runtime).unwrap());
+
+        complete_command_interaction(
+            &runtime,
+            true,
+            CommandInteractionTerminalOutcome::RecoverableFailure,
+        )
+        .unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Loading);
+    }
+
+    #[test]
     fn suspended_runtime_remains_guarded_across_asr_and_thinking() {
         let runtime = listening_runtime();
         assert!(suspend_for_command_interaction(&runtime).unwrap());
