@@ -16,7 +16,8 @@ pub(crate) trait WakeCommandAsrIngress {
 /// the authoritative capture owner is attached to that pipeline.
 impl WakeCommandAsrIngress for LocalAsrPipeline {
     fn accept_wake_handoff(&mut self, audio: WakeCommandHandoffAudio) -> Result<(), String> {
-        self.prime_wake_handoff(audio).map_err(|error| error.message)
+        self.prime_wake_handoff(audio)
+            .map_err(|error| error.message)
     }
 }
 
