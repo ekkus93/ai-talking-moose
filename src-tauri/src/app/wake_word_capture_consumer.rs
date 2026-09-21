@@ -286,6 +286,46 @@ mod tests {
     }
 
     #[test]
+    fn wake_phrase_and_immediate_first_command_word_survive_handoff_untrimmed() {
+        let engine = RecordingEngine {
+            detect_next: true,
+            ..Default::default()
+        };
+        let mut consumer = consumer_with_engine(engine);
+        let now = Instant::now();
+
+        // Synthetic contiguous markers stand in for the tail of "Hey, Moose" followed immediately
+        // by the first command word. V1 must preserve both sides of this trigger/live boundary.
+        let wake_phrase_tail = [101, 102, 103, 104];
+        let first_command_word = [105, 106, 107, 108];
+        assert!(
+            consumer
+                .route_capture_chunk(&bytes(&wake_phrase_tail), now)
+                .unwrap()
+                .trigger_accepted
+        );
+        assert!(
+            consumer
+                .route_capture_chunk(&bytes(&first_command_word), now)
+                .unwrap()
+                .live_handoff_retained
+        );
+
+        let handoff = consumer
+            .transfer_handoff_audio_to_asr()
+            .unwrap()
+            .expect("wake phrase plus command word should reach command ASR");
+        assert_eq!(
+            handoff.samples_i16(),
+            &[101, 102, 103, 104, 105, 106, 107, 108]
+        );
+        assert_eq!(
+            handoff.to_pcm16_le_bytes(),
+            bytes(&[101, 102, 103, 104, 105, 106, 107, 108])
+        );
+    }
+
+    #[test]
     fn returning_to_wake_resets_kws_and_allows_later_capture() {
         let engine = RecordingEngine {
             detect_next: true,
