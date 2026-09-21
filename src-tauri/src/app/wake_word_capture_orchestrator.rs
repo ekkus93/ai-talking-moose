@@ -38,15 +38,20 @@ impl<E: SherpaKwsEngine> WakeCaptureOrchestrator<E> {
     }
 
     /// Route exactly one next canonical capture chunk, preserving receiver order.
+    ///
+    /// A closed capture queue is a terminal event for this listening epoch. Fail the Wake runtime
+    /// closed and discard any pending handoff so a device disconnect cannot leave stale pre-roll
+    /// or a false Listening state. Reconnect is deliberately serialized by the application through
+    /// a later `start` on the same `AudioCapture` owner; this path never opens a replacement stream.
     pub(crate) async fn route_next(
         &mut self,
         now: Instant,
     ) -> Result<WakePcmRouteOutcome, WakeCaptureOrchestratorError> {
-        let chunk = self
-            .receiver
-            .recv()
-            .await
-            .ok_or(WakeCaptureOrchestratorError::CaptureClosed)?;
+        let Some(chunk) = self.receiver.recv().await else {
+            self.consumer.clear_handoff();
+            self.consumer.router().runtime().record_runtime_error();
+            return Err(WakeCaptureOrchestratorError::CaptureClosed);
+        };
         self.consumer
             .route_capture_chunk(&chunk, now)
             .map_err(WakeCaptureOrchestratorError::Pcm)
@@ -70,6 +75,17 @@ impl<E: SherpaKwsEngine> WakeCaptureOrchestrator<E> {
             .map_err(WakeCaptureOrchestratorError::Pcm)
     }
 
+    /// Disable Wake Word without creating or retaining another microphone stream.
+    ///
+    /// The sole application capture owner is stopped, all pending handoff audio is discarded, and
+    /// the shared Wake runtime is transitioned to Disabled. Manual listen may subsequently start
+    /// this same `AudioCapture` object through the existing command path.
+    pub(crate) fn disable(&mut self, capture: &mut AudioCapture) {
+        capture.stop();
+        self.consumer.clear_handoff();
+        self.consumer.router().runtime().disable();
+    }
+
     pub(crate) fn consumer(&self) -> &WakeCapturePcmConsumer<E> {
         &self.consumer
     }
@@ -85,7 +101,7 @@ mod tests {
     use crate::app::wake_word::engine::{
         validate_pcm_frame, SherpaKwsConfig, WakeWordDetection, WakeWordError,
     };
-    use crate::app::wake_word::runtime::WakeWordRuntimeManager;
+    use crate::app::wake_word::runtime::{WakeWordRuntimeManager, WakeWordRuntimePhase};
     use crate::app::wake_word_pcm_router::CanonicalWakePcmRouter;
     use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 
@@ -170,5 +186,63 @@ mod tests {
         drop(second);
         capture.stop();
         assert!(!capture.is_active());
+    }
+
+    #[test]
+    fn disable_stops_single_capture_owner_and_clears_wake_state() {
+        let mut capture = AudioCapture::new_mock();
+        let mut orchestrator =
+            WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
+        assert!(capture.is_active());
+        assert!(orchestrator
+            .consumer()
+            .router()
+            .runtime()
+            .append_listening_pcm(&[1, 2, 3]));
+
+        orchestrator.disable(&mut capture);
+
+        assert!(!capture.is_active());
+        let snapshot = orchestrator
+            .consumer()
+            .router()
+            .runtime()
+            .snapshot(Instant::now());
+        assert_eq!(snapshot.phase, WakeWordRuntimePhase::Disabled);
+        assert_eq!(snapshot.ring_buffer_samples, 0);
+        assert_eq!(snapshot.handoff_pre_roll_samples, 0);
+    }
+
+    #[tokio::test]
+    async fn closed_capture_queue_fails_wake_runtime_closed_without_reopening_capture() {
+        let (sender, receiver) = mpsc::channel(1);
+        drop(sender);
+        let mut orchestrator = WakeCaptureOrchestrator {
+            receiver,
+            consumer: listening_consumer(),
+        };
+        assert_eq!(
+            orchestrator
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase,
+            WakeWordRuntimePhase::Listening
+        );
+
+        assert!(matches!(
+            orchestrator.route_next(Instant::now()).await,
+            Err(WakeCaptureOrchestratorError::CaptureClosed)
+        ));
+
+        let snapshot = orchestrator
+            .consumer()
+            .router()
+            .runtime()
+            .snapshot(Instant::now());
+        assert_eq!(snapshot.phase, WakeWordRuntimePhase::Error);
+        assert_eq!(snapshot.ring_buffer_samples, 0);
+        assert_eq!(snapshot.handoff_pre_roll_samples, 0);
     }
 }
