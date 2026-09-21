@@ -1,15 +1,16 @@
-# WWR-300/WWR-310 acceptance evidence mapping — 2026-09-21
+# WWR-300/WWR-310/WWR-400 acceptance evidence mapping — 2026-09-21
 
-This file reconciles the objective evidence now present on master after PR #317 and PR #318. It is intentionally conservative: it records which remediation TODO requirements have source/test evidence and which requirements remain open.
+This file reconciles objective evidence now present on master after PR #317, PR #318, and PR #320. It is intentionally conservative: it records which remediation TODO requirements have source/test evidence and which requirements remain open.
 
 ## Qualified commits and CI
 
 - Ownership reconciliation evidence merged via PR #317 at master `8b69451e7edfbcb717da55e1b247238081d61b45`; exact merged-master CI `35619133665` passed.
 - Command handoff audio boundary tests merged via PR #318 at master `bcf29ce6b1a55bb11cdd211c518526b490dbafdf`; exact PR-head CI `35623229571` passed on `ac291483e5419f863dff66443e65da5dbdf3e987`.
+- Terminal lifecycle boundary tests merged via PR #320 at master `c994c3dd6c74e78e8b7124e1542f58a24510f851`; exact PR-head ordinary CI `35624567356` and Wake Word lifecycle stability `35624567400` both passed on `d9f0e65bb9dd91a6159ef4033b30d71f86b97fab`.
 
 ## WWR-300 evidence-backed items
 
-The PR #317 evidence file `docs/evidence/WWR-300_OWNERSHIP_ACCEPTANCE_RECONCILIATION_2026-09-21.md` supports the following WWR-300 requirements:
+The PR #317 evidence file `docs/evidence/WWR-300_OWNERSHIP_ACCEPTANCE_RECONCILIATION_2026-09-21.md` and `src-tauri/src/app/wake_word_authoritative_capture.rs` support the following WWR-300 requirements:
 
 - Wake Word does not open a competing continuous microphone stream at the implemented ownership boundary.
 - Wake start/disable, command handoff, command return, restart, disable, cancellation, unavailable-device startup failure, and recoverable restart operate through the shared application capture owner.
@@ -47,6 +48,25 @@ The following WWR-310 items remain open:
 - Downstream ASR acceptance proving the first command word survives beyond the provider-neutral audio payload boundary.
 - End-to-end production acceptance that the existing command ASR receives the payload through its normal path.
 
+## WWR-400 evidence-backed items
+
+PR #320 extends the application-composition lifecycle coverage in `src-tauri/src/app/wake_word_composition.rs`. Exact-head ordinary CI and the specialized lifecycle stability workflow both passed. The covered requirements are:
+
+- Persisted enabled state starts in `Loading` and reaches `Listening` only after the runtime is marked loaded; persisted disabled state remains `Disabled`.
+- Entry to Talking suspends Wake Word and clears retained ring/handoff audio.
+- Terminal TTS success, cancellation, and recoverable-failure outcomes all resolve through the same enabled resume boundary and return to `Listening`.
+- Repeated Talking suspend/resume cycles do not leave the runtime stuck in `SuspendedTalking`.
+- Disabling Wake Word during Triggered or Talking state wins over later resume and resolves to `Disabled` with retained audio cleared.
+- Recoverable Wake runtime error can re-enter `Loading` without taking over the manual microphone owner.
+- Capture error fails closed, clears retained audio, and requires explicit recovery rather than spinning or silently opening another capture.
+
+The following WWR-400 items remain open:
+
+- Production event wiring proving every real command/TTS terminal path invokes these lifecycle boundaries.
+- End-to-end proof that one real wake trigger starts exactly one normal command interaction.
+- Integrated proof of suppression throughout command ASR and Thinking.
+- End-to-end proof that Moose TTS cannot wake Moose through the physical audio path.
+
 ## WWR-410 evidence-backed items
 
 The PR #318 repeated-positive test supports the deterministic debounce invariant at the PCM-router boundary:
@@ -59,4 +79,4 @@ WWR-410 still needs later lifecycle-level evidence that a second phrase after a 
 
 ## Closeout note
 
-This mapping exists so a future TODO reconciliation can update `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md` with precise evidence instead of marking broad sections complete from memory. It should not be used to claim real corpus, real Linux/macOS KWS, or full end-to-end lifecycle acceptance.
+This mapping exists so TODO reconciliation can update `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md` with precise evidence instead of marking broad sections complete from memory. It must not be used to claim real corpus, real Linux/macOS KWS, physical-device disconnect acceptance, or full end-to-end production lifecycle acceptance.
