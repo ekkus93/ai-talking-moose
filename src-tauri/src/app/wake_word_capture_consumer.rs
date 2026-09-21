@@ -298,14 +298,18 @@ mod tests {
         // by the first command word. V1 must preserve both sides of this trigger/live boundary.
         let wake_phrase_tail = [101, 102, 103, 104];
         let first_command_word = [105, 106, 107, 108];
-        assert!(consumer
-            .route_capture_chunk(&bytes(&wake_phrase_tail), now)
-            .unwrap()
-            .trigger_accepted);
-        assert!(consumer
-            .route_capture_chunk(&bytes(&first_command_word), now)
-            .unwrap()
-            .live_handoff_retained);
+        assert!(
+            consumer
+                .route_capture_chunk(&bytes(&wake_phrase_tail), now)
+                .unwrap()
+                .trigger_accepted
+        );
+        assert!(
+            consumer
+                .route_capture_chunk(&bytes(&first_command_word), now)
+                .unwrap()
+                .live_handoff_retained
+        );
 
         let handoff = consumer
             .transfer_handoff_audio_to_asr()
