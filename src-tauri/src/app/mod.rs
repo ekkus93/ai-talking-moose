@@ -10,6 +10,8 @@ pub(crate) mod wake_word;
 #[allow(dead_code)]
 pub(crate) mod wake_word_capture_consumer;
 #[allow(dead_code)]
+pub(crate) mod wake_word_capture_orchestrator;
+#[allow(dead_code)]
 pub(crate) mod wake_word_command_activation;
 #[allow(dead_code)]
 pub(crate) mod wake_word_command_asr_ingress;
