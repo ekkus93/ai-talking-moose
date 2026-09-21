@@ -8,6 +8,8 @@ pub(crate) mod tray;
 #[allow(dead_code)]
 pub(crate) mod wake_word;
 #[allow(dead_code)]
+pub(crate) mod wake_word_authoritative_capture;
+#[allow(dead_code)]
 pub(crate) mod wake_word_capture_consumer;
 #[allow(dead_code)]
 pub(crate) mod wake_word_capture_orchestrator;
