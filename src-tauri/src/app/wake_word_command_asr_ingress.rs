@@ -1,4 +1,5 @@
 use super::wake_word_command_handoff::WakeCommandHandoffAudio;
+use crate::asr::pipeline::LocalAsrPipeline;
 
 /// Provider-neutral acceptance boundary between Wake Word and the already-selected command ASR.
 ///
@@ -7,6 +8,16 @@ use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 /// successful handoff cannot be replayed accidentally by the Wake Word side.
 pub(crate) trait WakeCommandAsrIngress {
     fn accept_wake_handoff(&mut self, audio: WakeCommandHandoffAudio) -> Result<(), String>;
+}
+
+/// The production local command-ASR path consumes Wake audio through the same bounded Moonshine
+/// ingress used by normal microphone capture. This implementation deliberately does not create a
+/// second ASR pipeline or microphone stream: it only primes the already-running pipeline before
+/// the authoritative capture owner is attached to that pipeline.
+impl WakeCommandAsrIngress for LocalAsrPipeline {
+    fn accept_wake_handoff(&mut self, audio: WakeCommandHandoffAudio) -> Result<(), String> {
+        self.prime_wake_handoff(audio).map_err(|error| error.message)
+    }
 }
 
 /// Single-use command-ASR handoff coordinator.
