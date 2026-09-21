@@ -9,3 +9,8 @@ mod tests {
 mod provider_boundary_tests {
     include!("provider_boundary_tests.rs");
 }
+
+#[cfg(test)]
+mod wake_word_lifecycle_tests {
+    include!("wake_word_lifecycle_tests.rs");
+}
