@@ -269,6 +269,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn failed_command_return_leaves_capture_stopped_and_wake_recoverable() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        owner.start_wake(None, consumer()).await.unwrap();
+        enter_command_interaction(&owner).await;
+        assert!(!app_capture.lock().is_active());
+
+        // Switch the shared owner to a real-device mode so an impossible device name deterministically
+        // exercises ASR-return startup failure without constructing a second capture owner.
+        *app_capture.lock() = AudioCapture::new();
+        let result = owner
+            .return_to_wake_listening(Some(
+                "definitely-not-a-real-wake-test-microphone".to_string(),
+            ))
+            .await;
+
+        assert!(result.is_err());
+        assert!(owner.shares_capture_with(&app_capture));
+        assert!(!app_capture.lock().is_active());
+        let phase = {
+            let wake = owner.wake.lock().await;
+            wake.as_ref()
+                .unwrap()
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase
+        };
+        assert_eq!(phase, WakeWordRuntimePhase::Error);
+
+        // A later reconnect remains possible through the same authoritative owner.
+        *app_capture.lock() = AudioCapture::new_mock();
+        owner.restart_wake(None).await.unwrap();
+        assert!(app_capture.lock().is_active());
+        let recovered_phase = {
+            let wake = owner.wake.lock().await;
+            wake.as_ref()
+                .unwrap()
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase
+        };
+        assert_eq!(recovered_phase, WakeWordRuntimePhase::Listening);
+    }
+
+    #[tokio::test]
     async fn cancellation_with_wake_enabled_returns_to_same_shared_capture_owner() {
         let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
         let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
