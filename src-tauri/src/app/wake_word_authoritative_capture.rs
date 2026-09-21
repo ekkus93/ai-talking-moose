@@ -118,6 +118,7 @@ mod tests {
     };
     use crate::app::wake_word::runtime::{WakeWordRuntimeManager, WakeWordRuntimePhase};
     use crate::app::wake_word_pcm_router::CanonicalWakePcmRouter;
+    use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 
     #[derive(Default)]
     struct TestEngine {
@@ -216,5 +217,30 @@ mod tests {
                 .phase
         };
         assert_eq!(phase, WakeWordRuntimePhase::Listening);
+    }
+
+    #[tokio::test]
+    async fn wake_disable_releases_shared_capture_for_manual_listen() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        owner.start_wake(None, consumer()).await.unwrap();
+        assert!(app_capture.lock().is_active());
+
+        owner.disable().await;
+        assert!(!app_capture.lock().is_active());
+
+        let (manual_pcm_tx, _manual_pcm_rx) = tokio::sync::mpsc::channel(1);
+        app_capture
+            .lock()
+            .start(None, V1_KWS_SAMPLE_RATE_HZ, manual_pcm_tx, None)
+            .unwrap();
+
+        assert!(owner.shares_capture_with(&app_capture));
+        assert!(app_capture.lock().is_active());
+        assert_eq!(
+            app_capture.lock().diagnostics().sample_rate_hz,
+            Some(V1_KWS_SAMPLE_RATE_HZ)
+        );
+        app_capture.lock().stop();
     }
 }
