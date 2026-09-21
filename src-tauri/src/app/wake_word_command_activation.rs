@@ -95,40 +95,24 @@ mod tests {
         let mut ingress = RecordingIngress::default();
 
         let mut first_handoff = handoff();
-        assert!(activate_wake_command_once(
-            &runtime,
-            &mut first_handoff,
-            &mut ingress,
-            true,
-        )
-        .unwrap());
-        assert!(!activate_wake_command_once(
-            &runtime,
-            &mut first_handoff,
-            &mut ingress,
-            true,
-        )
-        .unwrap());
+        assert!(
+            activate_wake_command_once(&runtime, &mut first_handoff, &mut ingress, true,).unwrap()
+        );
+        assert!(
+            !activate_wake_command_once(&runtime, &mut first_handoff, &mut ingress, true,).unwrap()
+        );
         assert_eq!(ingress.activations, 1);
 
         resume_after_command_interaction(&runtime, true).unwrap();
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
 
         let mut second_handoff = handoff();
-        assert!(activate_wake_command_once(
-            &runtime,
-            &mut second_handoff,
-            &mut ingress,
-            true,
-        )
-        .unwrap());
-        assert!(!activate_wake_command_once(
-            &runtime,
-            &mut second_handoff,
-            &mut ingress,
-            true,
-        )
-        .unwrap());
+        assert!(
+            activate_wake_command_once(&runtime, &mut second_handoff, &mut ingress, true,).unwrap()
+        );
+        assert!(
+            !activate_wake_command_once(&runtime, &mut second_handoff, &mut ingress, true,).unwrap()
+        );
 
         assert_eq!(ingress.activations, 2);
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
