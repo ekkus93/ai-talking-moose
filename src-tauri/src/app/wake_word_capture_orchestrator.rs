@@ -64,9 +64,7 @@ impl<E: SherpaKwsEngine> WakeCaptureOrchestrator<E> {
         self.consumer.clear_handoff();
     }
 
-    pub(crate) fn return_to_wake_listening(
-        &mut self,
-    ) -> Result<(), WakeCaptureOrchestratorError> {
+    pub(crate) fn return_to_wake_listening(&mut self) -> Result<(), WakeCaptureOrchestratorError> {
         self.consumer
             .return_to_wake_listening()
             .map_err(WakeCaptureOrchestratorError::Pcm)
@@ -156,10 +154,12 @@ mod tests {
     #[test]
     fn replacing_orchestrator_reuses_same_capture_owner_instead_of_multiplying_owners() {
         let mut capture = AudioCapture::new_mock();
-        let first = WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
+        let first =
+            WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
         assert!(capture.is_active());
 
-        let second = WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
+        let second =
+            WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
         assert!(capture.is_active());
         assert_eq!(
             capture.diagnostics().sample_rate_hz,
