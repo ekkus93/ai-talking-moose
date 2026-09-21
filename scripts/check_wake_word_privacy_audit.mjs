@@ -1,6 +1,33 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 
 const read = (path) => readFileSync(path, "utf8");
+
+const listRustFiles = (dir) => {
+  const entries = readdirSync(dir).sort();
+  const files = [];
+  for (const entry of entries) {
+    const path = `${dir}/${entry}`;
+    if (statSync(path).isDirectory()) {
+      files.push(...listRustFiles(path));
+    } else if (path.endsWith(".rs")) {
+      files.push(path);
+    }
+  }
+  return files;
+};
+
+const productionRust = (source) =>
+  source.replace(/\n#\[cfg\(test\)\]\s*\nmod tests \{[\s\S]*$/u, "");
+
+const rustStringLiterals = (source) =>
+  [...source.matchAll(/"(?:\\.|[^"\\])*"/gu)].map((match) => match[0]);
+
+const wakeProductionFiles = [
+  ...listRustFiles("src-tauri/src/app").filter((path) => path.includes("/wake_word")),
+  ...listRustFiles("src-tauri/src/asr").filter((path) => path.includes("/wake_word")),
+  ...listRustFiles("src-tauri/src/commands").filter((path) => path.includes("/wake_word")),
+];
+
 const fail = (message) => {
   throw new Error(`Wake Word privacy audit failed: ${message}`);
 };
@@ -58,6 +85,7 @@ const requiredPrivacySafeFields = [
   "ring_buffer_capacity_samples",
   "ring_buffer_samples",
   "handoff_pre_roll_samples",
+  "handoff_pre_roll_duration_ms",
   "trigger_count",
   "last_trigger_age_ms",
   "runtime_initialization_ms",
@@ -108,6 +136,43 @@ if (corpus.acceptance_criteria?.criteria_status !== "pending_real_fixture_calibr
   fail("corpus criteria must remain pending until real fixtures calibrate acceptance");
 }
 
+const forbiddenProductionLogFragments = [
+  "tracing::",
+  "trace!",
+  "debug!",
+  "info!",
+  "warn!",
+  "error!",
+  "println!",
+  "eprintln!",
+];
+const forbiddenErrorLiteralFragments = [
+  "credential",
+  "secret",
+  "api_key",
+  "transcript",
+  "raw_audio",
+  "audio_content",
+  "absolute_path",
+  "file_path",
+];
+
+for (const path of wakeProductionFiles) {
+  const source = productionRust(read(path));
+  for (const fragment of forbiddenProductionLogFragments) {
+    if (source.includes(fragment)) {
+      fail(`${path} contains production Wake Word logging macro/reference ${fragment}`);
+    }
+  }
+  for (const literal of rustStringLiterals(source)) {
+    for (const fragment of forbiddenErrorLiteralFragments) {
+      if (literal.toLowerCase().includes(fragment)) {
+        fail(`${path} contains sensitive production error/log string literal fragment ${fragment}`);
+      }
+    }
+  }
+}
+
 console.log(
-  `Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), sanitizer evidence, documentation, and corpus privacy policy are OK.`,
+  `Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), ${wakeProductionFiles.length} production Wake Word Rust file(s), sanitizer evidence, documentation, and corpus privacy policy are OK.`,
 );
