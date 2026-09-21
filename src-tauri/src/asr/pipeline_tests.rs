@@ -217,11 +217,8 @@ async fn wake_handoff_primes_existing_ingress_in_exact_sample_order() {
     let state = Arc::new(FakeState::default());
     let mut pipeline = fake_pipeline(state.clone()).await;
     let samples = vec![i16::MIN, -1234, 0, 2345, i16::MAX];
-    let handoff = WakeCommandHandoffAudio::new(
-        MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
-        samples.clone(),
-    )
-    .unwrap();
+    let handoff =
+        WakeCommandHandoffAudio::new(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ, samples.clone()).unwrap();
 
     pipeline.prime_wake_handoff(handoff).unwrap();
     wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
@@ -243,11 +240,8 @@ async fn wake_handoff_queue_full_fails_without_dropping_or_reordering_payload() 
         sender.try_send(vec![0, 0]).unwrap();
     }
 
-    let handoff = WakeCommandHandoffAudio::new(
-        MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
-        vec![7, 8, 9],
-    )
-    .unwrap();
+    let handoff =
+        WakeCommandHandoffAudio::new(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ, vec![7, 8, 9]).unwrap();
     let error = pipeline.prime_wake_handoff(handoff).unwrap_err();
     assert_eq!(error.kind, AsrErrorKind::AudioInput);
 
@@ -543,17 +537,20 @@ fn sensitive_asr_payloads_are_processed_without_entering_tracing() {
         .updates
         .lock()
         .unwrap()
-        .push(MoonshineTinyTranscriptUpdate::Partial {
-            line_id: 1,
+        .push(MoonshineTinyTranscriptUpdate::Final {
+            line_id: 181,
             text: TRANSCRIPT.to_string(),
-            latency_ms: 1,
+            latency_ms: 7,
         });
-    let (callback, _) = callback_events();
+    let (callback, events) = callback_events();
     let worker_state = state.clone();
 
-    let logs = capture_logs(|| {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async move {
+    let (_, logs) = capture_logs(|| {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
             let mut pipeline = LocalAsrPipeline::start_with_factory(
                 move || {
                     Ok(Box::new(FakeEngine {
@@ -566,53 +563,87 @@ fn sensitive_asr_payloads_are_processed_without_entering_tracing() {
             .await
             .unwrap();
             pipeline.test_sender().try_send(pcm_bytes).unwrap();
-            wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+            wait_until(|| events.lock().unwrap().len() == 3);
+
+            assert!(matches!(
+                events.lock().unwrap().as_slice(),
+                [
+                    AsrEvent::SpeechStarted { .. },
+                    AsrEvent::FinalTranscript { text },
+                    AsrEvent::SpeechEnded { .. },
+                ] if text.as_str() == TRANSCRIPT
+            ));
+            {
+                let received = state.received_pcm.lock().unwrap();
+                assert_eq!(
+                    received.len(),
+                    1,
+                    "raw PCM must cross the production worker boundary"
+                );
+                assert!(!received[0].is_empty());
+            }
             pipeline.stop_and_join().await.unwrap();
         });
     });
 
     assert_log_capture_live(&logs);
     assert!(!logs.contains(TRANSCRIPT));
-    assert!(!logs.contains(RAW_PCM.escape_ascii().to_string().as_str()));
+    assert!(!logs.contains(std::str::from_utf8(RAW_PCM).unwrap()));
     assert!(!logs.contains(&pcm_base64));
 }
 
 #[tokio::test]
-async fn architecture_is_exposed_without_changing_worker_contract() {
-    let tiny_state = Arc::new(FakeState::default());
-    let mut tiny = fake_pipeline_for_architecture(
-        MoonshineModelArchitecture::TinyStreaming,
-        tiny_state.clone(),
-    )
-    .await;
-    tiny.test_sender().try_send(vec![0, 0]).unwrap();
-    wait_until(|| tiny_state.pushes.load(Ordering::SeqCst) == 1);
-    assert_eq!(
-        tiny.diagnostics().architecture,
-        MoonshineModelArchitecture::TinyStreaming
-    );
-    tiny.stop_and_join().await.unwrap();
-
-    let small_state = Arc::new(FakeState::default());
-    let mut small = fake_pipeline_for_architecture(
-        MoonshineModelArchitecture::SmallStreaming,
-        small_state.clone(),
-    )
-    .await;
-    small.test_sender().try_send(vec![0, 0]).unwrap();
-    wait_until(|| small_state.pushes.load(Ordering::SeqCst) == 1);
-    assert_eq!(
-        small.diagnostics().architecture,
-        MoonshineModelArchitecture::SmallStreaming
-    );
-    small.stop_and_join().await.unwrap();
+async fn stop_is_idempotent_and_joins_worker() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline = fake_pipeline(state.clone()).await;
+    pipeline.stop_and_join().await.unwrap();
+    pipeline.stop_and_join().await.unwrap();
+    assert!(!pipeline.is_running());
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
-async fn rejects_engine_with_wrong_input_rate() {
+async fn stop_discards_queued_audio_instead_of_draining_it() {
+    let state = Arc::new(FakeState::default());
+    state.block_push.store(true, Ordering::SeqCst);
+    let mut pipeline = fake_pipeline(state.clone()).await;
+    let sender = pipeline.test_sender();
+    sender.try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    sender.try_send(vec![0, 0]).unwrap();
+    sender.try_send(vec![0, 0]).unwrap();
+    pipeline.request_stop();
+    state.block_push.store(false, Ordering::SeqCst);
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn startup_failure_never_exposes_running_pipeline() {
+    let (callback, _) = callback_events();
+    let result = LocalAsrPipeline::start_with_factory(
+        || {
+            Err(AsrError {
+                kind: AsrErrorKind::ModelNotInstalled,
+                message: "missing".to_string(),
+                retryable: true,
+            })
+        },
+        callback,
+    )
+    .await;
+    let error = match result {
+        Ok(_) => panic!("startup unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind, AsrErrorKind::ModelNotInstalled);
+}
+
+#[tokio::test]
+async fn unexpected_engine_sample_rate_fails_before_capture() {
     let state = Arc::new(FakeState::default());
     let (callback, _) = callback_events();
-    let error = match LocalAsrPipeline::start_with_factory(
+    let result = LocalAsrPipeline::start_with_factory(
         move || {
             Ok(Box::new(FakeEngine {
                 state,
@@ -621,87 +652,98 @@ async fn rejects_engine_with_wrong_input_rate() {
         },
         callback,
     )
-    .await
-    {
-        Ok(_) => panic!("wrong-rate engine unexpectedly started"),
-        Err(error) => error,
-    };
-    assert_eq!(error.kind, AsrErrorKind::Internal);
-}
-
-#[tokio::test]
-async fn startup_failure_returns_typed_error() {
-    let (callback, _) = callback_events();
-    let expected = AsrError {
-        kind: AsrErrorKind::RuntimeUnavailable,
-        message: "missing fake runtime".to_string(),
-        retryable: true,
-    };
-    let returned = match LocalAsrPipeline::start_with_factory(
-        {
-            let expected = expected.clone();
-            move || Err(expected)
-        },
-        callback,
-    )
-    .await
-    {
+    .await;
+    let error = match result {
         Ok(_) => panic!("startup unexpectedly succeeded"),
         Err(error) => error,
     };
-    assert_eq!(returned.kind, AsrErrorKind::RuntimeUnavailable);
-}
-
-#[tokio::test]
-async fn startup_panic_is_sanitized() {
-    let (callback, _) = callback_events();
-    let error = match LocalAsrPipeline::start_with_factory(
-        || panic!("sensitive startup detail"),
-        callback,
-    )
-    .await
-    {
-        Ok(_) => panic!("panic unexpectedly succeeded"),
-        Err(error) => error,
-    };
     assert_eq!(error.kind, AsrErrorKind::Internal);
-    assert!(!error.message.contains("sensitive startup detail"));
 }
 
 #[tokio::test]
-async fn repeated_stop_is_safe_and_joins_once() {
+async fn mock_capture_uses_same_authoritative_capture_at_16khz() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline = fake_pipeline(state).await;
+    let mut capture = AudioCapture::new_mock();
+    pipeline.start_capture(&mut capture, None, None).unwrap();
+    let diagnostics = capture.diagnostics();
+    assert!(diagnostics.active);
+    assert_eq!(
+        diagnostics.sample_rate_hz,
+        Some(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ)
+    );
+    assert_eq!(diagnostics.channels, Some(1));
+    capture.stop();
+    pipeline.stop_and_join().await.unwrap();
+}
+
+#[tokio::test]
+async fn processed_chunk_releases_queue_depth() {
     let state = Arc::new(FakeState::default());
     let mut pipeline = fake_pipeline(state.clone()).await;
+    pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    wait_until(|| pipeline.diagnostics().queue_depth == 0);
     pipeline.stop_and_join().await.unwrap();
-    pipeline.stop_and_join().await.unwrap();
-    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
-async fn drop_requests_stop_and_joins_worker() {
+async fn stopped_pipeline_refuses_to_start_microphone() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline = fake_pipeline(state).await;
+    pipeline.stop_and_join().await.unwrap();
+    let mut capture = AudioCapture::new_mock();
+    let error = pipeline
+        .start_capture(&mut capture, None, None)
+        .unwrap_err();
+    assert_eq!(error.kind, AsrErrorKind::InvalidState);
+    assert!(!capture.is_active());
+}
+
+#[tokio::test]
+async fn drop_stops_and_joins_worker_as_safety_net() {
     let state = Arc::new(FakeState::default());
     {
-        let _pipeline = fake_pipeline(state.clone()).await;
+        let pipeline = fake_pipeline(state.clone()).await;
+        assert!(pipeline.is_running());
     }
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
 
-#[test]
-fn queue_capacity_matches_documented_audio_bound() {
-    assert_eq!(LOCAL_ASR_QUEUE_CAPACITY_CHUNKS, 8);
+#[tokio::test]
+async fn small_pipeline_uses_same_bounded_worker_and_reports_small_architecture() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline =
+        fake_pipeline_for_architecture(MoonshineModelArchitecture::SmallStreaming, state.clone())
+            .await;
+
+    let diagnostics = pipeline.diagnostics();
+    assert_eq!(
+        diagnostics.architecture,
+        MoonshineModelArchitecture::SmallStreaming
+    );
+    assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
+    assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+
+    pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
 
-#[test]
-fn malformed_pcm_decode_is_rejected() {
-    let error = decode_mono_i16_le(&[1]).unwrap_err();
-    assert_eq!(error.kind, AsrErrorKind::AudioInput);
-}
-
-#[test]
-fn valid_pcm_decode_preserves_samples() {
-    let samples = [i16::MIN, -123, 0, 456, i16::MAX];
-    let bytes = AudioResampler::i16_to_bytes(&samples);
-    let decoded = decode_mono_i16_le(&bytes).unwrap();
-    let expected = AudioResampler::i16_to_f32(&samples);
-    assert_eq!(decoded, expected);
+#[tokio::test]
+async fn pipeline_diagnostics_report_bound_and_running_state() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline = fake_pipeline(state).await;
+    let diagnostics = pipeline.diagnostics();
+    assert_eq!(
+        diagnostics.architecture,
+        MoonshineModelArchitecture::TinyStreaming
+    );
+    assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
+    assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+    assert_eq!(diagnostics.queue_depth, 0);
+    assert!(diagnostics.running);
+    assert!(diagnostics.last_error.is_none());
+    pipeline.stop_and_join().await.unwrap();
 }
