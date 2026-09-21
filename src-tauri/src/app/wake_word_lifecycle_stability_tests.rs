@@ -16,7 +16,9 @@ fn listening_runtime() -> WakeWordApplicationRuntime {
 #[test]
 fn repeated_lifecycle_cycles_remain_bounded_and_return_to_listening() {
     let runtime = listening_runtime();
-    let capacity = runtime.snapshot(Instant::now()).ring_buffer_capacity_samples;
+    let capacity = runtime
+        .snapshot(Instant::now())
+        .ring_buffer_capacity_samples;
 
     for cycle in 0_i16..100 {
         let samples = [cycle, cycle.saturating_add(1), cycle.saturating_add(2)];
