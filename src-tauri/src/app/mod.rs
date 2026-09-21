@@ -35,3 +35,5 @@ pub use state::*;
 
 #[cfg(test)]
 mod provider_switch_tests;
+#[cfg(test)]
+mod wake_word_debounce_tests;
