@@ -6,24 +6,26 @@ use super::wake_word_capture_orchestrator::{
 use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 use super::wake_word_pcm_router::WakePcmRouteOutcome;
 use crate::audio::capture::AudioCapture;
+use parking_lot::Mutex as CaptureMutex;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 
-/// Serializes the application's one authoritative microphone owner with its Wake receive path.
+/// Serializes Wake receive state around the application's existing authoritative microphone owner.
 ///
-/// Manual conversation and Wake Word both borrow the same `AudioCapture`; this owner never
-/// constructs a second capture object. Both the physical owner and the receive-side orchestrator
-/// use async-aware mutexes so ownership transitions remain serialized without blocking a Tokio
-/// worker across an await point.
+/// `AppState::audio_capture`, manual conversation, diagnostics, and Wake Word all share the exact
+/// same `Arc<Mutex<AudioCapture>>`. This type never constructs or hides another `AudioCapture`.
+/// The receive-side orchestrator uses an async-aware mutex because routing awaits queue input; the
+/// physical capture lock is held only around synchronous start/stop replacement operations.
 pub(crate) struct AuthoritativeWakeCaptureOwner<E: SherpaKwsEngine> {
-    capture: Mutex<AudioCapture>,
+    capture: Arc<CaptureMutex<AudioCapture>>,
     wake: Mutex<Option<WakeCaptureOrchestrator<E>>>,
 }
 
 impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
-    pub(crate) fn new(capture: AudioCapture) -> Self {
+    pub(crate) fn from_shared_capture(capture: Arc<CaptureMutex<AudioCapture>>) -> Self {
         Self {
-            capture: Mutex::new(capture),
+            capture,
             wake: Mutex::new(None),
         }
     }
@@ -33,8 +35,10 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         device_name: Option<String>,
         consumer: WakeCapturePcmConsumer<E>,
     ) -> Result<(), WakeCaptureOrchestratorError> {
-        let mut capture = self.capture.lock().await;
-        let orchestrator = WakeCaptureOrchestrator::start(&mut capture, device_name, consumer)?;
+        let orchestrator = {
+            let mut capture = self.capture.lock();
+            WakeCaptureOrchestrator::start(&mut capture, device_name, consumer)?
+        };
         *self.wake.lock().await = Some(orchestrator);
         Ok(())
     }
@@ -52,14 +56,12 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
 
     /// Stop Wake capture and transfer its chronological handoff payload to command ASR.
     ///
-    /// Stopping the sole capture owner before returning the payload guarantees the normal command
-    /// path can replace that same owner without a simultaneous competing microphone open.
+    /// Stopping the shared AppState capture before returning the payload guarantees the normal
+    /// command path can replace that same owner without a simultaneous competing microphone open.
     pub(crate) async fn transfer_to_command_asr(
         &self,
     ) -> Result<Option<WakeCommandHandoffAudio>, WakeCaptureOrchestratorError> {
-        let mut capture = self.capture.lock().await;
-        capture.stop();
-        drop(capture);
+        self.capture.lock().stop();
         let mut wake = self.wake.lock().await;
         let orchestrator = wake
             .as_mut()
@@ -71,17 +73,17 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         &self,
         device_name: Option<String>,
     ) -> Result<(), WakeCaptureOrchestratorError> {
-        let mut capture = self.capture.lock().await;
         let mut wake = self.wake.lock().await;
         let orchestrator = wake
             .as_mut()
             .ok_or(WakeCaptureOrchestratorError::CaptureClosed)?;
+        let mut capture = self.capture.lock();
         orchestrator.restart_after_capture_error(&mut capture, device_name)
     }
 
     pub(crate) async fn disable(&self) {
-        let mut capture = self.capture.lock().await;
         let mut wake = self.wake.lock().await;
+        let mut capture = self.capture.lock();
         if let Some(orchestrator) = wake.as_mut() {
             orchestrator.disable(&mut capture);
         } else {
@@ -91,8 +93,8 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
     }
 
     #[cfg(test)]
-    async fn capture_is_active(&self) -> bool {
-        self.capture.lock().await.is_active()
+    fn shares_capture_with(&self, capture: &Arc<CaptureMutex<AudioCapture>>) -> bool {
+        Arc::ptr_eq(&self.capture, capture)
     }
 }
 
@@ -141,23 +143,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn wake_start_and_disable_share_one_physical_capture_owner() {
-        let owner = AuthoritativeWakeCaptureOwner::new(AudioCapture::new_mock());
+    async fn wake_start_and_disable_use_exact_shared_app_capture_owner() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        assert!(owner.shares_capture_with(&app_capture));
+
         owner.start_wake(None, consumer()).await.unwrap();
-        assert!(owner.capture_is_active().await);
+        assert!(app_capture.lock().is_active());
 
         owner.disable().await;
-        assert!(!owner.capture_is_active().await);
+        assert!(!app_capture.lock().is_active());
     }
 
     #[tokio::test]
-    async fn replacing_wake_epoch_reuses_same_authoritative_capture_owner() {
-        let owner = AuthoritativeWakeCaptureOwner::new(AudioCapture::new_mock());
+    async fn replacing_wake_epoch_reuses_exact_shared_app_capture_owner() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
         owner.start_wake(None, consumer()).await.unwrap();
         owner.start_wake(None, consumer()).await.unwrap();
 
-        assert!(owner.capture_is_active().await);
+        assert!(owner.shares_capture_with(&app_capture));
+        assert!(app_capture.lock().is_active());
         owner.disable().await;
-        assert!(!owner.capture_is_active().await);
+        assert!(!app_capture.lock().is_active());
     }
 }
