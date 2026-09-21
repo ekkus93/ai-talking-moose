@@ -69,6 +69,18 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         orchestrator.transfer_handoff_audio_to_asr()
     }
 
+    pub(crate) async fn return_to_wake_listening(
+        &self,
+        device_name: Option<String>,
+    ) -> Result<(), WakeCaptureOrchestratorError> {
+        let mut wake = self.wake.lock().await;
+        let orchestrator = wake
+            .as_mut()
+            .ok_or(WakeCaptureOrchestratorError::CaptureClosed)?;
+        let mut capture = self.capture.lock();
+        orchestrator.resume_capture_after_command(&mut capture, device_name)
+    }
+
     pub(crate) async fn restart_wake(
         &self,
         device_name: Option<String>,
@@ -104,7 +116,7 @@ mod tests {
     use crate::app::wake_word::engine::{
         validate_pcm_frame, SherpaKwsConfig, WakeWordDetection, WakeWordError,
     };
-    use crate::app::wake_word::runtime::WakeWordRuntimeManager;
+    use crate::app::wake_word::runtime::{WakeWordRuntimeManager, WakeWordRuntimePhase};
     use crate::app::wake_word_pcm_router::CanonicalWakePcmRouter;
 
     #[derive(Default)]
@@ -166,5 +178,43 @@ mod tests {
         assert!(app_capture.lock().is_active());
         owner.disable().await;
         assert!(!app_capture.lock().is_active());
+    }
+
+    #[tokio::test]
+    async fn command_return_reuses_exact_shared_app_capture_owner() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        owner.start_wake(None, consumer()).await.unwrap();
+        assert!(app_capture.lock().is_active());
+
+        {
+            let wake = owner.wake.lock().await;
+            wake.as_ref()
+                .unwrap()
+                .consumer()
+                .router()
+                .runtime()
+                .suspend_for_talking()
+                .unwrap();
+        }
+
+        assert!(owner.transfer_to_command_asr().await.unwrap().is_none());
+        assert!(!app_capture.lock().is_active());
+
+        owner.return_to_wake_listening(None).await.unwrap();
+
+        assert!(owner.shares_capture_with(&app_capture));
+        assert!(app_capture.lock().is_active());
+        let phase = {
+            let wake = owner.wake.lock().await;
+            wake.as_ref()
+                .unwrap()
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase
+        };
+        assert_eq!(phase, WakeWordRuntimePhase::Listening);
     }
 }
