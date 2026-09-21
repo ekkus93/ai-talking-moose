@@ -117,6 +117,35 @@ impl<E: SherpaKwsEngine> WakeCaptureOrchestrator<E> {
             .map_err(WakeCaptureOrchestratorError::Pcm)
     }
 
+    /// Return command ownership to Wake listening and restart capture through the same owner.
+    ///
+    /// The microphone stream is reopened only through the supplied authoritative `AudioCapture`.
+    /// If reopening fails, Wake enters Error instead of claiming Listening. If runtime/KWS reset
+    /// fails after the stream opens, the stream is stopped again so no orphan microphone owner can
+    /// remain active after a failed return.
+    pub(crate) fn resume_capture_after_command(
+        &mut self,
+        capture: &mut AudioCapture,
+        device_name: Option<String>,
+    ) -> Result<(), WakeCaptureOrchestratorError> {
+        let receiver = match start_authoritative_wake_capture(capture, device_name) {
+            Ok(receiver) => receiver,
+            Err(error) => {
+                self.consumer.router().runtime().record_runtime_error();
+                return Err(WakeCaptureOrchestratorError::Capture(error));
+            }
+        };
+
+        if let Err(error) = self.consumer.return_to_wake_listening() {
+            capture.stop();
+            self.consumer.router().runtime().record_runtime_error();
+            return Err(WakeCaptureOrchestratorError::Pcm(error));
+        }
+
+        self.receiver = receiver;
+        Ok(())
+    }
+
     /// Disable Wake Word without creating or retaining another microphone stream.
     ///
     /// The sole application capture owner is stopped, all pending handoff audio is discarded, and
@@ -255,6 +284,50 @@ mod tests {
         assert_eq!(snapshot.phase, WakeWordRuntimePhase::Disabled);
         assert_eq!(snapshot.ring_buffer_samples, 0);
         assert_eq!(snapshot.handoff_pre_roll_samples, 0);
+    }
+
+    #[test]
+    fn command_return_restarts_capture_through_same_owner() {
+        let mut capture = AudioCapture::new_mock();
+        let mut orchestrator =
+            WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
+        assert!(capture.is_active());
+
+        orchestrator
+            .consumer()
+            .router()
+            .runtime()
+            .suspend_for_talking()
+            .unwrap();
+        capture.stop();
+        assert!(!capture.is_active());
+
+        orchestrator
+            .resume_capture_after_command(&mut capture, None)
+            .unwrap();
+
+        assert!(capture.is_active());
+        assert_eq!(
+            capture.diagnostics().sample_rate_hz,
+            Some(V1_KWS_SAMPLE_RATE_HZ)
+        );
+        assert_eq!(
+            orchestrator
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase,
+            WakeWordRuntimePhase::Listening
+        );
+        assert_eq!(
+            orchestrator
+                .consumer_mut()
+                .router_mut()
+                .engine_mut()
+                .reset_count,
+            1
+        );
     }
 
     #[tokio::test]
