@@ -81,6 +81,25 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         orchestrator.resume_capture_after_command(&mut capture, device_name)
     }
 
+    /// Resolve a cancelled command interaction against the latest Wake-enabled setting.
+    ///
+    /// When Wake remains enabled, ownership returns to Listening through the same shared capture
+    /// owner. If the user disabled Wake during the interaction, cancellation tears down Wake state
+    /// and leaves that shared capture owner idle for manual listen instead of accidentally
+    /// reopening the microphone.
+    pub(crate) async fn cancel_command_interaction(
+        &self,
+        wake_word_enabled: bool,
+        device_name: Option<String>,
+    ) -> Result<(), WakeCaptureOrchestratorError> {
+        if wake_word_enabled {
+            self.return_to_wake_listening(device_name).await
+        } else {
+            self.disable().await;
+            Ok(())
+        }
+    }
+
     pub(crate) async fn restart_wake(
         &self,
         device_name: Option<String>,
@@ -155,6 +174,20 @@ mod tests {
         WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(runtime, TestEngine::default()))
     }
 
+    async fn enter_command_interaction(owner: &AuthoritativeWakeCaptureOwner<TestEngine>) {
+        {
+            let wake = owner.wake.lock().await;
+            wake.as_ref()
+                .unwrap()
+                .consumer()
+                .router()
+                .runtime()
+                .suspend_for_talking()
+                .unwrap();
+        }
+        assert!(owner.transfer_to_command_asr().await.unwrap().is_none());
+    }
+
     #[tokio::test]
     async fn wake_start_and_disable_use_exact_shared_app_capture_owner() {
         let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
@@ -188,18 +221,7 @@ mod tests {
         owner.start_wake(None, consumer()).await.unwrap();
         assert!(app_capture.lock().is_active());
 
-        {
-            let wake = owner.wake.lock().await;
-            wake.as_ref()
-                .unwrap()
-                .consumer()
-                .router()
-                .runtime()
-                .suspend_for_talking()
-                .unwrap();
-        }
-
-        assert!(owner.transfer_to_command_asr().await.unwrap().is_none());
+        enter_command_interaction(&owner).await;
         assert!(!app_capture.lock().is_active());
 
         owner.return_to_wake_listening(None).await.unwrap();
@@ -217,6 +239,54 @@ mod tests {
                 .phase
         };
         assert_eq!(phase, WakeWordRuntimePhase::Listening);
+    }
+
+    #[tokio::test]
+    async fn cancellation_with_wake_enabled_returns_to_same_shared_capture_owner() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        owner.start_wake(None, consumer()).await.unwrap();
+        enter_command_interaction(&owner).await;
+        assert!(!app_capture.lock().is_active());
+
+        owner.cancel_command_interaction(true, None).await.unwrap();
+
+        assert!(owner.shares_capture_with(&app_capture));
+        assert!(app_capture.lock().is_active());
+        let phase = {
+            let wake = owner.wake.lock().await;
+            wake.as_ref()
+                .unwrap()
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase
+        };
+        assert_eq!(phase, WakeWordRuntimePhase::Listening);
+    }
+
+    #[tokio::test]
+    async fn cancellation_after_wake_disable_releases_capture_for_manual_listen() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        owner.start_wake(None, consumer()).await.unwrap();
+        enter_command_interaction(&owner).await;
+        assert!(!app_capture.lock().is_active());
+
+        owner.cancel_command_interaction(false, None).await.unwrap();
+
+        assert!(owner.shares_capture_with(&app_capture));
+        assert!(!app_capture.lock().is_active());
+        assert!(owner.wake.lock().await.is_none());
+
+        let (manual_pcm_tx, _manual_pcm_rx) = tokio::sync::mpsc::channel(1);
+        app_capture
+            .lock()
+            .start(None, V1_KWS_SAMPLE_RATE_HZ, manual_pcm_tx, None)
+            .unwrap();
+        assert!(app_capture.lock().is_active());
+        app_capture.lock().stop();
     }
 
     #[tokio::test]
