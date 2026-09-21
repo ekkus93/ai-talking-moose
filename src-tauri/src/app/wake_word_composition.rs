@@ -181,6 +181,57 @@ mod tests {
     }
 
     #[test]
+    fn all_terminal_tts_outcomes_resume_through_same_enabled_policy() {
+        for outcome in ["success", "cancellation", "recoverable_failure"] {
+            let owner = enabled_owner();
+            assert!(owner.manager().append_listening_pcm(&[10, 11, 12]));
+            owner.suspend_for_talking().unwrap();
+
+            owner
+                .resume_after_interaction(true)
+                .unwrap_or_else(|error| panic!("{outcome} should resume Wake Word: {error}"));
+
+            let resumed = owner.snapshot(Instant::now());
+            assert_eq!(resumed.phase, WakeWordRuntimePhase::Listening, "{outcome}");
+            assert_eq!(resumed.ring_buffer_samples, 0, "{outcome}");
+            assert_eq!(resumed.handoff_pre_roll_samples, 0, "{outcome}");
+        }
+    }
+
+    #[test]
+    fn repeated_terminal_resolution_does_not_leave_runtime_suspended() {
+        let owner = enabled_owner();
+
+        for _ in 0..3 {
+            owner.suspend_for_talking().unwrap();
+            assert_eq!(owner.phase(), WakeWordRuntimePhase::SuspendedTalking);
+            owner.resume_after_interaction(true).unwrap();
+            assert_eq!(owner.phase(), WakeWordRuntimePhase::Listening);
+        }
+    }
+
+    #[test]
+    fn disabled_during_trigger_or_talking_clears_audio_and_stays_disabled() {
+        let owner = enabled_owner();
+        assert!(owner.manager().append_listening_pcm(&[21, 22, 23]));
+        assert!(owner.manager().accept_trigger(Instant::now()).unwrap());
+        assert!(owner.snapshot(Instant::now()).handoff_pre_roll_samples > 0);
+
+        owner.resume_after_interaction(false).unwrap();
+
+        let disabled_after_trigger = owner.snapshot(Instant::now());
+        assert_eq!(disabled_after_trigger.phase, WakeWordRuntimePhase::Disabled);
+        assert_eq!(disabled_after_trigger.ring_buffer_samples, 0);
+        assert_eq!(disabled_after_trigger.handoff_pre_roll_samples, 0);
+
+        owner.apply_enabled_setting(true).unwrap();
+        owner.mark_loaded().unwrap();
+        owner.suspend_for_talking().unwrap();
+        owner.resume_after_interaction(false).unwrap();
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
     fn terminal_interaction_starts_loading_when_wake_was_enabled_while_disabled() {
         let owner = WakeWordApplicationRuntime::from_settings(&AppSettings::default()).unwrap();
         assert_eq!(owner.phase(), WakeWordRuntimePhase::Disabled);
