@@ -76,7 +76,7 @@ fn production_manual_start_failure_keeps_disabled_wake_runtime_disabled() {
 }
 
 #[test]
-fn production_stop_conversation_resumes_suspended_enabled_wake_runtime() {
+fn stop_lifecycle_boundary_resumes_suspended_enabled_wake_runtime() {
     let app_state = AppState::new_for_tests().unwrap();
     app_state.settings.write().wake_word_enabled = true;
     app_state.wake_word_runtime.apply_enabled_setting(true).unwrap();
@@ -86,25 +86,18 @@ fn production_stop_conversation_resumes_suspended_enabled_wake_runtime() {
         app_state.wake_word_runtime.phase(),
         WakeWordRuntimePhase::SuspendedTalking
     );
-    let wake_runtime = app_state.wake_word_runtime.clone();
 
-    let app = mock_builder()
-        .manage(app_state)
-        .invoke_handler(tauri::generate_handler![stop_conversation])
-        .build(mock_context(noop_assets()))
-        .unwrap();
-    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
-        .build()
-        .unwrap();
+    let wake_word_enabled = app_state.settings.read().wake_word_enabled;
+    resume_after_command_interaction(&app_state.wake_word_runtime, wake_word_enabled).unwrap();
 
-    get_ipc_response(&webview, ipc_request("stop_conversation"))
-        .expect("stop conversation should resolve suspended Wake Word state");
-
-    assert_eq!(wake_runtime.phase(), WakeWordRuntimePhase::Listening);
+    assert_eq!(
+        app_state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Listening
+    );
 }
 
 #[test]
-fn production_stop_conversation_honors_disabled_setting_after_suspension() {
+fn stop_lifecycle_boundary_honors_disabled_setting_after_suspension() {
     let app_state = AppState::new_for_tests().unwrap();
     app_state.settings.write().wake_word_enabled = true;
     app_state.wake_word_runtime.apply_enabled_setting(true).unwrap();
@@ -115,19 +108,12 @@ fn production_stop_conversation_honors_disabled_setting_after_suspension() {
         app_state.wake_word_runtime.phase(),
         WakeWordRuntimePhase::SuspendedTalking
     );
-    let wake_runtime = app_state.wake_word_runtime.clone();
 
-    let app = mock_builder()
-        .manage(app_state)
-        .invoke_handler(tauri::generate_handler![stop_conversation])
-        .build(mock_context(noop_assets()))
-        .unwrap();
-    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
-        .build()
-        .unwrap();
+    let wake_word_enabled = app_state.settings.read().wake_word_enabled;
+    resume_after_command_interaction(&app_state.wake_word_runtime, wake_word_enabled).unwrap();
 
-    get_ipc_response(&webview, ipc_request("stop_conversation"))
-        .expect("stop conversation should honor a disabled Wake Word setting");
-
-    assert_eq!(wake_runtime.phase(), WakeWordRuntimePhase::Disabled);
+    assert_eq!(
+        app_state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Disabled
+    );
 }

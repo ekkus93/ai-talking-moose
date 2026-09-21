@@ -244,9 +244,9 @@ pub async fn start_conversation<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn stop_conversation<R: Runtime>(
+pub async fn stop_conversation(
     state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     state.record_user_interaction();
     state
