@@ -116,6 +116,24 @@ mod tests {
     }
 
     #[test]
+    fn shutting_down_wake_does_not_claim_or_restart_after_command_completion() {
+        let runtime = listening_runtime();
+        runtime.begin_shutdown();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::ShuttingDown);
+
+        assert!(!suspend_for_command_interaction(&runtime).unwrap());
+        let error = complete_command_interaction(
+            &runtime,
+            true,
+            CommandInteractionTerminalOutcome::RecoverableFailure,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, "The Wake Word runtime is shutting down.");
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::ShuttingDown);
+    }
+
+    #[test]
     fn wake_error_does_not_block_manual_command_guard() {
         let runtime = listening_runtime();
         runtime.record_runtime_error();
