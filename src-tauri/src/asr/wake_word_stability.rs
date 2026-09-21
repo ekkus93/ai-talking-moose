@@ -126,6 +126,36 @@ fn disabling_during_talking_prevents_unintended_resume() {
 }
 
 #[test]
+fn repeated_runtime_error_recovery_cycles_clear_audio_and_reload_cleanly() {
+    let manager = WakeWordRuntimeManager::new();
+
+    for cycle in 0..128 {
+        manager.begin_enable().unwrap();
+        manager.mark_loaded().unwrap();
+        let sample = i16::try_from(cycle).unwrap_or(i16::MAX);
+        assert!(manager.append_listening_pcm(&[sample, sample.saturating_add(1)]));
+
+        manager.record_runtime_error();
+        let errored = manager.snapshot(Instant::now());
+        assert_eq!(errored.phase, WakeWordRuntimePhase::Error);
+        assert_eq!(errored.ring_buffer_samples, 0);
+        assert_eq!(errored.handoff_pre_roll_samples, 0);
+
+        manager.begin_enable().unwrap();
+        let loading = manager.snapshot(Instant::now());
+        assert_eq!(loading.phase, WakeWordRuntimePhase::Loading);
+        assert_eq!(loading.ring_buffer_samples, 0);
+        assert_eq!(loading.handoff_pre_roll_samples, 0);
+
+        manager.mark_loaded().unwrap();
+        let listening = manager.snapshot(Instant::now());
+        assert_eq!(listening.phase, WakeWordRuntimePhase::Listening);
+        assert_eq!(listening.ring_buffer_samples, 0);
+        assert_eq!(listening.handoff_pre_roll_samples, 0);
+    }
+}
+
+#[test]
 fn shutdown_is_clean_from_listening_and_triggered_handoff() {
     let listening = WakeWordRuntimeManager::new();
     listening.begin_enable().unwrap();
