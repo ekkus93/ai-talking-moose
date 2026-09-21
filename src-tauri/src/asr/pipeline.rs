@@ -142,6 +142,8 @@ impl LocalAsrPipeline {
     /// pre-roll plus post-trigger live PCM before microphone ownership moves to
     /// `start_capture`. This preserves chronological ordering without acoustic
     /// wake-phrase trimming or a second inference path.
+    // WWR-310 lands the ingress seam before the production orchestrator calls it.
+    #[allow(dead_code)]
     pub(crate) fn prime_wake_handoff(
         &self,
         handoff: WakeCommandHandoffAudio,
