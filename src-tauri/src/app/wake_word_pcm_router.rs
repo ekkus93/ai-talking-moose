@@ -323,7 +323,10 @@ mod tests {
         let audio = router.transfer_handoff_audio_to_asr().unwrap().unwrap();
         assert_eq!(audio.sample_rate_hz(), V1_KWS_SAMPLE_RATE_HZ);
         assert_eq!(audio.samples_i16(), &[11, 12, 13, 14]);
-        assert_eq!(audio.to_pcm16_le_bytes(), vec![11, 0, 12, 0, 13, 0, 14, 0]);
+        assert_eq!(
+            audio.to_pcm16_le_bytes(),
+            vec![11, 0, 12, 0, 13, 0, 14, 0]
+        );
         assert!(router.transfer_handoff_audio_to_asr().unwrap().is_none());
     }
 
@@ -370,7 +373,10 @@ mod tests {
         );
         assert_eq!(
             router.engine_mut().frames,
-            vec![wake_phrase_head.to_vec(), wake_phrase_tail_and_trigger.to_vec()]
+            vec![
+                wake_phrase_head.to_vec(),
+                wake_phrase_tail_and_trigger.to_vec()
+            ]
         );
     }
 
@@ -384,7 +390,9 @@ mod tests {
         let mut router = CanonicalWakePcmRouter::new(runtime, engine);
         let now = Instant::now();
 
-        let first = router.route(V1_KWS_SAMPLE_RATE_HZ, &[200, 201], now).unwrap();
+        let first = router
+            .route(V1_KWS_SAMPLE_RATE_HZ, &[200, 201], now)
+            .unwrap();
         assert!(first.trigger_accepted);
         router.engine_mut().detect_next = true;
 
