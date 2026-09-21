@@ -323,10 +323,7 @@ mod tests {
         let audio = router.transfer_handoff_audio_to_asr().unwrap().unwrap();
         assert_eq!(audio.sample_rate_hz(), V1_KWS_SAMPLE_RATE_HZ);
         assert_eq!(audio.samples_i16(), &[11, 12, 13, 14]);
-        assert_eq!(
-            audio.to_pcm16_le_bytes(),
-            vec![11, 0, 12, 0, 13, 0, 14, 0]
-        );
+        assert_eq!(audio.to_pcm16_le_bytes(), vec![11, 0, 12, 0, 13, 0, 14, 0]);
         assert!(router.transfer_handoff_audio_to_asr().unwrap().is_none());
     }
 
