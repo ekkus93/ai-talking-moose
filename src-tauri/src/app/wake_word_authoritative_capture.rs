@@ -6,26 +6,25 @@ use super::wake_word_capture_orchestrator::{
 use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 use super::wake_word_pcm_router::WakePcmRouteOutcome;
 use crate::audio::capture::AudioCapture;
-use parking_lot::Mutex;
 use std::time::Instant;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::Mutex;
 
 /// Serializes the application's one authoritative microphone owner with its Wake receive path.
 ///
 /// Manual conversation and Wake Word both borrow the same `AudioCapture`; this owner never
-/// constructs a second capture object. Keeping the orchestrator behind an async-aware mutex makes
-/// the capture stream and its receiver one composition unit and provides an explicit
-/// ownership-transfer boundary for command ASR.
+/// constructs a second capture object. Both the physical owner and the receive-side orchestrator
+/// use async-aware mutexes so ownership transitions remain serialized without blocking a Tokio
+/// worker across an await point.
 pub(crate) struct AuthoritativeWakeCaptureOwner<E: SherpaKwsEngine> {
     capture: Mutex<AudioCapture>,
-    wake: AsyncMutex<Option<WakeCaptureOrchestrator<E>>>,
+    wake: Mutex<Option<WakeCaptureOrchestrator<E>>>,
 }
 
 impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
     pub(crate) fn new(capture: AudioCapture) -> Self {
         Self {
             capture: Mutex::new(capture),
-            wake: AsyncMutex::new(None),
+            wake: Mutex::new(None),
         }
     }
 
@@ -34,7 +33,7 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         device_name: Option<String>,
         consumer: WakeCapturePcmConsumer<E>,
     ) -> Result<(), WakeCaptureOrchestratorError> {
-        let mut capture = self.capture.lock();
+        let mut capture = self.capture.lock().await;
         let orchestrator = WakeCaptureOrchestrator::start(&mut capture, device_name, consumer)?;
         *self.wake.lock().await = Some(orchestrator);
         Ok(())
@@ -44,9 +43,6 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         &self,
         now: Instant,
     ) -> Result<WakePcmRouteOutcome, WakeCaptureOrchestratorError> {
-        // The receiver is independent of the CPAL stream handle after start, so routing does not
-        // hold the physical-owner lock while awaiting a chunk. The async Wake lock serializes
-        // receiver consumption without blocking a Tokio worker thread.
         let mut wake = self.wake.lock().await;
         let orchestrator = wake
             .as_mut()
@@ -61,8 +57,9 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
     pub(crate) async fn transfer_to_command_asr(
         &self,
     ) -> Result<Option<WakeCommandHandoffAudio>, WakeCaptureOrchestratorError> {
-        let mut capture = self.capture.lock();
+        let mut capture = self.capture.lock().await;
         capture.stop();
+        drop(capture);
         let mut wake = self.wake.lock().await;
         let orchestrator = wake
             .as_mut()
@@ -74,7 +71,7 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
         &self,
         device_name: Option<String>,
     ) -> Result<(), WakeCaptureOrchestratorError> {
-        let mut capture = self.capture.lock();
+        let mut capture = self.capture.lock().await;
         let mut wake = self.wake.lock().await;
         let orchestrator = wake
             .as_mut()
@@ -83,7 +80,7 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
     }
 
     pub(crate) async fn disable(&self) {
-        let mut capture = self.capture.lock();
+        let mut capture = self.capture.lock().await;
         let mut wake = self.wake.lock().await;
         if let Some(orchestrator) = wake.as_mut() {
             orchestrator.disable(&mut capture);
@@ -94,8 +91,8 @@ impl<E: SherpaKwsEngine> AuthoritativeWakeCaptureOwner<E> {
     }
 
     #[cfg(test)]
-    fn capture_is_active(&self) -> bool {
-        self.capture.lock().is_active()
+    async fn capture_is_active(&self) -> bool {
+        self.capture.lock().await.is_active()
     }
 }
 
@@ -147,10 +144,10 @@ mod tests {
     async fn wake_start_and_disable_share_one_physical_capture_owner() {
         let owner = AuthoritativeWakeCaptureOwner::new(AudioCapture::new_mock());
         owner.start_wake(None, consumer()).await.unwrap();
-        assert!(owner.capture_is_active());
+        assert!(owner.capture_is_active().await);
 
         owner.disable().await;
-        assert!(!owner.capture_is_active());
+        assert!(!owner.capture_is_active().await);
     }
 
     #[tokio::test]
@@ -159,8 +156,8 @@ mod tests {
         owner.start_wake(None, consumer()).await.unwrap();
         owner.start_wake(None, consumer()).await.unwrap();
 
-        assert!(owner.capture_is_active());
+        assert!(owner.capture_is_active().await);
         owner.disable().await;
-        assert!(!owner.capture_is_active());
+        assert!(!owner.capture_is_active().await);
     }
 }
