@@ -196,9 +196,17 @@ mod tests {
             WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
 
         assert!(capture.is_active());
-        assert_eq!(capture.diagnostics().sample_rate_hz, Some(V1_KWS_SAMPLE_RATE_HZ));
         assert_eq!(
-            orchestrator.consumer().router().runtime().snapshot(Instant::now()).ring_buffer_samples,
+            capture.diagnostics().sample_rate_hz,
+            Some(V1_KWS_SAMPLE_RATE_HZ)
+        );
+        assert_eq!(
+            orchestrator
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .ring_buffer_samples,
             0
         );
     }
@@ -206,12 +214,17 @@ mod tests {
     #[test]
     fn replacing_orchestrator_reuses_same_capture_owner_instead_of_multiplying_owners() {
         let mut capture = AudioCapture::new_mock();
-        let first = WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
+        let first =
+            WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
         assert!(capture.is_active());
 
-        let second = WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
+        let second =
+            WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
         assert!(capture.is_active());
-        assert_eq!(capture.diagnostics().sample_rate_hz, Some(V1_KWS_SAMPLE_RATE_HZ));
+        assert_eq!(
+            capture.diagnostics().sample_rate_hz,
+            Some(V1_KWS_SAMPLE_RATE_HZ)
+        );
 
         drop(first);
         drop(second);
@@ -222,14 +235,23 @@ mod tests {
     #[test]
     fn disable_stops_single_capture_owner_and_clears_wake_state() {
         let mut capture = AudioCapture::new_mock();
-        let mut orchestrator = WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
+        let mut orchestrator =
+            WakeCaptureOrchestrator::start(&mut capture, None, listening_consumer()).unwrap();
         assert!(capture.is_active());
-        assert!(orchestrator.consumer().router().runtime().append_listening_pcm(&[1, 2, 3]));
+        assert!(orchestrator
+            .consumer()
+            .router()
+            .runtime()
+            .append_listening_pcm(&[1, 2, 3]));
 
         orchestrator.disable(&mut capture);
 
         assert!(!capture.is_active());
-        let snapshot = orchestrator.consumer().router().runtime().snapshot(Instant::now());
+        let snapshot = orchestrator
+            .consumer()
+            .router()
+            .runtime()
+            .snapshot(Instant::now());
         assert_eq!(snapshot.phase, WakeWordRuntimePhase::Disabled);
         assert_eq!(snapshot.ring_buffer_samples, 0);
         assert_eq!(snapshot.handoff_pre_roll_samples, 0);
@@ -239,9 +261,17 @@ mod tests {
     async fn closed_capture_queue_fails_wake_runtime_closed_without_reopening_capture() {
         let (sender, receiver) = mpsc::channel(1);
         drop(sender);
-        let mut orchestrator = WakeCaptureOrchestrator { receiver, consumer: listening_consumer() };
+        let mut orchestrator = WakeCaptureOrchestrator {
+            receiver,
+            consumer: listening_consumer(),
+        };
         assert_eq!(
-            orchestrator.consumer().router().runtime().snapshot(Instant::now()).phase,
+            orchestrator
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase,
             WakeWordRuntimePhase::Listening
         );
 
@@ -250,7 +280,11 @@ mod tests {
             Err(WakeCaptureOrchestratorError::CaptureClosed)
         ));
 
-        let snapshot = orchestrator.consumer().router().runtime().snapshot(Instant::now());
+        let snapshot = orchestrator
+            .consumer()
+            .router()
+            .runtime()
+            .snapshot(Instant::now());
         assert_eq!(snapshot.phase, WakeWordRuntimePhase::Error);
         assert_eq!(snapshot.ring_buffer_samples, 0);
         assert_eq!(snapshot.handoff_pre_roll_samples, 0);
@@ -260,25 +294,50 @@ mod tests {
     async fn reconnect_reuses_same_capture_owner_and_returns_error_runtime_to_listening() {
         let (sender, receiver) = mpsc::channel(1);
         drop(sender);
-        let mut orchestrator = WakeCaptureOrchestrator { receiver, consumer: listening_consumer() };
+        let mut orchestrator = WakeCaptureOrchestrator {
+            receiver,
+            consumer: listening_consumer(),
+        };
         assert!(matches!(
             orchestrator.route_next(Instant::now()).await,
             Err(WakeCaptureOrchestratorError::CaptureClosed)
         ));
         assert_eq!(
-            orchestrator.consumer().router().runtime().snapshot(Instant::now()).phase,
+            orchestrator
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase,
             WakeWordRuntimePhase::Error
         );
 
         let mut capture = AudioCapture::new_mock();
-        orchestrator.restart_after_capture_error(&mut capture, None).unwrap();
+        orchestrator
+            .restart_after_capture_error(&mut capture, None)
+            .unwrap();
 
         assert!(capture.is_active());
-        assert_eq!(capture.diagnostics().sample_rate_hz, Some(V1_KWS_SAMPLE_RATE_HZ));
         assert_eq!(
-            orchestrator.consumer().router().runtime().snapshot(Instant::now()).phase,
+            capture.diagnostics().sample_rate_hz,
+            Some(V1_KWS_SAMPLE_RATE_HZ)
+        );
+        assert_eq!(
+            orchestrator
+                .consumer()
+                .router()
+                .runtime()
+                .snapshot(Instant::now())
+                .phase,
             WakeWordRuntimePhase::Listening
         );
-        assert_eq!(orchestrator.consumer_mut().router_mut().engine_mut().reset_count, 1);
+        assert_eq!(
+            orchestrator
+                .consumer_mut()
+                .router_mut()
+                .engine_mut()
+                .reset_count,
+            1
+        );
     }
 }
