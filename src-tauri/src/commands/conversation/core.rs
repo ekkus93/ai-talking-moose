@@ -42,12 +42,7 @@ fn build_typed_text_system_instruction(
     snapshot: &TextRequestSettingsSnapshot,
 ) -> String {
     let memories = model_prompt_memories(state, snapshot.settings.memory_enabled);
-    PromptBuilder::build_system_instruction(
-        &snapshot.character_config,
-        &memories,
-        None,
-        false,
-    )
+    PromptBuilder::build_system_instruction(&snapshot.character_config, &memories, None, false)
 }
 
 async fn generate_typed_text_with_snapshot(
@@ -69,64 +64,32 @@ async fn generate_typed_text_with_snapshot(
 
 fn normalize_text_message(message: String) -> Result<Option<String>, String> {
     let trimmed = message.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
+    if trimmed.is_empty() { return Ok(None); }
     if trimmed.chars().count() > MAX_TEXT_MESSAGE_CHARS {
-        return Err(format!(
-            "text message exceeds the {MAX_TEXT_MESSAGE_CHARS}-character limit"
-        ));
+        return Err(format!("text message exceeds the {MAX_TEXT_MESSAGE_CHARS}-character limit"));
     }
     Ok(Some(trimmed.to_string()))
 }
 
-fn persist_transcript_if_enabled(
-    db: &Database,
-    enabled: bool,
-    session_id: &str,
-    role: &str,
-    text: &str,
-) -> Result<(), String> {
-    if !enabled {
-        return Ok(());
-    }
-
-    db.add_transcript(session_id, role, text)
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+fn persist_transcript_if_enabled(db: &Database, enabled: bool, session_id: &str, role: &str, text: &str) -> Result<(), String> {
+    if !enabled { return Ok(()); }
+    db.add_transcript(session_id, role, text).map(|_| ()).map_err(|error| error.to_string())
 }
 
-fn is_final_transcript_role(role: &str) -> bool {
-    matches!(role, "user" | "moose")
-}
+fn is_final_transcript_role(role: &str) -> bool { matches!(role, "user" | "moose") }
 
-fn prepare_character_for_conversation<R: Runtime>(
-    state: &AppState,
-    app: &tauri::AppHandle<R>,
-) -> Result<(), String> {
+fn prepare_character_for_conversation<R: Runtime>(state: &AppState, app: &tauri::AppHandle<R>) -> Result<(), String> {
     let current = *state.character_state.read();
-    if current.can_transition_to(&CharacterState::Listening) {
-        return Ok(());
-    }
+    if current.can_transition_to(&CharacterState::Listening) { return Ok(()); }
     transition_and_emit(&state.character_state, app, CharacterState::Idle)
 }
 
 #[tauri::command]
-pub async fn start_conversation<R: Runtime>(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
-) -> Result<String, String> {
+pub async fn start_conversation<R: Runtime>(state: State<'_, AppState>, app: tauri::AppHandle<R>) -> Result<String, String> {
     state.record_user_interaction();
-    state
-        .standalone_speech
-        .cancel(state.audio_playback.as_ref());
+    state.standalone_speech.cancel(state.audio_playback.as_ref());
     clear_speech_bubble(&app);
-    if *state.is_muted.read() {
-        return Err("Moose is currently muted".to_string());
-    }
-
-    // Prevent a settings update from committing a new ASR/provider/device selection while this
-    // start request is still constructing or activating the old graph.
+    if *state.is_muted.read() { return Err("Moose is currently muted".to_string()); }
     let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
     let wake_runtime = state.wake_word_runtime.clone();
@@ -135,19 +98,8 @@ pub async fn start_conversation<R: Runtime>(
     prepare_character_for_conversation(state.inner(), &app)?;
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
-
-    let system_instruction =
-        build_conversation_system_instruction(state.inner(), settings.memory_enabled);
-
-    let config = LiveSessionConfig {
-        model: settings.live_model.clone(),
-        voice_name: Some(settings.live_voice.clone()),
-        system_instruction: Some(system_instruction),
-        sample_rate_in: 16_000,
-        sample_rate_out: 24_000,
-        tools: tool_router.get_declarations(),
-    };
-
+    let system_instruction = build_conversation_system_instruction(state.inner(), settings.memory_enabled);
+    let config = LiveSessionConfig { model: settings.live_model.clone(), voice_name: Some(settings.live_voice.clone()), system_instruction: Some(system_instruction), sample_rate_in: 16_000, sample_rate_out: 24_000, tools: tool_router.get_declarations() };
     let character_state = state.character_state.clone();
     let app_state = app.clone();
     let app_lifecycle = app.clone();
@@ -159,258 +111,69 @@ pub async fn start_conversation<R: Runtime>(
     let app_level = app.clone();
     let db_ref = state.db.clone();
     let save_transcripts = settings.save_transcripts;
-
-    let request = ConversationStartRequest {
-        provider,
-        config,
-        asr_mode: settings.asr_mode,
-        moonshine_installer: Some(state.moonshine_installer.clone()),
-        capture: state.audio_capture.clone(),
-        input_device: settings.input_device.clone(),
-        playback: state.audio_playback.clone(),
-        output_device: settings.output_device.clone(),
-        muted: state.is_muted.clone(),
-        tool_router,
-        callbacks: ConversationCallbacks::new(
-            move |new_state: CharacterState| {
-                if let Err(error_value) = transition_character_state(&character_state, new_state) {
-                    warn!(error = %error_value, ?new_state, "Rejected conversation character transition");
-                    return;
-                }
-                let _ = app_state.emit("moose://state", new_state);
-            },
-            move |lifecycle: ConversationLifecycle| {
-                let _ = app_lifecycle.emit("moose://conversation/lifecycle", lifecycle);
-                if wake_guarded
-                    && matches!(
-                        lifecycle,
-                        ConversationLifecycle::Idle | ConversationLifecycle::Failed
-                    )
-                    && wake_runtime_for_lifecycle.phase()
-                        == WakeWordRuntimePhase::SuspendedTalking
-                {
-                    let wake_word_enabled = settings_for_lifecycle.read().wake_word_enabled;
-                    if let Err(error_value) = resume_after_command_interaction(
-                        &wake_runtime_for_lifecycle,
-                        wake_word_enabled,
-                    ) {
-                        warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
-                    }
-                }
-            },
-            move |session_id: String, role: String, text: String| {
-                let _ = app_transcript.emit(&format!("moose://transcript/{role}"), &text);
-                if is_final_transcript_role(&role) {
-                    if let Err(error_value) = persist_transcript_if_enabled(
-                        db_ref.as_ref(),
-                        save_transcripts,
-                        &session_id,
-                        &role,
-                        &text,
-                    ) {
-                        warn!(error = %error_value, "Failed to persist retained transcript");
-                    }
-                }
-            },
-            move |speech_text: String| {
-                let _ = app_bubble.emit("moose://speech-bubble", &speech_text);
-            },
-            move |level: f32| {
-                let _ = app_level.emit("moose://audio/input-level", level);
-            },
-            move |provider_error| {
-                let _ = app_provider_error.emit("moose://conversation/error", provider_error);
-            },
-        ),
-    };
-
-    let session_id = match state.conversation_mgr.start_session(request).await {
-        Ok(session_id) => session_id,
-        Err(error_value) => {
-            if wake_guarded && wake_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
-                let wake_word_enabled = state.settings.read().wake_word_enabled;
-                if let Err(resume_error) =
-                    resume_after_command_interaction(&wake_runtime, wake_word_enabled)
-                {
-                    warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
-                }
-            }
-            return Err(error_value);
-        }
-    };
-
+    let request = ConversationStartRequest { provider, config, asr_mode: settings.asr_mode, moonshine_installer: Some(state.moonshine_installer.clone()), capture: state.audio_capture.clone(), input_device: settings.input_device.clone(), playback: state.audio_playback.clone(), output_device: settings.output_device.clone(), muted: state.is_muted.clone(), tool_router, callbacks: ConversationCallbacks::new(
+        move |new_state: CharacterState| { if let Err(error_value) = transition_character_state(&character_state, new_state) { warn!(error = %error_value, ?new_state, "Rejected conversation character transition"); return; } let _ = app_state.emit("moose://state", new_state); },
+        move |lifecycle: ConversationLifecycle| { let _ = app_lifecycle.emit("moose://conversation/lifecycle", lifecycle); if wake_guarded && matches!(lifecycle, ConversationLifecycle::Idle | ConversationLifecycle::Failed) && wake_runtime_for_lifecycle.phase() == WakeWordRuntimePhase::SuspendedTalking { let wake_word_enabled = settings_for_lifecycle.read().wake_word_enabled; if let Err(error_value) = resume_after_command_interaction(&wake_runtime_for_lifecycle, wake_word_enabled) { warn!(error = %error_value, "Failed to resolve Wake Word after command interaction"); } } },
+        move |session_id: String, role: String, text: String| { let _ = app_transcript.emit(&format!("moose://transcript/{role}"), &text); if is_final_transcript_role(&role) { if let Err(error_value) = persist_transcript_if_enabled(db_ref.as_ref(), save_transcripts, &session_id, &role, &text) { warn!(error = %error_value, "Failed to persist retained transcript"); } } },
+        move |speech_text: String| { let _ = app_bubble.emit("moose://speech-bubble", &speech_text); },
+        move |level: f32| { let _ = app_level.emit("moose://audio/input-level", level); },
+        move |provider_error| { let _ = app_provider_error.emit("moose://conversation/error", provider_error); },
+    ) };
+    let session_id = match state.conversation_mgr.start_session(request).await { Ok(session_id) => session_id, Err(error_value) => { if wake_guarded && wake_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking { let wake_word_enabled = state.settings.read().wake_word_enabled; if let Err(resume_error) = resume_after_command_interaction(&wake_runtime, wake_word_enabled) { warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure"); } } return Err(error_value); } };
     info!(session_id = %session_id, "Conversation session started");
     Ok(session_id)
 }
 
 #[tauri::command]
-pub async fn stop_conversation(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn stop_conversation(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     state.record_user_interaction();
-    state
-        .conversation_mgr
-        .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
-        .await;
-    if state.wake_word_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
-        let wake_word_enabled = state.settings.read().wake_word_enabled;
-        resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
-    }
-
+    state.conversation_mgr.stop_session(state.audio_capture.clone(), state.audio_playback.clone()).await;
+    if state.wake_word_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking { let wake_word_enabled = state.settings.read().wake_word_enabled; resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?; }
     state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Idle)
 }
 
 #[tauri::command]
-pub async fn barge_in<R: Runtime>(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
-) -> Result<(), String> {
+pub async fn barge_in<R: Runtime>(state: State<'_, AppState>, app: tauri::AppHandle<R>) -> Result<(), String> {
     state.record_user_interaction();
-    state
-        .standalone_speech
-        .cancel(state.audio_playback.as_ref());
+    state.standalone_speech.cancel(state.audio_playback.as_ref());
     clear_speech_bubble(&app);
-
     let conversation_active = state.conversation_mgr.is_active();
-    state
-        .conversation_mgr
-        .barge_in(state.audio_playback.clone())
-        .await?;
-
-    if *state.character_state.read() == CharacterState::Talking {
-        state.ambient_scheduler.claim_foreground_presentation();
-        let target = if conversation_active {
-            CharacterState::Interrupted
-        } else {
-            CharacterState::Idle
-        };
-        transition_and_emit(&state.character_state, &app, target)?;
-    }
+    state.conversation_mgr.barge_in(state.audio_playback.clone()).await?;
+    if *state.character_state.read() == CharacterState::Talking { state.ambient_scheduler.claim_foreground_presentation(); let target = if conversation_active { CharacterState::Interrupted } else { CharacterState::Idle }; transition_and_emit(&state.character_state, &app, target)?; }
     state.behavior_engine.lock().cooldowns.record_interruption();
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_conversation_lifecycle(
-    state: State<'_, AppState>,
-) -> Result<ConversationLifecycle, String> {
-    Ok(state.conversation_mgr.lifecycle())
-}
+pub fn get_conversation_lifecycle(state: State<'_, AppState>) -> Result<ConversationLifecycle, String> { Ok(state.conversation_mgr.lifecycle()) }
+#[tauri::command]
+pub async fn get_live_outbound_diagnostics(state: State<'_, AppState>) -> Result<Option<LiveOutboundDiagnostics>, String> { Ok(state.conversation_mgr.live_outbound_diagnostics().await) }
+#[tauri::command]
+pub fn get_memories(state: State<'_, AppState>) -> Result<Vec<MemoryRecord>, String> { state.memory.get_all_memories() }
+#[tauri::command]
+pub fn delete_memory(id: i64, state: State<'_, AppState>) -> Result<bool, String> { state.memory.forget(id) }
+#[tauri::command]
+pub fn forget_everything(state: State<'_, AppState>) -> Result<(), String> { state.memory.forget_everything()?; state.ambient_scheduler.interrupt(); state.behavior_engine.lock().cooldowns.clear_event_fingerprints(); crate::desktop::runtime::reset_observation_state(); Ok(()) }
+#[tauri::command]
+pub fn get_transcripts(limit: usize, state: State<'_, AppState>) -> Result<Vec<TranscriptRecord>, String> { state.db.get_transcripts(limit).map_err(|e| e.to_string()) }
 
 #[tauri::command]
-pub async fn get_live_outbound_diagnostics(
-    state: State<'_, AppState>,
-) -> Result<Option<LiveOutboundDiagnostics>, String> {
-    Ok(state.conversation_mgr.live_outbound_diagnostics().await)
-}
-
-#[tauri::command]
-pub fn get_memories(state: State<'_, AppState>) -> Result<Vec<MemoryRecord>, String> {
-    state.memory.get_all_memories()
-}
-
-#[tauri::command]
-pub fn delete_memory(id: i64, state: State<'_, AppState>) -> Result<bool, String> {
-    state.memory.forget(id)
-}
-
-#[tauri::command]
-pub fn forget_everything(state: State<'_, AppState>) -> Result<(), String> {
-    state.memory.forget_everything()?;
-    state.ambient_scheduler.interrupt();
-    state
-        .behavior_engine
-        .lock()
-        .cooldowns
-        .clear_event_fingerprints();
-    crate::desktop::runtime::reset_observation_state();
-    Ok(())
-}
-
-#[tauri::command]
-pub fn get_transcripts(
-    limit: usize,
-    state: State<'_, AppState>,
-) -> Result<Vec<TranscriptRecord>, String> {
-    state.db.get_transcripts(limit).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn send_text_message<R: Runtime>(
-    message: String,
-    state: State<'_, AppState>,
-    app: tauri::AppHandle<R>,
-) -> Result<String, String> {
-    let Some(msg_trimmed) = normalize_text_message(message)? else {
-        return Ok(String::new());
-    };
+pub async fn send_text_message<R: Runtime>(message: String, state: State<'_, AppState>, app: tauri::AppHandle<R>) -> Result<String, String> {
+    let Some(msg_trimmed) = normalize_text_message(message)? else { return Ok(String::new()); };
     state.record_user_interaction();
     let request_snapshot = state.capture_text_request_settings();
     let settings = &request_snapshot.settings;
-
     let _ = app.emit("moose://transcript/user", &msg_trimmed);
-    persist_transcript_if_enabled(
-        state.db.as_ref(),
-        settings.save_transcripts,
-        "debug_terminal",
-        "user",
-        &msg_trimmed,
-    )?;
-
+    persist_transcript_if_enabled(state.db.as_ref(), settings.save_transcripts, "debug_terminal", "user", &msg_trimmed)?;
     state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Thinking)?;
-
-    let text_res = match generate_typed_text_with_snapshot(
-        state.inner(),
-        &request_snapshot,
-        msg_trimmed,
-    )
-    .await
-    {
-        Ok(response) => response,
-        Err(error_value) => {
-            if *state.character_state.read() == CharacterState::Thinking {
-                transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
-            }
-            return Err(crate::ai::types::ProviderError::from_kind(error_value.kind).to_string());
-        }
-    };
-
+    let text_res = match generate_typed_text_with_snapshot(state.inner(), &request_snapshot, msg_trimmed).await { Ok(response) => response, Err(error_value) => { if *state.character_state.read() == CharacterState::Thinking { transition_and_emit(&state.character_state, &app, CharacterState::Idle)?; } return Err(crate::ai::types::ProviderError::from_kind(error_value.kind).to_string()); } };
     let reply = text_res.text;
     let _ = app.emit("moose://transcript/moose", &reply);
-    if let Err(error_value) = persist_transcript_if_enabled(
-        state.db.as_ref(),
-        settings.save_transcripts,
-        "debug_terminal",
-        "moose",
-        &reply,
-    ) {
-        if *state.character_state.read() == CharacterState::Thinking {
-            transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
-        }
-        return Err(error_value);
-    }
-
-    if *state.is_muted.read() {
-        if *state.character_state.read() == CharacterState::Thinking {
-            transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
-        }
-        return Ok(reply);
-    }
-
-    let playback = match invoke_standalone_speech(state.inner(), &app, &reply, None).await {
-        Ok(playback) => playback,
-        Err(error_value) => {
-            if *state.character_state.read() == CharacterState::Thinking {
-                transition_and_emit(&state.character_state, &app, CharacterState::Idle)?;
-            }
-            clear_speech_bubble(&app);
-            return Err(error_value);
-        }
-    };
+    if let Err(error_value) = persist_transcript_if_enabled(state.db.as_ref(), settings.save_transcripts, "debug_terminal", "moose", &reply) { if *state.character_state.read() == CharacterState::Thinking { transition_and_emit(&state.character_state, &app, CharacterState::Idle)?; } return Err(error_value); }
+    if *state.is_muted.read() { if *state.character_state.read() == CharacterState::Thinking { transition_and_emit(&state.character_state, &app, CharacterState::Idle)?; } return Ok(reply); }
+    let playback = match invoke_standalone_speech(state.inner(), &app, &reply, None).await { Ok(playback) => playback, Err(error_value) => { if *state.character_state.read() == CharacterState::Thinking { transition_and_emit(&state.character_state, &app, CharacterState::Idle)?; } clear_speech_bubble(&app); return Err(error_value); } };
     schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
-
     Ok(reply)
 }
