@@ -20,11 +20,20 @@ Policy:
 - Ordinary CI is required for every mergeable Wake Word change.
 - Ordinary CI alone is not final Wake Word V1 qualification.
 
-### Deterministic corpus manifest gate
+### Deterministic corpus manifest and contract gates
 
-Workflow: `.github/workflows/wake-word-corpus.yml`
+The Wake Word corpus contract is the Python companion to the Node manifest gate.
 
-Current check: `node scripts/check_wake_word_corpus_manifest.mjs`.
+Workflows:
+
+- `.github/workflows/wake-word-corpus.yml`
+- `.github/workflows/wake-word-corpus-contract.yml`
+
+Current checks:
+
+- `node scripts/check_wake_word_corpus_manifest.mjs`
+- `python scripts/validate_wake_word_corpus.py`
+- `PYTHONPATH=scripts python -m unittest scripts/test_validate_wake_word_corpus.py`
 
 Purpose:
 
@@ -33,11 +42,13 @@ Purpose:
 - require fixture provenance, redistributable license evidence, byte size, SHA-256, and expected detection outcome for committed fixtures
 - reject fixture paths outside `docs/fixtures/wake-word-v1`
 - keep recall/false-accept thresholds pending until real redistributable fixtures exist
+- keep the legacy Python corpus contract aligned with the active `docs/wake-word-corpus.json` schema
 
 Policy:
 
-- This gate must pass when its path filters select it.
+- These gates must pass when their path filters select them.
 - A skipped corpus gate is not evidence that real corpus acceptance passed.
+- Passing schema/contract gates do not mean the repository contains real audio fixtures or calibrated detection thresholds.
 
 ### Native packaging/architecture policy gate
 
@@ -106,6 +117,7 @@ Current check: `node scripts/check_wake_word_privacy_audit.mjs`.
 Purpose:
 
 - fail closed if Wake diagnostics gain raw PCM/transcript/credential/private-audio fields
+- scan production Wake Word Rust error/log surfaces for direct logging macros and sensitive outward-facing string literals
 - require sanitized runtime error behavior and path/token-like-secret sanitizer evidence
 - prevent filesystem-path serialization from the diagnostics module
 - require truthful privacy documentation and the corpus private-room-audio prohibition
@@ -166,7 +178,7 @@ The automated privacy source gate is implemented, but final WWR-900 still requir
 
 ## Specialized runners and hardware
 
-- Deterministic corpus, performance-policy, privacy-source, and documentation gates run on ordinary hosted CI and do not constitute real KWS acceptance.
+- Deterministic corpus schema/contract, performance-policy, privacy-source, and documentation gates run on ordinary hosted CI and do not constitute real KWS acceptance.
 - Native packaging policy runs on hosted Linux x86_64 and macOS arm64; it validates policy/tests rather than real KWS audio acceptance.
 - Deterministic lifecycle stability currently runs on hosted Linux CI and does not constitute a production audio soak.
 - Linux x86_64 real KWS acceptance requires a runner/environment capable of loading and executing the pinned Linux native runtime and real redistributable fixtures.
