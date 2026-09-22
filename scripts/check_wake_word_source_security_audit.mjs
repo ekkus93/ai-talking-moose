@@ -17,6 +17,7 @@ const router = read("src-tauri/src/app/wake_word_pcm_router.rs");
 const lifecycle = read("src-tauri/src/app/wake_word_command_lifecycle.rs");
 const activation = read("src-tauri/src/app/wake_word_command_activation.rs");
 const ingress = read("src-tauri/src/app/wake_word_command_asr_ingress.rs");
+const handoffAudio = read("src-tauri/src/app/wake_word_command_handoff.rs");
 const appModule = read("src-tauri/src/app/mod.rs");
 
 const managerDefinitions = [runtime, engine, composition, state, capture, router, lifecycle]
@@ -102,6 +103,20 @@ for (const [label, source] of [
   }
 }
 
+for (const [label, source] of [
+  ["Wake runtime", runtime.split("#[cfg(test)]")[0]],
+  ["Wake PCM router", router.split("#[cfg(test)]")[0]],
+  ["Wake command activation", productionActivation],
+  ["Wake command ASR ingress", productionIngress],
+  ["Wake command handoff audio", handoffAudio.split("#[cfg(test)]")[0]],
+]) {
+  for (const forbidden of ["File::create", "OpenOptions", "std::fs::write", "fs::write("]) {
+    if (source.includes(forbidden)) {
+      fail(`${label} can persist retained Wake PCM through ${forbidden}`);
+    }
+  }
+}
+
 requireText(engine, "verify_model_artifacts", "model identity verification");
 requireText(engine, "verify_runtime_artifacts", "runtime identity verification");
 requireText(engine, "NativeArchitecture::ElfX86_64", "Linux native architecture verification");
@@ -134,5 +149,5 @@ requireText(
   "authoritative Wake capture module registration",
 );
 console.log(
-  "Wake Word source/security audit passed: ownership, capture, lifecycle, command activation/ASR ingress, router handoff/debounce, artifact, architecture, and offline/provider-separation invariants are present.",
+  "Wake Word source/security audit passed: ownership, capture, lifecycle, memory-only PCM retention, command activation/ASR ingress, router handoff/debounce, artifact, architecture, and offline/provider-separation invariants are present.",
 );
