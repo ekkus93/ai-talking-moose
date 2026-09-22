@@ -29,6 +29,7 @@ pub(crate) fn capture_owner_from_app_state<E: SherpaKwsEngine>(
     AuthoritativeWakeCaptureOwner::from_shared_capture(state.audio_capture.clone())
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum WakeWordStartupError {
     Runtime(WakeWordRuntimeError),
@@ -76,7 +77,10 @@ pub(crate) async fn start_native_wake_from_app_state(
         .map_err(WakeWordStartupError::Runtime)?;
 
     let owner = capture_owner_from_app_state::<NativeKwsSession>(state);
-    if let Err(error) = owner.start_wake(settings.input_device.clone(), consumer).await {
+    if let Err(error) = owner
+        .start_wake(settings.input_device.clone(), consumer)
+        .await
+    {
         state.wake_word_runtime.record_capture_error();
         return Err(WakeWordStartupError::Capture(error));
     }
@@ -172,10 +176,15 @@ mod tests {
             runtime_dir: temp.path().join("missing-runtime"),
         };
 
-        let owner = start_native_wake_from_app_state(&state, paths).await.unwrap();
+        let owner = start_native_wake_from_app_state(&state, paths)
+            .await
+            .unwrap();
 
         assert!(owner.is_none());
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
         assert!(!state.audio_capture.lock().is_active());
     }
 
@@ -189,11 +198,8 @@ mod tests {
             runtime_dir: temp.path().join("missing-runtime"),
         };
 
-        let error = start_native_wake_from_app_state(&state, paths)
-            .await
-            .unwrap_err();
-
-        assert!(matches!(error, WakeWordStartupError::Native(_)));
+        let result = start_native_wake_from_app_state(&state, paths).await;
+        assert!(matches!(result, Err(WakeWordStartupError::Native(_))));
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Error);
         assert!(!state.audio_capture.lock().is_active());
     }
