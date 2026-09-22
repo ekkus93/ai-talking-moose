@@ -9,6 +9,7 @@ edition = "2021"
 [features]
 frontend-contract-export = []
 local-llm-acceptance = []
+wake-word-acceptance = []
 
 [[bin]]
 name = "export_frontend_contract"
@@ -24,6 +25,11 @@ required-features = ["frontend-contract-export"]
 name = "local_llm_acceptance"
 path = "src/bin/local_llm_acceptance.rs"
 required-features = ["local-llm-acceptance"]
+
+[[bin]]
+name = "wake_word_acceptance"
+path = "src/bin/wake_word_acceptance.rs"
+required-features = ["wake-word-acceptance"]
 
 [lib]
 name = "talking_moose_lib"
