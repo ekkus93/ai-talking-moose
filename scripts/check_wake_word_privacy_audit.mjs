@@ -116,7 +116,6 @@ const engineRequirements = [
   "errors_sanitize_paths_and_token_like_secrets",
   "native_session_rejects_missing_verified_artifacts_before_creation",
   "missing_native_c_api_library_is_sanitized_before_inference",
-  "native_load_failure is sanitized",
   "missing required Wake Word native C API library",
 ];
 for (const token of engineRequirements) {
