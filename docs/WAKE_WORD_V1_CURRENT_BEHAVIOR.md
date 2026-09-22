@@ -63,6 +63,8 @@ Runtime and model licensing are tracked separately. The pinned sherpa-onnx runti
 
 Wake Word diagnostics expose privacy-safe state useful for lifecycle and artifact troubleshooting, including enabled state, authoritative runtime phase, exact model/runtime identity, platform/architecture, one-thread policy, canonical sample rate/channels, bounded ring/pre-roll counts, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension state, and sanitized last error.
 
+Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist.
+
 Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content.
 
 ## Corpus and acceptance status
