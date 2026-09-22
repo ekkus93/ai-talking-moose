@@ -6,6 +6,7 @@ const fail = (message) => {
 };
 
 const behavior = read("docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md");
+const architecture = read("docs/WAKE_WORD_V1_ARCHITECTURE.md");
 const gates = read("docs/WAKE_WORD_V1_CI_GATES.md");
 const panel = read("src/components/Settings/WakeWordSettingsPanel.tsx");
 const runtimePreferences = read("src-tauri/src/app/runtime_preferences.rs");
@@ -25,6 +26,25 @@ const behaviorRequirements = [
 for (const token of behaviorRequirements) {
   if (!behavior.toLowerCase().includes(token.toLowerCase())) {
     fail(`current-behavior documentation is missing ${token}`);
+  }
+}
+
+const architectureRequirements = [
+  "one `WakeWordApplicationRuntime` in `AppState`",
+  "single canonical `WakeWordRuntimeManager`",
+  "authoritative application microphone owner remains `AppState::audio_capture`",
+  "Wake Word composition deliberately does not open a microphone device",
+  "16 kHz mono PCM",
+  "one inference thread",
+  "two seconds of in-memory pre-roll",
+  "does not implement barge-in",
+  "component tests are **not** a substitute",
+  "Linux x86_64 and macOS arm64 remain subject to their dedicated real-KWS acceptance tasks",
+  "implementation under qualification rather than as fully accepted cross-platform production functionality",
+];
+for (const token of architectureRequirements) {
+  if (!architecture.includes(token)) {
+    fail(`architecture documentation is missing truthfulness boundary: ${token}`);
   }
 }
 
@@ -83,9 +103,9 @@ const forbiddenClaims = [
   /real kws acceptance (?:has )?passed/i,
 ];
 for (const pattern of forbiddenClaims) {
-  if (pattern.test(behavior) || pattern.test(gates)) {
+  if (pattern.test(behavior) || pattern.test(architecture) || pattern.test(gates)) {
     fail(`unqualified acceptance claim matched ${pattern}`);
   }
 }
 
-console.log("Wake Word documentation audit: behavior, source-backed live toggle, UI disclosures, gate boundaries, and pending performance status are consistent.");
+console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, UI disclosures, gate boundaries, and pending performance status are consistent.");

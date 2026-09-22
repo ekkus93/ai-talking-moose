@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md"
+      - "docs/WAKE_WORD_V1_ARCHITECTURE.md"
       - "docs/WAKE_WORD_V1_CI_GATES.md"
       - "docs/wake-word-performance-evidence.json"
       - "src/components/Settings/WakeWordSettingsPanel.tsx"
@@ -14,6 +15,7 @@ on:
     branches: [master]
     paths:
       - "docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md"
+      - "docs/WAKE_WORD_V1_ARCHITECTURE.md"
       - "docs/WAKE_WORD_V1_CI_GATES.md"
       - "docs/wake-word-performance-evidence.json"
       - "src/components/Settings/WakeWordSettingsPanel.tsx"
