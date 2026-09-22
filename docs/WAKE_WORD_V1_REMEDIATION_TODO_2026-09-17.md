@@ -1,482 +1,295 @@
-# AI Talking Moose — Wake Word V1 Remediation TODO
+# Wake Word V1 — Code-Review Remediation TODO
 
-**Date:** 2026-09-17
-**Status:** Implementation queue
-**Baseline:** `master` at `9f5d90b4b15f16c1ef2d473e574537392c310f0b`
-**Specification:** `docs/WAKE_WORD_V1_REMEDIATION_SPEC_2026-09-17.md`
-**Original TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`
-**Review baseline:** `ai-talking-moose-wake-word-v1-code-review-2026-09-17.md`
+**Date:** 2026-09-17  
+**Repository:** `ekkus93/ai-talking-moose`  
+**Baseline reviewed:** `master` at `9f5d90b4b15f16c1ef2d473e574537392c310f0b`  
+**Status:** Blocking remediation plan before Wake Word V1 may be considered complete  
+**Primary review:** `docs/WAKE_WORD_V1_CODE_REVIEW_2026-09-17.md`  
+**Original implementation TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`
 
-Task IDs use the `WWR-###` prefix (**Wake Word Remediation**).
+> Reconciliation note (2026-09-21): WWR-800 gate definitions are implemented by `docs/wake-word-required-gates.json`, `scripts/check_wake_word_required_gates.mjs`, the specialized workflows documented in `docs/WAKE_WORD_V1_CI_GATES.md`, and the fail-closed final-readiness check `scripts/check_wake_word_final_qualification_readiness.mjs`. This closes gate-definition/policy work only; WWR-600/610/620/630/640 real fixture, native inference, performance, and integrated lifecycle acceptance remain pending and must not be inferred from policy-gate success.
 
-The ordering is intentional. Do not implement later integration around unresolved duplicate runtime ownership or unverified artifact identities.
+## 0. Non-negotiable completion rule
+
+Wake Word V1 is **not complete** until every applicable item in this remediation TODO is implemented, objectively qualified, merged, and reconciled back into `docs/WAKE_WORD_V1_TODO_2026-09-14.md`.
+
+A checked box means the requirement is present in the authoritative production path and backed by evidence. A design document, scaffold, mock, placeholder, skipped workflow, or component-only test is **not** completion evidence unless the item explicitly asks for design work only.
+
+When evidence is incomplete, leave the box unchecked.
 
 ---
 
-## WWR-000 — Freeze remediation baseline and preserve known-good behavior
+## 1. Review baseline and blocking findings
 
-- [x] Confirm current implementation base is `9f5d90b4b15f16c1ef2d473e574537392c310f0b` or a later verified descendant.
-- [x] Record exact starting master SHA and ordinary CI run.
-- [x] Preserve manual-listen behavior while Wake Word remains disabled.
-- [x] Preserve ASR provider selection/fallback policy.
-- [x] Preserve Local/Google/Gemini TTS separation.
-- [x] Preserve Local TTS production thread policy.
-- [x] Preserve no-barge-in V1 policy.
-- [x] Preserve no acoustic wake-phrase trimming V1 policy.
-- [x] Preserve `PcmRingBuffer` behavior and tests.
-- [x] Preserve fail-closed artifact behavior until real identities are populated.
-- [x] Add/update a remediation evidence file recording baseline and scope.
+The 2026-09-17 review found five mandatory defects:
+
+1. **Two competing Wake Word implementations exist.**
+   - `src-tauri/src/asr/wake_word_runtime.rs` contains a substantial `WakeWordRuntimeManager` with ring buffer, lifecycle, diagnostics, trigger routing, and handoff behavior.
+   - `src-tauri/src/app/wake_word_engine.rs` contains a second substantial runtime/engine path with native sherpa loading, stream handling, and artifact verification.
+   - They are not composed into one authoritative production subsystem.
+
+2. **Live Settings writes are invalid.**
+   - `src-tauri/src/app/runtime_preferences.rs` rejects any transition where `wake_word_enabled` changes.
+   - The Settings panel writes `wake_word_enabled` immediately.
+   - Therefore the visible live toggle is functionally broken.
+
+3. **Wake Word is not wired into the real production microphone/ASR/TTS lifecycle.**
+   - The authoritative capture path is still owned by `AppState.audio_capture` / `AudioCapture`.
+   - No verified production path feeds those PCM frames into the Wake Word runtime.
+   - No verified production handoff stops wake inference, starts command ASR with pre-roll, and resumes Wake Word after TTS.
+
+4. **Current tests overstate production readiness.**
+   - Many Wake Word tests instantiate isolated runtime/engine objects directly.
+   - They do not prove the real `AppState` + `AudioCapture` + command-ASR + TTS path.
+
+5. **Real native acceptance is missing.**
+   - No committed deterministic positive/negative audio corpus.
+   - No real Linux x86_64 KWS acceptance evidence.
+   - No real macOS arm64 KWS acceptance evidence.
+   - No repeated integrated lifecycle/resource-stability acceptance.
+
+These are release-blocking defects. The remediation must fix them without regressing the existing ASR/TTS behavior already merged on `master`.
+
+---
+
+## 2. Execution order
+
+Execute in this order unless a dependency requires a small local reorder:
+
+1. `WWR-000` — freeze baseline and ownership map.
+2. `WWR-100` — consolidate the Wake Word implementation.
+3. `WWR-200` — wire authoritative production audio capture.
+4. `WWR-300` — implement command-ASR handoff and pre-roll.
+5. `WWR-400` — implement TTS suspension/resume and terminal-path recovery.
+6. `WWR-500` — fix live Settings behavior and complete user-facing diagnostics.
+7. `WWR-600` — add deterministic corpus/harness.
+8. `WWR-610` — real Linux x86_64 KWS acceptance.
+9. `WWR-620` — real macOS arm64 KWS acceptance.
+10. `WWR-630` — performance evidence.
+11. `WWR-640` — integrated lifecycle/resource stability.
+12. `WWR-700` — documentation truthfulness/completeness.
+13. `WWR-800` — specialized Wake CI gates.
+14. `WWR-900` — final source/privacy/security audit.
+15. `WWR-910` — reconcile the original 314-item TODO.
+16. `WWR-950` — exact-head final qualification.
+17. `WWR-960` — guarded merge and exact-master verification.
+
+---
+
+## WWR-000 — Freeze baseline and authoritative ownership
+
+- [x] Record reviewed `master` SHA.
+- [x] Record the Wake-related diff range from the last pre-Wake baseline through current `master`.
+- [x] Inventory every Wake-related production module.
+- [x] Inventory every Wake-related test module.
+- [x] Inventory every Wake-related workflow/script/artifact manifest.
+- [x] Identify every production microphone owner.
+- [x] Identify every command-ASR entry point.
+- [x] Identify every TTS completion/cancel/failure path that must resume Wake Word.
+- [x] Identify every Settings write path for `wake_word_enabled`.
+- [x] Identify every diagnostics/UI read path.
+- [x] Declare the intended authoritative Wake Word runtime owner.
+- [x] Declare the intended authoritative KWS engine owner.
+- [x] Declare the intended authoritative ring/pre-roll owner.
+- [x] Declare the intended authoritative lifecycle state machine owner.
+- [x] Mark the duplicate/legacy path to remove or reduce to a thin wrapper.
 
 **Acceptance**
 
-- [x] No remediation change silently changes non-Wake ASR/TTS/manual behavior.
-- [x] Baseline is reproducible from repository evidence.
-
-**Evidence:** `docs/evidence/WWR-000_REMEDIATION_BASELINE_2026-09-17.md`
+- [x] There is one written ownership map that later tasks can be checked against.
+- [x] The ownership map matches actual source paths on the reviewed head.
 
 ---
 
-## WWR-010 — Fix live Wake Word settings validation defect
+## WWR-100 — Consolidate to one authoritative Wake Word implementation
 
-- [x] Identify the one canonical Wake Word settings validation/normalization function.
-- [x] Route persisted-load validation through that function.
-- [x] Route live `update_settings` validation through the same function.
-- [x] Ensure `wake_word_phrase` normalizes case/whitespace to exact `Hey, Moose`.
-- [x] Reject any other Wake Word phrase before state mutation or persistence.
-- [x] Ensure invalid type/value does not partially persist Wake Word state.
-- [x] Preserve unrelated ASR/TTS fields on successful Wake Word updates.
-- [x] Preserve previous valid persisted settings on failed update.
+### Runtime ownership
 
-**Tests**
+- [x] Keep exactly one production `WakeWordRuntimeManager`.
+- [x] Keep exactly one authoritative Wake Word state machine.
+- [x] Keep exactly one authoritative diagnostics snapshot source.
+- [x] Keep exactly one authoritative ring/pre-roll implementation.
+- [x] Keep exactly one authoritative trigger/handoff path.
 
-- [x] Live update accepts canonical `Hey, Moose`.
-- [x] Live update normalizes `  hey, moose  `.
-- [x] Live update rejects `Hey Bruce`.
-- [x] Rejected update does not persist invalid JSON/settings.
-- [x] Restart/load after rejected update still succeeds.
-- [x] Missing Wake Word fields still migrate to disabled + canonical phrase.
-- [x] Existing unrelated ASR/TTS settings remain unchanged.
+### Engine ownership
+
+- [x] Keep exactly one production sherpa KWS engine abstraction.
+- [x] Keep exactly one native runtime loading path.
+- [x] Keep exactly one model/runtime artifact verification path.
+- [x] Keep exactly one native architecture verification path.
+- [x] Keep exactly one KWS stream lifecycle path.
+
+### Remove/reduce duplicate stack
+
+- [x] Delete or reduce the non-authoritative stack to thin adapters.
+- [x] Remove duplicated enums/state machines that can drift.
+- [x] Remove duplicated ring-buffer logic.
+- [x] Remove duplicated diagnostics logic.
+- [x] Remove duplicated trigger acceptance logic.
+- [x] Remove duplicated lifecycle transitions.
+- [x] Ensure tests import the authoritative production modules rather than test-only duplicates.
+
+### Composition
+
+- [x] Compose the authoritative runtime manager with the authoritative sherpa engine.
+- [x] Define explicit ownership/lifetime boundaries between manager and engine.
+- [x] Define one API for PCM ingestion.
+- [x] Define one API for trigger acceptance.
+- [x] Define one API for command-ASR handoff.
+- [x] Define one API for Talking suspension.
+- [x] Define one API for resume/re-arm.
+- [x] Define one API for disable/shutdown.
 
 **Acceptance**
 
-- [x] There is no settings path that can persist a value startup validation later rejects.
-- [x] Command-level regression test covers the previously identified defect.
-
-**Evidence:** implementation merged in PR #169 at `cdf5ec65cf1a2d0d726c6e96459ba4264d7aeadc`; exact PR-head ordinary CI `35254726268` passed on `a85158d62084fd8506004b6d486530af32bf37a4`. Canonical validation is `WakeWordSettings::from_app_settings_fields`; both persisted-load projection and live `update_settings` use it, with live normalization/rejection regression tests in `src-tauri/src/commands/settings.rs`.
+- [x] Production has one Wake Word subsystem, not two parallel implementations.
+- [x] No test-only duplicate is required to explain runtime behavior.
 
 ---
 
-## WWR-020 — Consolidate duplicate Wake Word module architecture
+## WWR-200 — Wire the real production microphone path
 
-- [x] Choose a single canonical module boundary, preferably `src-tauri/src/wake_word/`.
-- [x] Inventory all functionality in `app/wake_word_*`.
-- [x] Inventory all functionality in `asr/wake_word_*`.
-- [x] Select one authoritative KWS config representation.
-- [x] Select one authoritative KWS engine/session abstraction.
-- [x] Select one authoritative `WakeWordRuntimeManager`.
-- [x] Select one authoritative handoff implementation.
-- [x] Select one authoritative diagnostics representation.
-- [x] Move/rehome reusable tests to the canonical module.
-- [x] Remove duplicate/obsolete public exports.
-- [x] Remove duplicate/obsolete source files after migration.
-- [x] Ensure production code cannot instantiate two independent Wake Word managers.
-- [x] Ensure Wake Word remains distinct from command ASR provider implementations.
-- [x] Add structural/source regression coverage against duplicate manager reintroduction.
+### Authoritative capture
+
+- [x] Feed PCM from the real `AudioCapture` path into the Wake Word subsystem.
+- [x] Do not create a second competing always-on microphone stream for Wake Word.
+- [x] Keep sample format/channel/rate conversion explicit and testable.
+- [x] Verify Wake Word input is 16 kHz mono PCM16 at the KWS boundary.
+- [x] Define resampling/downmix behavior if authoritative capture differs.
+- [x] Ensure Wake Word sees only local PCM required for inference/pre-roll.
+
+### Capture ownership transitions
+
+- [x] Define who owns capture while `Disabled`.
+- [x] Define who owns capture while `Listening`.
+- [x] Define who owns capture during `WakeTriggered`.
+- [x] Define who owns capture during command ASR.
+- [x] Define who owns capture during `Thinking`.
+- [x] Define who owns capture during `Talking`.
+- [x] Define who owns capture during shutdown.
+- [x] Prevent overlapping capture owners during transitions.
+
+### Failure behavior
+
+- [x] Capture-start failure must fail closed.
+- [x] Capture-stop failure must not create a second stream.
+- [x] Device loss must not silently leave UI/runtime in a false `Listening` state.
+- [x] Device restoration behavior must be deterministic.
+- [x] Shutdown must terminate capture exactly once.
 
 **Acceptance**
 
-- [x] Exactly one production `WakeWordRuntimeManager` exists.
-- [x] Exactly one production V1 KWS config/engine policy exists.
-- [x] No tests depend on the removed duplicate implementation.
-- [x] Ordinary CI passes after consolidation.
-
-**Evidence:** `docs/evidence/WWR-020_WAKE_WORD_ARCHITECTURE_CONSOLIDATION_2026-09-17.md`; implementation merged in PR #172 at `70b813b757789cf993ff4c1e8d2d4c9825f6313b`. Exact PR-head ordinary CI `35268110856` passed on `39c95ddba9628cdd531c08f3bff4451fc6bad785`.
+- [x] Real production PCM reaches the authoritative Wake Word manager.
+- [x] There is one active microphone stream in steady-state Wake listening.
+- [x] Capture ownership is explicit across all lifecycle states.
 
 ---
 
-## WWR-030 — Freeze one authoritative V1 KWS policy
+## WWR-300 — Implement wake trigger → command ASR handoff
 
-- [x] Define canonical constants in one source location:
-  - [x] sample rate `16_000 Hz`;
-  - [x] channels `1`;
-  - [x] feature dimension `80`;
-  - [x] inference threads `1`;
-  - [x] keyword source `HEY MOOSE`;
-  - [x] score `1.0`;
-  - [x] threshold `0.25`;
-  - [x] pre-roll `2 seconds`.
-- [x] Make settings/docs/diagnostics/tests consume or verify the same constants.
-- [x] Remove permissive parallel config validation that merely accepts any positive threshold/score.
-- [x] Make config drift fail deterministically.
-- [x] Ensure model artifact schema matches engine config schema.
+### Trigger semantics
 
-**Tests**
+- [x] Accept one trigger only while armed/listening.
+- [x] Transition to `WakeTriggered` exactly once per accepted wake.
+- [x] Disarm/stop KWS immediately after trigger acceptance.
+- [x] Reject duplicate callbacks for the same trigger.
+- [x] Keep trigger callback work bounded and non-blocking.
 
-- [x] Any threshold other than `0.25` fails V1 config validation.
-- [x] Any score other than `1.0` fails V1 config validation.
-- [x] Any inference thread count other than `1` fails V1 validation.
-- [x] Non-16-kHz or non-mono KWS input fails before retention/inference.
-- [x] Artifact contract test verifies encoder/decoder/joiner/tokens/BPE expectations.
+### Pre-roll semantics
+
+- [x] Snapshot pre-roll exactly once per accepted trigger.
+- [x] Preserve bounded in-memory PCM only.
+- [x] Clear/reset the ring at the defined boundary after handoff.
+- [x] Do not write pre-roll audio to disk.
+- [x] Do not log/transcribe pre-roll separately.
+- [x] Define whether the Wake phrase is included in the ASR input.
+
+### Command ASR handoff
+
+- [x] Stop/disarm Wake inference before command ASR owns the handoff.
+- [x] Deliver pre-roll to the command-ASR path in the defined order.
+- [x] Start live command-ASR capture exactly once.
+- [x] Prevent Wake Word from re-triggering during command ASR.
+- [x] Prevent a second microphone stream from being created for command ASR.
+- [x] Ensure command ASR receives audio after the wake trigger without an unbounded gap.
+
+### Failure/cancel
+
+- [x] If command ASR fails to start, recover to a defined state.
+- [x] If command ASR is cancelled, recover to a defined state.
+- [x] If handoff fails after Wake is disarmed, do not remain stuck indefinitely.
 
 **Acceptance**
 
-- [x] No production module can configure a contradictory Wake Word V1 policy.
-
-**Evidence:** `docs/evidence/WWR-030_CANONICAL_KWS_POLICY_2026-09-17.md`; implementation merged in PR #174 at `4a9c3d585bf1458418ab87aa3d5b818add845505`. Exact PR-head ordinary CI `35281663768` and KittenTTS CPU acceptance `35281663889` passed on `93ea1f9cbd41178975293abf0ce1c0f5f9665153`.
+- [x] One accepted wake causes one command-ASR session.
+- [x] Pre-roll is consumed once and remains memory-only.
+- [x] No duplicate capture stream exists during handoff.
 
 ---
 
-## WWR-100 — Complete model artifact identities and provenance
+## WWR-400 — Integrate Talking/TTS suspension and resume
 
-- [x] Obtain the exact selected GigaSpeech KWS model archive through an independently verifiable source.
-- [x] Run deterministic identity freezing.
-- [x] Record model archive byte size.
-- [x] Record model archive SHA-256.
-- [x] Record exact encoder filename/path, byte size, SHA-256.
-- [x] Record exact decoder filename/path, byte size, SHA-256.
-- [x] Record exact joiner filename/path, byte size, SHA-256.
-- [x] Record exact `tokens.txt` byte size and SHA-256.
-- [x] Record exact `bpe.model` byte size and SHA-256.
-- [x] Deterministically generate/freeze the exact `HEY MOOSE` keyword representation required by the native API.
-- [x] Record keyword artifact bytes/hash if represented as a file.
-- [x] Populate `wake-word-artifacts.json` with production model entries.
-- [x] Populate/replace Rust manifest placeholders with real identities or generate Rust data from the authoritative manifest.
-- [x] Ensure Rust and JSON manifests cannot drift silently.
-- [x] Remove zero-byte/empty-hash production placeholders.
+### Suspension
 
-**Provenance/license**
+- [x] Suspend/disarm Wake Word before Moose audio playback begins.
+- [x] Do not detect Wake Word from Moose's own TTS output.
+- [x] Do not create a second capture stream while suspended.
 
-- [x] Independently verify model provenance.
-- [x] Independently verify model license.
-- [x] Remove any unverified hard-coded license assertion.
-- [x] Add required model attribution/notices.
-- [x] Make docs distinguish runtime license from model license.
+### Resume after terminal TTS paths
+
+- [x] Resume/re-arm after successful TTS completion.
+- [x] Resume/re-arm after TTS cancellation.
+- [x] Resume/re-arm after recoverable TTS failure.
+- [x] Respect latest `wake_word_enabled` value when deciding whether to resume.
+- [x] If disabled while Talking, remain disabled after TTS ends.
+- [x] If enabled while Talking, resume according to defined policy.
+
+### Lifecycle correctness
+
+- [x] Keep lifecycle transitions idempotent.
+- [x] Prevent duplicate re-arm calls from creating duplicate native sessions.
+- [x] Prevent stale callbacks from re-arming after disable/shutdown.
+- [x] Ensure shutdown wins over late TTS callbacks.
 
 **Acceptance**
 
-- [x] Every consumed production model/tokenizer/keyword input has immutable identity.
-- [x] Repository provenance/license information is internally consistent.
-- [x] Any byte mismatch fails closed.
-
-
-**Evidence:** `docs/evidence/WWR-100_MODEL_IDENTITY_2026-09-17.md`; implementation merged in PR #178 at `2319947000fd629f0f1308389fe40dd074ac1198`. Exact final PR head `18d5c798c06a38c17c93418e2cec0a297d4305ca` passed ordinary CI `35289861261`, Wake Artifact Verification `35289861279`, and Wake Word model identity freeze `35289861291`.
----
-
-## WWR-110 — Complete sherpa native runtime identities and packaging
-
-- [x] Verify the frozen sherpa runtime version used for V1.
-- [x] Obtain exact Linux x86_64 runtime archive.
-- [x] Freeze Linux archive byte size/SHA-256.
-- [x] Freeze all actually loaded Linux native library byte sizes/SHA-256 values.
-- [x] Verify ELF x86_64 architecture before use.
-- [x] Obtain exact macOS arm64 runtime archive.
-- [x] Freeze macOS archive byte size/SHA-256.
-- [x] Freeze all actually loaded macOS native library byte sizes/SHA-256 values.
-- [x] Verify Mach-O arm64 architecture before use.
-- [x] Define deterministic installed runtime directory layout.
-- [x] Define deterministic package/bundle locations.
-- [x] Ensure cached artifacts still undergo hash verification.
-- [x] Produce sanitized unsupported-platform errors.
-- [x] Add complete sherpa runtime Apache-2.0 attribution/notices.
-- [x] Do not add additional supported architectures without real acceptance.
-
-**Tests**
-
-- [x] Wrong Linux architecture fails.
-- [x] Wrong macOS architecture fails.
-- [x] Corrupt archive fails.
-- [x] Corrupt consumed library fails.
-- [x] Missing required library fails.
-- [x] Unsupported platform fails with sanitized explicit error.
-- [x] Offline prepared runtime can be located deterministically.
-
-**Acceptance**
-
-- [x] Claimed packages can locate the exact pinned runtime offline.
-- [x] No wrong-architecture/corrupt runtime can reach inference.
-
-
-**Evidence:** `docs/evidence/WWR-110_SHERPA_RUNTIME_IDENTITY_2026-09-17.md`; implementation on PR #184. Frozen identities were independently reproduced by runtime-identity workflow `35294590820` on master `4955d1f1872c310f872219b812f5d95a3887e97e`. Exact PR-head `50c562f6421b73e11f7049fbe87764048730f9be` passed ordinary CI `35296408130`, Wake Artifact Verification `35296408236`, Wake Word model identity freeze `35296408238`, and Wake Word runtime identity freeze `35296408308`. Runtime preparation re-verifies cached archives and installed libraries, rejects unsafe archive members, enforces ELF x86_64 / Mach-O arm64 architecture, supports deterministic offline preparation from an explicit archive, and reports unsupported platforms with sanitized errors.
----
-
-## WWR-120 — Expand artifact CI coverage
-
-- [x] Update Wake artifact workflow path filters to include:
-  - [x] model identity freezer;
-  - [x] runtime identity freezer;
-  - [x] their test files;
-  - [x] production manifest(s);
-  - [x] preparation script;
-  - [x] verification script.
-- [x] Run all four Wake artifact Python test suites in CI.
-- [x] Add manifest consistency/schema validation.
-- [x] Add a check that production-required identities are non-placeholder when production mode is enabled.
-- [x] Add test coverage for safe extraction/path traversal rejection.
-- [x] Add test coverage proving cache cannot bypass identity verification.
-
-**Acceptance**
-
-- [x] A change to either freezer script triggers and exercises the Wake artifact workflow.
-- [x] Artifact tooling regression cannot merge behind a skipped path filter.
-
-
-**Evidence:** `docs/evidence/WWR-120_ARTIFACT_CI_COVERAGE_2026-09-17.md`; implementation head `761f94352d3ca7b385a6a3eca1a7f8ec61197288` passed ordinary CI `35298008399`, Wake Artifact Verification `35298008347`, Wake Word model identity freeze `35298008322`, and Wake Word runtime identity freeze `35298008340`. The artifact workflow runs the four pre-existing Wake artifact suites plus focused current-freezer/runtime tests, validates the production manifest and non-placeholder identities, rejects malicious extraction paths, and proves cached runtime state cannot bypass identity verification.
----
-
-## WWR-200 — Implement the real native sherpa KWS session
-
-- [x] Implement the real native `NativeKwsSession`/equivalent adapter.
-- [x] Load the exact verified sherpa native runtime.
-- [x] Load exact verified encoder.
-- [x] Load exact verified decoder.
-- [x] Load exact verified joiner.
-- [x] Load exact verified `tokens.txt`.
-- [x] Load exact verified `bpe.model`.
-- [x] Configure deterministic `HEY MOOSE` keyword representation.
-- [x] Configure one inference thread.
-- [x] Configure score `1.0`.
-- [x] Configure threshold `0.25`.
-- [x] Feed streaming 16-kHz mono PCM.
-- [x] Emit bounded Wake Word detection event with no raw audio.
-- [x] Reset stream state after accepted recognition.
-- [x] Implement idempotent shutdown.
-- [x] Add cancellation/interrupt behavior where native API permits.
-- [x] Map native errors to sanitized Wake Word errors.
-- [x] Ensure normal inference has no network dependency.
-- [x] Ensure engine never performs full transcription.
-
-**Tests**
-
-- [x] Missing verified artifact fails before native session creation.
-- [x] Corrupt verified artifact fails before native session creation.
-- [x] Wrong architecture fails before native load.
-- [x] Native load failure is sanitized.
-- [x] Thread/threshold/score policy is observable.
-- [x] Fake-session tests remain for deterministic unit coverage.
-- [ ] Real positive fixture triggers.
-- [ ] Real negative fixture does not trigger.
-
-**Acceptance**
-
-- [ ] Production engine can execute real pinned sherpa KWS offline.
-- [ ] Fake session is not used by production composition.
+- [x] Wake Word is suspended during Moose speech.
+- [x] Wake Word resumes correctly after every terminal TTS path.
+- [x] No stale callback can resurrect Wake Word after disable/shutdown.
 
 ---
 
-**Evidence (implementation):** `src-tauri/src/app/wake_word_engine.rs` now contains the real verified native sherpa C-API session, fail-closed model/runtime identity and architecture checks, frozen V1 policy, bounded detection, reset/shutdown behavior, and deterministic fake-session/unit coverage. Real positive/negative fixture acceptance and production composition remain open and must not be inferred from component tests.
+## WWR-500 — Fix live Settings behavior and diagnostics
 
----
+### Live enable/disable
 
-## WWR-210 — Fix PCM validation ordering
+- [x] Make the Settings toggle semantically valid.
+- [x] Enabling Wake Word applies to the authoritative runtime immediately or via an explicitly documented restart boundary.
+- [x] Disabling Wake Word stops/disarms the authoritative runtime immediately or via an explicitly documented restart boundary.
+- [x] Roll back UI state if runtime application fails.
+- [x] Persist only a state that matches the runtime contract.
 
-- [x] Validate/canonicalize PCM before ring-buffer append.
-- [x] Validate/canonicalize PCM before KWS feed.
-- [x] Validate/canonicalize PCM before live handoff append.
-- [x] Ensure invalid frames do not mutate Wake Word retained state.
-- [x] Ensure prior valid pre-roll remains unchanged after invalid input.
+### Settings UI
 
-**Tests**
+- [x] Show fixed phrase `Hey, Moose`.
+- [x] Show disabled-by-default behavior.
+- [x] Show local/offline keyword-spotting disclosure.
+- [x] Show active-microphone disclosure.
+- [x] Show cloud-boundary disclosure: wake detection itself is not full-time cloud transcription.
+- [x] Show no-barge-in limitation.
+- [x] Show current runtime status.
+- [x] Show actionable last error when present.
+- [x] Keep advanced tuning hidden from V1 user settings.
 
-- [x] 48-kHz frame is rejected before append.
-- [x] Empty frame is rejected before append.
-- [x] Invalid frame is not fed to KWS.
-- [x] Invalid frame does not alter ring snapshot.
-- [x] Valid canonical frame is appended/fed exactly once.
+### Diagnostics
 
-**Acceptance**
-
-- [x] Non-canonical PCM cannot contaminate pre-roll.
-
-**Evidence:** implementation completed across PR #187 and PR #189. PR #187 merged at `5be1539d0ba03b9a8e072a035752d19df3b872c1` with exact PR-head ordinary CI `35303924318`, adding validation before live wake→ASR handoff retention in `src-tauri/src/asr/wake_word_handoff.rs`. PR #189 merged at `c8b43524b01719454543517ccd21e2fe9a457504` with exact PR-head ordinary CI `35317569091` on `1d9a4bd891aff735caad2aee96f795e79d3e39d6`, adding validation before ring-buffer retention in `WakeWordRuntimeManager::append_listening_pcm_frame` and regression coverage proving invalid 48-kHz/empty input leaves retained pre-roll unchanged; it also adds KWS-feed coverage proving invalid frames fail before engine state mutation.
-
----
-
-## WWR-300 — Integrate one authoritative microphone routing path
-
-- [x] Re-audit current `AudioCapture` ownership on the post-consolidation source.
-- [x] Select and document the final one-stream/routing strategy.
-- [ ] Wire Wake Word manager into production application state/composition.
-- [ ] Ensure Wake Word does not open a competing continuous microphone stream.
-- [ ] Canonicalize/resample microphone PCM once where practical.
-- [ ] Feed ring buffer and KWS from the same chronological canonical stream.
-- [ ] Preserve live samples immediately after trigger while command ASR initializes.
-- [ ] Implement deterministic ownership transfer to command ASR.
-- [ ] Implement deterministic ownership return to wake listening.
-- [ ] Handle device disconnect.
-- [ ] Handle reconnect.
-- [ ] Handle unavailable device.
-- [ ] Handle permission/capture error without spin/deadlock.
-- [ ] Ensure cancellation does not orphan or multiply streams.
-
-**Tests**
-
-- [ ] Repeated wake→ASR→wake cycles do not increase capture-stream count.
-- [ ] Wake disable tears down/suspends capture according to final policy.
-- [ ] Manual listen still works with Wake Word disabled.
-- [ ] Device error leaves deterministic ownership.
-- [ ] Cancellation leaves deterministic ownership.
-
-**Acceptance**
-
-- [ ] Exactly one authoritative microphone ownership model exists in production.
-- [ ] No simultaneous competing capture opens occur.
-
----
-
-**Evidence (audit/strategy):** `docs/evidence/WWR-300_AUDIO_CAPTURE_OWNERSHIP_AUDIT_2026-09-19.md`; audit merged in PR #223 at `f182f688d94e384780fc28024ca3ae3f5680829f`. The remaining WWR-300 items are production wiring and acceptance, not documentation.
-
----
-
-## WWR-310 — Complete production wake→ASR pre-roll/live handoff
-
-- [ ] On accepted trigger, snapshot ring chronologically.
-- [ ] Start preserving subsequent live canonical samples.
-- [ ] Activate the existing normal command ASR path exactly once.
-- [ ] Replay pre-roll into command ASR.
-- [ ] Continue with live PCM.
-- [ ] Prevent gaps at snapshot/live boundary.
-- [ ] Prevent duplicated sample ranges.
-- [ ] Preserve complete `Hey, Moose` phrase when present in the two-second window.
-- [ ] Preserve immediate first command word.
-- [ ] Do not acoustically trim Wake Word in V1.
-- [ ] Clear stale handoff/pre-roll after success.
-- [ ] Clear stale handoff/pre-roll after ASR startup failure.
-- [ ] Clear stale handoff/pre-roll after cancellation.
-- [ ] Return runtime to a valid recoverable state after handoff failure.
-
-**Tests**
-
-- [ ] Synthetic exact sample-order boundary test.
-- [ ] Real/reproducible `Hey Moose, tell me the time` audio acceptance.
-- [ ] First command word is present in downstream ASR acceptance.
-- [ ] No duplicate range is observed.
-- [ ] No inversion is observed.
-- [ ] ASR startup failure returns to recoverable state.
-
-**Acceptance**
-
-- [ ] Existing command ASR receives one continuous wake phrase + command utterance.
-- [ ] No first-word clipping occurs in deterministic acceptance.
-
----
-
-## WWR-400 — Integrate Wake Word with application lifecycle
-
-- [x] Add one Wake Word runtime owner to `AppState` or equivalent authoritative application composition.
-- [x] Initialize runtime from persisted settings.
-- [x] Keep runtime disabled when setting is false.
-- [ ] Start/load/listen when enabled and lifecycle permits.
-- [ ] Ensure one wake trigger starts exactly one normal command interaction.
-- [ ] Prevent wake activation while command ASR is active.
-- [ ] Prevent wake activation while Thinking is active.
-- [ ] Suspend wake activation on/before Talking.
-- [ ] Clear ring buffer on entry to Talking.
-- [ ] Keep Wake Word suspended throughout TTS playback.
-- [ ] Resume after successful TTS completion.
-- [ ] Resume after TTS cancellation.
-- [ ] Resume after recoverable TTS failure.
-- [ ] Resume after recoverable command interaction failure.
-- [ ] Clear stale pre-roll before resuming.
-- [ ] Reset KWS state before resuming where required.
-- [ ] Ensure disabling Wake Word during an interaction results in Disabled rather than an unintended resume.
-- [ ] Preserve manual interaction after Wake Word errors.
-- [ ] Do not implement barge-in.
-
-**Tests**
-
-- [ ] Idle + enabled -> Listening.
-- [ ] Idle + disabled -> Disabled/manual behavior.
-- [ ] Trigger -> one command activation.
-- [ ] Repeated positive frames -> no duplicate activation.
-- [ ] Talking -> Suspended.
-- [ ] TTS success -> Listening when enabled.
-- [ ] TTS cancellation -> Listening when enabled.
-- [ ] TTS recoverable failure -> Listening when enabled.
-- [ ] Disabled during Talking -> Disabled after TTS.
-- [ ] Wake error does not break manual listen.
-- [ ] No path leaves runtime permanently suspended unintentionally.
-
-**Acceptance**
-
-- [ ] Moose cannot wake itself from its own TTS in V1.
-- [ ] One integrated lifecycle controls Wake Word end-to-end.
-
----
-
-## WWR-410 — Finalize debounce/trigger semantics
-
-- [ ] Preserve one wake event → one command activation invariant.
-- [ ] Ignore repeated positive KWS frames after acceptance.
-- [ ] Reset KWS stream at the verified lifecycle point.
-- [ ] Permit a later phrase after return to Listening.
-- [ ] Avoid cooldown unless real acceptance shows it is required.
-
-- [ ] If cooldown is added, make it bounded/configured and document measured justification.
-- [ ] Keep trigger count privacy-safe.
-
-- [ ] Keep last-trigger timing privacy-safe and monotonic where practical.
-
-**Tests**
-
-- [ ] One phrase with repeated positive frames yields one interaction.
-- [ ] A second phrase after resume yields a second interaction.
-- [ ] No cooldown is needed for correctness tests.
-- [ ] Trigger diagnostics do not expose PCM.
-
-**Acceptance**
-
-- [ ] Debounce behavior is lifecycle-correct rather than timer-masking a state bug.
-
----
-
-## WWR-500 — Implement Wake Word Settings UI
-
-- [x] Add Wake Word section under Settings.
-- [x] Add `Enable wake word` toggle.
-- [x] Display fixed phrase `Hey, Moose`.
-- [x] Do not expose arbitrary phrase editing.
-- [x] Do not expose sensitivity in V1.
-- [x] Explain local/offline keyword spotting.
-- [x] Explain microphone remains locally active while listening for Wake Word.
-- [x] Show useful runtime status: loading/listening/suspended/error.
-- [x] Show sanitized failure/help text.
-- [x] Apply toggle to runtime without app restart when safe.
-- [x] Ensure disabling restores manual behavior immediately/boundedly.
-- [x] Ensure UI never implies full-time cloud transcription.
-- [x] Add accessibility labels and keyboard behavior consistent with Settings conventions.
-
-**Tests**
-
-- [x] Default UI shows disabled.
-- [x] Toggle persists enabled state.
-- [x] Toggle updates runtime.
-- [x] Toggle off stops/suspends Wake Word according to policy.
-- [x] Phrase is displayed but not editable.
-- [x] Local/offline and active-mic disclosures render.
-- [x] Runtime error state is displayed without raw path/secret leakage.
-
-**Acceptance**
-
-- [x] A user can enable/disable Wake Word entirely through the normal Settings UI.
-
----
-
-## WWR-510 — Complete privacy-safe diagnostics
-
-- [x] Expose Wake Word enabled state.
-- [x] Expose authoritative runtime state.
-- [x] Expose exact model identity.
-- [x] Expose exact runtime version/identity.
-- [x] Expose platform/architecture.
-- [x] Expose one-thread policy.
-- [x] Expose canonical sample rate/channels.
-- [x] Expose ring duration/capacity.
-- [x] Expose threshold/score.
+- [x] Expose lifecycle state.
+- [x] Expose model/runtime identity.
 - [x] Expose trigger count.
-- [x] Expose last-trigger age/timestamp in approved form.
-- [x] Expose initialization duration.
-- [x] Expose Talking suspension.
-- [x] Expose sanitized last error.
+- [x] Expose last trigger timestamp or elapsed age.
+- [x] Expose last sanitized error.
+- [x] Expose native session/stream counts if available.
+- [x] Expose ring occupancy/capacity if available.
 - [ ] Add optional measured CPU/memory/inference/handoff timing fields as available.
 - [x] Ensure raw PCM cannot be represented/serialized.
 - [ ] Audit errors/logs for credentials.
@@ -637,20 +450,20 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-800 — Add specialized Wake CI gates
 
-- [ ] Define deterministic corpus CI/validation gate.
-- [ ] Define Linux real KWS acceptance gate.
-- [ ] Define macOS arm64 real KWS acceptance gate.
-- [ ] Define native packaging/architecture gate.
-- [ ] Define repeated lifecycle stability gate.
-- [ ] Define performance evidence gate/report policy.
-- [ ] Ensure required gates are exact-head bound.
-- [ ] Ensure required gates are not silently treated as passed when skipped.
-- [ ] Document which gates require specialized runners/hardware.
-- [ ] Ensure final merge eligibility checks required Wake gates in addition to ordinary CI.
+- [x] Define deterministic corpus CI/validation gate.
+- [x] Define Linux real KWS acceptance gate.
+- [x] Define macOS arm64 real KWS acceptance gate.
+- [x] Define native packaging/architecture gate.
+- [x] Define repeated lifecycle stability gate.
+- [x] Define performance evidence gate/report policy.
+- [x] Ensure required gates are exact-head bound.
+- [x] Ensure required gates are not silently treated as passed when skipped.
+- [x] Document which gates require specialized runners/hardware.
+- [x] Ensure final merge eligibility checks required Wake gates in addition to ordinary CI.
 
 **Acceptance**
 
-- [ ] A final feature head cannot qualify using ordinary CI alone.
+- [x] A final feature head cannot qualify using ordinary CI alone.
 
 ---
 
@@ -777,62 +590,36 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ---
 
-## Final remediation checklist
+## 3. Required evidence discipline
 
-### Architecture
+For every implementation PR:
 
-- [x] One authoritative Wake Word subsystem exists.
-- [x] One authoritative `WakeWordRuntimeManager` exists.
-- [x] One authoritative KWS config/engine policy exists.
-- [x] Duplicate legacy Wake Word stacks are removed.
+- record exact branch/head SHA;
+- record exact CI run IDs;
+- record exact artifact manifest revision when artifacts are involved;
+- record exact corpus revision when corpus/acceptance is involved;
+- distinguish hosted component tests from real native acceptance;
+- distinguish schema validation from real inference;
+- distinguish source inspection from integrated runtime evidence;
+- do not infer macOS arm64 acceptance from Linux;
+- do not infer production acceptance from test-only constructors;
+- do not infer real audio acceptance from synthetic PCM unless the requirement explicitly allows it;
+- do not treat a skipped workflow as passing evidence;
+- do not mark original TODO items complete merely because remediation scaffolding exists.
 
-### Settings/UI
+## 4. Definition of done
 
-- [x] Live settings validation cannot persist an invalid phrase.
-- [x] Wake defaults disabled.
-- [x] Phrase is fixed to `Hey, Moose`.
-- [x] Settings UI can enable/disable Wake Word.
-- [x] UI discloses local/offline KWS and active microphone behavior.
-- [x] Manual behavior is preserved when Wake Word is disabled.
+Wake Word V1 is done only when:
 
-### Artifacts/engine
-
-- [ ] Model archive/files have immutable identities.
-- [ ] Native runtimes have immutable identities.
-- [ ] Model/runtime licenses and notices are verified.
-- [ ] Real native sherpa session loads exact verified inputs.
-- [x] KWS uses 16 kHz mono, one thread, score 1.0, threshold 0.25.
-- [ ] KWS is local/offline during idle inference.
-
-### Audio/handoff/lifecycle
-
-- [ ] One authoritative microphone ownership path exists.
-- [x] PCM is validated before retention.
-- [ ] Ring buffer and KWS share one chronological canonical stream.
-- [ ] Wake→ASR pre-roll/live handoff is continuous.
-- [ ] First command word is not clipped.
-- [ ] One wake event creates one command interaction.
-- [ ] Wake is suspended while Moose talks.
-- [ ] Wake resumes after TTS success/cancellation/recoverable failure.
-- [ ] No V1 barge-in exists.
-
-### Privacy/quality
-
-- [ ] Raw Wake PCM remains memory-only.
-- [x] Diagnostics are privacy-safe.
-- [ ] No silent cloud/full-ASR fallback exists.
-- [ ] Corpus acceptance passes.
-- [ ] Linux real KWS acceptance passes.
-- [ ] macOS arm64 real KWS acceptance passes.
-- [ ] Lifecycle stability passes.
-- [ ] Performance baseline is recorded.
-- [ ] Documentation is truthful.
-
-### Closeout
-
-- [ ] Artifact/freezer CI coverage is complete.
-- [ ] Exact PR-head required gates pass.
-- [ ] Guarded merge uses exact tested head.
-- [ ] Exact merged-master required gates pass.
-- [ ] Original 314-item TODO is reconciled.
-- [ ] No mandatory code-review finding remains open.
+1. there is one authoritative production Wake Word subsystem;
+2. real production PCM reaches it;
+3. one accepted wake starts one command-ASR session with bounded pre-roll;
+4. Wake Word is suspended during Moose speech and resumes on every terminal TTS path;
+5. the live Settings toggle is truthful and functional;
+6. deterministic corpus tests cover positive and negative behavior;
+7. Linux x86_64 and macOS arm64 real native KWS acceptance pass;
+8. performance and lifecycle stability evidence are recorded;
+9. documentation matches reality;
+10. privacy/security review passes;
+11. original TODO is reconciled against final evidence;
+12. exact-head and exact-master qualification pass.
