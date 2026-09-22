@@ -8,7 +8,7 @@ This document records the current Wake Word V1 gate inventory and the merge-elig
 
 The audited titles are: Ordinary CI; Wake Word required gates manifest audit; Wake Word deterministic corpus manifest gate; Wake Word corpus contract gate; Native packaging/architecture policy gate; Lifecycle stability gate; Performance evidence policy gate; Privacy/security source audit gate; Documentation truthfulness audit; Source/security ownership audit gate; Linux x86_64 real KWS acceptance; macOS arm64 real KWS acceptance; Integrated production lifecycle acceptance; and Measured performance acceptance.
 
-`scripts/check_wake_word_final_qualification_readiness.mjs` is the fail-closed final-readiness check. It rejects final qualification while any required gate in the manifest remains pending. The manually dispatched `.github/workflows/wake-word-final-qualification-readiness.yml` exists specifically so a final feature head cannot qualify using ordinary CI alone. Passing it is still not a substitute for recording the exact-head run IDs and reports required by WWR-950.
+`scripts/check_wake_word_final_qualification_readiness.mjs` is the fail-closed final-readiness check. It rejects final qualification while any required gate in the manifest remains pending. The manually dispatched `.github/workflows/wake-word-final-qualification-readiness.yml` exists specifically so a final feature head cannot qualify using ordinary CI alone. In policy terms, ordinary CI alone is not final Wake Word V1 qualification. Passing the readiness check is still not a substitute for recording the exact-head run IDs and reports required by WWR-950.
 
 ## Implemented gates
 
