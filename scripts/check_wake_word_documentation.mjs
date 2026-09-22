@@ -56,6 +56,9 @@ for (const sentence of uiRequirements) {
 const gateRequirements = [
   "Ordinary CI alone is not final Wake Word V1 qualification",
   "A skipped corpus gate is not evidence that real corpus acceptance passed",
+  "Wake Word corpus contract",
+  "Passing schema/contract gates do not mean the repository contains real audio fixtures",
+  "production Wake Word Rust error/log surfaces",
   "does not by itself prove real KWS inference",
   "pending_measurement",
   "A workflow with conclusion `skipped`",
