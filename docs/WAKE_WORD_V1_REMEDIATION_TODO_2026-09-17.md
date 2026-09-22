@@ -331,34 +331,36 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-310 — Complete production wake→ASR pre-roll/live handoff
 
-- [ ] On accepted trigger, snapshot ring chronologically.
-- [ ] Start preserving subsequent live canonical samples.
+- [x] On accepted trigger, snapshot ring chronologically.
+- [x] Start preserving subsequent live canonical samples.
 - [ ] Activate the existing normal command ASR path exactly once.
-- [ ] Replay pre-roll into command ASR.
-- [ ] Continue with live PCM.
-- [ ] Prevent gaps at snapshot/live boundary.
-- [ ] Prevent duplicated sample ranges.
-- [ ] Preserve complete `Hey, Moose` phrase when present in the two-second window.
-- [ ] Preserve immediate first command word.
-- [ ] Do not acoustically trim Wake Word in V1.
-- [ ] Clear stale handoff/pre-roll after success.
-- [ ] Clear stale handoff/pre-roll after ASR startup failure.
-- [ ] Clear stale handoff/pre-roll after cancellation.
-- [ ] Return runtime to a valid recoverable state after handoff failure.
+- [x] Replay pre-roll into command ASR.
+- [x] Continue with live PCM.
+- [x] Prevent gaps at snapshot/live boundary.
+- [x] Prevent duplicated sample ranges.
+- [x] Preserve complete `Hey, Moose` phrase when present in the two-second window.
+- [x] Preserve immediate first command word.
+- [x] Do not acoustically trim Wake Word in V1.
+- [x] Clear stale handoff/pre-roll after success.
+- [x] Clear stale handoff/pre-roll after ASR startup failure.
+- [x] Clear stale handoff/pre-roll after cancellation.
+- [x] Return runtime to a valid recoverable state after handoff failure.
 
 **Tests**
 
-- [ ] Synthetic exact sample-order boundary test.
+- [x] Synthetic exact sample-order boundary test.
 - [ ] Real/reproducible `Hey Moose, tell me the time` audio acceptance.
 - [ ] First command word is present in downstream ASR acceptance.
-- [ ] No duplicate range is observed.
-- [ ] No inversion is observed.
-- [ ] ASR startup failure returns to recoverable state.
+- [x] No duplicate range is observed.
+- [x] No inversion is observed.
+- [x] ASR startup failure returns to recoverable state.
 
 **Acceptance**
 
 - [ ] Existing command ASR receives one continuous wake phrase + command utterance.
 - [ ] No first-word clipping occurs in deterministic acceptance.
+
+**Evidence:** `docs/evidence/WWR-310_HANDOFF_BOUNDARY_2026-09-22.md`; implementation/evidence merged in PR #377 at `efe91096135956d3e4454f1957f8623a1fa264e7`. Exact merged-master ordinary CI `35759517089` passed. The merged evidence covers deterministic pre-roll snapshot, post-trigger live retention, one-shot handoff payload transfer, contiguous wake phrase plus first command word in provider-neutral command-ASR audio, no duplicate/inverted sample ranges, stale handoff clearing for failure/cancellation paths, and recoverable return to Listening. Full normal command-ASR activation and real/reproducible audio acceptance remain open.
 
 ---
 
