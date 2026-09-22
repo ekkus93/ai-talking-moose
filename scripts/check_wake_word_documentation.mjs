@@ -8,6 +8,7 @@ const fail = (message) => {
 const behavior = read("docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md");
 const architecture = read("docs/WAKE_WORD_V1_ARCHITECTURE.md");
 const gates = read("docs/WAKE_WORD_V1_CI_GATES.md");
+const readme = read("README.md");
 const panel = read("src/components/Settings/WakeWordSettingsPanel.tsx");
 const runtimePreferences = read("src-tauri/src/app/runtime_preferences.rs");
 const performance = JSON.parse(read("docs/wake-word-performance-evidence.json"));
@@ -89,6 +90,31 @@ for (const sentence of gateRequirements) {
   }
 }
 
+const readmeMentionsWakeWord = /wake[- ]word/i.test(readme);
+const readmeUnqualifiedAcceptanceClaims = [
+  /wake[- ]word[^\n.]*fully user[- ]ready/i,
+  /wake[- ]word[^\n.]*fully accepted/i,
+  /wake[- ]word[^\n.]*production[- ]accepted/i,
+  /wake[- ]word[^\n.]*real kws acceptance[^\n.]*passed/i,
+  /wake[- ]word[^\n.]*linux x86_64[^\n.]*accepted/i,
+  /wake[- ]word[^\n.]*macos arm64[^\n.]*accepted/i,
+];
+for (const pattern of readmeUnqualifiedAcceptanceClaims) {
+  if (pattern.test(readme)) {
+    fail(`README contains unqualified Wake Word acceptance claim matching ${pattern}`);
+  }
+}
+if (readmeMentionsWakeWord) {
+  const readmeTruthfulBoundary =
+    /not yet fully accepted/i.test(readme) ||
+    /under qualification/i.test(readme) ||
+    /real audio acceptance.*pending/i.test(readme) ||
+    /wake word.*pending/i.test(readme);
+  if (!readmeTruthfulBoundary) {
+    fail("README mentions Wake Word without an explicit pending/qualification boundary");
+  }
+}
+
 if (performance.status !== "pending_measurement") {
   fail("performance status changed; update documentation audit with accepted measured evidence");
 }
@@ -108,4 +134,4 @@ for (const pattern of forbiddenClaims) {
   }
 }
 
-console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, UI disclosures, gate boundaries, and pending performance status are consistent.");
+console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, UI disclosures, README truthfulness boundary, gate boundaries, and pending performance status are consistent.");
