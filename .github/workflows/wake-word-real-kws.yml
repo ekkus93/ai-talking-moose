@@ -110,6 +110,9 @@ jobs:
             libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+      - name: Prepare pinned Moonshine build prerequisites on macOS
+        if: matrix.label == 'macos-arm64'
+        run: bash scripts/prepare_moonshine_macos.sh arm64
       - name: Cache Cargo downloads and acceptance build
         uses: actions/cache@v4
         with:
@@ -152,6 +155,7 @@ jobs:
             --index target/wake-word-v1-corpus/corpus-index.json \
             --output "target/wake-word-reports/${{ matrix.label }}.json"
       - name: Upload exact-head acceptance report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wake-word-real-kws-${{ matrix.label }}
