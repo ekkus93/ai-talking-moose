@@ -299,18 +299,18 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [x] Ensure Wake Word does not open a competing continuous microphone stream.
 - [x] Canonicalize/resample microphone PCM once where practical.
 - [x] Feed ring buffer and KWS from the same chronological canonical stream.
-- [ ] Preserve live samples immediately after trigger while command ASR initializes.
+- [x] Preserve live samples immediately after trigger while command ASR initializes.
 - [x] Implement deterministic ownership transfer to command ASR.
 - [x] Implement deterministic ownership return to wake listening.
-- [ ] Handle device disconnect.
-- [ ] Handle reconnect.
+- [x] Handle device disconnect.
+- [x] Handle reconnect.
 - [x] Handle unavailable device.
 - [x] Handle permission/capture error without spin/deadlock.
 - [x] Ensure cancellation does not orphan or multiply streams.
 
 **Tests**
 
-- [ ] Repeated wake→ASR→wake cycles do not increase capture-stream count.
+- [x] Repeated wake→ASR→wake cycles do not increase capture-stream count.
 - [x] Wake disable tears down/suspends capture according to final policy.
 - [x] Manual listen still works with Wake Word disabled.
 - [x] Device error leaves deterministic ownership.
@@ -326,6 +326,8 @@ The ordering is intentional. Do not implement later integration around unresolve
 **Evidence (audit/strategy):** `docs/evidence/WWR-300_AUDIO_CAPTURE_OWNERSHIP_AUDIT_2026-09-19.md`; audit merged in PR #223 at `f182f688d94e384780fc28024ca3ae3f5680829f`. The remaining WWR-300 items are production wiring and acceptance, not documentation.
 
 **Evidence (routing/composition):** `docs/evidence/WWR-300_APP_STATE_CAPTURE_COMPOSITION_2026-09-22.md`; implementation merged in PR #370 at `ae2fb1e50a97768b697052c557d65609e89921bd`. Exact merged-master ordinary CI `35743357172`, Wake Word source security audit `35743357280`, and Wake Word lifecycle stability `35743357095` passed. The shared `AuthoritativeWakeCaptureOwner` uses the existing `AppState::audio_capture`, deterministic transfer/return/cancellation methods stop or resume that same owner, and `CanonicalWakePcmRouter` validates one canonical 16-kHz mono timeline before retaining the same chunks for pre-roll and feeding KWS. Lifecycle start wiring, real device disconnect/reconnect acceptance, and repeated wake→ASR→wake soak remain open.
+
+**Evidence (capture recovery/cycles):** `docs/evidence/WWR-300_CAPTURE_RECOVERY_CYCLES_2026-09-22.md`. Post-trigger canonical PCM is retained in the single handoff path while command ASR starts. Runtime capture inactivity is detected even when the PCM queue remains open, fails Wake closed, and is recoverable only through the serialized restart path on the same `AppState::audio_capture`. A 100-cycle wake→command→wake regression verifies repeated ownership transfer/return reuses that exact shared capture owner. Real hardware disconnect/reconnect acceptance remains a later integration/acceptance concern; production lifecycle startup wiring is still open.
 
 ---
 
