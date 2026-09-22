@@ -296,34 +296,36 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [x] Re-audit current `AudioCapture` ownership on the post-consolidation source.
 - [x] Select and document the final one-stream/routing strategy.
 - [ ] Wire Wake Word manager into production application state/composition.
-- [ ] Ensure Wake Word does not open a competing continuous microphone stream.
-- [ ] Canonicalize/resample microphone PCM once where practical.
-- [ ] Feed ring buffer and KWS from the same chronological canonical stream.
+- [x] Ensure Wake Word does not open a competing continuous microphone stream.
+- [x] Canonicalize/resample microphone PCM once where practical.
+- [x] Feed ring buffer and KWS from the same chronological canonical stream.
 - [ ] Preserve live samples immediately after trigger while command ASR initializes.
-- [ ] Implement deterministic ownership transfer to command ASR.
-- [ ] Implement deterministic ownership return to wake listening.
+- [x] Implement deterministic ownership transfer to command ASR.
+- [x] Implement deterministic ownership return to wake listening.
 - [ ] Handle device disconnect.
 - [ ] Handle reconnect.
-- [ ] Handle unavailable device.
-- [ ] Handle permission/capture error without spin/deadlock.
-- [ ] Ensure cancellation does not orphan or multiply streams.
+- [x] Handle unavailable device.
+- [x] Handle permission/capture error without spin/deadlock.
+- [x] Ensure cancellation does not orphan or multiply streams.
 
 **Tests**
 
 - [ ] Repeated wake→ASR→wake cycles do not increase capture-stream count.
-- [ ] Wake disable tears down/suspends capture according to final policy.
-- [ ] Manual listen still works with Wake Word disabled.
-- [ ] Device error leaves deterministic ownership.
-- [ ] Cancellation leaves deterministic ownership.
+- [x] Wake disable tears down/suspends capture according to final policy.
+- [x] Manual listen still works with Wake Word disabled.
+- [x] Device error leaves deterministic ownership.
+- [x] Cancellation leaves deterministic ownership.
 
 **Acceptance**
 
 - [ ] Exactly one authoritative microphone ownership model exists in production.
-- [ ] No simultaneous competing capture opens occur.
+- [x] No simultaneous competing capture opens occur.
 
 ---
 
 **Evidence (audit/strategy):** `docs/evidence/WWR-300_AUDIO_CAPTURE_OWNERSHIP_AUDIT_2026-09-19.md`; audit merged in PR #223 at `f182f688d94e384780fc28024ca3ae3f5680829f`. The remaining WWR-300 items are production wiring and acceptance, not documentation.
+
+**Evidence (routing/composition):** `docs/evidence/WWR-300_APP_STATE_CAPTURE_COMPOSITION_2026-09-22.md`; implementation merged in PR #370 at `ae2fb1e50a97768b697052c557d65609e89921bd`. Exact merged-master ordinary CI `35743357172`, Wake Word source security audit `35743357280`, and Wake Word lifecycle stability `35743357095` passed. The shared `AuthoritativeWakeCaptureOwner` uses the existing `AppState::audio_capture`, deterministic transfer/return/cancellation methods stop or resume that same owner, and `CanonicalWakePcmRouter` validates one canonical 16-kHz mono timeline before retaining the same chunks for pre-roll and feeding KWS. Lifecycle start wiring, real device disconnect/reconnect acceptance, and repeated wake→ASR→wake soak remain open.
 
 ---
 
