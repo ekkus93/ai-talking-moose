@@ -9,6 +9,11 @@ on:
       - "src-tauri/src/asr/wake_word_stability.rs"
       - "src-tauri/src/app/wake_word_composition.rs"
       - "src-tauri/src/app/wake_word_lifecycle_stability_tests.rs"
+      - "src-tauri/src/app/wake_word_authoritative_capture.rs"
+      - "src-tauri/src/app/wake_word_capture_consumer.rs"
+      - "src-tauri/src/app/wake_word_capture_orchestrator.rs"
+      - "src-tauri/src/app/wake_word_command_lifecycle.rs"
+      - "src-tauri/src/app/wake_word_pcm_router.rs"
       - "src-tauri/src/app/wake_word_state.rs"
       - "src-tauri/src/app/runtime_preferences.rs"
       - "src-tauri/src/commands/wake_word.rs"
@@ -23,6 +28,11 @@ on:
       - "src-tauri/src/asr/wake_word_stability.rs"
       - "src-tauri/src/app/wake_word_composition.rs"
       - "src-tauri/src/app/wake_word_lifecycle_stability_tests.rs"
+      - "src-tauri/src/app/wake_word_authoritative_capture.rs"
+      - "src-tauri/src/app/wake_word_capture_consumer.rs"
+      - "src-tauri/src/app/wake_word_capture_orchestrator.rs"
+      - "src-tauri/src/app/wake_word_command_lifecycle.rs"
+      - "src-tauri/src/app/wake_word_pcm_router.rs"
       - "src-tauri/src/app/wake_word_state.rs"
       - "src-tauri/src/app/runtime_preferences.rs"
       - "src-tauri/src/commands/wake_word.rs"
@@ -74,3 +84,9 @@ jobs:
         run: python3 scripts/generate_app_icons.py
       - name: Run Wake Word lifecycle stability tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_stability -- --nocapture
+      - name: Run authoritative capture ownership tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_authoritative_capture -- --nocapture
+      - name: Run capture orchestrator recovery tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_capture_orchestrator -- --nocapture
+      - name: Run command lifecycle ownership tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features wake_word_command_lifecycle -- --nocapture
