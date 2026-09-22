@@ -479,15 +479,17 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [x] Expose initialization duration.
 - [x] Expose Talking suspension.
 - [x] Expose sanitized last error.
-- [ ] Add optional measured CPU/memory/inference/handoff timing fields as available.
+- [x] Add optional measured CPU/memory/inference/handoff timing fields as available.
 - [x] Ensure raw PCM cannot be represented/serialized.
-- [ ] Audit errors/logs for credentials.
-- [ ] Audit errors/logs for unnecessary absolute paths.
-- [ ] Audit errors/logs for audio content.
+- [x] Audit errors/logs for credentials.
+- [x] Audit errors/logs for unnecessary absolute paths.
+- [x] Audit errors/logs for audio content.
 
 **Acceptance**
 
 - [x] Diagnostics can troubleshoot lifecycle/artifact/performance issues without exposing audio or secrets.
+
+**Evidence:** `docs/evidence/WWR-510_MEASURED_DIAGNOSTICS_PLACEHOLDERS_2026-09-22.md`, `docs/evidence/WWR-510_PRIVACY_ERROR_AUDIT_GUARD_2026-09-22.md`, `docs/evidence/WWR-510_WAKE_WORD_ERROR_LOG_PRIVACY_AUDIT_2026-09-21.md`, `docs/evidence/WWR-510_WAKE_PRIVACY_LOG_AUDIT_2026-09-21.md`, and `docs/evidence/WWR-510_TODO_RECONCILIATION_2026-09-22.md`. Optional measured CPU/memory/inference/handoff diagnostics are schema placeholders only; WWR-630 remains open for accepted performance measurements.
 
 ---
 
