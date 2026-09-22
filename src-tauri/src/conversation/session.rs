@@ -1,5 +1,7 @@
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
+use crate::app::wake_word_command_asr_ingress::WakeCommandAsrHandoff;
+use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrLifecycle;
 use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::{AsrEvent, AsrMode};
@@ -114,6 +116,7 @@ pub struct ConversationStartRequest {
     pub config: LiveSessionConfig,
     pub asr_mode: AsrMode,
     pub moonshine_installer: Option<Arc<MoonshineModelInstaller>>,
+    pub wake_handoff: Option<WakeCommandHandoffAudio>,
     pub capture: Arc<SyncMutex<AudioCapture>>,
     pub input_device: Option<String>,
     pub playback: Arc<AudioPlayback>,
@@ -479,6 +482,7 @@ impl ConversationManager {
             config,
             asr_mode,
             moonshine_installer,
+            wake_handoff,
             capture,
             input_device,
             playback,
@@ -543,6 +547,32 @@ impl ConversationManager {
                 provider_error_callback: provider_error_callback.clone(),
             })
             .await?;
+
+        if let Some(audio) = wake_handoff {
+            let Some(pipeline) = local_pipeline.as_mut() else {
+                Self::set_lifecycle(
+                    &self.lifecycle,
+                    ConversationLifecycle::Failed,
+                    Some(&lifecycle_callback),
+                );
+                state_callback(CharacterState::Error);
+                return Err(
+                    "Wake Word V1 requires the selected local command ASR path for audio handoff."
+                        .to_string(),
+                );
+            };
+            let mut handoff = WakeCommandAsrHandoff::new(audio);
+            if let Err(error) = handoff.deliver_once(pipeline) {
+                Self::stop_provisional_local_asr(&mut local_pipeline).await;
+                Self::set_lifecycle(
+                    &self.lifecycle,
+                    ConversationLifecycle::Failed,
+                    Some(&lifecycle_callback),
+                );
+                state_callback(CharacterState::Error);
+                return Err(error);
+            }
+        }
 
         let input_sample_rate = config.sample_rate_in;
         let output_sample_rate = config.sample_rate_out;
