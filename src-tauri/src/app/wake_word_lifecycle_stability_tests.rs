@@ -1,6 +1,15 @@
 use super::state::AppSettings;
-use super::wake_word::runtime::WakeWordRuntimePhase;
+use super::wake_word::engine::{
+    validate_pcm_frame, SherpaKwsConfig, SherpaKwsEngine, WakeWordDetection, WakeWordError,
+};
+use super::wake_word::runtime::{WakeWordRuntimeManager, WakeWordRuntimePhase};
+use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
+use super::wake_word_capture_consumer::WakeCapturePcmConsumer;
 use super::wake_word_composition::WakeWordApplicationRuntime;
+use super::wake_word_pcm_router::CanonicalWakePcmRouter;
+use crate::audio::capture::AudioCapture;
+use parking_lot::Mutex as CaptureMutex;
+use std::sync::Arc;
 use std::time::Instant;
 
 fn listening_runtime() -> WakeWordApplicationRuntime {
@@ -11,6 +20,44 @@ fn listening_runtime() -> WakeWordApplicationRuntime {
     let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
     runtime.mark_loaded().unwrap();
     runtime
+}
+
+#[derive(Default)]
+struct CaptureCycleEngine {
+    config: SherpaKwsConfig,
+}
+
+impl SherpaKwsEngine for CaptureCycleEngine {
+    fn config(&self) -> &SherpaKwsConfig {
+        &self.config
+    }
+
+    fn accept_pcm16_mono(
+        &mut self,
+        sample_rate_hz: u32,
+        samples: &[i16],
+    ) -> Result<Option<WakeWordDetection>, WakeWordError> {
+        validate_pcm_frame(sample_rate_hz, samples)?;
+        Ok(None)
+    }
+
+    fn reset_stream(&mut self) -> Result<(), WakeWordError> {
+        Ok(())
+    }
+
+    fn shutdown(&mut self) -> Result<(), WakeWordError> {
+        Ok(())
+    }
+}
+
+fn capture_cycle_consumer() -> WakeCapturePcmConsumer<CaptureCycleEngine> {
+    let runtime = WakeWordRuntimeManager::new();
+    runtime.begin_enable().unwrap();
+    runtime.mark_loaded().unwrap();
+    WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(
+        runtime,
+        CaptureCycleEngine::default(),
+    ))
 }
 
 #[test]
@@ -44,6 +91,35 @@ fn repeated_lifecycle_cycles_remain_bounded_and_return_to_listening() {
     }
 
     assert_eq!(runtime.snapshot(Instant::now()).trigger_count, 100);
+}
+
+#[tokio::test]
+async fn repeated_wake_command_wake_cycles_reuse_one_authoritative_capture_owner() {
+    let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+    let capture_identity = Arc::as_ptr(&app_capture);
+    let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+
+    owner
+        .start_wake(None, capture_cycle_consumer())
+        .await
+        .unwrap();
+
+    for _ in 0..100 {
+        assert_eq!(Arc::as_ptr(&app_capture), capture_identity);
+        assert!(app_capture.lock().is_active());
+
+        owner.transfer_to_command_asr().await.unwrap();
+        assert!(!app_capture.lock().is_active());
+        assert_eq!(Arc::as_ptr(&app_capture), capture_identity);
+
+        owner.return_to_wake_listening(None).await.unwrap();
+        assert!(app_capture.lock().is_active());
+        assert_eq!(Arc::as_ptr(&app_capture), capture_identity);
+    }
+
+    owner.disable().await;
+    assert!(!app_capture.lock().is_active());
+    assert_eq!(Arc::as_ptr(&app_capture), capture_identity);
 }
 
 #[test]
