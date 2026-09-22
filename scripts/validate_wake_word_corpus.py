@@ -9,6 +9,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "docs" / "wake-word-corpus.json"
+ARTIFACT_MANIFEST = ROOT / "wake-word-artifacts.json"
 REQUIRED_LABELS = {
     "positive_wake_phrase",
     "positive_wake_phrase_with_command",
@@ -41,7 +42,30 @@ def _require_object(value: Any, name: str) -> dict[str, Any]:
     return value
 
 
+def _require_sha256(value: Any, name: str) -> None:
+    _require(
+        isinstance(value, str)
+        and len(value) == 64
+        and value == value.lower()
+        and all(char in "0123456789abcdef" for char in value),
+        f"{name} must be lowercase hex sha256",
+    )
+
+
+def _runtime_c_api_sha256(artifact_manifest: dict[str, Any], platform_key: str) -> str:
+    platform = artifact_manifest["runtime"]["platforms"][platform_key]
+    for file in platform["files"]:
+        if "sherpa-onnx-c-api" in file["path"]:
+            return file["sha256"]
+    raise AssertionError(f"artifact manifest missing {platform_key} C API file")
+
+
 def validate(data: dict[str, Any]) -> None:
+    artifact_manifest = json.loads(ARTIFACT_MANIFEST.read_text(encoding="utf-8"))
+    model = next(
+        artifact for artifact in artifact_manifest["artifacts"] if artifact["kind"] == "kws-model"
+    )
+
     _require(data.get("schema_version") == 1, "schema_version must be 1")
     _require(data.get("corpus_id") == "wake-word-v1-deterministic-corpus", "unexpected corpus_id")
     _require(data.get("wake_phrase") == "Hey, Moose", "wake_phrase must be Hey, Moose")
@@ -50,6 +74,8 @@ def validate(data: dict[str, Any]) -> None:
     _require(policy.get("sample_rate_hz") == 16_000, "policy.sample_rate_hz must be 16000")
     _require(policy.get("channels") == 1, "policy.channels must be 1")
     _require(policy.get("sample_format") == "pcm_s16le", "policy.sample_format must be pcm_s16le")
+    _require(policy.get("score") == 1.0, "policy.score must be 1.0")
+    _require(policy.get("threshold") == 0.25, "policy.threshold must be 0.25")
     _require(
         policy.get("fixture_root") == "docs/fixtures/wake-word-v1",
         "policy.fixture_root must be docs/fixtures/wake-word-v1",
@@ -59,6 +85,36 @@ def validate(data: dict[str, Any]) -> None:
         "Do not commit private room audio" in str(policy.get("privacy", "")),
         "privacy policy must forbid private room audio",
     )
+
+    identity = _require_object(data.get("model_runtime_identity"), "model_runtime_identity")
+    _require(identity.get("source_manifest") == "wake-word-artifacts.json", "identity source drift")
+    _require(identity.get("model_id") == model["id"], "identity model_id must match artifact manifest")
+    _require(
+        identity.get("model_archive_sha256") == model["archive"]["sha256"],
+        "identity model_archive_sha256 must match artifact manifest",
+    )
+    _require(
+        identity.get("keyword_sha256") == model["keyword"]["sha256"],
+        "identity keyword_sha256 must match artifact manifest",
+    )
+    _require(identity.get("runtime_id") == artifact_manifest["runtime"]["id"], "runtime_id drift")
+    _require(
+        identity.get("runtime_version") == artifact_manifest["runtime"]["version"],
+        "runtime_version drift",
+    )
+    _require(
+        identity.get("linux_x86_64_c_api_sha256")
+        == _runtime_c_api_sha256(artifact_manifest, "linux-x86_64"),
+        "linux C API identity drift",
+    )
+    _require(
+        identity.get("macos_arm64_c_api_sha256")
+        == _runtime_c_api_sha256(artifact_manifest, "macos-arm64"),
+        "macOS C API identity drift",
+    )
+    for key, value in identity.items():
+        if key.endswith("sha256"):
+            _require_sha256(value, f"identity.{key}")
 
     required_labels = data.get("required_labels")
     _require(isinstance(required_labels, list), "required_labels must be a list")
@@ -96,13 +152,7 @@ def validate(data: dict[str, Any]) -> None:
         _require(fixture["channels"] == policy["channels"], f"{fixture_id}: channel drift")
         _require(fixture["sample_format"] == policy["sample_format"], f"{fixture_id}: sample format drift")
         _require(isinstance(fixture["bytes"], int) and fixture["bytes"] > 0, f"{fixture_id}: bytes must be positive")
-        _require(
-            isinstance(fixture["sha256"], str)
-            and len(fixture["sha256"]) == 64
-            and fixture["sha256"] == fixture["sha256"].lower()
-            and all(char in "0123456789abcdef" for char in fixture["sha256"]),
-            f"{fixture_id}: sha256 must be lowercase hex",
-        )
+        _require_sha256(fixture["sha256"], f"{fixture_id}: sha256")
         _require(isinstance(fixture["expected_detection"], bool), f"{fixture_id}: expected_detection must be boolean")
         _require_object(fixture["provenance"], f"{fixture_id}.provenance")
         license_info = _require_object(fixture["license"], f"{fixture_id}.license")
