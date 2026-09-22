@@ -295,10 +295,10 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 - [x] Re-audit current `AudioCapture` ownership on the post-consolidation source.
 - [x] Select and document the final one-stream/routing strategy.
-- [ ] Wire Wake Word manager into production application state/composition.
-- [ ] Ensure Wake Word does not open a competing continuous microphone stream.
-- [ ] Canonicalize/resample microphone PCM once where practical.
-- [ ] Feed ring buffer and KWS from the same chronological canonical stream.
+- [x] Wire Wake Word manager into production application state/composition.
+- [x] Ensure Wake Word does not open a competing continuous microphone stream.
+- [x] Canonicalize/resample microphone PCM once where practical.
+- [x] Feed ring buffer and KWS from the same chronological canonical stream.
 - [ ] Preserve live samples immediately after trigger while command ASR initializes.
 - [ ] Implement deterministic ownership transfer to command ASR.
 - [ ] Implement deterministic ownership return to wake listening.
@@ -311,19 +311,21 @@ The ordering is intentional. Do not implement later integration around unresolve
 **Tests**
 
 - [ ] Repeated wake→ASR→wake cycles do not increase capture-stream count.
-- [ ] Wake disable tears down/suspends capture according to final policy.
-- [ ] Manual listen still works with Wake Word disabled.
-- [ ] Device error leaves deterministic ownership.
-- [ ] Cancellation leaves deterministic ownership.
+- [x] Wake disable tears down/suspends capture according to final policy.
+- [x] Manual listen still works with Wake Word disabled.
+- [x] Device error leaves deterministic ownership.
+- [x] Cancellation leaves deterministic ownership.
 
 **Acceptance**
 
-- [ ] Exactly one authoritative microphone ownership model exists in production.
-- [ ] No simultaneous competing capture opens occur.
+- [x] Exactly one authoritative microphone ownership model exists in production.
+- [x] No simultaneous competing capture opens occur.
 
 ---
 
-**Evidence (audit/strategy):** `docs/evidence/WWR-300_AUDIO_CAPTURE_OWNERSHIP_AUDIT_2026-09-19.md`; audit merged in PR #223 at `f182f688d94e384780fc28024ca3ae3f5680829f`. The remaining WWR-300 items are production wiring and acceptance, not documentation.
+**Evidence (audit/strategy):** `docs/evidence/WWR-300_AUDIO_CAPTURE_OWNERSHIP_AUDIT_2026-09-19.md`; audit merged in PR #223 at `f182f688d94e384780fc28024ca3ae3f5680829f`.
+
+**Evidence (composition/routing):** `docs/evidence/WWR-300_APP_STATE_CAPTURE_COMPOSITION_2026-09-22.md`; AppState capture composition merged in PR #370 at `ae2fb1e50a97768b697052c557d65609e89921bd`. Exact merged-master CI `35743357172`, Wake Word source security audit `35743357280`, and Wake Word lifecycle stability `35743357095` passed. The implementation composes Wake routing from `AppState::audio_capture`, keeps Wake from allocating an independent physical capture owner, validates/canonicalizes PCM before fan-out, feeds ring retention and KWS from the same chronological canonical chunks, and verifies disable/manual-listen/device-error/cancellation ownership behavior in deterministic tests. Device disconnect/reconnect and wake→ASR handoff remain open.
 
 ---
 
@@ -477,15 +479,17 @@ The ordering is intentional. Do not implement later integration around unresolve
 - [x] Expose initialization duration.
 - [x] Expose Talking suspension.
 - [x] Expose sanitized last error.
-- [ ] Add optional measured CPU/memory/inference/handoff timing fields as available.
+- [x] Add optional measured CPU/memory/inference/handoff timing fields as available.
 - [x] Ensure raw PCM cannot be represented/serialized.
-- [ ] Audit errors/logs for credentials.
-- [ ] Audit errors/logs for unnecessary absolute paths.
-- [ ] Audit errors/logs for audio content.
+- [x] Audit errors/logs for credentials.
+- [x] Audit errors/logs for unnecessary absolute paths.
+- [x] Audit errors/logs for audio content.
 
 **Acceptance**
 
 - [x] Diagnostics can troubleshoot lifecycle/artifact/performance issues without exposing audio or secrets.
+
+**Evidence:** `docs/evidence/WWR-510_MEASURED_DIAGNOSTICS_PLACEHOLDERS_2026-09-22.md`, `docs/evidence/WWR-510_PRIVACY_ERROR_AUDIT_GUARD_2026-09-22.md`, `docs/evidence/WWR-510_WAKE_WORD_ERROR_LOG_PRIVACY_AUDIT_2026-09-21.md`, `docs/evidence/WWR-510_WAKE_PRIVACY_LOG_AUDIT_2026-09-21.md`, and `docs/evidence/WWR-510_TODO_RECONCILIATION_2026-09-22.md`. The measured CPU/memory/inference/handoff diagnostics are placeholders only; WWR-630 remains open for accepted performance measurements.
 
 ---
 
@@ -806,9 +810,9 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ### Audio/handoff/lifecycle
 
-- [ ] One authoritative microphone ownership path exists.
+- [x] One authoritative microphone ownership path exists.
 - [x] PCM is validated before retention.
-- [ ] Ring buffer and KWS share one chronological canonical stream.
+- [x] Ring buffer and KWS share one chronological canonical stream.
 - [ ] Wake→ASR pre-roll/live handoff is continuous.
 - [ ] First command word is not clipped.
 - [ ] One wake event creates one command interaction.
@@ -818,7 +822,7 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ### Privacy/quality
 
-- [ ] Raw Wake PCM remains memory-only.
+- [x] Raw Wake PCM remains memory-only.
 - [x] Diagnostics are privacy-safe.
 - [ ] No silent cloud/full-ASR fallback exists.
 - [ ] Corpus acceptance passes.
