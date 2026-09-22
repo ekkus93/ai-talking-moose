@@ -18,10 +18,7 @@ pub(crate) fn runtime_from_app_state(state: &AppState) -> &WakeWordApplicationRu
 /// competing capture owner. The returned owner still requires a caller-supplied capture consumer so
 /// production can use a verified native KWS session while tests can keep deterministic fake engines.
 /// The application-startup caller is intentionally staged separately from this ownership seam.
-#[expect(
-    dead_code,
-    reason = "WWR-300 stages the AppState capture seam before production startup activation"
-)]
+#[allow(dead_code)]
 pub(crate) fn capture_owner_from_app_state<E: SherpaKwsEngine>(
     state: &AppState,
 ) -> AuthoritativeWakeCaptureOwner<E> {
