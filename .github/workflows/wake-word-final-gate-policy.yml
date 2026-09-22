@@ -1,0 +1,42 @@
+name: Wake Word final gate policy
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/wake-word-*.yml"
+      - "scripts/check_wake_word_final_gate_policy.mjs"
+      - "docs/WAKE_WORD_V1_CI_GATES.md"
+      - "docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md"
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/wake-word-*.yml"
+      - "scripts/check_wake_word_final_gate_policy.mjs"
+      - "docs/WAKE_WORD_V1_CI_GATES.md"
+      - "docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wake-word-final-gate-policy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    name: Final specialized gate policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact workflow head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Enforce Wake Word final gate policy
+        run: node scripts/check_wake_word_final_gate_policy.mjs
