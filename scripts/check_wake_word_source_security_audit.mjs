@@ -77,7 +77,7 @@ requireText(
 );
 requireText(
   activation,
-  "command_asr_startup_failure_clears_handoff_and_resumes_wake",
+  "command_asr_startup_failure_returns_to_listening_without_stale_replay",
   "command ASR startup recovery regression",
 );
 requireText(ingress, "pub trait WakeCommandAsrIngress", "provider-neutral command ASR ingress");
