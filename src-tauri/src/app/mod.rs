@@ -28,7 +28,7 @@ pub(crate) mod wake_word_pcm_router;
 pub(crate) mod wake_word_state;
 #[allow(dead_code)]
 #[rustfmt::skip]
-pub(crate) mod wake_word_engine;
+pub mod wake_word_engine;
 pub(crate) mod wake_word_settings;
 pub(crate) mod window_position;
 pub use state::*;
