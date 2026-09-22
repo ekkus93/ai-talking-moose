@@ -32,6 +32,10 @@ const fail = (message) => {
   throw new Error(`Wake Word privacy audit failed: ${message}`);
 };
 
+const requireText = (source, needle, label) => {
+  if (!source.includes(needle)) fail(`${label} is missing ${needle}`);
+};
+
 const diagnosticsPath = "src-tauri/src/asr/wake_word_diagnostics.rs";
 const enginePath = "src-tauri/src/app/wake_word_engine.rs";
 const docsPath = "docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md";
@@ -110,12 +114,25 @@ const engineRequirements = [
   "<path>",
   "<redacted>",
   "errors_sanitize_paths_and_token_like_secrets",
+  "native_session_rejects_missing_verified_artifacts_before_creation",
+  "missing_native_c_api_library_is_sanitized_before_inference",
+  "native_load_failure is sanitized",
   "missing required Wake Word native C API library",
 ];
 for (const token of engineRequirements) {
   if (!engine.includes(token)) {
     fail(`${enginePath} is missing privacy sanitizer evidence ${token}`);
   }
+}
+
+const sanitizerTestRequirements = [
+  "assert_eq!(error.message, \"failed <path> token <redacted>\")",
+  "!error.message.contains(temp.path().to_string_lossy().as_ref())",
+  "assert_eq!(error.message, \"missing required Wake Word native C API library\")",
+  "assert_eq!(error.message, \"native runtime architecture mismatch\")",
+];
+for (const token of sanitizerTestRequirements) {
+  requireText(engine, token, "Wake Word sanitized error regression coverage");
 }
 
 const docRequirements = [
@@ -156,6 +173,13 @@ const forbiddenErrorLiteralFragments = [
   "absolute_path",
   "file_path",
 ];
+const forbiddenErrorFormattingFragments = [
+  "{path}",
+  "{file}",
+  "{model_dir}",
+  "{runtime_dir}",
+  "{:?}",
+];
 
 for (const path of wakeProductionFiles) {
   const source = productionRust(read(path));
@@ -171,8 +195,13 @@ for (const path of wakeProductionFiles) {
       }
     }
   }
+  for (const fragment of forbiddenErrorFormattingFragments) {
+    if (source.includes(fragment)) {
+      fail(`${path} contains potentially path-leaking production formatting fragment ${fragment}`);
+    }
+  }
 }
 
 console.log(
-  `Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), ${wakeProductionFiles.length} production Wake Word Rust file(s), sanitizer evidence, documentation, and corpus privacy policy are OK.`,
+  `Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), ${wakeProductionFiles.length} production Wake Word Rust file(s), sanitizer regression evidence, documentation, and corpus privacy policy are OK.`,
 );
