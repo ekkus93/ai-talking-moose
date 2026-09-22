@@ -3,11 +3,13 @@ import path from "node:path";
 
 const manifestPath = "docs/wake-word-corpus.json";
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+const artifactManifest = JSON.parse(readFileSync("wake-word-artifacts.json", "utf8"));
 const requiredTopLevel = [
   "schema_version",
   "corpus_id",
   "wake_phrase",
   "policy",
+  "model_runtime_identity",
   "required_labels",
   "acceptance_criteria",
   "fixtures",
@@ -36,6 +38,17 @@ const requiredLabels = new Set([
 const fail = (message) => {
   throw new Error(`${manifestPath}: ${message}`);
 };
+const requireHexSha256 = (value, label) => {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
+    fail(`${label} must be lowercase 64-character hex`);
+  }
+};
+const requiredRuntimeSha = (platformKey) => {
+  const platform = artifactManifest.runtime.platforms[platformKey];
+  const cApi = platform.files.find((file) => file.path.includes("sherpa-onnx-c-api"));
+  if (!cApi) fail(`artifact manifest missing ${platformKey} C API file`);
+  return cApi.sha256;
+};
 
 for (const key of requiredTopLevel) {
   if (!Object.hasOwn(manifest, key)) fail(`missing top-level key ${key}`);
@@ -59,6 +72,8 @@ if (policy.channels !== 1) fail("policy.channels must be 1");
 if (policy.sample_format !== "pcm_s16le") {
   fail("policy.sample_format must be pcm_s16le");
 }
+if (policy.score !== 1.0) fail("policy.score must be 1.0");
+if (policy.threshold !== 0.25) fail("policy.threshold must be 0.25");
 if (policy.fixture_root !== "docs/fixtures/wake-word-v1") {
   fail("policy.fixture_root must be docs/fixtures/wake-word-v1");
 }
@@ -67,6 +82,34 @@ if (policy.fixture_schema_version !== 1) {
 }
 if (!String(policy.privacy ?? "").includes("Do not commit private room audio")) {
   fail("policy.privacy must explicitly forbid private room audio");
+}
+
+const identity = manifest.model_runtime_identity;
+if (!identity || typeof identity !== "object" || Array.isArray(identity)) {
+  fail("model_runtime_identity must be an object");
+}
+const model = artifactManifest.artifacts.find((artifact) => artifact.kind === "kws-model");
+if (!model) fail("artifact manifest missing kws-model artifact");
+if (identity.source_manifest !== "wake-word-artifacts.json") fail("identity.source_manifest drifted");
+if (identity.model_id !== model.id) fail("identity.model_id must match artifact manifest");
+if (identity.model_archive_sha256 !== model.archive.sha256) {
+  fail("identity.model_archive_sha256 must match artifact manifest");
+}
+if (identity.keyword_sha256 !== model.keyword.sha256) {
+  fail("identity.keyword_sha256 must match artifact manifest");
+}
+if (identity.runtime_id !== artifactManifest.runtime.id) fail("identity.runtime_id must match artifact manifest");
+if (identity.runtime_version !== artifactManifest.runtime.version) {
+  fail("identity.runtime_version must match artifact manifest");
+}
+if (identity.linux_x86_64_c_api_sha256 !== requiredRuntimeSha("linux-x86_64")) {
+  fail("identity.linux_x86_64_c_api_sha256 must match artifact manifest");
+}
+if (identity.macos_arm64_c_api_sha256 !== requiredRuntimeSha("macos-arm64")) {
+  fail("identity.macos_arm64_c_api_sha256 must match artifact manifest");
+}
+for (const [key, value] of Object.entries(identity)) {
+  if (key.endsWith("sha256")) requireHexSha256(value, `identity.${key}`);
 }
 
 const criteria = manifest.acceptance_criteria;
@@ -141,5 +184,5 @@ if (manifest.fixtures.length > 0) {
 }
 
 console.log(
-  `Wake Word corpus manifest: schema OK, fixture_schema=${policy.fixture_schema_version}, criteria=${criteria.criteria_version}/${criteria.criteria_status}, ${manifest.fixtures.length} fixture(s).`,
+  `Wake Word corpus manifest: schema OK, score=${policy.score}, threshold=${policy.threshold}, model=${identity.model_id}, runtime=${identity.runtime_version}, fixture_schema=${policy.fixture_schema_version}, criteria=${criteria.criteria_version}/${criteria.criteria_status}, ${manifest.fixtures.length} fixture(s).`,
 );

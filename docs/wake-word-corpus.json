@@ -6,10 +6,22 @@
     "sample_rate_hz": 16000,
     "channels": 1,
     "sample_format": "pcm_s16le",
+    "score": 1.0,
+    "threshold": 0.25,
     "fixture_root": "docs/fixtures/wake-word-v1",
     "fixture_schema_version": 1,
     "privacy": "Fixtures must be licensable, redistributable, and intentionally recorded or generated for Wake Word acceptance. Do not commit private room audio, transcripts beyond fixture labels, credentials, or user recordings captured incidentally.",
     "pass_fail_scope": "This manifest records corpus metadata and acceptance criteria. It does not claim real positive/negative KWS acceptance until fixture files are present and a platform acceptance job records exact run evidence."
+  },
+  "model_runtime_identity": {
+    "source_manifest": "wake-word-artifacts.json",
+    "model_id": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
+    "model_archive_sha256": "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a",
+    "keyword_sha256": "3b1ad407b63b5e89edd8e253b9c104ac85d74a2a862b0d07ac4a0d4ee27770a6",
+    "runtime_id": "sherpa-onnx-native",
+    "runtime_version": "v1.13.8",
+    "linux_x86_64_c_api_sha256": "b8351ca1632571ac108adbb317bcc4bf7cfe84b72690e3017316b0da3e1e344f",
+    "macos_arm64_c_api_sha256": "ee098d8b419d49b92101cde3c970a333b361066eb2d79a11ab480a116552b908"
   },
   "required_labels": [
     "positive_wake_phrase",

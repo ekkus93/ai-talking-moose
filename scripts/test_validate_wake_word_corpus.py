@@ -71,6 +71,18 @@ class WakeWordCorpusContractTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             validate(data)
 
+    def test_score_threshold_drift_fails(self):
+        data = copy.deepcopy(self.data)
+        data["policy"]["threshold"] = 0.5
+        with self.assertRaises(AssertionError):
+            validate(data)
+
+    def test_model_runtime_identity_drift_fails(self):
+        data = copy.deepcopy(self.data)
+        data["model_runtime_identity"]["model_archive_sha256"] = "1" * 64
+        with self.assertRaises(AssertionError):
+            validate(data)
+
 
 if __name__ == "__main__":
     unittest.main()
