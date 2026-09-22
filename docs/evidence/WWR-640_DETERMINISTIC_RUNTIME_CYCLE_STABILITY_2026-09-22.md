@@ -2,6 +2,7 @@
 
 Date: 2026-09-22
 Baseline master: `7b9801a4eb26a8106042c36a88129762a7375fdf`
+Latest exact-master qualification: `cf174e08a578f0bf17f1f071f2d56fefd3c56fa6`
 
 ## Scope
 
@@ -28,9 +29,19 @@ The production-facing test module `src-tauri/src/app/wake_word_lifecycle_stabili
 
 `shutdown_during_triggered_handoff_is_terminal_and_clears_pre_roll` proves shutdown during an active trigger/handoff clears pre-roll and cannot resume afterward.
 
+## Exact-master qualification
+
+The lifecycle workflow path filters now cover the production Wake capture, routing, command activation/lifecycle, composition, conversation command, and lifecycle-stability source paths. On exact master `cf174e08a578f0bf17f1f071f2d56fefd3c56fa6`:
+
+- ordinary CI run `35796510592` completed successfully;
+- Wake Word required-gates audit run `35796510622` completed successfully;
+- Wake Word lifecycle stability run `35796510636` completed successfully.
+
+This closes the qualification gap for the deterministic layer itself: these tests are not merely present in source; the repository-defined lifecycle gate executed successfully on the exact master containing the expanded production-path trigger coverage.
+
 ## WWR-640 items objectively supported by this deterministic layer
 
-The source tests provide objective component-level evidence for:
+The source tests and exact-master lifecycle run provide objective component-level evidence for:
 
 - ring-buffer memory remaining bounded across repeated runtime cycles;
 - successful terminal interaction/TTS resolution repeatedly resuming Wake Word;
