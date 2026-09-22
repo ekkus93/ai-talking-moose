@@ -7,6 +7,8 @@ pub mod state;
 pub(crate) mod tray;
 #[allow(dead_code)]
 pub(crate) mod wake_word;
+#[cfg(feature = "wake-word-acceptance")]
+pub mod wake_word_acceptance;
 #[allow(dead_code)]
 pub(crate) mod wake_word_authoritative_capture;
 #[allow(dead_code)]
