@@ -2,7 +2,13 @@
 
 This document records the current Wake Word V1 gate inventory and the merge-eligibility policy implied by `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`.
 
-The machine-readable inventory lives in `docs/wake-word-required-gates.json` and is audited by `scripts/check_wake_word_required_gates.mjs`. The manifest is intentionally explicit that ordinary CI alone is not final Wake Word V1 qualification and that a workflow conclusion of `skipped` never counts as passed acceptance evidence.
+## Required-gate source of truth
+
+`docs/wake-word-required-gates.json` is the machine-readable required-gate inventory. `scripts/check_wake_word_required_gates.mjs` audits that inventory on pull requests and rejects drift, missing workflow files, `continue-on-error: true`, non-exact-head policy, or any policy that treats a skipped workflow as acceptance evidence.
+
+The audited titles are: Ordinary CI; Wake Word required gates manifest audit; Wake Word deterministic corpus manifest gate; Wake Word corpus contract gate; Native packaging/architecture policy gate; Lifecycle stability gate; Performance evidence policy gate; Privacy/security source audit gate; Documentation truthfulness audit; Source/security ownership audit gate; Linux x86_64 real KWS acceptance; macOS arm64 real KWS acceptance; Integrated production lifecycle acceptance; and Measured performance acceptance.
+
+`scripts/check_wake_word_final_qualification_readiness.mjs` is the fail-closed final-readiness check. It rejects final qualification while any required gate in the manifest remains pending. The manually dispatched `.github/workflows/wake-word-final-qualification-readiness.yml` exists specifically so a final feature head cannot qualify using ordinary CI alone. In policy terms, ordinary CI alone is not final Wake Word V1 qualification. Passing the readiness check is still not a substitute for recording the exact-head run IDs and reports required by WWR-950.
 
 ## Implemented gates
 
@@ -21,40 +27,6 @@ Policy:
 
 - Ordinary CI is required for every mergeable Wake Word change.
 - Ordinary CI alone is not final Wake Word V1 qualification.
-
-### Wake Word required gates manifest audit
-
-Workflow: `.github/workflows/wake-word-required-gates.yml`
-
-Current check: `node scripts/check_wake_word_required_gates.mjs`.
-
-Purpose:
-
-- validate the versioned required-gate inventory in `docs/wake-word-required-gates.json`
-- verify implemented gates point at real workflow files and include pull-request triggers
-- verify every final-closeout gate requires exact-head evidence
-- verify skipped workflow conclusions are never treated as passing acceptance evidence
-- preserve pending specialized-runner entries for Linux real KWS, macOS real KWS, integrated lifecycle, and measured performance acceptance
-
-Audited manifest gate titles:
-
-- Wake Word deterministic corpus manifest gate
-- Wake Word corpus contract gate
-- Native packaging/architecture policy gate
-- Lifecycle stability gate
-- Performance evidence policy gate
-- Privacy/security source audit gate
-- Documentation truthfulness audit
-- Source/security ownership audit gate
-- Linux x86_64 real KWS acceptance
-- macOS arm64 real KWS acceptance
-- Integrated production lifecycle acceptance
-- Measured performance acceptance
-
-Policy:
-
-- This is a policy/source-of-truth gate, not a real KWS acceptance run.
-- A passing manifest audit means the gate inventory is internally consistent; it does not mean pending real KWS, integrated lifecycle, or performance acceptance is complete.
 
 ### Deterministic corpus manifest and contract gates
 
@@ -163,24 +135,6 @@ Policy:
 - This is an automated source/privacy guardrail.
 - It supplements, but does not replace, the final WWR-900 source/privacy/security audit.
 
-### Source/security ownership audit gate
-
-Workflow: `.github/workflows/wake-word-source-security-audit.yml`
-
-Current check: `node scripts/check_wake_word_source_security_audit.mjs`.
-
-Purpose:
-
-- preserve the single authoritative `WakeWordRuntimeManager` definition
-- preserve shared `AudioCapture` ownership without a competing Wake-specific capture owner
-- verify lifecycle, shutdown, Talking suspension, and one-trigger router boundaries stay present
-- verify model/runtime identity checks and native architecture verification boundaries stay present
-- reject network or cloud/full-ASR references in the production KWS engine boundary
-
-Policy:
-
-- This automated source audit advances WWR-900 coverage but does not replace real production audio acceptance or final manual source review.
-
 ### Documentation truthfulness audit
 
 Workflow: `.github/workflows/wake-word-documentation-audit.yml`
@@ -220,19 +174,19 @@ The native packaging/architecture policy workflow is implemented. Final packagin
 
 ### Integrated production lifecycle acceptance
 
-The deterministic lifecycle workflow is implemented, but WWR-640 still requires Integrated production lifecycle acceptance: integrated repeated wake→ASR→Thinking→Talking→wake cycles, resource-count observations, TTS success/cancel/failure resume behavior, disable/enable cycles, shutdown scenarios, and bounded soak behavior.
+The deterministic lifecycle workflow is implemented, but WWR-640 still requires integrated repeated wake→ASR→Thinking→Talking→wake cycles, resource-count observations, TTS success/cancel/failure resume behavior, disable/enable cycles, shutdown scenarios, and bounded soak behavior.
 
 ### Measured performance acceptance
 
-The performance evidence policy gate is implemented, but WWR-630 remains pending until Measured performance acceptance populates `docs/wake-word-performance-evidence.json` with representative Linux and macOS measurements and demonstrates that idle KWS is lighter than continuously running full ASR.
+The performance evidence policy gate is implemented, but WWR-630 remains pending until representative Linux and macOS measurements populate `docs/wake-word-performance-evidence.json` and demonstrate that idle KWS is lighter than continuously running full ASR.
 
 ### Final source/privacy/security audit
 
-The automated privacy and source/security gates are implemented, but final WWR-900 still requires review of runtime ownership, microphone transitions, cancellation/shutdown, ring clearing, Wake-disabled behavior, Talking suspension/resume, one-trigger/one-command behavior, provider separation, exact artifact loading, architecture verification, offline idle inference, and documentation truthfulness.
+The automated privacy source gate is implemented, but final WWR-900 still requires review of runtime ownership, microphone transitions, cancellation/shutdown, ring clearing, Wake-disabled behavior, Talking suspension/resume, one-trigger/one-command behavior, provider separation, exact artifact loading, architecture verification, offline idle inference, and documentation truthfulness.
 
 ## Specialized runners and hardware
 
-- Deterministic corpus schema/contract, performance-policy, privacy-source, source/security, required-gates, and documentation gates run on ordinary hosted CI and do not constitute real KWS acceptance.
+- Deterministic corpus schema/contract, performance-policy, privacy-source, and documentation gates run on ordinary hosted CI and do not constitute real KWS acceptance.
 - Native packaging policy runs on hosted Linux x86_64 and macOS arm64; it validates policy/tests rather than real KWS audio acceptance.
 - Deterministic lifecycle stability currently runs on hosted Linux CI and does not constitute a production audio soak.
 - Linux x86_64 real KWS acceptance requires a runner/environment capable of loading and executing the pinned Linux native runtime and real redistributable fixtures.
