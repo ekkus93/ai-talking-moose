@@ -165,6 +165,7 @@ pub async fn start_conversation<R: Runtime>(
         config,
         asr_mode: settings.asr_mode,
         moonshine_installer: Some(state.moonshine_installer.clone()),
+        wake_handoff: None,
         capture: state.audio_capture.clone(),
         input_device: settings.input_device.clone(),
         playback: state.audio_playback.clone(),
