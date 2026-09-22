@@ -36,6 +36,21 @@ Purpose:
 - verify skipped workflow conclusions are never treated as passing acceptance evidence
 - preserve pending specialized-runner entries for Linux real KWS, macOS real KWS, integrated lifecycle, and measured performance acceptance
 
+Audited manifest gate titles:
+
+- Wake Word deterministic corpus manifest gate
+- Wake Word corpus contract gate
+- Native packaging/architecture policy gate
+- Lifecycle stability gate
+- Performance evidence policy gate
+- Privacy/security source audit gate
+- Documentation truthfulness audit
+- Source/security ownership audit gate
+- Linux x86_64 real KWS acceptance
+- macOS arm64 real KWS acceptance
+- Integrated production lifecycle acceptance
+- Measured performance acceptance
+
 Policy:
 
 - This is a policy/source-of-truth gate, not a real KWS acceptance run.
