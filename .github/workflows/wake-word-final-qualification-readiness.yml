@@ -1,0 +1,20 @@
+name: Wake Word final qualification readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  final-qualification-readiness:
+    name: Wake Word final qualification readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Fail closed unless every required acceptance gate is implemented
+        run: node scripts/check_wake_word_final_qualification_readiness.mjs
