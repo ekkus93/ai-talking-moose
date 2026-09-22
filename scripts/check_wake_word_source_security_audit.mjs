@@ -42,6 +42,12 @@ requireText(lifecycle, "SuspendedTalking", "Talking suspension policy");
 requireText(lifecycle, "wake_word_enabled", "latest-setting terminal resolution");
 requireText(composition, "record_capture_error", "capture-error fail-closed boundary");
 requireText(composition, "begin_shutdown", "Wake shutdown boundary");
+requireText(composition, "capture_consumer", "AppState Wake capture-consumer composition boundary");
+requireText(
+  composition,
+  "CanonicalWakePcmRouter::new(self.manager.clone(), engine)",
+  "shared runtime manager capture routing",
+);
 
 requireText(engine, "verify_model_artifacts", "model identity verification");
 requireText(engine, "verify_runtime_artifacts", "runtime identity verification");
@@ -75,5 +81,5 @@ requireText(
   "authoritative Wake capture module registration",
 );
 console.log(
-  "Wake Word source/security audit passed: ownership, capture, lifecycle, artifact, architecture, and offline/provider-separation invariants are present.",
+  "Wake Word source/security audit passed: ownership, capture, lifecycle, artifact, architecture, app composition, and offline/provider-separation invariants are present.",
 );
