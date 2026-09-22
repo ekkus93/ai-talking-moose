@@ -26,6 +26,8 @@ if (managerDefinitions !== 1) {
 
 requireText(state, "pub audio_capture: Arc<Mutex<AudioCapture>>", "AppState authoritative capture");
 requireText(state, "pub wake_word_runtime: WakeWordApplicationRuntime", "AppState Wake runtime ownership");
+requireText(composition, "capture_consumer", "AppState Wake capture composition boundary");
+requireText(composition, "CanonicalWakePcmRouter::new", "AppState Wake router composition boundary");
 requireText(capture, "from_shared_capture", "Wake shared-capture boundary");
 requireText(capture, "self.capture.lock().stop();", "Wake command handoff capture stop");
 const productionCapture = capture.split("#[cfg(test)]")[0];
@@ -38,16 +40,30 @@ if (
 
 requireText(router, "accept_trigger", "one-trigger router boundary");
 requireText(router, "return_to_wake_listening", "Wake router reset boundary");
+requireText(
+  router,
+  "handoff_audio_preserves_wake_phrase_tail_and_first_command_word_contiguously",
+  "wake-to-ASR chronological handoff regression",
+);
+requireText(
+  router,
+  "repeated_positive_frames_after_trigger_do_not_duplicate_command_activation",
+  "repeated-trigger debounce regression",
+);
+requireText(
+  router,
+  "later_phrase_after_return_to_listening_yields_second_trigger_without_cooldown",
+  "post-resume trigger regression",
+);
+requireText(
+  router,
+  "disabled_runtime_never_feeds_kws",
+  "disabled Wake no-feed regression",
+);
 requireText(lifecycle, "SuspendedTalking", "Talking suspension policy");
 requireText(lifecycle, "wake_word_enabled", "latest-setting terminal resolution");
 requireText(composition, "record_capture_error", "capture-error fail-closed boundary");
 requireText(composition, "begin_shutdown", "Wake shutdown boundary");
-requireText(composition, "capture_consumer", "AppState Wake capture-consumer composition boundary");
-requireText(
-  composition,
-  "CanonicalWakePcmRouter::new(self.manager.clone(), engine)",
-  "shared runtime manager capture routing",
-);
 
 requireText(engine, "verify_model_artifacts", "model identity verification");
 requireText(engine, "verify_runtime_artifacts", "runtime identity verification");
@@ -81,5 +97,5 @@ requireText(
   "authoritative Wake capture module registration",
 );
 console.log(
-  "Wake Word source/security audit passed: ownership, capture, lifecycle, artifact, architecture, app composition, and offline/provider-separation invariants are present.",
+  "Wake Word source/security audit passed: ownership, capture, lifecycle, router handoff/debounce, artifact, architecture, and offline/provider-separation invariants are present.",
 );
