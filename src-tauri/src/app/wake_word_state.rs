@@ -94,7 +94,10 @@ mod tests {
         owner.disable().await;
         assert!(!state.audio_capture.lock().is_active());
         assert_eq!(
-            state.wake_word_runtime.snapshot(std::time::Instant::now()).phase,
+            state
+                .wake_word_runtime
+                .snapshot(std::time::Instant::now())
+                .phase,
             WakeWordRuntimePhase::Disabled
         );
     }
