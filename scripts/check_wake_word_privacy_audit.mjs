@@ -93,6 +93,10 @@ const requiredPrivacySafeFields = [
   "trigger_count",
   "last_trigger_age_ms",
   "runtime_initialization_ms",
+  "measured_idle_cpu_percent",
+  "measured_memory_rss_bytes",
+  "last_inference_duration_ms",
+  "last_handoff_duration_ms",
   "talking_suspended",
   "last_error",
 ];
@@ -136,6 +140,7 @@ for (const token of sanitizerTestRequirements) {
 const docRequirements = [
   "Wake Word diagnostics do not serialize or expose raw PCM.",
   "Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content.",
+  "Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist.",
   "Do not describe Wake Word V1 as fully user-ready or fully accepted",
 ];
 for (const sentence of docRequirements) {

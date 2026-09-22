@@ -21,8 +21,9 @@ pub const WAKE_WORD_RUNTIME_MACOS_ARM64_C_API_SHA256: &str =
 /// Privacy-safe Wake Word V1 runtime diagnostics.
 ///
 /// This intentionally exposes only bounded counters, fixed configuration,
-/// immutable artifact identities, and lifecycle state. Raw PCM, transcripts,
-/// credentials, and filesystem paths are not representable in this type.
+/// immutable artifact identities, lifecycle state, and optional aggregate
+/// measurements. Raw PCM, transcripts, credentials, and filesystem paths are
+/// not representable in this type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WakeWordDiagnostics {
     pub enabled: bool,
@@ -50,6 +51,10 @@ pub struct WakeWordDiagnostics {
     pub trigger_count: u64,
     pub last_trigger_age_ms: Option<u64>,
     pub runtime_initialization_ms: Option<u64>,
+    pub measured_idle_cpu_percent: Option<f32>,
+    pub measured_memory_rss_bytes: Option<u64>,
+    pub last_inference_duration_ms: Option<u64>,
+    pub last_handoff_duration_ms: Option<u64>,
     pub talking_suspended: bool,
     pub last_error: Option<String>,
 }
@@ -85,6 +90,10 @@ impl WakeWordDiagnostics {
             trigger_count: snapshot.trigger_count,
             last_trigger_age_ms: snapshot.last_trigger_age.map(duration_ms),
             runtime_initialization_ms: snapshot.initialization_duration.map(duration_ms),
+            measured_idle_cpu_percent: None,
+            measured_memory_rss_bytes: None,
+            last_inference_duration_ms: None,
+            last_handoff_duration_ms: None,
             talking_suspended: snapshot.phase == WakeWordRuntimePhase::SuspendedTalking,
             last_error: snapshot.last_error.map(str::to_string),
         }
@@ -153,6 +162,10 @@ mod tests {
         assert_eq!(diagnostics.handoff_pre_roll_duration_ms, 0);
         assert_eq!(diagnostics.trigger_count, 0);
         assert_eq!(diagnostics.runtime_initialization_ms, None);
+        assert_eq!(diagnostics.measured_idle_cpu_percent, None);
+        assert_eq!(diagnostics.measured_memory_rss_bytes, None);
+        assert_eq!(diagnostics.last_inference_duration_ms, None);
+        assert_eq!(diagnostics.last_handoff_duration_ms, None);
         assert!(!diagnostics.talking_suspended);
         assert!(diagnostics.last_error.is_none());
 
@@ -199,6 +212,10 @@ mod tests {
         );
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Listening);
         assert_eq!(diagnostics.runtime_initialization_ms, Some(42));
+        assert_eq!(diagnostics.measured_idle_cpu_percent, None);
+        assert_eq!(diagnostics.measured_memory_rss_bytes, None);
+        assert_eq!(diagnostics.last_inference_duration_ms, None);
+        assert_eq!(diagnostics.last_handoff_duration_ms, None);
         let json = serde_json::to_string(&diagnostics).unwrap();
         assert!(!json.contains("model_path"));
         assert!(!json.contains("runtime_path"));
