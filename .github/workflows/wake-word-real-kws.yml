@@ -1,0 +1,160 @@
+name: Wake Word real KWS acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "docs/wake-word-corpus.json"
+      - "wake-word-artifacts.json"
+      - "scripts/generate_wake_word_corpus.py"
+      - "scripts/prepare_wake_word_model.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "scripts/check_wake_word_corpus_manifest.mjs"
+      - "src-tauri/src/app/wake_word_acceptance.rs"
+      - "src-tauri/src/bin/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_engine.rs"
+      - "src-tauri/src/asr/wake_word_sherpa_manifest.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - ".github/workflows/wake-word-real-kws.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "docs/wake-word-corpus.json"
+      - "wake-word-artifacts.json"
+      - "scripts/generate_wake_word_corpus.py"
+      - "scripts/prepare_wake_word_model.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "scripts/check_wake_word_corpus_manifest.mjs"
+      - "src-tauri/src/app/wake_word_acceptance.rs"
+      - "src-tauri/src/bin/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_engine.rs"
+      - "src-tauri/src/asr/wake_word_sherpa_manifest.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - ".github/workflows/wake-word-real-kws.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wake-word-real-kws-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  corpus:
+    name: Generate deterministic Wake corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install deterministic speech generator
+        run: |
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends espeak-ng
+      - name: Validate corpus contract
+        run: node scripts/check_wake_word_corpus_manifest.mjs
+      - name: Generate canonical PCM corpus
+        run: python3 scripts/generate_wake_word_corpus.py --output-dir target/wake-word-v1-corpus
+      - name: Upload generated corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-word-v1-corpus
+          path: target/wake-word-v1-corpus/
+          if-no-files-found: error
+          retention-days: 7
+
+  real-kws:
+    name: Real KWS acceptance (${{ matrix.label }})
+    needs: corpus
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-latest
+            platform_key: linux-x86_64
+            runtime_root: runtime/sherpa-onnx/v1.13.8/linux-x86_64
+          - label: macos-arm64
+            runner: macos-15
+            platform_key: macos-arm64
+            runtime_root: runtime/sherpa-onnx/v1.13.8/macos-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Assert acceptance architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.label }}" in
+            linux-x86_64) test "$(uname -s)-$(uname -m)" = "Linux-x86_64" ;;
+            macos-arm64) test "$(uname -s)-$(uname -m)" = "Darwin-arm64" ;;
+          esac
+      - name: Install Linux build dependencies
+        if: matrix.label == 'linux-x86_64'
+        run: |
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads and acceptance build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-${{ matrix.label }}-wake-kws-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-wake-kws-
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+      - name: Build exact-head acceptance binary
+        run: cargo build --manifest-path src-tauri/Cargo.toml --features wake-word-acceptance --bin wake_word_acceptance
+      - name: Download deterministic corpus
+        uses: actions/download-artifact@v5
+        with:
+          name: wake-word-v1-corpus
+          path: target/wake-word-v1-corpus
+      - name: Prepare and verify pinned model/runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_root="$RUNNER_TEMP/wake-assets"
+          python3 scripts/prepare_wake_word_model.py --root "$asset_root"
+          python3 scripts/prepare_wake_word_runtime.py --root "$asset_root" --platform "${{ matrix.platform_key }}"
+          python3 scripts/prepare_wake_word_model.py --root "$asset_root" --verify-only
+          python3 scripts/prepare_wake_word_runtime.py --root "$asset_root" --platform "${{ matrix.platform_key }}" --verify-only
+      - name: Run real pinned sherpa KWS inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          model_id="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+          asset_root="$RUNNER_TEMP/wake-assets"
+          mkdir -p target/wake-word-reports
+          src-tauri/target/debug/wake_word_acceptance \
+            --model-dir "$asset_root/models/wake-word/$model_id" \
+            --runtime-dir "$asset_root/${{ matrix.runtime_root }}" \
+            --corpus-dir target/wake-word-v1-corpus \
+            --index target/wake-word-v1-corpus/corpus-index.json \
+            --output "target/wake-word-reports/${{ matrix.label }}.json"
+      - name: Upload exact-head acceptance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-word-real-kws-${{ matrix.label }}
+          path: target/wake-word-reports/${{ matrix.label }}.json
+          if-no-files-found: error
+          retention-days: 30
