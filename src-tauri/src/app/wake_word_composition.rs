@@ -1,5 +1,7 @@
 use super::state::AppSettings;
-use super::wake_word::engine::SherpaKwsEngine;
+use super::wake_word::engine::{
+    NativeKwsSession, NativeKwsSessionPaths, SherpaKwsEngine, WakeWordError,
+};
 use super::wake_word::runtime::{
     WakeWordRuntimeError, WakeWordRuntimeManager, WakeWordRuntimePhase, WakeWordRuntimeSnapshot,
 };
@@ -45,6 +47,20 @@ impl WakeWordApplicationRuntime {
         engine: E,
     ) -> WakeCapturePcmConsumer<E> {
         WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(self.manager.clone(), engine))
+    }
+
+    /// Build the production capture consumer with the real verified native sherpa KWS session.
+    ///
+    /// Test fakes remain available only through `capture_consumer(engine)` for deterministic unit
+    /// coverage. The production constructor accepts explicit model/runtime roots, constructs the
+    /// real native session, and fails closed before any microphone capture can start if verified
+    /// artifacts or native runtime identities are missing or corrupt.
+    pub(crate) fn native_capture_consumer(
+        &self,
+        paths: NativeKwsSessionPaths,
+    ) -> Result<WakeCapturePcmConsumer<NativeKwsSession>, WakeWordError> {
+        let engine = NativeKwsSession::new(paths)?;
+        Ok(self.capture_consumer(engine))
     }
 
     pub fn snapshot(&self, now: Instant) -> WakeWordRuntimeSnapshot {
@@ -133,6 +149,24 @@ mod tests {
         let owner = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
         owner.mark_loaded().unwrap();
         owner
+    }
+
+    #[test]
+    fn native_capture_consumer_uses_real_session_and_fails_closed_without_verified_artifacts() {
+        let owner = enabled_owner();
+        let temp = tempfile::tempdir().unwrap();
+        let paths = NativeKwsSessionPaths {
+            model_dir: temp.path().join("model"),
+            runtime_dir: temp.path().join("runtime"),
+        };
+
+        let result = owner.native_capture_consumer(paths);
+
+        let Err(error) = result else {
+            panic!("missing verified artifacts must fail before Wake capture starts");
+        };
+        assert_eq!(error.message, "missing required wake artifact");
+        assert_eq!(owner.phase(), WakeWordRuntimePhase::Listening);
     }
 
     #[test]
