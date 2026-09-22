@@ -15,6 +15,9 @@ const state = read("src-tauri/src/app/state.rs");
 const capture = read("src-tauri/src/app/wake_word_authoritative_capture.rs");
 const router = read("src-tauri/src/app/wake_word_pcm_router.rs");
 const lifecycle = read("src-tauri/src/app/wake_word_command_lifecycle.rs");
+const activation = read("src-tauri/src/app/wake_word_command_activation.rs");
+const ingress = read("src-tauri/src/app/wake_word_command_asr_ingress.rs");
+const handoff = read("src-tauri/src/app/wake_word_command_handoff.rs");
 const appModule = read("src-tauri/src/app/mod.rs");
 
 const managerDefinitions = [runtime, engine, composition, state, capture, router, lifecycle]
@@ -65,6 +68,36 @@ requireText(lifecycle, "wake_word_enabled", "latest-setting terminal resolution"
 requireText(composition, "record_capture_error", "capture-error fail-closed boundary");
 requireText(composition, "begin_shutdown", "Wake shutdown boundary");
 
+requireText(activation, "activate_wake_command_once", "single command activation boundary");
+requireText(activation, "deliver_once", "single-use Wake command handoff");
+requireText(
+  activation,
+  "suspend_for_command_interaction",
+  "Wake suspension before command ASR activation",
+);
+requireText(
+  activation,
+  "command_asr_startup_failure_clears_handoff_and_resumes_wake",
+  "command ASR startup recovery regression",
+);
+requireText(ingress, "pub trait WakeCommandAsrIngress", "provider-neutral command ASR ingress");
+requireText(ingress, "LocalAsrPipeline", "normal local command ASR ingress implementation");
+requireText(handoff, "deliver_once", "single-use handoff coordinator");
+requireText(handoff, "clear_stale", "stale handoff clearing boundary");
+
+const productionActivation = activation.split("#[cfg(test)]")[0];
+const productionIngress = ingress.split("#[cfg(test)]")[0];
+for (const [label, source] of [
+  ["Wake command activation", productionActivation],
+  ["Wake command ASR ingress", productionIngress],
+]) {
+  for (const forbidden of ["GoogleLiveProvider", "GoogleAuth", "reqwest", "http://", "https://"]) {
+    if (source.includes(forbidden)) {
+      fail(`${label} contains cloud/network bypass reference ${forbidden}`);
+    }
+  }
+}
+
 requireText(engine, "verify_model_artifacts", "model identity verification");
 requireText(engine, "verify_runtime_artifacts", "runtime identity verification");
 requireText(engine, "NativeArchitecture::ElfX86_64", "Linux native architecture verification");
@@ -97,5 +130,5 @@ requireText(
   "authoritative Wake capture module registration",
 );
 console.log(
-  "Wake Word source/security audit passed: ownership, capture, lifecycle, router handoff/debounce, artifact, architecture, and offline/provider-separation invariants are present.",
+  "Wake Word source/security audit passed: ownership, capture, lifecycle, command activation/ASR ingress, router handoff/debounce, artifact, architecture, and offline/provider-separation invariants are present.",
 );
