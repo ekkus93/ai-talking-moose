@@ -409,27 +409,29 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-410 — Finalize debounce/trigger semantics
 
-- [ ] Preserve one wake event → one command activation invariant.
-- [ ] Ignore repeated positive KWS frames after acceptance.
-- [ ] Reset KWS stream at the verified lifecycle point.
-- [ ] Permit a later phrase after return to Listening.
-- [ ] Avoid cooldown unless real acceptance shows it is required.
+- [x] Preserve one wake event → one command activation invariant.
+- [x] Ignore repeated positive KWS frames after acceptance.
+- [x] Reset KWS stream at the verified lifecycle point.
+- [x] Permit a later phrase after return to Listening.
+- [x] Avoid cooldown unless real acceptance shows it is required.
 
-- [ ] If cooldown is added, make it bounded/configured and document measured justification.
-- [ ] Keep trigger count privacy-safe.
+- [x] If cooldown is added, make it bounded/configured and document measured justification. — Not applicable in V1: no cooldown is implemented.
+- [x] Keep trigger count privacy-safe.
 
-- [ ] Keep last-trigger timing privacy-safe and monotonic where practical.
+- [x] Keep last-trigger timing privacy-safe and monotonic where practical.
 
 **Tests**
 
-- [ ] One phrase with repeated positive frames yields one interaction.
-- [ ] A second phrase after resume yields a second interaction.
-- [ ] No cooldown is needed for correctness tests.
-- [ ] Trigger diagnostics do not expose PCM.
+- [x] One phrase with repeated positive frames yields one interaction.
+- [x] A second phrase after resume yields a second interaction.
+- [x] No cooldown is needed for correctness tests.
+- [x] Trigger diagnostics do not expose PCM.
 
 **Acceptance**
 
-- [ ] Debounce behavior is lifecycle-correct rather than timer-masking a state bug.
+- [x] Debounce behavior is lifecycle-correct rather than timer-masking a state bug.
+
+**Evidence:** `docs/evidence/WWR-410_DEBOUNCE_TRIGGER_SEMANTICS_2026-09-22.md`.
 
 ---
 
