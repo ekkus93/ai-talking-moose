@@ -54,157 +54,47 @@ if (!diagnosticsStruct) {
 }
 
 const forbiddenDiagnosticsFragments = [
-  "Vec<",
-  "&[",
-  "pcm",
-  "transcript",
-  "credential",
-  "secret",
-  "api_key",
-  "file_path",
-  "absolute_path",
-  "audio_content",
+  "Vec<", "&[", "pcm", "transcript", "credential", "secret", "api_key", "file_path", "absolute_path", "audio_content",
 ];
 for (const fragment of forbiddenDiagnosticsFragments) {
-  if (diagnosticsStruct.toLowerCase().includes(fragment.toLowerCase())) {
-    fail(`WakeWordDiagnostics contains forbidden serialized fragment ${fragment}`);
-  }
+  if (diagnosticsStruct.toLowerCase().includes(fragment.toLowerCase())) fail(`WakeWordDiagnostics contains forbidden serialized fragment ${fragment}`);
 }
 
-const diagnosticFields = [...diagnosticsStruct.matchAll(/pub\s+([a-zA-Z0-9_]+):/g)].map(
-  (match) => match[1],
-);
+const diagnosticFields = [...diagnosticsStruct.matchAll(/pub\s+([a-zA-Z0-9_]+):/g)].map((match) => match[1]);
 const requiredPrivacySafeFields = [
-  "enabled",
-  "runtime_phase",
-  "model_id",
-  "runtime_id",
-  "platform",
-  "architecture",
-  "canonical_sample_rate_hz",
-  "canonical_channels",
-  "inference_threads",
-  "threshold",
-  "score",
-  "ring_buffer_capacity_samples",
-  "ring_buffer_samples",
-  "handoff_pre_roll_samples",
-  "handoff_pre_roll_duration_ms",
-  "trigger_count",
-  "last_trigger_age_ms",
-  "runtime_initialization_ms",
-  "measured_idle_cpu_percent",
-  "measured_memory_rss_bytes",
-  "last_inference_duration_ms",
-  "last_handoff_duration_ms",
-  "talking_suspended",
-  "last_error",
+  "enabled", "runtime_phase", "model_id", "runtime_id", "platform", "architecture", "canonical_sample_rate_hz", "canonical_channels", "inference_threads", "threshold", "score", "ring_buffer_capacity_samples", "ring_buffer_samples", "handoff_pre_roll_samples", "handoff_pre_roll_duration_ms", "trigger_count", "last_trigger_age_ms", "runtime_initialization_ms", "measured_idle_cpu_percent", "measured_memory_rss_bytes", "last_inference_duration_ms", "last_handoff_duration_ms", "talking_suspended", "last_error",
 ];
 for (const field of requiredPrivacySafeFields) {
-  if (!diagnosticFields.includes(field)) {
-    fail(`WakeWordDiagnostics is missing expected privacy-safe field ${field}`);
-  }
+  if (!diagnosticFields.includes(field)) fail(`WakeWordDiagnostics is missing expected privacy-safe field ${field}`);
 }
 
-if (!diagnostics.includes("The Wake Word runtime encountered an internal error.")) {
-  fail("diagnostics must use the sanitized runtime error string");
-}
-if (diagnostics.includes("std::path::Path") || diagnostics.includes("PathBuf")) {
-  fail("diagnostics module must not serialize filesystem paths");
-}
+if (!diagnostics.includes("The Wake Word runtime encountered an internal error.")) fail("diagnostics must use the sanitized runtime error string");
+if (diagnostics.includes("std::path::Path") || diagnostics.includes("PathBuf")) fail("diagnostics module must not serialize filesystem paths");
 
-const engineRequirements = [
-  "fn sanitize_error_message",
-  "<path>",
-  "<redacted>",
-  "errors_sanitize_paths_and_token_like_secrets",
-  "native_session_rejects_missing_verified_artifacts_before_creation",
-  "missing_native_c_api_library_is_sanitized_before_inference",
-  "missing required Wake Word native C API library",
-];
-for (const token of engineRequirements) {
-  if (!engine.includes(token)) {
-    fail(`${enginePath} is missing privacy sanitizer evidence ${token}`);
-  }
-}
+const engineRequirements = ["fn sanitize_error_message", "<path>", "<redacted>", "errors_sanitize_paths_and_token_like_secrets", "native_session_rejects_missing_verified_artifacts_before_creation", "missing_native_c_api_library_is_sanitized_before_inference", "missing required Wake Word native C API library"];
+for (const token of engineRequirements) if (!engine.includes(token)) fail(`${enginePath} is missing privacy sanitizer evidence ${token}`);
 
-const sanitizerTestRequirements = [
-  "assert_eq!(error.message, \"failed <path> token <redacted>\")",
-  "contains(temp.path().to_string_lossy().as_ref())",
-  "assert_eq!(error.message, \"native runtime architecture mismatch\")",
-];
-for (const token of sanitizerTestRequirements) {
-  requireText(engine, token, "Wake Word sanitized error regression coverage");
-}
+const sanitizerTestRequirements = ["assert_eq!(error.message, \"failed <path> token <redacted>\")", "contains(temp.path().to_string_lossy().as_ref())", "assert_eq!(error.message, \"native runtime architecture mismatch\")"];
+for (const token of sanitizerTestRequirements) requireText(engine, token, "Wake Word sanitized error regression coverage");
 
-const docRequirements = [
-  "Wake Word diagnostics do not serialize or expose raw PCM.",
-  "Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content.",
-  "Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist.",
-  "Do not describe Wake Word V1 as fully user-ready or fully accepted",
-];
-for (const sentence of docRequirements) {
-  if (!docs.includes(sentence)) {
-    fail(`${docsPath} is missing required privacy/truthfulness statement: ${sentence}`);
-  }
-}
+const docRequirements = ["Wake Word diagnostics do not serialize or expose raw PCM.", "Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content.", "Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist.", "Do not describe Wake Word V1 as fully user-ready or fully accepted"];
+for (const sentence of docRequirements) if (!docs.includes(sentence)) fail(`${docsPath} is missing required privacy/truthfulness statement: ${sentence}`);
 
-if (!String(corpus.policy?.privacy ?? "").includes("Do not commit private room audio")) {
-  fail("corpus manifest must forbid private room audio");
-}
-if (corpus.acceptance_criteria?.criteria_status !== "pending_real_fixture_calibration") {
-  fail("corpus criteria must remain pending until real fixtures calibrate acceptance");
-}
+if (!String(corpus.policy?.privacy ?? "").includes("Do not commit private room audio")) fail("corpus manifest must forbid private room audio");
+const criteria = corpus.acceptance_criteria;
+if (criteria?.criteria_status !== "active_predeclared") fail("corpus criteria must be active and predeclared before real platform inference");
+if (!(Number(criteria?.positive_recall_minimum) > 0 && Number(criteria?.positive_recall_minimum) <= 1)) fail("corpus positive recall criterion must be bounded and active");
+if (!Number.isInteger(criteria?.negative_false_accepts_maximum) || criteria.negative_false_accepts_maximum < 0) fail("corpus false-accept criterion must be a non-negative integer");
+if (corpus.policy?.generated_audio_is_ephemeral !== true) fail("generated corpus audio must remain ephemeral and out of source control");
 
-const forbiddenProductionLogFragments = [
-  "tracing::",
-  "trace!",
-  "debug!",
-  "info!",
-  "warn!",
-  "error!",
-  "println!",
-  "eprintln!",
-];
-const forbiddenErrorLiteralFragments = [
-  "credential",
-  "secret",
-  "api_key",
-  "transcript",
-  "raw_audio",
-  "audio_content",
-  "absolute_path",
-  "file_path",
-];
-const forbiddenErrorFormattingFragments = [
-  "{path}",
-  "{file}",
-  "{model_dir}",
-  "{runtime_dir}",
-  "{:?}",
-];
-
+const forbiddenProductionLogFragments = ["tracing::", "trace!", "debug!", "info!", "warn!", "error!", "println!", "eprintln!"];
+const forbiddenErrorLiteralFragments = ["credential", "secret", "api_key", "transcript", "raw_audio", "audio_content", "absolute_path", "file_path"];
+const forbiddenErrorFormattingFragments = ["{path}", "{file}", "{model_dir}", "{runtime_dir}", "{:?}"];
 for (const path of wakeProductionFiles) {
   const source = productionRust(read(path));
-  for (const fragment of forbiddenProductionLogFragments) {
-    if (source.includes(fragment)) {
-      fail(`${path} contains production Wake Word logging macro/reference ${fragment}`);
-    }
-  }
-  for (const literal of rustStringLiterals(source)) {
-    for (const fragment of forbiddenErrorLiteralFragments) {
-      if (literal.toLowerCase().includes(fragment)) {
-        fail(`${path} contains sensitive production error/log string literal fragment ${fragment}`);
-      }
-    }
-  }
-  for (const fragment of forbiddenErrorFormattingFragments) {
-    if (source.includes(fragment)) {
-      fail(`${path} contains potentially path-leaking production formatting fragment ${fragment}`);
-    }
-  }
+  for (const fragment of forbiddenProductionLogFragments) if (source.includes(fragment)) fail(`${path} contains production Wake Word logging macro/reference ${fragment}`);
+  for (const literal of rustStringLiterals(source)) for (const fragment of forbiddenErrorLiteralFragments) if (literal.toLowerCase().includes(fragment)) fail(`${path} contains sensitive production error/log string literal fragment ${fragment}`);
+  for (const fragment of forbiddenErrorFormattingFragments) if (source.includes(fragment)) fail(`${path} contains potentially path-leaking production formatting fragment ${fragment}`);
 }
 
-console.log(
-  `Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), ${wakeProductionFiles.length} production Wake Word Rust file(s), sanitizer regression evidence, documentation, and corpus privacy policy are OK.`,
-);
+console.log(`Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), ${wakeProductionFiles.length} production Wake Word Rust file(s), sanitizer regression evidence, documentation, active corpus criteria, and corpus privacy policy are OK.`);
