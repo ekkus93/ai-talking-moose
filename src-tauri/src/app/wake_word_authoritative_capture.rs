@@ -366,6 +366,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn repeated_wake_command_cycles_reuse_exact_shared_capture_owner() {
+        let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
+        owner.start_wake(None, consumer()).await.unwrap();
+
+        for _ in 0..100 {
+            assert!(owner.shares_capture_with(&app_capture));
+            assert!(app_capture.lock().is_active());
+
+            enter_command_interaction(&owner).await;
+            assert!(!app_capture.lock().is_active());
+
+            owner.return_to_wake_listening(None).await.unwrap();
+
+            assert!(owner.shares_capture_with(&app_capture));
+            assert!(app_capture.lock().is_active());
+            let phase = {
+                let wake = owner.wake.lock().await;
+                wake.as_ref()
+                    .unwrap()
+                    .consumer()
+                    .router()
+                    .runtime()
+                    .snapshot(Instant::now())
+                    .phase
+            };
+            assert_eq!(phase, WakeWordRuntimePhase::Listening);
+        }
+
+        owner.disable().await;
+        assert!(!app_capture.lock().is_active());
+    }
+
+    #[tokio::test]
     async fn wake_disable_releases_shared_capture_for_manual_listen() {
         let app_capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
         let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(app_capture.clone());
