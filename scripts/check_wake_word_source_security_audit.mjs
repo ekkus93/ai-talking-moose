@@ -17,7 +17,6 @@ const router = read("src-tauri/src/app/wake_word_pcm_router.rs");
 const lifecycle = read("src-tauri/src/app/wake_word_command_lifecycle.rs");
 const activation = read("src-tauri/src/app/wake_word_command_activation.rs");
 const ingress = read("src-tauri/src/app/wake_word_command_asr_ingress.rs");
-const handoff = read("src-tauri/src/app/wake_word_command_handoff.rs");
 const appModule = read("src-tauri/src/app/mod.rs");
 
 const managerDefinitions = [runtime, engine, composition, state, capture, router, lifecycle]
@@ -80,10 +79,15 @@ requireText(
   "command_asr_startup_failure_returns_to_listening_without_stale_replay",
   "command ASR startup recovery regression",
 );
-requireText(ingress, "pub trait WakeCommandAsrIngress", "provider-neutral command ASR ingress");
+requireText(ingress, "trait WakeCommandAsrIngress", "provider-neutral command ASR ingress");
 requireText(ingress, "LocalAsrPipeline", "normal local command ASR ingress implementation");
-requireText(handoff, "deliver_once", "single-use handoff coordinator");
-requireText(handoff, "clear_stale", "stale handoff clearing boundary");
+requireText(ingress, "struct WakeCommandAsrHandoff", "single-use handoff coordinator");
+requireText(ingress, "self.audio.take()", "single-use handoff consumption");
+requireText(
+  ingress,
+  "accepted_trigger_payload_is_delivered_exactly_once",
+  "single-use command activation regression",
+);
 
 const productionActivation = activation.split("#[cfg(test)]")[0];
 const productionIngress = ingress.split("#[cfg(test)]")[0];
