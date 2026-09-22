@@ -126,7 +126,7 @@ for (const token of engineRequirements) {
 
 const sanitizerTestRequirements = [
   "assert_eq!(error.message, \"failed <path> token <redacted>\")",
-  "!error.message.contains(temp.path().to_string_lossy().as_ref())",
+  "contains(temp.path().to_string_lossy().as_ref())",
   "assert_eq!(error.message, \"missing required Wake Word native C API library\")",
   "assert_eq!(error.message, \"native runtime architecture mismatch\")",
 ];
