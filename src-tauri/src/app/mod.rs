@@ -36,4 +36,6 @@ pub use state::*;
 #[cfg(test)]
 mod provider_switch_tests;
 #[cfg(test)]
+mod wake_word_appstate_composition_tests;
+#[cfg(test)]
 mod wake_word_lifecycle_stability_tests;

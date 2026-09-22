@@ -1,7 +1,10 @@
 use super::state::AppSettings;
+use super::wake_word::engine::SherpaKwsEngine;
 use super::wake_word::runtime::{
     WakeWordRuntimeError, WakeWordRuntimeManager, WakeWordRuntimePhase, WakeWordRuntimeSnapshot,
 };
+use super::wake_word_capture_consumer::WakeCapturePcmConsumer;
+use super::wake_word_pcm_router::CanonicalWakePcmRouter;
 use std::time::Instant;
 
 /// Authoritative application-level owner for the Wake Word V1 runtime.
@@ -29,6 +32,19 @@ impl WakeWordApplicationRuntime {
 
     pub fn manager(&self) -> &WakeWordRuntimeManager {
         &self.manager
+    }
+
+    /// Build the production capture consumer from the authoritative runtime manager clone.
+    ///
+    /// The returned consumer owns no microphone stream. It routes the application's single
+    /// canonical capture timeline into the shared Wake runtime manager and the supplied KWS
+    /// engine so pre-roll retention, KWS inference, and wake→ASR handoff observe one ordered
+    /// PCM stream.
+    pub(crate) fn capture_consumer<E: SherpaKwsEngine>(
+        &self,
+        engine: E,
+    ) -> WakeCapturePcmConsumer<E> {
+        WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(self.manager.clone(), engine))
     }
 
     pub fn snapshot(&self, now: Instant) -> WakeWordRuntimeSnapshot {
