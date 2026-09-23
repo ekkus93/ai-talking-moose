@@ -8,7 +8,7 @@ use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
 /// command-ASR path. Provider-specific callers can request little-endian PCM bytes without
 /// reordering, dropping, or duplicating samples.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WakeCommandHandoffAudio {
+pub struct WakeCommandHandoffAudio {
     sample_rate_hz: u32,
     samples_i16: Vec<i16>,
 }
