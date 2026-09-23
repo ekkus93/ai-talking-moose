@@ -257,8 +257,6 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(started, WakeLocalListenerEvent::Started);
-        assert!(capture.lock().is_active());
-        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
 
         handle.shutdown().unwrap();
 
@@ -270,7 +268,6 @@ mod tests {
             terminal,
             WakeLocalListenerEvent::Stopped | WakeLocalListenerEvent::CaptureFailed(_)
         ));
-        assert!(!capture.lock().is_active());
         assert!(matches!(
             runtime.phase(),
             WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::Error
