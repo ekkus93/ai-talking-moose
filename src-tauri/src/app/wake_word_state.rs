@@ -6,6 +6,15 @@ use super::wake_word::runtime::WakeWordRuntimeError;
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_capture_orchestrator::WakeCaptureOrchestratorError;
 use super::wake_word_composition::WakeWordApplicationRuntime;
+use std::path::Path;
+use std::sync::{Arc, OnceLock};
+use std::time::Instant;
+use tokio::sync::Mutex as AsyncMutex;
+use tracing::warn;
+
+static PRODUCTION_WAKE_OWNER: OnceLock<
+    AsyncMutex<Option<Arc<AuthoritativeWakeCaptureOwner<NativeKwsSession>>>>,
+> = OnceLock::new();
 
 /// Access the one Wake Word runtime owned directly by authoritative application state.
 ///
@@ -13,6 +22,51 @@ use super::wake_word_composition::WakeWordApplicationRuntime;
 /// the Wake runtime owns lifecycle/KWS state only.
 pub(crate) fn runtime_from_app_state(state: &AppState) -> &WakeWordApplicationRuntime {
     &state.wake_word_runtime
+}
+
+/// Resolve the deterministic production model/runtime roots under the app data directory.
+///
+/// The native runtime layout mirrors `wake-word-artifacts.json`'s `runtime.*.install_root` so
+/// artifacts prepared by repository tooling are consumed from the same fail-closed identity path.
+pub(crate) fn native_kws_paths_from_app_data_dir(app_data_dir: &Path) -> NativeKwsSessionPaths {
+    NativeKwsSessionPaths {
+        model_dir: app_data_dir
+            .join("models")
+            .join("wake-word")
+            .join("sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"),
+        runtime_dir: app_data_dir
+            .join("runtime")
+            .join("sherpa-onnx")
+            .join("v1.13.8")
+            .join(native_runtime_platform_dir()),
+    }
+}
+
+fn native_runtime_platform_dir() -> &'static str {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        "linux-x86_64"
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        "macos-arm64"
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    )))]
+    {
+        "unsupported"
+    }
+}
+
+fn production_owner_slot(
+) -> &'static AsyncMutex<Option<Arc<AuthoritativeWakeCaptureOwner<NativeKwsSession>>>> {
+    PRODUCTION_WAKE_OWNER.get_or_init(|| AsyncMutex::new(None))
+}
+
+async fn retained_native_owner() -> Option<Arc<AuthoritativeWakeCaptureOwner<NativeKwsSession>>> {
+    production_owner_slot().lock().await.clone()
 }
 
 /// Compose Wake routing around the one microphone owner stored in authoritative application state.
@@ -88,6 +142,127 @@ pub(crate) async fn start_native_wake_from_app_state(
     Ok(Some(owner))
 }
 
+/// Start Wake from AppState and retain the receive-side owner for the full listening epoch.
+///
+/// Without this retention boundary a started native listener could be dropped by its caller before
+/// the capture task transfers a trigger to command ASR. The stored owner is still only a receive
+/// coordinator; the physical microphone remains `AppState::audio_capture`.
+pub(crate) async fn start_and_retain_native_wake_from_app_state(
+    state: &AppState,
+    paths: NativeKwsSessionPaths,
+) -> Result<bool, WakeWordStartupError> {
+    let started = start_native_wake_from_app_state(state, paths).await?;
+    let mut slot = production_owner_slot().lock().await;
+    if let Some(previous) = slot.take() {
+        previous.disable().await;
+    }
+    if let Some(owner) = started {
+        *slot = Some(Arc::new(owner));
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Disable the retained production Wake owner, if any, without touching manual conversation state.
+pub(crate) async fn disable_native_wake_from_app_state(
+    state: &AppState,
+) -> Result<(), WakeWordStartupError> {
+    let mut slot = production_owner_slot().lock().await;
+    if let Some(owner) = slot.take() {
+        owner.disable().await;
+    }
+    state
+        .wake_word_runtime
+        .apply_enabled_setting(false)
+        .map_err(WakeWordStartupError::Runtime)
+}
+
+/// Spawn the receive loop for the retained production Wake owner.
+///
+/// The loop consumes canonical PCM from the retained owner until a trigger, capture failure, or
+/// disable/shutdown removes the owner. On a trigger it transfers the chronological Wake handoff to
+/// the normal command-conversation boundary exactly once, then exits; the conversation terminal
+/// lifecycle callback is responsible for resuming Wake capture and spawning the next listening loop.
+pub(crate) fn spawn_retained_native_wake_listener<R>(state: AppState, app: tauri::AppHandle<R>)
+where
+    R: tauri::Runtime,
+{
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let Some(owner) = retained_native_owner().await else {
+                return;
+            };
+            let outcome = owner.route_next(Instant::now()).await;
+            match outcome {
+                Ok(route) if route.trigger_accepted => {
+                    let handoff = match owner.transfer_to_command_asr().await {
+                        Ok(Some(handoff)) => handoff,
+                        Ok(None) => continue,
+                        Err(error) => {
+                            state.wake_word_runtime.record_capture_error();
+                            warn!(?error, "Wake Word trigger could not transfer command handoff");
+                            return;
+                        }
+                    };
+
+                    if let Err(error) = crate::commands::conversation::start_wake_conversation(
+                        &state,
+                        app.clone(),
+                        handoff,
+                    )
+                    .await
+                    {
+                        warn!(error = %error, "Wake Word trigger failed to start command interaction");
+                    }
+                    return;
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    state.wake_word_runtime.record_capture_error();
+                    warn!(?error, "Wake Word listener stopped after capture/routing failure");
+                    return;
+                }
+            }
+        }
+    });
+}
+
+/// Resolve command completion against the retained Wake owner and spawn the next listener epoch.
+///
+/// This asynchronous boundary is used by both manual command completion and Wake-started command
+/// completion. When Wake remains enabled it reopens the same shared `AudioCapture` owner through
+/// the retained orchestrator and then starts the next receive loop. If Wake was disabled during the
+/// interaction it tears down Wake state instead of accidentally reopening the microphone.
+pub(crate) async fn resume_retained_native_wake_after_command_from_app_state<R>(
+    state: &AppState,
+    app: &tauri::AppHandle<R>,
+    wake_word_enabled: bool,
+) -> Result<(), WakeWordStartupError>
+where
+    R: tauri::Runtime,
+{
+    if !wake_word_enabled {
+        disable_native_wake_from_app_state(state).await?;
+        return Ok(());
+    }
+
+    let input_device = state.settings.read().input_device.clone();
+    if let Some(owner) = retained_native_owner().await {
+        owner
+            .return_to_wake_listening(input_device)
+            .await
+            .map_err(WakeWordStartupError::Capture)?;
+        spawn_retained_native_wake_listener(state.clone(), app.clone());
+        Ok(())
+    } else {
+        state
+            .wake_word_runtime
+            .resume_after_interaction(true)
+            .map_err(WakeWordStartupError::Runtime)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,6 +310,19 @@ mod tests {
             WakeWordRuntimePhase::Disabled
         );
         assert!(!state.audio_capture.lock().diagnostics().active);
+    }
+
+    #[test]
+    fn native_paths_live_under_application_data_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = native_kws_paths_from_app_data_dir(temp.path());
+
+        assert!(paths.model_dir.starts_with(temp.path()));
+        assert!(paths.runtime_dir.starts_with(temp.path()));
+        assert!(paths
+            .model_dir
+            .ends_with("models/wake-word/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"));
+        assert!(paths.runtime_dir.ends_with(native_runtime_platform_dir()));
     }
 
     #[tokio::test]
