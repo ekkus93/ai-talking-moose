@@ -108,11 +108,11 @@ def validate(report: dict, criteria: dict) -> list[str]:
     ]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("report", type=Path)
     parser.add_argument("--criteria", type=Path, default=Path("docs/wake_word_qualification_criteria_v1.json"))
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         report = require_dict(json.loads(args.report.read_text()), "report")
         criteria = require_dict(json.loads(args.criteria.read_text()), "criteria")
@@ -122,6 +122,10 @@ def main() -> int:
         return 1
     print("WAKE_QUALIFICATION_PASS " + " ".join(summary))
     return 0
+
+
+def main_for_test(argv: list[str]) -> int:
+    return main(argv)
 
 
 if __name__ == "__main__":
