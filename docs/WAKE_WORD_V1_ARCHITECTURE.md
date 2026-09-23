@@ -12,7 +12,7 @@ The canonical Wake input is 16 kHz mono PCM. `CanonicalWakePcmRouter` validates 
 
 Production KWS uses the pinned sherpa-onnx runtime and model identities in `wake-word-artifacts.json`. Artifact preparation verifies byte sizes, SHA-256 identities, and native architecture before use and fails closed on mismatch. The fixed V1 policy is one inference thread, score `1.0`, threshold `0.25`, and a two-second pre-roll. The KWS engine performs keyword spotting only; it is not a full-time transcription path.
 
-Component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 remain subject to their dedicated real-KWS acceptance tasks. Until those tasks and the integrated acceptance sections are complete, Wake Word V1 is implementation under qualification rather than as fully accepted cross-platform production functionality.
+component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 remain subject to their dedicated real-KWS acceptance tasks. Until those tasks and the integrated acceptance sections are complete, Wake Word V1 is implementation under qualification rather than as fully accepted cross-platform production functionality.
 
 ## Wake-to-command handoff
 
