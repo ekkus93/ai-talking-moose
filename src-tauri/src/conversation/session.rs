@@ -1,5 +1,6 @@
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
+use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrLifecycle;
 use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::{AsrEvent, AsrMode};
@@ -474,6 +475,14 @@ impl ConversationManager {
     }
 
     pub async fn start_session(&self, request: ConversationStartRequest) -> Result<String, String> {
+        self.start_session_with_wake_handoff(request, None).await
+    }
+
+    pub async fn start_session_with_wake_handoff(
+        &self,
+        request: ConversationStartRequest,
+        wake_handoff_audio: Option<WakeCommandHandoffAudio>,
+    ) -> Result<String, String> {
         let ConversationStartRequest {
             provider,
             config,
@@ -543,6 +552,35 @@ impl ConversationManager {
                 provider_error_callback: provider_error_callback.clone(),
             })
             .await?;
+
+        if let Some(handoff_audio) = wake_handoff_audio {
+            let Some(pipeline) = local_pipeline.as_ref() else {
+                let message = concat!(
+                    "Wake Word handoff requires local Moonshine command ASR; ",
+                    "no microphone audio was sent."
+                )
+                .to_string();
+                Self::set_lifecycle(
+                    &self.lifecycle,
+                    ConversationLifecycle::Failed,
+                    Some(&lifecycle_callback),
+                );
+                state_callback(CharacterState::Error);
+                return Err(message);
+            };
+            if let Err(error) = pipeline.prime_wake_handoff(handoff_audio) {
+                self.local_asr_diagnostics
+                    .remember_error(asr_mode, error.clone());
+                Self::stop_provisional_local_asr(&mut local_pipeline).await;
+                Self::set_lifecycle(
+                    &self.lifecycle,
+                    ConversationLifecycle::Failed,
+                    Some(&lifecycle_callback),
+                );
+                state_callback(CharacterState::Error);
+                return Err(error.message);
+            }
+        }
 
         let input_sample_rate = config.sample_rate_in;
         let output_sample_rate = config.sample_rate_out;
