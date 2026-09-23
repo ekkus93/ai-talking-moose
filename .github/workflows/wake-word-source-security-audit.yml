@@ -7,6 +7,9 @@ on:
       - "src-tauri/src/app/wake_word*.rs"
       - "src-tauri/src/asr/wake_word*.rs"
       - "src-tauri/src/app/state.rs"
+      - "src-tauri/src/conversation/session.rs"
+      - "src-tauri/src/conversation/session/**"
+      - "src-tauri/src/commands/conversation/**"
       - "scripts/check_wake_word_source_security_audit.mjs"
       - ".github/workflows/wake-word-source-security-audit.yml"
   push:
@@ -15,6 +18,9 @@ on:
       - "src-tauri/src/app/wake_word*.rs"
       - "src-tauri/src/asr/wake_word*.rs"
       - "src-tauri/src/app/state.rs"
+      - "src-tauri/src/conversation/session.rs"
+      - "src-tauri/src/conversation/session/**"
+      - "src-tauri/src/commands/conversation/**"
       - "scripts/check_wake_word_source_security_audit.mjs"
       - ".github/workflows/wake-word-source-security-audit.yml"
   workflow_dispatch:
