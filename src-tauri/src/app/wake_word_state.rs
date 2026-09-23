@@ -6,6 +6,7 @@ use super::wake_word::runtime::WakeWordRuntimeError;
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_capture_orchestrator::WakeCaptureOrchestratorError;
 use super::wake_word_composition::WakeWordApplicationRuntime;
+use std::path::Path;
 
 /// Access the one Wake Word runtime owned directly by authoritative application state.
 ///
@@ -13,6 +14,44 @@ use super::wake_word_composition::WakeWordApplicationRuntime;
 /// the Wake runtime owns lifecycle/KWS state only.
 pub(crate) fn runtime_from_app_state(state: &AppState) -> &WakeWordApplicationRuntime {
     &state.wake_word_runtime
+}
+
+/// Resolve the deterministic production model/runtime roots under the app data directory.
+///
+/// The native runtime layout mirrors `wake-word-artifacts.json`'s `runtime.*.install_root` so
+/// artifacts prepared by repository tooling are consumed from the same fail-closed identity path.
+#[allow(dead_code)]
+pub(crate) fn native_kws_paths_from_app_data_dir(app_data_dir: &Path) -> NativeKwsSessionPaths {
+    NativeKwsSessionPaths {
+        model_dir: app_data_dir
+            .join("models")
+            .join("wake-word")
+            .join("sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"),
+        runtime_dir: app_data_dir
+            .join("runtime")
+            .join("sherpa-onnx")
+            .join("v1.13.8")
+            .join(native_runtime_platform_dir()),
+    }
+}
+
+#[allow(dead_code)]
+fn native_runtime_platform_dir() -> &'static str {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        "linux-x86_64"
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        "macos-arm64"
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "macos", target_arch = "aarch64")
+    )))]
+    {
+        "unsupported"
+    }
 }
 
 /// Compose Wake routing around the one microphone owner stored in authoritative application state.
@@ -135,6 +174,19 @@ mod tests {
             WakeWordRuntimePhase::Disabled
         );
         assert!(!state.audio_capture.lock().diagnostics().active);
+    }
+
+    #[test]
+    fn native_paths_live_under_application_data_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = native_kws_paths_from_app_data_dir(temp.path());
+
+        assert!(paths.model_dir.starts_with(temp.path()));
+        assert!(paths.runtime_dir.starts_with(temp.path()));
+        assert!(paths
+            .model_dir
+            .ends_with("models/wake-word/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"));
+        assert!(paths.runtime_dir.ends_with(native_runtime_platform_dir()));
     }
 
     #[tokio::test]
