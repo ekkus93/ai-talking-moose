@@ -12,6 +12,7 @@ pub(crate) trait LocalAsrResource: Send {
         None
     }
 
+    #[allow(dead_code)]
     fn prime_wake_handoff(&self, _handoff: WakeCommandHandoffAudio) -> Result<(), AsrError> {
         Err(AsrError {
             kind: AsrErrorKind::InvalidState,
@@ -75,6 +76,7 @@ impl LocalAsrLifecycle {
             .and_then(|active| active.resource.diagnostics())
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn prime_wake_handoff(
         &self,
         generation: u64,
