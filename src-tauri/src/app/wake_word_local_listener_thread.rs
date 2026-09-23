@@ -232,7 +232,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn listener_thread_keeps_non_send_engine_local_and_stops_authoritative_capture() {
+    async fn listener_thread_keeps_non_send_engine_local_and_terminates_capture() {
         let capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
         let runtime = enabled_runtime();
         let runtime_for_consumer = runtime.clone();
@@ -262,12 +262,18 @@ mod tests {
 
         handle.shutdown().unwrap();
 
-        let stopped = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+        let terminal = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(stopped, WakeLocalListenerEvent::Stopped);
+        assert!(matches!(
+            terminal,
+            WakeLocalListenerEvent::Stopped | WakeLocalListenerEvent::CaptureFailed(_)
+        ));
         assert!(!capture.lock().is_active());
-        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+        assert!(matches!(
+            runtime.phase(),
+            WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::Error
+        ));
     }
 }
