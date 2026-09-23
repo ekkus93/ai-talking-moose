@@ -4,9 +4,7 @@ use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
-use crate::app::wake_word_command_lifecycle::{
-    resume_after_command_interaction, suspend_for_command_interaction,
-};
+use crate::app::wake_word_command_lifecycle::suspend_for_command_interaction;
 #[cfg(test)]
 use crate::asr::AsrMode;
 use crate::character::prompt::PromptBuilder;
