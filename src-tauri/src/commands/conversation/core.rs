@@ -4,7 +4,9 @@ use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
-use crate::app::wake_word_command_lifecycle::suspend_for_command_interaction;
+use crate::app::wake_word_command_lifecycle::{
+    resume_after_command_interaction, suspend_for_command_interaction,
+};
 #[cfg(test)]
 use crate::asr::AsrMode;
 use crate::character::prompt::PromptBuilder;
@@ -149,9 +151,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     let character_state = state.character_state.clone();
     let app_state = app.clone();
     let app_lifecycle = app.clone();
-    let app_wake_resolution = app.clone();
     let wake_runtime_for_lifecycle = wake_runtime.clone();
-    let wake_state_for_lifecycle = state.clone();
     let settings_for_lifecycle = state.settings.clone();
     let app_provider_error = app.clone();
     let app_transcript = app.clone();
@@ -190,19 +190,12 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
                         == WakeWordRuntimePhase::SuspendedTalking
                 {
                     let wake_word_enabled = settings_for_lifecycle.read().wake_word_enabled;
-                    let wake_state = wake_state_for_lifecycle.clone();
-                    let wake_app = app_wake_resolution.clone();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(error_value) = crate::app::wake_word_state::resume_retained_native_wake_after_command_from_app_state(
-                            &wake_state,
-                            &wake_app,
-                            wake_word_enabled,
-                        )
-                        .await
-                        {
-                            warn!(?error_value, "Failed to resolve Wake Word after command interaction");
-                        }
-                    });
+                    if let Err(error_value) = resume_after_command_interaction(
+                        &wake_runtime_for_lifecycle,
+                        wake_word_enabled,
+                    ) {
+                        warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
+                    }
                 }
             },
             move |session_id: String, role: String, text: String| {
@@ -246,14 +239,9 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
             if wake_guarded && wake_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
                 let wake_word_enabled = state.settings.read().wake_word_enabled;
                 if let Err(resume_error) =
-                    crate::app::wake_word_state::resume_retained_native_wake_after_command_from_app_state(
-                        state,
-                        &app,
-                        wake_word_enabled,
-                    )
-                    .await
+                    resume_after_command_interaction(&wake_runtime, wake_word_enabled)
                 {
-                    warn!(?resume_error, "Failed to resolve Wake Word after conversation start failure");
+                    warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
                 }
             }
             return Err(error_value);
@@ -292,13 +280,7 @@ pub async fn stop_conversation(
         .await;
     if state.wake_word_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
         let wake_word_enabled = state.settings.read().wake_word_enabled;
-        crate::app::wake_word_state::resume_retained_native_wake_after_command_from_app_state(
-            state.inner(),
-            &app,
-            wake_word_enabled,
-        )
-        .await
-        .map_err(|error| format!("{error:?}"))?;
+        resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
     }
 
     state.ambient_scheduler.claim_foreground_presentation();

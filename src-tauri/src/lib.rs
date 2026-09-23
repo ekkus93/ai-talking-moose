@@ -287,14 +287,6 @@ pub fn run() {
                     scheduler.stop().await;
                 }
 
-                if let Some(state) = handle.try_state::<AppState>() {
-                    if let Err(error) =
-                        app::wake_word_state::disable_native_wake_from_app_state(&state).await
-                    {
-                        warn!(?error, "Failed to stop retained Wake Word listener during shutdown");
-                    }
-                }
-
                 if let (Some(state), Some(window)) =
                     (handle.try_state::<AppState>(), handle.get_webview_window("main"))
                 {
