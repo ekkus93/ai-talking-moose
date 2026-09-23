@@ -7,13 +7,6 @@ use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_capture_orchestrator::WakeCaptureOrchestratorError;
 use super::wake_word_composition::WakeWordApplicationRuntime;
 use std::path::Path;
-use std::sync::{Arc, OnceLock};
-use tokio::sync::Mutex as AsyncMutex;
-use tracing::warn;
-
-static PRODUCTION_WAKE_OWNER: OnceLock<
-    AsyncMutex<Option<Arc<AuthoritativeWakeCaptureOwner<NativeKwsSession>>>>,
-> = OnceLock::new();
 
 /// Access the one Wake Word runtime owned directly by authoritative application state.
 ///
@@ -57,15 +50,6 @@ fn native_runtime_platform_dir() -> &'static str {
     {
         "unsupported"
     }
-}
-
-fn production_owner_slot(
-) -> &'static AsyncMutex<Option<Arc<AuthoritativeWakeCaptureOwner<NativeKwsSession>>>> {
-    PRODUCTION_WAKE_OWNER.get_or_init(|| AsyncMutex::new(None))
-}
-
-async fn retained_native_owner() -> Option<Arc<AuthoritativeWakeCaptureOwner<NativeKwsSession>>> {
-    production_owner_slot().lock().await.clone()
 }
 
 /// Compose Wake routing around the one microphone owner stored in authoritative application state.
@@ -139,88 +123,6 @@ pub(crate) async fn start_native_wake_from_app_state(
     }
 
     Ok(Some(owner))
-}
-
-/// Start Wake from AppState and retain the receive-side owner for the full listening epoch.
-///
-/// Without this retention boundary a started native listener could be dropped by its caller before
-/// the capture task transfers a trigger to command ASR. The stored owner is still only a receive
-/// coordinator; the physical microphone remains `AppState::audio_capture`.
-pub(crate) async fn start_and_retain_native_wake_from_app_state(
-    state: &AppState,
-    paths: NativeKwsSessionPaths,
-) -> Result<bool, WakeWordStartupError> {
-    let started = start_native_wake_from_app_state(state, paths).await?;
-    let mut slot = production_owner_slot().lock().await;
-    if let Some(previous) = slot.take() {
-        previous.disable().await;
-    }
-    if let Some(owner) = started {
-        *slot = Some(Arc::new(owner));
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
-
-/// Disable the retained production Wake owner, if any, without touching manual conversation state.
-pub(crate) async fn disable_native_wake_from_app_state(
-    state: &AppState,
-) -> Result<(), WakeWordStartupError> {
-    let mut slot = production_owner_slot().lock().await;
-    if let Some(owner) = slot.take() {
-        owner.disable().await;
-    }
-    state
-        .wake_word_runtime
-        .apply_enabled_setting(false)
-        .map_err(WakeWordStartupError::Runtime)
-}
-
-/// Placeholder for the production receive loop until the native KWS owner is moved to a dedicated
-/// local-thread runner.
-///
-/// `NativeKwsSession` deliberately is not `Send`, so driving it from Tauri's multithreaded async
-/// runtime would be unsound. This function is intentionally inert instead of weakening that safety
-/// boundary; the retained owner/start helpers remain available for the upcoming local-runner slice.
-#[allow(dead_code)]
-pub(crate) fn spawn_retained_native_wake_listener<R>(_state: AppState, _app: tauri::AppHandle<R>)
-where
-    R: tauri::Runtime,
-{
-    warn!("Wake Word native receive loop requires a dedicated local-thread runner before startup");
-}
-
-/// Resolve command completion against the retained Wake owner.
-///
-/// When Wake remains enabled it reopens the same shared `AudioCapture` owner through the retained
-/// orchestrator. If Wake was disabled during the interaction it tears down Wake state instead of
-/// accidentally reopening the microphone.
-pub(crate) async fn resume_retained_native_wake_after_command_from_app_state<R>(
-    state: &AppState,
-    _app: &tauri::AppHandle<R>,
-    wake_word_enabled: bool,
-) -> Result<(), WakeWordStartupError>
-where
-    R: tauri::Runtime,
-{
-    if !wake_word_enabled {
-        disable_native_wake_from_app_state(state).await?;
-        return Ok(());
-    }
-
-    let input_device = state.settings.read().input_device.clone();
-    if let Some(owner) = retained_native_owner().await {
-        owner
-            .return_to_wake_listening(input_device)
-            .await
-            .map_err(WakeWordStartupError::Capture)
-    } else {
-        state
-            .wake_word_runtime
-            .resume_after_interaction(true)
-            .map_err(WakeWordStartupError::Runtime)
-    }
 }
 
 #[cfg(test)]
