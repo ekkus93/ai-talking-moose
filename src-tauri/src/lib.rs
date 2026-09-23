@@ -102,10 +102,6 @@ pub fn run() {
             })?;
 
             let app_state = AppState::new(Some(db_path)).map_err(io::Error::other)?;
-            let wake_start_paths =
-                app::wake_word_state::native_kws_paths_from_app_data_dir(&app_data_dir);
-            let wake_start_state = app_state.clone();
-            let wake_start_app = app.handle().clone();
             let startup_settings = app_state.settings.read().clone();
             if let Err(error) = app::runtime_preferences::apply_startup_runtime_preferences(
                 app.handle(),
@@ -198,29 +194,7 @@ pub fn run() {
             });
 
             let tray_visible = app_state.settings.read().show_in_menu_bar;
-            let wake_start_enabled = wake_start_state.settings.read().wake_word_enabled;
             app.manage(app_state);
-            if wake_start_enabled {
-                tauri::async_runtime::spawn(async move {
-                    match app::wake_word_state::start_and_retain_native_wake_from_app_state(
-                        &wake_start_state,
-                        wake_start_paths,
-                    )
-                    .await
-                    {
-                        Ok(true) => {
-                            app::wake_word_state::spawn_retained_native_wake_listener(
-                                wake_start_state,
-                                wake_start_app,
-                            );
-                        }
-                        Ok(false) => {}
-                        Err(error) => {
-                            warn!(?error, "Failed to start Wake Word listener during startup");
-                        }
-                    }
-                });
-            }
             app::tray::install(app, tray_visible)?;
             info!("Talking Moose AI backend initialized successfully");
             Ok(())

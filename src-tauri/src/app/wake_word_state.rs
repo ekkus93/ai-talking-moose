@@ -8,7 +8,6 @@ use super::wake_word_capture_orchestrator::WakeCaptureOrchestratorError;
 use super::wake_word_composition::WakeWordApplicationRuntime;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
-use std::time::Instant;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
@@ -178,65 +177,28 @@ pub(crate) async fn disable_native_wake_from_app_state(
         .map_err(WakeWordStartupError::Runtime)
 }
 
-/// Spawn the receive loop for the retained production Wake owner.
+/// Placeholder for the production receive loop until the native KWS owner is moved to a dedicated
+/// local-thread runner.
 ///
-/// The loop consumes canonical PCM from the retained owner until a trigger, capture failure, or
-/// disable/shutdown removes the owner. On a trigger it transfers the chronological Wake handoff to
-/// the normal command-conversation boundary exactly once, then exits; the conversation terminal
-/// lifecycle callback is responsible for resuming Wake capture and spawning the next listening loop.
-pub(crate) fn spawn_retained_native_wake_listener<R>(state: AppState, app: tauri::AppHandle<R>)
+/// `NativeKwsSession` deliberately is not `Send`, so driving it from Tauri's multithreaded async
+/// runtime would be unsound. This function is intentionally inert instead of weakening that safety
+/// boundary; the retained owner/start helpers remain available for the upcoming local-runner slice.
+#[allow(dead_code)]
+pub(crate) fn spawn_retained_native_wake_listener<R>(_state: AppState, _app: tauri::AppHandle<R>)
 where
     R: tauri::Runtime,
 {
-    tauri::async_runtime::spawn(async move {
-        loop {
-            let Some(owner) = retained_native_owner().await else {
-                return;
-            };
-            let outcome = owner.route_next(Instant::now()).await;
-            match outcome {
-                Ok(route) if route.trigger_accepted => {
-                    let handoff = match owner.transfer_to_command_asr().await {
-                        Ok(Some(handoff)) => handoff,
-                        Ok(None) => continue,
-                        Err(error) => {
-                            state.wake_word_runtime.record_capture_error();
-                            warn!(?error, "Wake Word trigger could not transfer command handoff");
-                            return;
-                        }
-                    };
-
-                    if let Err(error) = crate::commands::conversation::start_wake_conversation(
-                        &state,
-                        app.clone(),
-                        handoff,
-                    )
-                    .await
-                    {
-                        warn!(error = %error, "Wake Word trigger failed to start command interaction");
-                    }
-                    return;
-                }
-                Ok(_) => {}
-                Err(error) => {
-                    state.wake_word_runtime.record_capture_error();
-                    warn!(?error, "Wake Word listener stopped after capture/routing failure");
-                    return;
-                }
-            }
-        }
-    });
+    warn!("Wake Word native receive loop requires a dedicated local-thread runner before startup");
 }
 
-/// Resolve command completion against the retained Wake owner and spawn the next listener epoch.
+/// Resolve command completion against the retained Wake owner.
 ///
-/// This asynchronous boundary is used by both manual command completion and Wake-started command
-/// completion. When Wake remains enabled it reopens the same shared `AudioCapture` owner through
-/// the retained orchestrator and then starts the next receive loop. If Wake was disabled during the
-/// interaction it tears down Wake state instead of accidentally reopening the microphone.
+/// When Wake remains enabled it reopens the same shared `AudioCapture` owner through the retained
+/// orchestrator. If Wake was disabled during the interaction it tears down Wake state instead of
+/// accidentally reopening the microphone.
 pub(crate) async fn resume_retained_native_wake_after_command_from_app_state<R>(
     state: &AppState,
-    app: &tauri::AppHandle<R>,
+    _app: &tauri::AppHandle<R>,
     wake_word_enabled: bool,
 ) -> Result<(), WakeWordStartupError>
 where
@@ -252,9 +214,7 @@ where
         owner
             .return_to_wake_listening(input_device)
             .await
-            .map_err(WakeWordStartupError::Capture)?;
-        spawn_retained_native_wake_listener(state.clone(), app.clone());
-        Ok(())
+            .map_err(WakeWordStartupError::Capture)
     } else {
         state
             .wake_word_runtime
