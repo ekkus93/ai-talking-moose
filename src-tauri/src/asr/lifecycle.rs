@@ -1,5 +1,6 @@
+use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
-use crate::asr::AsrError;
+use crate::asr::{AsrError, AsrErrorKind};
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
@@ -9,6 +10,15 @@ pub(crate) trait LocalAsrResource: Send {
 
     fn diagnostics(&self) -> Option<LocalAsrRuntimeDiagnostics> {
         None
+    }
+
+    fn prime_wake_handoff(&self, _handoff: WakeCommandHandoffAudio) -> Result<(), AsrError> {
+        Err(AsrError {
+            kind: AsrErrorKind::InvalidState,
+            message: "Active local ASR resource does not accept Wake Word handoff audio."
+                .to_string(),
+            retryable: false,
+        })
     }
 }
 
@@ -63,6 +73,31 @@ impl LocalAsrLifecycle {
             .await
             .as_ref()
             .and_then(|active| active.resource.diagnostics())
+    }
+
+    pub(crate) async fn prime_wake_handoff(
+        &self,
+        generation: u64,
+        handoff: WakeCommandHandoffAudio,
+    ) -> Result<(), AsrError> {
+        let _operation_guard = self.operation.lock().await;
+        let active = self.active.lock().await;
+        let Some(active) = active.as_ref() else {
+            return Err(AsrError {
+                kind: AsrErrorKind::InvalidState,
+                message: "No active local ASR resource is available for Wake Word handoff audio."
+                    .to_string(),
+                retryable: true,
+            });
+        };
+        if active.generation != generation {
+            return Err(AsrError {
+                kind: AsrErrorKind::InvalidState,
+                message: "Wake Word handoff targeted a stale local ASR generation.".to_string(),
+                retryable: true,
+            });
+        }
+        active.resource.prime_wake_handoff(handoff)
     }
 
     pub async fn accepts_callback(&self, generation: u64) -> bool {
