@@ -1,84 +1,58 @@
-# Wake Word V1 architecture and current support
+# Wake Word V1 architecture
 
-Wake Word V1 is the local keyword-spotting subsystem for the fixed phrase **Hey, Moose**. This document describes the implementation that exists on `master`; it does not treat planned acceptance work as completed support.
+Wake Word V1 provides a fixed local wake phrase, **“Hey, Moose”**, for starting the existing command interaction. The feature is disabled by default. When enabled and healthy, keyword spotting runs locally/offline; it does not continuously send microphone audio to a cloud service.
 
-## User-visible policy
+## Authoritative ownership
 
-Wake Word is disabled by default and can be enabled or disabled from normal Settings. The phrase is fixed to **Hey, Moose** in V1; arbitrary phrase editing and sensitivity controls are intentionally not exposed.
+Production composition has one `WakeWordApplicationRuntime` in `AppState` and a single canonical `WakeWordRuntimeManager`. The authoritative application microphone owner remains `AppState::audio_capture`. Wake Word composition deliberately does not open a microphone device; `AuthoritativeWakeCaptureOwner` borrows that same shared capture used by normal command capture and serializes Wake capture, transfer to command ASR, return to Wake listening, cancellation, disable, and recovery.
 
-When enabled, keyword spotting is designed to run locally/offline against the pinned sherpa-onnx KWS model/runtime. The microphone therefore remains locally active while Wake Word is listening. A wake-triggered command may subsequently enter the normal command-ASR path, whose provider and privacy behavior are separate from idle keyword spotting. V1 does not implement barge-in: Wake Word is suspended while Moose is talking.
+The canonical Wake input is 16 kHz mono PCM. `CanonicalWakePcmRouter` validates that stream before retention or inference. The same chronological canonical samples feed both two seconds of in-memory pre-roll and the sherpa KWS engine. Invalid PCM fails before it can mutate retained Wake state.
 
-Manual interaction remains available when Wake Word is disabled or when the Wake Word runtime has failed closed.
+## Native KWS
 
-## Authoritative subsystem
+Production KWS uses the pinned sherpa-onnx runtime and model identities in `wake-word-artifacts.json`. Artifact preparation verifies byte sizes, SHA-256 identities, and native architecture before use and fails closed on mismatch. The fixed V1 policy is one inference thread, score `1.0`, threshold `0.25`, and a two-second pre-roll. The KWS engine performs keyword spotting only; it is not a full-time transcription path.
 
-Production application composition owns one `WakeWordApplicationRuntime` in `AppState`. That application runtime wraps the single canonical `WakeWordRuntimeManager`. Clones share the manager state rather than constructing independent Wake Word owners.
+component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 remain subject to their dedicated real-KWS acceptance tasks. Until those tasks and the integrated acceptance sections are complete, Wake Word V1 is implementation under qualification rather than as fully accepted cross-platform production functionality.
 
-The authoritative application microphone owner remains `AppState::audio_capture`. Wake Word composition deliberately does not open a microphone device. The intended WWR-300 production routing model is one capture stream feeding canonical PCM to the ring buffer/KWS/handoff path; a second continuous Wake Word capture stream is not part of the design.
+## Wake-to-command handoff
 
-The canonical V1 KWS policy is fixed at:
+On an accepted trigger, the runtime snapshots pre-roll chronologically and retains subsequent live canonical samples while command ASR initializes. Transfer is single-use. Wake capture stops on the shared `AudioCapture` before normal command capture replaces it, so Wake and command ASR do not open competing microphone streams.
 
-- 16 kHz mono PCM;
-- feature dimension 80;
-- one inference thread;
-- keyword `HEY MOOSE` / user phrase `Hey, Moose`;
-- keyword score 1.0;
-- threshold 0.25;
-- two seconds of in-memory pre-roll.
+V1 deliberately does **not** acoustically trim the wake phrase. The handoff therefore may contain both “Hey, Moose” and the immediately following command, and that wake phrase plus prompt may reach the selected command ASR. The existing Moonshine command-ASR ingress accepts the handoff before subsequent live microphone PCM so the boundary can remain gap-free and ordered.
 
-Non-canonical PCM is rejected before Wake Word retention/inference boundaries.
+The handoff is memory-only. Raw Wake PCM is not written to diagnostics or logs, and the ring/pre-roll is cleared at lifecycle boundaries that invalidate retained audio.
 
 ## Lifecycle
 
-The runtime state machine uses Disabled, Loading, Listening, Triggered, SuspendedTalking, Error, and ShuttingDown phases.
+The intended integrated lifecycle is:
 
-Persisted disabled state constructs a Disabled runtime. Persisted enabled state enters Loading and does not claim Listening until the KWS runtime is actually marked loaded. Trigger acceptance snapshots chronological pre-roll and moves to Triggered. Repeated positive frames are ignored until the interaction lifecycle resets the runtime.
+1. Disabled setting → `Disabled`; manual interaction remains available.
+2. Enabled startup → `Loading` while verified native KWS resources are prepared.
+3. Successful preparation and eligible idle state → `Listening`.
+4. One accepted trigger → one normal command interaction, with Wake activation suspended before command ASR owns the microphone.
+5. Thinking/Talking/TTS keep Wake activation suspended. V1 does not implement barge-in.
+6. Terminal command/TTS success, cancellation, or recoverable failure clears stale retained audio, resets KWS state where required, and returns to `Listening` only if Wake is still enabled.
+7. If Wake is disabled during an interaction, terminal resolution ends in `Disabled`, never an unconditional resume.
+8. Wake-specific runtime/capture failure fails Wake closed without preventing the ordinary manual interaction path.
 
-Command/TTS ownership suspends Wake Word. Entering suspension clears retained ring/pre-roll state. Successful completion, cancellation, and recoverable failure use the same terminal policy: return to Listening only when Wake Word remains enabled. If the user disables Wake Word during an interaction, Disabled wins over resume. Shutdown is terminal and command completion cannot resurrect the runtime.
-
-This lifecycle is intentionally state-based rather than timer/cooldown based. No V1 cooldown is required for the deterministic one-trigger/one-interaction invariant.
-
-## Audio retention and handoff
-
-Wake Word pre-roll is memory-only PCM held in a bounded ring buffer. Runtime diagnostics expose sample counts/capacity, not PCM payloads. The handoff implementation is designed to snapshot pre-roll chronologically, preserve live samples after the trigger, and transfer ownership once to command ASR without duplicate ranges or inversion.
-
-Component-level deterministic tests cover chronological snapshotting, invalid-frame rejection before mutation, one-shot pre-roll take, stale-buffer clearing, repeated-trigger suppression, and wake/command lifecycle reset behavior.
-
-Those component tests are **not** a substitute for the still-open real/reproducible `Hey Moose, tell me the time` acceptance, first-command-word acceptance, or complete production capture→KWS→ASR integration acceptance.
-
-## Native model/runtime identity
-
-V1 pins immutable identities for the selected GigaSpeech KWS model inputs and sherpa-onnx native runtime artifacts. Preparation and runtime verification fail closed on byte/hash mismatch, missing artifacts, or wrong native architecture. The implementation currently contains platform-specific identity checks for Linux x86_64 and macOS arm64.
-
-Pinned identities and packaging code do not by themselves constitute a supported-platform claim. Linux x86_64 and macOS arm64 remain subject to their dedicated real-KWS acceptance tasks before documentation may claim end-to-end platform support.
-
-Model provenance/license and sherpa runtime license/attribution are distinct concerns and are recorded separately in repository evidence/notices.
+Some lifecycle wiring and real acceptance remain tracked as open work in `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`; this document describes the authoritative design and must not be read as evidence that unchecked acceptance items have passed.
 
 ## Privacy and diagnostics
 
-Wake Word diagnostics are intentionally bounded. They can report enabled/runtime state, model/runtime identity, platform/architecture, one-thread policy, sample format, ring capacity, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension, and sanitized error state.
+Wake diagnostics expose state and bounded metadata such as enabled/runtime phase, model/runtime identity, platform/architecture, fixed policy, ring capacity, trigger count/timing, initialization timing, and sanitized errors. They must not expose raw PCM, audio content, credentials, or unnecessary absolute paths.
 
-Diagnostics do not serialize raw PCM. Detection events contain only the fixed keyword identity and score. Engine error sanitization redacts path-like and token-like values, and runtime-state errors use bounded operational text. Native keyword-result handling reduces results to keyword presence instead of propagating native JSON, token arrays, transcripts, or audio.
+The microphone remains locally active while Wake is enabled and listening. This behavior is disclosed in Settings. Normal inference has no network dependency after verified artifacts are prepared.
 
-Idle KWS is not intended to perform full transcription or silently fall back to cloud ASR. Any command-ASR activity after a trigger is part of the normal command interaction and must follow the configured ASR policy.
+## Source map
 
-## Current acceptance boundary
-
-The following work remains open and must not be described as completed merely because component tests pass:
-
-- complete production one-stream microphone routing and capture ownership acceptance;
-- end-to-end wake→command-ASR pre-roll/live handoff acceptance with real/reproducible audio;
-- deterministic corpus recall/false-trigger acceptance;
-- real Linux x86_64 KWS inference acceptance;
-- real macOS arm64 KWS inference acceptance;
-- measured CPU, memory, inference, and handoff performance evidence;
-- repeated integrated lifecycle/resource stability acceptance;
-- specialized final Wake CI gates and exact-head closeout.
-
-Until those gates are complete, Wake Word V1 should be described as an implementation under qualification rather than as fully accepted cross-platform production functionality.
-
-## Troubleshooting boundaries
-
-If Wake Word is disabled, manual interaction should continue normally. If the runtime reports Loading, the application has not yet established a usable KWS session. Error means Wake Word failed closed; manual interaction should remain available, and re-enabling may re-enter Loading. SuspendedTalking is expected while the command/TTS lifecycle owns the interaction. ShuttingDown is terminal for that application lifetime.
-
-Artifact/runtime failures should be diagnosed from the sanitized error and pinned identity evidence rather than by logging PCM, transcripts, credentials, or unnecessary absolute paths.
+- `src-tauri/src/app/state.rs` — authoritative application composition and shared capture owner.
+- `src-tauri/src/app/wake_word_composition.rs` — application Wake runtime composition/lifecycle boundary.
+- `src-tauri/src/app/wake_word_authoritative_capture.rs` — serialized use of the shared `AudioCapture`.
+- `src-tauri/src/app/wake_word_pcm_router.rs` — canonical PCM routing, pre-roll, trigger/live handoff ordering.
+- `src-tauri/src/app/wake_word_command_handoff.rs` — owned single-use handoff audio.
+- `src-tauri/src/app/wake_word_command_asr_ingress.rs` — provider-neutral command-ASR ingress boundary.
+- `src-tauri/src/app/wake_word_command_activation.rs` — one-shot command activation boundary.
+- `src-tauri/src/app/wake_word_command_lifecycle.rs` — suspend/resume lifecycle policy.
+- `src-tauri/src/app/wake_word/` and `src-tauri/src/app/wake_word_engine.rs` — runtime state and native sherpa KWS implementation.
+- `src-tauri/src/asr/pipeline.rs` — existing Moonshine command-ASR pipeline and Wake handoff ingress.
+- `wake-word-artifacts.json` — authoritative immutable model/runtime identities.
