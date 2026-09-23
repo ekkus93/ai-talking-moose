@@ -4,6 +4,17 @@ use super::wake_word_command_lifecycle::{
 };
 use super::wake_word_composition::WakeWordApplicationRuntime;
 
+/// Production boundary that starts the existing normal command interaction after Wake audio is
+/// accepted by the command-ASR ingress.
+///
+/// Implementations are expected to call the same command-start path used by manual listen. The
+/// Wake side owns only single-use activation discipline: one accepted trigger may prime command
+/// ASR and request one normal command start exactly once. Startup failure must be reported so the
+/// Wake runtime can recover and stale handoff audio cannot replay.
+pub(crate) trait WakeCommandStarter {
+    fn start_normal_command_interaction(&mut self) -> Result<(), String>;
+}
+
 /// Activate the normal command-ASR boundary for one accepted Wake trigger.
 ///
 /// Wake is suspended before command ASR can receive audio. A successful delivery deliberately
@@ -33,6 +44,39 @@ pub(crate) fn activate_wake_command_once(
     }
 }
 
+/// Prime command ASR with the single-use Wake handoff, then request exactly one normal command
+/// interaction on the same successful activation.
+///
+/// This keeps WWR-310's ordering explicit: the wake phrase plus immediate command PCM is accepted
+/// before command microphone capture begins, then the ordinary command-start path owns the rest of
+/// ASR/Thinking/Talking. If the ordinary command start fails after priming, the runtime returns to
+/// the latest enabled/disabled state and the consumed handoff is not replayable.
+pub(crate) fn activate_wake_command_and_start_normal_asr_once(
+    runtime: &WakeWordApplicationRuntime,
+    handoff: &mut WakeCommandAsrHandoff,
+    ingress: &mut impl WakeCommandAsrIngress,
+    starter: &mut impl WakeCommandStarter,
+    wake_word_enabled: bool,
+) -> Result<bool, String> {
+    let delivered = activate_wake_command_once(runtime, handoff, ingress, wake_word_enabled)?;
+    if !delivered {
+        return Ok(false);
+    }
+
+    match starter.start_normal_command_interaction() {
+        Ok(()) => Ok(true),
+        Err(start_error) => {
+            let recovery = resume_after_command_interaction(runtime, wake_word_enabled);
+            match recovery {
+                Ok(()) => Err(start_error),
+                Err(recovery_error) => Err(format!(
+                    "{start_error}; Wake Word recovery also failed: {recovery_error}"
+                )),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,6 +100,23 @@ mod tests {
             }
             self.samples = audio.into_samples_i16();
             Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingStarter {
+        start_count: usize,
+        fail: bool,
+    }
+
+    impl WakeCommandStarter for RecordingStarter {
+        fn start_normal_command_interaction(&mut self) -> Result<(), String> {
+            self.start_count += 1;
+            if self.fail {
+                Err("normal command start failed".to_string())
+            } else {
+                Ok(())
+            }
         }
     }
 
@@ -122,5 +183,74 @@ mod tests {
         activate_wake_command_once(&runtime, &mut handoff, &mut ingress, false).unwrap_err();
 
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
+    fn successful_wake_activation_starts_the_normal_command_path_once() {
+        let runtime = listening_runtime();
+        let mut handoff = handoff();
+        let mut ingress = RecordingIngress::default();
+        let mut starter = RecordingStarter::default();
+
+        assert!(activate_wake_command_and_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        )
+        .unwrap());
+        assert!(!activate_wake_command_and_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        )
+        .unwrap());
+
+        assert_eq!(ingress.activations, 1);
+        assert_eq!(starter.start_count, 1);
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+    }
+
+    #[test]
+    fn normal_command_start_failure_recovers_without_replaying_handoff() {
+        let runtime = listening_runtime();
+        let mut handoff = handoff();
+        let mut ingress = RecordingIngress::default();
+        let mut starter = RecordingStarter {
+            fail: true,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            activate_wake_command_and_start_normal_asr_once(
+                &runtime,
+                &mut handoff,
+                &mut ingress,
+                &mut starter,
+                true,
+            )
+            .unwrap_err(),
+            "normal command start failed"
+        );
+
+        assert_eq!(ingress.activations, 1);
+        assert_eq!(starter.start_count, 1);
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
+        assert!(!handoff.is_pending());
+
+        starter.fail = false;
+        assert!(!activate_wake_command_and_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        )
+        .unwrap());
+        assert_eq!(ingress.activations, 1);
+        assert_eq!(starter.start_count, 1);
     }
 }
