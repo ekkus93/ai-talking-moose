@@ -258,9 +258,18 @@ mod tests {
                 true,
             );
             tokio::pin!(activation);
-            tokio::task::yield_now().await;
 
-            assert!(entered.load(Ordering::SeqCst));
+            tokio::select! {
+                result = &mut activation => {
+                    panic!("activation completed before starter release: {result:?}");
+                }
+                _ = async {
+                    while !entered.load(Ordering::SeqCst) {
+                        tokio::task::yield_now().await;
+                    }
+                } => {}
+            }
+
             release.store(true, Ordering::SeqCst);
             assert!(activation.await.unwrap());
         }
