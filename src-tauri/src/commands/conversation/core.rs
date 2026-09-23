@@ -3,6 +3,7 @@ use crate::app::request_snapshot::TextRequestSettingsSnapshot;
 use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 use crate::app::wake_word::runtime::WakeWordRuntimePhase;
+use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::app::wake_word_command_lifecycle::{
     resume_after_command_interaction, suspend_for_command_interaction,
 };
@@ -111,10 +112,10 @@ fn prepare_character_for_conversation<R: Runtime>(
     transition_and_emit(&state.character_state, app, CharacterState::Idle)
 }
 
-#[tauri::command]
-pub async fn start_conversation<R: Runtime>(
-    state: State<'_, AppState>,
+async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
+    state: &AppState,
     app: tauri::AppHandle<R>,
+    wake_handoff_audio: Option<WakeCommandHandoffAudio>,
 ) -> Result<String, String> {
     state.record_user_interaction();
     state
@@ -132,12 +133,11 @@ pub async fn start_conversation<R: Runtime>(
     let wake_runtime = state.wake_word_runtime.clone();
     let wake_guarded = suspend_for_command_interaction(&wake_runtime)?;
     state.ambient_scheduler.claim_foreground_presentation();
-    prepare_character_for_conversation(state.inner(), &app)?;
+    prepare_character_for_conversation(state, &app)?;
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
 
-    let system_instruction =
-        build_conversation_system_instruction(state.inner(), settings.memory_enabled);
+    let system_instruction = build_conversation_system_instruction(state, settings.memory_enabled);
 
     let config = LiveSessionConfig {
         model: settings.live_model.clone(),
@@ -224,7 +224,16 @@ pub async fn start_conversation<R: Runtime>(
         ),
     };
 
-    let session_id = match state.conversation_mgr.start_session(request).await {
+    let session_start = if let Some(handoff_audio) = wake_handoff_audio {
+        state
+            .conversation_mgr
+            .start_session_with_wake_handoff(request, Some(handoff_audio))
+            .await
+    } else {
+        state.conversation_mgr.start_session(request).await
+    };
+
+    let session_id = match session_start {
         Ok(session_id) => session_id,
         Err(error_value) => {
             if wake_guarded && wake_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
@@ -241,6 +250,23 @@ pub async fn start_conversation<R: Runtime>(
 
     info!(session_id = %session_id, "Conversation session started");
     Ok(session_id)
+}
+
+#[tauri::command]
+pub async fn start_conversation<R: Runtime + 'static>(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle<R>,
+) -> Result<String, String> {
+    start_conversation_with_optional_wake_handoff(state.inner(), app, None).await
+}
+
+#[allow(dead_code)]
+pub(crate) async fn start_wake_conversation<R: Runtime + 'static>(
+    state: &AppState,
+    app: tauri::AppHandle<R>,
+    wake_handoff_audio: WakeCommandHandoffAudio,
+) -> Result<String, String> {
+    start_conversation_with_optional_wake_handoff(state, app, Some(wake_handoff_audio)).await
 }
 
 #[tauri::command]
