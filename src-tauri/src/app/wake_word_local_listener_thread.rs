@@ -70,7 +70,16 @@ where
     let (command_tx, command_rx) = mpsc::unbounded_channel();
     let join_handle = thread::Builder::new()
         .name("wake-word-listener".to_string())
-        .spawn(move || run_listener_thread(capture, runtime, device_name, build_consumer, command_rx, event_tx))?;
+        .spawn(move || {
+            run_listener_thread(
+                capture,
+                runtime,
+                device_name,
+                build_consumer,
+                command_rx,
+                event_tx,
+            )
+        })?;
 
     Ok(WakeLocalListenerHandle {
         command_tx,
