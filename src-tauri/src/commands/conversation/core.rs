@@ -260,6 +260,7 @@ pub async fn start_conversation<R: Runtime + 'static>(
     start_conversation_with_optional_wake_handoff(state.inner(), app, None).await
 }
 
+#[allow(dead_code)]
 pub(crate) async fn start_wake_conversation<R: Runtime + 'static>(
     state: &AppState,
     app: tauri::AppHandle<R>,

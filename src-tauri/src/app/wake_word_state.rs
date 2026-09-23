@@ -20,6 +20,7 @@ pub(crate) fn runtime_from_app_state(state: &AppState) -> &WakeWordApplicationRu
 ///
 /// The native runtime layout mirrors `wake-word-artifacts.json`'s `runtime.*.install_root` so
 /// artifacts prepared by repository tooling are consumed from the same fail-closed identity path.
+#[allow(dead_code)]
 pub(crate) fn native_kws_paths_from_app_data_dir(app_data_dir: &Path) -> NativeKwsSessionPaths {
     NativeKwsSessionPaths {
         model_dir: app_data_dir
@@ -34,6 +35,7 @@ pub(crate) fn native_kws_paths_from_app_data_dir(app_data_dir: &Path) -> NativeK
     }
 }
 
+#[allow(dead_code)]
 fn native_runtime_platform_dir() -> &'static str {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
