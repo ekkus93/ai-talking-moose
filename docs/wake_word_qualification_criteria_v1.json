@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "allowed_platforms": ["linux-x86_64", "macos-arm64"],
+  "thread_count": 1,
+  "corpus": {
+    "min_positive": 1,
+    "min_negative": 1,
+    "min_recall": 1.0,
+    "max_false_accept_rate": 0.0
+  },
+  "required_performance_metrics": [
+    "idle_cpu_percent",
+    "runtime_memory_bytes",
+    "inference_ms",
+    "wake_to_asr_activation_ms",
+    "preroll_replay_ms"
+  ],
+  "lifecycle": {
+    "min_cycles": 1,
+    "required_zero_counters": [
+      "native_session_growth",
+      "capture_stream_growth",
+      "ring_buffer_growth",
+      "stuck_state_count"
+    ]
+  },
+  "privacy_required_true": [
+    "no_raw_audio_in_report",
+    "no_secrets_in_report",
+    "no_unnecessary_paths_in_report"
+  ]
+}
