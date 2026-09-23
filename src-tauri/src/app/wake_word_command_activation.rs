@@ -260,12 +260,12 @@ mod tests {
         tokio::task::yield_now().await;
 
         assert!(entered.load(Ordering::SeqCst));
+        release.store(true, Ordering::SeqCst);
+        assert!(activation.await.unwrap());
+
         assert_eq!(ingress.activations, 1);
         assert!(!handoff.is_pending());
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
-        release.store(true, Ordering::SeqCst);
-
-        assert!(activation.await.unwrap());
     }
 
     #[tokio::test]
