@@ -3,6 +3,7 @@ use super::wake_word_command_lifecycle::{
     resume_after_command_interaction, suspend_for_command_interaction,
 };
 use super::wake_word_composition::WakeWordApplicationRuntime;
+use async_trait::async_trait;
 
 /// Production boundary that starts the existing normal command interaction after Wake audio is
 /// accepted by the command-ASR ingress.
@@ -11,8 +12,9 @@ use super::wake_word_composition::WakeWordApplicationRuntime;
 /// Wake side owns only single-use activation discipline: one accepted trigger may prime command
 /// ASR and request one normal command start exactly once. Startup failure must be reported so the
 /// Wake runtime can recover and stale handoff audio cannot replay.
+#[async_trait]
 pub(crate) trait WakeCommandStarter {
-    fn start_normal_command_interaction(&mut self) -> Result<(), String>;
+    async fn start_normal_command_interaction(&mut self) -> Result<(), String>;
 }
 
 /// Activate the normal command-ASR boundary for one accepted Wake trigger.
@@ -51,7 +53,7 @@ pub(crate) fn activate_wake_command_once(
 /// before command microphone capture begins, then the ordinary command-start path owns the rest of
 /// ASR/Thinking/Talking. If the ordinary command start fails after priming, the runtime returns to
 /// the latest enabled/disabled state and the consumed handoff is not replayable.
-pub(crate) fn activate_wake_command_and_start_normal_asr_once(
+pub(crate) async fn activate_wake_command_and_start_normal_asr_once(
     runtime: &WakeWordApplicationRuntime,
     handoff: &mut WakeCommandAsrHandoff,
     ingress: &mut impl WakeCommandAsrIngress,
@@ -63,7 +65,7 @@ pub(crate) fn activate_wake_command_and_start_normal_asr_once(
         return Ok(false);
     }
 
-    match starter.start_normal_command_interaction() {
+    match starter.start_normal_command_interaction().await {
         Ok(()) => Ok(true),
         Err(start_error) => {
             let recovery = resume_after_command_interaction(runtime, wake_word_enabled);
@@ -84,6 +86,8 @@ mod tests {
     use crate::app::wake_word::runtime::WakeWordRuntimePhase;
     use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
     use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
 
     #[derive(Default)]
     struct RecordingIngress {
@@ -109,14 +113,31 @@ mod tests {
         fail: bool,
     }
 
+    #[async_trait]
     impl WakeCommandStarter for RecordingStarter {
-        fn start_normal_command_interaction(&mut self) -> Result<(), String> {
+        async fn start_normal_command_interaction(&mut self) -> Result<(), String> {
             self.start_count += 1;
             if self.fail {
                 Err("normal command start failed".to_string())
             } else {
                 Ok(())
             }
+        }
+    }
+
+    struct AwaitingStarter {
+        entered: Arc<AtomicBool>,
+        release: Arc<AtomicBool>,
+    }
+
+    #[async_trait]
+    impl WakeCommandStarter for AwaitingStarter {
+        async fn start_normal_command_interaction(&mut self) -> Result<(), String> {
+            self.entered.store(true, Ordering::SeqCst);
+            while !self.release.load(Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+            Ok(())
         }
     }
 
@@ -185,8 +206,8 @@ mod tests {
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
     }
 
-    #[test]
-    fn successful_wake_activation_starts_the_normal_command_path_once() {
+    #[tokio::test]
+    async fn successful_wake_activation_starts_the_normal_command_path_once() {
         let runtime = listening_runtime();
         let mut handoff = handoff();
         let mut ingress = RecordingIngress::default();
@@ -199,6 +220,7 @@ mod tests {
             &mut starter,
             true,
         )
+        .await
         .unwrap());
         assert!(!activate_wake_command_and_start_normal_asr_once(
             &runtime,
@@ -207,6 +229,7 @@ mod tests {
             &mut starter,
             true,
         )
+        .await
         .unwrap());
 
         assert_eq!(ingress.activations, 1);
@@ -214,8 +237,39 @@ mod tests {
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
     }
 
-    #[test]
-    fn normal_command_start_failure_recovers_without_replaying_handoff() {
+    #[tokio::test]
+    async fn activation_awaits_the_real_normal_command_start_boundary() {
+        let runtime = listening_runtime();
+        let mut handoff = handoff();
+        let mut ingress = RecordingIngress::default();
+        let entered = Arc::new(AtomicBool::new(false));
+        let release = Arc::new(AtomicBool::new(false));
+        let mut starter = AwaitingStarter {
+            entered: entered.clone(),
+            release: release.clone(),
+        };
+
+        let activation = activate_wake_command_and_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        );
+        tokio::pin!(activation);
+        tokio::task::yield_now().await;
+
+        assert!(entered.load(Ordering::SeqCst));
+        assert_eq!(ingress.activations, 1);
+        assert!(!handoff.is_pending());
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+        release.store(true, Ordering::SeqCst);
+
+        assert!(activation.await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn normal_command_start_failure_recovers_without_replaying_handoff() {
         let runtime = listening_runtime();
         let mut handoff = handoff();
         let mut ingress = RecordingIngress::default();
@@ -232,6 +286,7 @@ mod tests {
                 &mut starter,
                 true,
             )
+            .await
             .unwrap_err(),
             "normal command start failed"
         );
@@ -249,6 +304,7 @@ mod tests {
             &mut starter,
             true,
         )
+        .await
         .unwrap());
         assert_eq!(ingress.activations, 1);
         assert_eq!(starter.start_count, 1);
