@@ -1,0 +1,38 @@
+name: Wake Word qualification report
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/wake-word-qualification-report.yml
+      - docs/wake_word_qualification_criteria_v1.json
+      - scripts/wake_word_qualification_report.py
+      - tests/test_wake_word_qualification_report.py
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/wake-word-qualification-report.yml
+      - docs/wake_word_qualification_criteria_v1.json
+      - scripts/wake_word_qualification_report.py
+      - tests/test_wake_word_qualification_report.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wake-word-qualification-report-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+jobs:
+  validator-tests:
+    name: Qualification report validator tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Run validator unit tests
+        run: python3 -m unittest tests.test_wake_word_qualification_report
