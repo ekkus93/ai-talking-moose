@@ -249,19 +249,21 @@ mod tests {
             release: release.clone(),
         };
 
-        let activation = activate_wake_command_and_start_normal_asr_once(
-            &runtime,
-            &mut handoff,
-            &mut ingress,
-            &mut starter,
-            true,
-        );
-        tokio::pin!(activation);
-        tokio::task::yield_now().await;
+        {
+            let activation = activate_wake_command_and_start_normal_asr_once(
+                &runtime,
+                &mut handoff,
+                &mut ingress,
+                &mut starter,
+                true,
+            );
+            tokio::pin!(activation);
+            tokio::task::yield_now().await;
 
-        assert!(entered.load(Ordering::SeqCst));
-        release.store(true, Ordering::SeqCst);
-        assert!(activation.await.unwrap());
+            assert!(entered.load(Ordering::SeqCst));
+            release.store(true, Ordering::SeqCst);
+            assert!(activation.await.unwrap());
+        }
 
         assert_eq!(ingress.activations, 1);
         assert!(!handoff.is_pending());
