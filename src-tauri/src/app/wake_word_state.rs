@@ -336,9 +336,9 @@ mod tests {
         let state = AppState::new_for_tests().unwrap();
         let temp = tempfile::tempdir().unwrap();
         let (event_tx, _event_rx) = mpsc::unbounded_channel();
+        let start = start_native_wake_listener_thread_from_app_state;
 
-        let started = start_native_wake_listener_thread_from_app_state(&state, temp.path(), event_tx)
-            .unwrap();
+        let started = start(&state, temp.path(), event_tx).unwrap();
 
         assert!(!started);
         assert!(native_wake_listener_slot().lock().is_none());
