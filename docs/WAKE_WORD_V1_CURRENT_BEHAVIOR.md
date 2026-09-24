@@ -2,7 +2,7 @@
 
 **Status:** implementation/reference documentation for the current `master` behavior.
 
-Wake Word V1 is a local keyword-spotting feature for the fixed phrase **`Hey, Moose`**. This document records what the repository currently implements and what is still intentionally not claimed.
+Wake Word V1 is a local keyword-spotting feature for the fixed phrase **`Hey, Moose`**. This document records what the repository currently implements, which acceptance evidence has passed, and what is still intentionally not claimed.
 
 ## Authoritative subsystem
 
@@ -34,11 +34,11 @@ V1 disclosure requirements:
 - Raw Wake Word PCM is retained only in bounded in-memory ring/pre-roll buffers.
 - Wake Word diagnostics do not serialize or expose raw PCM.
 
-The one-stream production microphone routing and continuous wake→command-ASR handoff remain remediation work; these statements describe the required behavior and implemented runtime boundaries, not completed real-audio acceptance.
+The one-stream production microphone routing is the authoritative design and deterministic source/tests cover the shared-capture boundary. Remaining final closeout still depends on the original TODO reconciliation, source/privacy audit, measured performance acceptance, and exact final qualification.
 
 ## Lifecycle policy
 
-The authoritative runtime manager implements these state-machine rules, while full production audio/lifecycle integration acceptance remains pending:
+The authoritative runtime manager implements these state-machine rules:
 
 - Listening begins only after the runtime has been enabled and loaded.
 - One accepted wake event moves the runtime to the triggered/handoff state.
@@ -49,7 +49,7 @@ The authoritative runtime manager implements these state-machine rules, while fu
 - Disabling Wake Word during a triggered or suspended interaction leaves the runtime disabled and prevents a later completion/resume path from unintentionally restoring listening.
 - Wake Word V1 does **not** implement wake-word barge-in while Moose is talking.
 
-These runtime-manager invariants must not be described as proof that the production microphone/conversation/TTS graph is fully integrated; WWR-300/310/400/410 and WWR-640 remain the acceptance authority for that claim.
+Integrated lifecycle stability evidence now exists for repeated wake→ASR→Thinking→Talking→wake cycles, bounded retained audio, repeated TTS terminal outcomes, repeated disable/enable cycles, shutdown while listening, and shutdown during handoff. That evidence is recorded in the remediation TODO and WWR-640 evidence. It is still not a substitute for final WWR-950/960 closeout.
 
 ## Artifacts, model, runtime, and licenses
 
@@ -63,22 +63,22 @@ Runtime and model licensing are tracked separately. The pinned sherpa-onnx runti
 
 Wake Word diagnostics expose privacy-safe state useful for lifecycle and artifact troubleshooting, including enabled state, authoritative runtime phase, exact model/runtime identity, platform/architecture, one-thread policy, canonical sample rate/channels, bounded ring/pre-roll counts, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension state, and sanitized last error.
 
-Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist. The WWR-510 evidence records these fields as schema placeholders only, not as accepted performance data.
+Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist. Partial WWR-630 evidence exists for idle KWS CPU, memory, and inference timing, but accepted performance closeout remains pending until all required metrics, including command-ASR latency, pre-roll startup, repeated-cycle resource delta, and continuous-ASR comparison, are complete.
 
 Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content. The WWR-510 privacy audits cover Wake Word diagnostics, production error strings, and production logging surfaces for credentials, unnecessary filesystem paths, and audio content.
 
 ## Corpus and acceptance status
 
-`docs/wake-word-corpus.json` defines the deterministic Wake Word corpus manifest and versioned acceptance criteria schema. `.github/workflows/wake-word-corpus.yml` validates that manifest when the corpus, checker, fixture tree, or workflow changes.
+`docs/wake-word-corpus.json` defines the deterministic Wake Word corpus manifest and versioned acceptance criteria schema. The current deterministic generated corpus covers multiple positive variants, command-following positives, background/noise variants, ordinary-speech negatives, near-misses, and media/background-style negatives generated from repository-authored text.
+
+Linux x86_64 and macOS arm64 real native KWS acceptance have passed on exact merged master evidence recorded in `docs/evidence/WWR-610_620_REAL_KWS_ACCEPTANCE_2026-09-24.md`. Deterministic corpus acceptance is recorded in `docs/evidence/WWR-600_DETERMINISTIC_CORPUS_ACCEPTANCE_2026-09-24.md`.
 
 Current limitations:
 
-- The manifest currently contains no real redistributable audio fixtures.
-- Positive recall and negative false-accept thresholds are intentionally `null` until real fixtures are added and calibrated.
-- Linux x86_64 real KWS acceptance is not yet claimed complete.
-- macOS arm64 real KWS acceptance is not yet claimed complete.
-- Integrated one-stream microphone routing and wake→command-ASR handoff are not yet claimed complete.
-- Integrated production lifecycle stability acceptance is not yet claimed complete.
-- Performance measurements are not yet claimed.
+- WWR-630 measured performance acceptance is still pending.
+- WWR-700 documentation reconciliation is still in progress until this documentation set and audit pass on exact master.
+- WWR-900 final source/privacy/security audit is still pending.
+- WWR-910 original TODO reconciliation is still pending.
+- WWR-950/960 exact-head and exact-master final closeout are still pending.
 
-Do not describe Wake Word V1 as fully user-ready or fully accepted until the real fixture, platform acceptance, production integration, lifecycle stability, performance, and final audit tasks are complete.
+Do not describe Wake Word V1 as fully user-ready or fully accepted until the measured performance, final audit, original TODO reconciliation, and exact final closeout tasks are complete.

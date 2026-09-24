@@ -23,6 +23,7 @@ const behaviorRequirements = [
   "diagnostics",
   "Live enable/disable changes are applied to the authoritative runtime",
   "one-stream production microphone routing",
+  "WWR-630 measured performance acceptance is still pending",
 ];
 for (const token of behaviorRequirements) {
   if (!behavior.toLowerCase().includes(token.toLowerCase())) {
@@ -39,9 +40,9 @@ const architectureRequirements = [
   "one inference thread",
   "two seconds of in-memory pre-roll",
   "does not implement barge-in",
-  "component tests are **not** a substitute",
-  "Linux x86_64 and macOS arm64 remain subject to their dedicated real-KWS acceptance tasks",
-  "implementation under qualification rather than as fully accepted cross-platform production functionality",
+  "Component tests are **not** a substitute",
+  "Linux x86_64 and macOS arm64 real-KWS acceptance passed",
+  "final closeout still depends on measured performance, documentation/source audits, original TODO reconciliation, and exact final qualification",
 ];
 for (const token of architectureRequirements) {
   if (!architecture.includes(token)) {
@@ -83,6 +84,7 @@ const gateRequirements = [
   "does not by itself prove real KWS inference",
   "pending_measurement",
   "A workflow with conclusion `skipped`",
+  "command-ASR latency, pre-roll startup, repeated-cycle resource delta, and continuous-ASR comparison remain open",
 ];
 for (const sentence of gateRequirements) {
   if (!gates.includes(sentence)) {
@@ -126,7 +128,6 @@ const forbiddenClaims = [
   /wake word v1 is fully user[- ]ready/i,
   /wake word v1 is fully accepted/i,
   /production acceptance (?:is )?complete/i,
-  /real kws acceptance (?:has )?passed/i,
 ];
 for (const pattern of forbiddenClaims) {
   if (pattern.test(behavior) || pattern.test(architecture) || pattern.test(gates)) {
