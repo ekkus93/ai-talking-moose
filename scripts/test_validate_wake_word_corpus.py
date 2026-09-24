@@ -3,14 +3,16 @@ import json
 import unittest
 from pathlib import Path
 from validate_wake_word_corpus import MANIFEST, REQUIRED_LABELS, validate
-BASE_FIXTURE={"id":"fixture-id","label":"positive_wake_phrase","path":"docs/fixtures/wake-word-v1/positive/fixture-id.wav","speaker_or_source":"synthetic-test-source","provenance":{"kind":"synthetic","tool":"unit-test"},"license":{"spdx":"CC0-1.0","redistributable":True},"bytes":1234,"sha256":"0"*64,"sample_rate_hz":16000,"channels":1,"sample_format":"pcm_s16le","expected_detection":True}
+
 def fixture(label):
-    r=copy.deepcopy(BASE_FIXTURE); r["id"]=label; r["label"]=label; r["path"]=f"docs/fixtures/wake-word-v1/{label}.wav"; r["expected_detection"]=label.startswith("positive_"); return r
+    positive=label.startswith("positive_")
+    return {"id":label,"label":label,"output":f"{label}.pcm","speaker_or_source":"espeak-ng test","text":"Hey Moose" if positive else "Hello there","voice":"en-us","speed_wpm":150,"gain_db":0.0,"distance_scale":1.0,"noise_amplitude":0.0,"expected_detection":positive,"provenance":{"kind":"deterministic_synthetic_speech"},"license":{"spdx":"CC0-1.0","redistributable":True}}
+
 class WakeWordCorpusContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls): cls.data=json.loads(Path(MANIFEST).read_text(encoding="utf-8"))
-    def test_repository_manifest_is_valid_even_before_real_fixtures_exist(self): validate(copy.deepcopy(self.data))
-    def test_non_empty_fixture_set_must_cover_all_required_labels(self):
+    def test_repository_manifest_is_valid(self): validate(copy.deepcopy(self.data))
+    def test_fixture_set_must_cover_all_required_labels(self):
         d=copy.deepcopy(self.data); d["fixtures"]=[fixture("positive_wake_phrase")]
         with self.assertRaises(AssertionError): validate(d)
     def test_complete_synthetic_fixture_set_is_valid(self):
@@ -18,8 +20,8 @@ class WakeWordCorpusContractTests(unittest.TestCase):
     def test_duplicate_fixture_id_fails(self):
         d=copy.deepcopy(self.data); one=fixture("positive_wake_phrase"); d["fixtures"]=[one,copy.deepcopy(one)]
         with self.assertRaises(AssertionError): validate(d)
-    def test_path_traversal_fails(self):
-        d=copy.deepcopy(self.data); bad=fixture("positive_wake_phrase"); bad["path"]="docs/fixtures/wake-word-v1/../private.wav"; d["fixtures"]=[bad]
+    def test_output_path_traversal_fails(self):
+        d=copy.deepcopy(self.data); d["fixtures"][0]["output"]="../private.pcm"
         with self.assertRaises(AssertionError): validate(d)
     def test_policy_drift_fails(self):
         d=copy.deepcopy(self.data); d["policy"]["sample_rate_hz"]=48000
@@ -30,4 +32,7 @@ class WakeWordCorpusContractTests(unittest.TestCase):
     def test_model_runtime_identity_drift_fails(self):
         d=copy.deepcopy(self.data); d["model_runtime_identity"]["model_archive_sha256"]="1"*64
         with self.assertRaises(AssertionError): validate(d)
-if __name__ == "__main__": unittest.main()
+    def test_acceptance_criteria_cannot_return_to_pending(self):
+        d=copy.deepcopy(self.data); d["acceptance_criteria"]["criteria_status"]="pending_real_fixture_calibration"
+        with self.assertRaises(AssertionError): validate(d)
+if __name__=="__main__": unittest.main()
