@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+import argparse, json, os, platform, statistics
+from pathlib import Path
+
+p=argparse.ArgumentParser()
+p.add_argument('--acceptance-report', required=True)
+p.add_argument('--output', required=True)
+p.add_argument('--platform', required=True)
+p.add_argument('--commit-sha', required=True)
+p.add_argument('--runner', required=True)
+a=p.parse_args()
+r=json.loads(Path(a.acceptance_report).read_text())
+fixtures=r.get('fixtures', [])
+lat=[x['inference_wall_time_ms'] for x in fixtures]
+audio=sum(x.get('audio_ms',0) for x in fixtures)
+wall=sum(lat)
+cpu=r.get('process_cpu_time_ms',0)
+# This is corpus-active CPU utilization, not idle CPU; keep the name explicit.
+active_cpu=(100.0*cpu/wall) if wall else 0.0
+out={
+ 'schema_version':1,'platform':a.platform,'commit_sha':a.commit_sha,'runner':a.runner,
+ 'measured_at':os.environ.get('MEASURED_AT','github-actions'),
+ 'metrics':{
+  'corpus_active_cpu_percent':round(active_cpu,3),
+  'runtime_memory_mib':round((r.get('peak_resident_memory_bytes') or 0)/1048576,3),
+  'inference_latency_ms':round(statistics.mean(lat),3) if lat else 0.0,
+  'inference_p95_ms':sorted(lat)[max(0,int(len(lat)*0.95)-1)] if lat else 0,
+  'corpus_audio_ms':audio,'corpus_inference_wall_ms':wall,
+  'max_real_time_factor':max((x.get('real_time_factor',0) for x in fixtures),default=0),
+  'inference_threads':r.get('inference_threads')
+ },
+ 'pending_metrics':['idle_cpu_percent','wake_to_command_asr_ms','pre_roll_startup_ms','repeated_cycle_resource_delta','continuous_asr_idle_cpu_percent']
+}
+Path(a.output).write_text(json.dumps(out,indent=2)+'\n')
+print(json.dumps(out,indent=2))
