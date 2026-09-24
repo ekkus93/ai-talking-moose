@@ -2,7 +2,7 @@
 
 Date: 2026-09-22
 Baseline master: `7b9801a4eb26a8106042c36a88129762a7375fdf`
-Latest exact-master qualification: `cf174e08a578f0bf17f1f071f2d56fefd3c56fa6`
+Latest exact-master qualification: `d5403747c79fcb1e0cd61a8d23e31fdbe3370827`
 
 ## Scope
 
@@ -31,17 +31,28 @@ The production-facing test module `src-tauri/src/app/wake_word_lifecycle_stabili
 
 ## Exact-master qualification
 
-The lifecycle workflow path filters now cover the production Wake capture, routing, command activation/lifecycle, composition, conversation command, and lifecycle-stability source paths. On exact master `cf174e08a578f0bf17f1f071f2d56fefd3c56fa6`:
+The lifecycle workflow path filters now cover the production Wake capture, routing, command activation/lifecycle, composition, conversation command/session paths, and lifecycle-stability source paths.
+
+Earlier exact-master qualification at `cf174e08a578f0bf17f1f071f2d56fefd3c56fa6`:
 
 - ordinary CI run `35796510592` completed successfully;
 - Wake Word required-gates audit run `35796510622` completed successfully;
 - Wake Word lifecycle stability run `35796510636` completed successfully.
 
-This closes the qualification gap for the deterministic layer itself: these tests are not merely present in source; the repository-defined lifecycle gate executed successfully on the exact master containing the expanded production-path trigger coverage.
+Current gate-path qualification after the WWR-800 conversation-session path-filter merge at `145bf21d9baeb2b5f58fb50ae079e3094d11f4c6`:
+
+- ordinary CI run `35983938327` completed successfully;
+- Wake Word required-gates audit run `35983938148` completed successfully;
+- Wake Word source-security audit run `35983938252` completed successfully;
+- Wake Word lifecycle stability run `35983938243` completed successfully.
+
+The latest remediation/evidence-only master at `d5403747c79fcb1e0cd61a8d23e31fdbe3370827` also passed ordinary CI run `35986409622`.
+
+This closes the qualification gap for the deterministic layer itself: these tests are not merely present in source; the repository-defined lifecycle gate executed successfully on exact master, and later gate path-filter changes preserved exact-master validation.
 
 ## WWR-640 items objectively supported by this deterministic layer
 
-The source tests and exact-master lifecycle run provide objective component-level evidence for:
+The source tests and exact-master lifecycle runs provide objective component-level evidence for:
 
 - ring-buffer memory remaining bounded across repeated runtime cycles;
 - successful terminal interaction/TTS resolution repeatedly resuming Wake Word;
