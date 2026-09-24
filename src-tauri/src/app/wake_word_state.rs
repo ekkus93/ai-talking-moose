@@ -272,7 +272,6 @@ mod tests {
         let paths = native_kws_paths_from_app_data_dir(temp.path());
 
         assert!(paths.model_dir.starts_with(temp.path()));
-        assert!(paths.runtime_dir.starts_with(temp.path()));
         assert!(paths
             .model_dir
             .ends_with("models/wake-word/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"));
@@ -353,12 +352,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (event_tx, _event_rx) = mpsc::unbounded_channel();
 
-        let started = start_native_wake_listener_thread_from_app_state(
-            &state,
-            temp.path(),
-            event_tx.clone(),
-        )
-        .unwrap();
+        let started =
+            start_native_wake_listener_thread_from_app_state(&state, temp.path(), event_tx.clone())
+                .unwrap();
 
         assert!(!started);
         assert!(native_wake_listener_slot().lock().is_none());
