@@ -119,10 +119,14 @@ pub fn run_real_kws_acceptance(
                 fixture.id
             ));
         }
-        let samples: Vec<i16> = bytes
-            .chunks_exact(2)
-            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
-            .collect();
+        let (pairs, remainder) = bytes.as_chunks::<2>();
+        if !remainder.is_empty() {
+            return Err(format!(
+                "generated fixture {} is not PCM16 aligned",
+                fixture.id
+            ));
+        }
+        let samples: Vec<i16> = pairs.iter().map(|pair| i16::from_le_bytes(*pair)).collect();
         if samples.is_empty() {
             return Err(format!("generated fixture {} contains no PCM", fixture.id));
         }
