@@ -22,6 +22,8 @@ out={
  'measured_at':os.environ.get('MEASURED_AT','github-actions'),
  'metrics':{
   'corpus_active_cpu_percent':round(active_cpu,3),
+  'idle_cpu_percent':round(float(r.get('idle_cpu_percent',0)),3),
+  'idle_observation_ms':int(r.get('idle_observation_ms',0)),
   'runtime_memory_mib':round((r.get('peak_resident_memory_bytes') or 0)/1048576,3),
   'inference_latency_ms':round(statistics.mean(lat),3) if lat else 0.0,
   'inference_p95_ms':sorted(lat)[max(0,int(len(lat)*0.95)-1)] if lat else 0,
@@ -29,7 +31,7 @@ out={
   'max_real_time_factor':max((x.get('real_time_factor',0) for x in fixtures),default=0),
   'inference_threads':r.get('inference_threads')
  },
- 'pending_metrics':['idle_cpu_percent','wake_to_command_asr_ms','pre_roll_startup_ms','repeated_cycle_resource_delta','continuous_asr_idle_cpu_percent']
+ 'pending_metrics':['wake_to_command_asr_ms','pre_roll_startup_ms','repeated_cycle_resource_delta','continuous_asr_idle_cpu_percent']
 }
 Path(a.output).write_text(json.dumps(out,indent=2)+'\n')
 print(json.dumps(out,indent=2))
