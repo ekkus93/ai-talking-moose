@@ -160,8 +160,14 @@ pub fn run_real_kws_acceptance(
     }
     session.shutdown().map_err(|error| error.message)?;
 
-    let positive: Vec<_> = results.iter().filter(|item| item.expected_detection).collect();
-    let negative: Vec<_> = results.iter().filter(|item| !item.expected_detection).collect();
+    let positive: Vec<_> = results
+        .iter()
+        .filter(|item| item.expected_detection)
+        .collect();
+    let negative: Vec<_> = results
+        .iter()
+        .filter(|item| !item.expected_detection)
+        .collect();
     if positive.is_empty() || negative.is_empty() {
         return Err("acceptance corpus must contain positive and negative fixtures".to_string());
     }
