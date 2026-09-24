@@ -6,7 +6,19 @@ use super::wake_word::runtime::WakeWordRuntimeError;
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_capture_orchestrator::WakeCaptureOrchestratorError;
 use super::wake_word_composition::WakeWordApplicationRuntime;
+use super::wake_word_local_listener_thread::{
+    spawn_wake_local_listener_thread, WakeLocalListenerEvent, WakeLocalListenerHandle,
+};
+use parking_lot::Mutex;
 use std::path::Path;
+use std::sync::OnceLock;
+use tokio::sync::mpsc;
+
+static NATIVE_WAKE_LISTENER: OnceLock<Mutex<Option<WakeLocalListenerHandle>>> = OnceLock::new();
+
+fn native_wake_listener_slot() -> &'static Mutex<Option<WakeLocalListenerHandle>> {
+    NATIVE_WAKE_LISTENER.get_or_init(|| Mutex::new(None))
+}
 
 /// Access the one Wake Word runtime owned directly by authoritative application state.
 ///
@@ -20,7 +32,6 @@ pub(crate) fn runtime_from_app_state(state: &AppState) -> &WakeWordApplicationRu
 ///
 /// The native runtime layout mirrors `wake-word-artifacts.json`'s `runtime.*.install_root` so
 /// artifacts prepared by repository tooling are consumed from the same fail-closed identity path.
-#[allow(dead_code)]
 pub(crate) fn native_kws_paths_from_app_data_dir(app_data_dir: &Path) -> NativeKwsSessionPaths {
     NativeKwsSessionPaths {
         model_dir: app_data_dir
@@ -35,7 +46,6 @@ pub(crate) fn native_kws_paths_from_app_data_dir(app_data_dir: &Path) -> NativeK
     }
 }
 
-#[allow(dead_code)]
 fn native_runtime_platform_dir() -> &'static str {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
@@ -125,6 +135,70 @@ pub(crate) async fn start_native_wake_from_app_state(
     }
 
     Ok(Some(owner))
+}
+
+/// Start and retain the real native Wake listener on its dedicated local thread.
+///
+/// The retained value is only the send-capable thread handle. The non-`Send` native KWS session is
+/// constructed inside the listener thread by `spawn_wake_local_listener_thread`, so no native
+/// session is moved into Tauri's multithreaded executor or hidden in a `Sync` global.
+pub(crate) fn start_native_wake_listener_thread_from_app_state(
+    state: &AppState,
+    app_data_dir: &Path,
+    event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
+) -> Result<bool, String> {
+    let settings = state.settings.read().clone();
+    if !settings.wake_word_enabled {
+        state
+            .wake_word_runtime
+            .apply_enabled_setting(false)
+            .map_err(|error| error.to_string())?;
+        stop_native_wake_listener_thread();
+        return Ok(false);
+    }
+
+    let slot = native_wake_listener_slot();
+    if slot.lock().is_some() {
+        return Ok(false);
+    }
+
+    state
+        .wake_word_runtime
+        .apply_enabled_setting(true)
+        .map_err(|error| error.to_string())?;
+
+    let paths = native_kws_paths_from_app_data_dir(app_data_dir);
+    let runtime = state.wake_word_runtime.clone();
+    let capture = state.audio_capture.clone();
+    let device_name = settings.input_device.clone();
+    let handle = spawn_wake_local_listener_thread::<NativeKwsSession, _>(
+        capture,
+        runtime,
+        device_name,
+        move |wake_runtime| {
+            wake_runtime
+                .native_capture_consumer(paths)
+                .map_err(|error| error.message)
+        },
+        event_tx,
+    )
+    .map_err(|error| error.to_string())?;
+
+    *slot.lock() = Some(handle);
+    Ok(true)
+}
+
+/// Join and clear the retained native Wake listener handle after a terminal listener event.
+pub(crate) fn clear_native_wake_listener_thread() {
+    stop_native_wake_listener_thread();
+}
+
+/// Request shutdown for the retained native Wake listener, then join its thread.
+pub(crate) fn stop_native_wake_listener_thread() {
+    let Some(handle) = native_wake_listener_slot().lock().take() else {
+        return;
+    };
+    let _ = handle.shutdown();
 }
 
 #[cfg(test)]
@@ -254,5 +328,23 @@ mod tests {
         assert!(matches!(result, Err(WakeWordStartupError::Native(_))));
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Error);
         assert!(!state.audio_capture.lock().is_active());
+    }
+
+    #[test]
+    fn disabled_local_thread_start_does_not_retain_listener() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let (event_tx, _event_rx) = mpsc::unbounded_channel();
+        let start = start_native_wake_listener_thread_from_app_state;
+
+        let started = start(&state, temp.path(), event_tx).unwrap();
+
+        assert!(!started);
+        assert!(native_wake_listener_slot().lock().is_none());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
     }
 }
