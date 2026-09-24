@@ -4,6 +4,7 @@ use super::wake_word_command_lifecycle::{
 };
 use super::wake_word_composition::WakeWordApplicationRuntime;
 use async_trait::async_trait;
+use std::time::Instant;
 
 /// Production boundary that starts the existing normal command interaction after Wake audio is
 /// accepted by the command-ASR ingress.
@@ -15,6 +16,25 @@ use async_trait::async_trait;
 #[async_trait]
 pub(crate) trait WakeCommandStarter {
     async fn start_normal_command_interaction(&mut self) -> Result<(), String>;
+}
+
+/// Timing record for the Wake handoff and normal command-start boundary.
+///
+/// These values are deliberately bounded metadata. They contain no PCM, transcript, path, or
+/// provider payload and are suitable for WWR-630 performance reporting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WakeCommandActivationTiming {
+    pub wake_to_command_asr_ms: u64,
+    pub command_start_ms: u64,
+    pub total_activation_ms: u64,
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    started
+        .elapsed()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 /// Activate the normal command-ASR boundary for one accepted Wake trigger.
@@ -46,6 +66,53 @@ pub(crate) fn activate_wake_command_once(
     }
 }
 
+/// Prime command ASR with the single-use Wake handoff, request exactly one normal command
+/// interaction, and return privacy-safe timing metadata for WWR-630 reporting.
+pub(crate) async fn activate_wake_command_and_measure_start_normal_asr_once(
+    runtime: &WakeWordApplicationRuntime,
+    handoff: &mut WakeCommandAsrHandoff,
+    ingress: &mut impl WakeCommandAsrIngress,
+    starter: &mut impl WakeCommandStarter,
+    wake_word_enabled: bool,
+) -> Result<(bool, WakeCommandActivationTiming), String> {
+    let total_started = Instant::now();
+    let handoff_started = Instant::now();
+    let delivered = activate_wake_command_once(runtime, handoff, ingress, wake_word_enabled)?;
+    let wake_to_command_asr_ms = elapsed_ms(handoff_started);
+
+    if !delivered {
+        return Ok((
+            false,
+            WakeCommandActivationTiming {
+                wake_to_command_asr_ms,
+                command_start_ms: 0,
+                total_activation_ms: elapsed_ms(total_started),
+            },
+        ));
+    }
+
+    let command_start_started = Instant::now();
+    match starter.start_normal_command_interaction().await {
+        Ok(()) => Ok((
+            true,
+            WakeCommandActivationTiming {
+                wake_to_command_asr_ms,
+                command_start_ms: elapsed_ms(command_start_started),
+                total_activation_ms: elapsed_ms(total_started),
+            },
+        )),
+        Err(start_error) => {
+            let recovery = resume_after_command_interaction(runtime, wake_word_enabled);
+            match recovery {
+                Ok(()) => Err(start_error),
+                Err(recovery_error) => Err(format!(
+                    "{start_error}; Wake Word recovery also failed: {recovery_error}"
+                )),
+            }
+        }
+    }
+}
+
 /// Prime command ASR with the single-use Wake handoff, then request exactly one normal command
 /// interaction on the same successful activation.
 ///
@@ -60,23 +127,15 @@ pub(crate) async fn activate_wake_command_and_start_normal_asr_once(
     starter: &mut impl WakeCommandStarter,
     wake_word_enabled: bool,
 ) -> Result<bool, String> {
-    let delivered = activate_wake_command_once(runtime, handoff, ingress, wake_word_enabled)?;
-    if !delivered {
-        return Ok(false);
-    }
-
-    match starter.start_normal_command_interaction().await {
-        Ok(()) => Ok(true),
-        Err(start_error) => {
-            let recovery = resume_after_command_interaction(runtime, wake_word_enabled);
-            match recovery {
-                Ok(()) => Err(start_error),
-                Err(recovery_error) => Err(format!(
-                    "{start_error}; Wake Word recovery also failed: {recovery_error}"
-                )),
-            }
-        }
-    }
+    let (delivered, _) = activate_wake_command_and_measure_start_normal_asr_once(
+        runtime,
+        handoff,
+        ingress,
+        starter,
+        wake_word_enabled,
+    )
+    .await?;
+    Ok(delivered)
 }
 
 #[cfg(test)]
@@ -235,6 +294,64 @@ mod tests {
         assert_eq!(ingress.activations, 1);
         assert_eq!(starter.start_count, 1);
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+    }
+
+    #[tokio::test]
+    async fn measured_wake_activation_records_privacy_safe_timing() {
+        let runtime = listening_runtime();
+        let mut handoff = handoff();
+        let mut ingress = RecordingIngress::default();
+        let mut starter = RecordingStarter::default();
+
+        let (delivered, timing) = activate_wake_command_and_measure_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        )
+        .await
+        .unwrap();
+
+        assert!(delivered);
+        assert_eq!(ingress.activations, 1);
+        assert_eq!(starter.start_count, 1);
+        assert!(timing.total_activation_ms >= timing.wake_to_command_asr_ms);
+        assert!(timing.total_activation_ms >= timing.command_start_ms);
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+    }
+
+    #[tokio::test]
+    async fn measured_consumed_handoff_records_no_command_start_timing() {
+        let runtime = listening_runtime();
+        let mut handoff = handoff();
+        let mut ingress = RecordingIngress::default();
+        let mut starter = RecordingStarter::default();
+
+        assert!(activate_wake_command_and_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        )
+        .await
+        .unwrap());
+        let (delivered, timing) = activate_wake_command_and_measure_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        )
+        .await
+        .unwrap();
+
+        assert!(!delivered);
+        assert_eq!(timing.command_start_ms, 0);
+        assert!(timing.total_activation_ms >= timing.wake_to_command_asr_ms);
+        assert_eq!(ingress.activations, 1);
+        assert_eq!(starter.start_count, 1);
     }
 
     #[tokio::test]
