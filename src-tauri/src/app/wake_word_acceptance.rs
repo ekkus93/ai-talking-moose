@@ -102,7 +102,11 @@ pub fn run_real_kws_acceptance(
     let idle_cpu_before = process_cpu_time_ms();
     let idle_started = Instant::now();
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let idle_wall_ms: u64 = idle_started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let idle_wall_ms: u64 = idle_started
+        .elapsed()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX);
     let idle_cpu_ms = process_cpu_time_ms().saturating_sub(idle_cpu_before);
     let idle_cpu_percent = if idle_wall_ms == 0 {
         0.0
