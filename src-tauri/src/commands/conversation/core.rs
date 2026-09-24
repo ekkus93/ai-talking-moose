@@ -7,6 +7,7 @@ use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::app::wake_word_command_lifecycle::{
     resume_after_command_interaction, suspend_for_command_interaction,
 };
+use crate::app::wake_word_state::restart_native_wake_listener_thread_from_configured_app_state;
 #[cfg(test)]
 use crate::asr::AsrMode;
 use crate::character::prompt::PromptBuilder;
@@ -153,6 +154,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     let app_lifecycle = app.clone();
     let wake_runtime_for_lifecycle = wake_runtime.clone();
     let settings_for_lifecycle = state.settings.clone();
+    let wake_restart_state = state.clone();
     let app_provider_error = app.clone();
     let app_transcript = app.clone();
     let app_bubble = app.clone();
@@ -190,11 +192,24 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
                         == WakeWordRuntimePhase::SuspendedTalking
                 {
                     let wake_word_enabled = settings_for_lifecycle.read().wake_word_enabled;
-                    if let Err(error_value) = resume_after_command_interaction(
+                    match resume_after_command_interaction(
                         &wake_runtime_for_lifecycle,
                         wake_word_enabled,
                     ) {
-                        warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
+                        Ok(()) => {
+                            if wake_word_enabled {
+                                if let Err(error_value) =
+                                    restart_native_wake_listener_thread_from_configured_app_state(
+                                        &wake_restart_state,
+                                    )
+                                {
+                                    warn!(error = %error_value, "Failed to restart Wake Word listener after command interaction");
+                                }
+                            }
+                        }
+                        Err(error_value) => {
+                            warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
+                        }
                     }
                 }
             },
@@ -238,10 +253,19 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
         Err(error_value) => {
             if wake_guarded && wake_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
                 let wake_word_enabled = state.settings.read().wake_word_enabled;
-                if let Err(resume_error) =
-                    resume_after_command_interaction(&wake_runtime, wake_word_enabled)
-                {
-                    warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
+                match resume_after_command_interaction(&wake_runtime, wake_word_enabled) {
+                    Ok(()) => {
+                        if wake_word_enabled {
+                            if let Err(restart_error) =
+                                restart_native_wake_listener_thread_from_configured_app_state(state)
+                            {
+                                warn!(error = %restart_error, "Failed to restart Wake Word listener after conversation start failure");
+                            }
+                        }
+                    }
+                    Err(resume_error) => {
+                        warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
+                    }
                 }
             }
             return Err(error_value);
