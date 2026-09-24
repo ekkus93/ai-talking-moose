@@ -16,9 +16,8 @@ fn listening_runtime() -> WakeWordApplicationRuntime {
 #[test]
 fn repeated_lifecycle_cycles_remain_bounded_and_return_to_listening() {
     let runtime = listening_runtime();
-    let capacity = runtime
-        .snapshot(Instant::now())
-        .ring_buffer_capacity_samples;
+    let initial = runtime.snapshot(Instant::now());
+    let capacity = initial.ring_buffer_capacity_samples;
 
     for cycle in 0_i16..100 {
         let samples = [cycle, cycle.saturating_add(1), cycle.saturating_add(2)];
@@ -43,7 +42,25 @@ fn repeated_lifecycle_cycles_remain_bounded_and_return_to_listening() {
         assert_eq!(resumed.handoff_pre_roll_samples, 0);
     }
 
-    assert_eq!(runtime.snapshot(Instant::now()).trigger_count, 100);
+    let final_snapshot = runtime.snapshot(Instant::now());
+    assert_eq!(final_snapshot.trigger_count, 100);
+    assert_eq!(final_snapshot.ring_buffer_samples, initial.ring_buffer_samples);
+    assert_eq!(
+        final_snapshot.handoff_pre_roll_samples,
+        initial.handoff_pre_roll_samples
+    );
+    println!(
+        "WWR630_REPEATED_CYCLE_RESOURCE_DELTA cycles=100 initial_ring_buffer_samples={} final_ring_buffer_samples={} ring_buffer_delta={} initial_handoff_pre_roll_samples={} final_handoff_pre_roll_samples={} handoff_pre_roll_delta={} trigger_count_delta={} final_phase={:?} capacity_samples={}",
+        initial.ring_buffer_samples,
+        final_snapshot.ring_buffer_samples,
+        final_snapshot.ring_buffer_samples as i64 - initial.ring_buffer_samples as i64,
+        initial.handoff_pre_roll_samples,
+        final_snapshot.handoff_pre_roll_samples,
+        final_snapshot.handoff_pre_roll_samples as i64 - initial.handoff_pre_roll_samples as i64,
+        final_snapshot.trigger_count.saturating_sub(initial.trigger_count),
+        final_snapshot.phase,
+        capacity
+    );
 }
 
 #[test]
