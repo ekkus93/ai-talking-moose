@@ -25,6 +25,7 @@ on:
       - "src-tauri/src/commands/wake_word.rs"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "docs/evidence/WWR-640_*.md"
       - ".github/workflows/wake-word-lifecycle-stability.yml"
   pull_request:
     branches:
@@ -50,6 +51,7 @@ on:
       - "src-tauri/src/commands/wake_word.rs"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "docs/evidence/WWR-640_*.md"
       - ".github/workflows/wake-word-lifecycle-stability.yml"
   workflow_dispatch:
 
