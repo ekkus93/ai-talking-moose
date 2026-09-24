@@ -66,6 +66,8 @@ pub struct WakeWordAcceptanceReport {
     pub negative_total: u64,
     pub negative_false_accepts: u64,
     pub process_cpu_time_ms: u64,
+    pub idle_cpu_percent: f64,
+    pub idle_observation_ms: u64,
     pub peak_resident_memory_bytes: Option<u64>,
     pub criteria_version: u32,
     pub positive_recall_minimum: f64,
@@ -94,6 +96,19 @@ pub fn run_real_kws_acceptance(
     })
     .map_err(|error| error.message)?;
     let config = session.config().clone();
+    // Observe the initialized KWS session while it is idle. This deliberately
+    // happens before any corpus PCM is fed so WWR-630 does not confuse active
+    // inference CPU with idle wake-listening cost.
+    let idle_cpu_before = process_cpu_time_ms();
+    let idle_started = Instant::now();
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    let idle_wall_ms: u64 = idle_started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let idle_cpu_ms = process_cpu_time_ms().saturating_sub(idle_cpu_before);
+    let idle_cpu_percent = if idle_wall_ms == 0 {
+        0.0
+    } else {
+        (idle_cpu_ms as f64 * 100.0) / idle_wall_ms as f64
+    };
     let cpu_before = process_cpu_time_ms();
     let mut results = Vec::with_capacity(index.fixtures.len());
 
@@ -198,6 +213,8 @@ pub fn run_real_kws_acceptance(
         negative_total: negative.len() as u64,
         negative_false_accepts,
         process_cpu_time_ms: process_cpu_time_ms().saturating_sub(cpu_before),
+        idle_cpu_percent,
+        idle_observation_ms: idle_wall_ms,
         peak_resident_memory_bytes: peak_resident_memory_bytes(),
         criteria_version: index.acceptance_criteria.criteria_version,
         positive_recall_minimum: index.acceptance_criteria.positive_recall_minimum,
