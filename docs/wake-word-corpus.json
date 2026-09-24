@@ -174,6 +174,21 @@
       "license": {"spdx": "CC0-1.0", "scope": "repository-authored fixture text and recipe", "redistributable": true}
     },
     {
+      "id": "negative-hey-moosey",
+      "label": "negative_near_miss",
+      "output": "negative-hey-moosey.pcm",
+      "speaker_or_source": "espeak-ng en-us+f2",
+      "text": "Hey Moosey",
+      "voice": "en-us+f2",
+      "speed_wpm": 150,
+      "gain_db": 0.0,
+      "distance_scale": 1.0,
+      "noise_amplitude": 0.0,
+      "expected_detection": false,
+      "provenance": {"kind": "deterministic_synthetic_speech", "generator_license": "GPL-3.0-or-later", "audio_distribution": "ephemeral-only"},
+      "license": {"spdx": "CC0-1.0", "scope": "repository-authored fixture text and recipe", "redistributable": true}
+    },
+    {
       "id": "negative-hey-goose",
       "label": "negative_near_miss",
       "output": "negative-hey-goose.pcm",
@@ -214,6 +229,21 @@
       "gain_db": 0.0,
       "distance_scale": 1.0,
       "noise_amplitude": 0.001,
+      "expected_detection": false,
+      "provenance": {"kind": "deterministic_synthetic_speech", "generator_license": "GPL-3.0-or-later", "audio_distribution": "ephemeral-only"},
+      "license": {"spdx": "CC0-1.0", "scope": "repository-authored fixture text and recipe", "redistributable": true}
+    },
+    {
+      "id": "negative-background-media-style",
+      "label": "negative_ordinary_speech",
+      "output": "negative-background-media-style.pcm",
+      "speaker_or_source": "espeak-ng en-gb deterministic media-style speech",
+      "text": "Tonight on the program, weather and traffic updates continue after the news",
+      "voice": "en-gb",
+      "speed_wpm": 165,
+      "gain_db": -3.0,
+      "distance_scale": 0.8,
+      "noise_amplitude": 0.002,
       "expected_detection": false,
       "provenance": {"kind": "deterministic_synthetic_speech", "generator_license": "GPL-3.0-or-later", "audio_distribution": "ephemeral-only"},
       "license": {"spdx": "CC0-1.0", "scope": "repository-authored fixture text and recipe", "redistributable": true}
