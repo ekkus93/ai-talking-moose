@@ -37,18 +37,10 @@ fn remember_native_wake_listener_config(
     });
 }
 
-/// Access the one Wake Word runtime owned directly by authoritative application state.
-///
-/// Physical microphone capture remains exclusively owned by `AppState::audio_capture`;
-/// the Wake runtime owns lifecycle/KWS state only.
 pub(crate) fn runtime_from_app_state(state: &AppState) -> &WakeWordApplicationRuntime {
     &state.wake_word_runtime
 }
 
-/// Resolve the deterministic production model/runtime roots under the app data directory.
-///
-/// The native runtime layout mirrors `wake-word-artifacts.json`'s `runtime.*.install_root` so
-/// artifacts prepared by repository tooling are consumed from the same fail-closed identity path.
 pub(crate) fn native_kws_paths_from_app_data_dir(app_data_dir: &Path) -> NativeKwsSessionPaths {
     NativeKwsSessionPaths {
         model_dir: app_data_dir
@@ -81,13 +73,6 @@ fn native_runtime_platform_dir() -> &'static str {
     }
 }
 
-/// Compose Wake routing around the one microphone owner stored in authoritative application state.
-///
-/// This function is the production boundary for WWR-300: Wake receives PCM through the same
-/// `AppState::audio_capture` object used by manual command listening instead of constructing a
-/// competing capture owner. The returned owner still requires a caller-supplied capture consumer so
-/// production can use a verified native KWS session while tests can keep deterministic fake engines.
-/// The application-startup caller is intentionally staged separately from this ownership seam.
 #[allow(dead_code)]
 pub(crate) fn capture_owner_from_app_state<E: SherpaKwsEngine>(
     state: &AppState,
@@ -103,13 +88,6 @@ pub(crate) enum WakeWordStartupError {
     Capture(WakeCaptureOrchestratorError),
 }
 
-/// Start the production Wake listener from authoritative application state.
-///
-/// This is the lifecycle/start boundary for WWR-300. It honors the persisted setting, constructs
-/// the real verified native KWS session, marks the shared Wake runtime loaded only after native
-/// construction succeeds, and starts capture through `AppState::audio_capture` rather than through
-/// a Wake-owned microphone. Any native or capture startup failure leaves Wake in a recoverable Error
-/// state and does not leave the shared capture owner active.
 #[allow(dead_code)]
 pub(crate) async fn start_native_wake_from_app_state(
     state: &AppState,
@@ -154,16 +132,12 @@ pub(crate) async fn start_native_wake_from_app_state(
     Ok(Some(owner))
 }
 
-/// Start and retain the real native Wake listener on its dedicated local thread.
-///
-/// The retained value is only the send-capable thread handle. The non-`Send` native KWS session is
-/// constructed inside the listener thread by `spawn_wake_local_listener_thread`, so no native
-/// session is moved into Tauri's multithreaded executor or hidden in a `Sync` global.
 pub(crate) fn start_native_wake_listener_thread_from_app_state(
     state: &AppState,
     app_data_dir: &Path,
     event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
 ) -> Result<bool, String> {
+    remember_native_wake_listener_config(app_data_dir, &event_tx);
     let settings = state.settings.read().clone();
     if !settings.wake_word_enabled {
         state
@@ -174,7 +148,6 @@ pub(crate) fn start_native_wake_listener_thread_from_app_state(
         return Ok(false);
     }
 
-    remember_native_wake_listener_config(app_data_dir, &event_tx);
     start_native_wake_listener_thread_with_config(state, app_data_dir, event_tx)
 }
 
@@ -215,7 +188,6 @@ fn start_native_wake_listener_thread_with_config(
     Ok(true)
 }
 
-/// Restart the native listener from the startup configuration after command ASR/TTS completes.
 pub(crate) fn restart_native_wake_listener_thread_from_configured_app_state(
     state: &AppState,
 ) -> Result<bool, String> {
@@ -234,12 +206,10 @@ pub(crate) fn restart_native_wake_listener_thread_from_configured_app_state(
     )
 }
 
-/// Join and clear the retained native Wake listener handle after a terminal listener event.
 pub(crate) fn clear_native_wake_listener_thread() {
     stop_native_wake_listener_thread();
 }
 
-/// Request shutdown for the retained native Wake listener, then join its thread.
 pub(crate) fn stop_native_wake_listener_thread() {
     let Some(handle) = native_wake_listener_slot().lock().take() else {
         return;
@@ -377,17 +347,22 @@ mod tests {
     }
 
     #[test]
-    fn disabled_local_thread_start_does_not_retain_listener() {
+    fn disabled_local_thread_start_retains_restart_configuration_without_listener() {
         stop_native_wake_listener_thread();
         let state = AppState::new_for_tests().unwrap();
         let temp = tempfile::tempdir().unwrap();
         let (event_tx, _event_rx) = mpsc::unbounded_channel();
-        let start = start_native_wake_listener_thread_from_app_state;
 
-        let started = start(&state, temp.path(), event_tx).unwrap();
+        let started = start_native_wake_listener_thread_from_app_state(
+            &state,
+            temp.path(),
+            event_tx.clone(),
+        )
+        .unwrap();
 
         assert!(!started);
         assert!(native_wake_listener_slot().lock().is_none());
+        assert!(NATIVE_WAKE_LISTENER_CONFIG.get().is_some());
         assert_eq!(
             state.wake_word_runtime.phase(),
             WakeWordRuntimePhase::Disabled
