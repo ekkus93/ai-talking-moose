@@ -117,24 +117,24 @@
     {
       "id": "linux_real_kws_acceptance",
       "title": "Linux x86_64 real KWS acceptance",
-      "status": "pending_specialized_runner_acceptance",
-      "workflow": null,
+      "status": "implemented",
+      "workflow": ".github/workflows/wake-word-real-kws.yml",
       "required_for_final_closeout": true,
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": true,
-      "acceptance_scope": "real positive and negative pinned sherpa KWS inference on Linux x86_64"
+      "acceptance_scope": "real positive and negative pinned sherpa KWS inference on Linux x86_64 using the generated deterministic corpus and exact frozen model/runtime identities"
     },
     {
       "id": "macos_real_kws_acceptance",
       "title": "macOS arm64 real KWS acceptance",
-      "status": "pending_specialized_runner_acceptance",
-      "workflow": null,
+      "status": "implemented",
+      "workflow": ".github/workflows/wake-word-real-kws.yml",
       "required_for_final_closeout": true,
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": true,
-      "acceptance_scope": "real positive and negative pinned sherpa KWS inference on macOS arm64"
+      "acceptance_scope": "real positive and negative pinned sherpa KWS inference on macOS arm64 using the generated deterministic corpus and exact frozen model/runtime identities"
     },
     {
       "id": "integrated_production_lifecycle_acceptance",

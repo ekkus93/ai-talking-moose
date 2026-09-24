@@ -1,28 +1,28 @@
 # WWR-610/620 — real KWS acceptance evidence
 
 Date: 2026-09-24
-Merged master: `f95abbef2f458688666d0bb1fb479c14fb90d6de`
-Source PR: #395 (`feat(wake): add real KWS acceptance harness`)
+Accepted master: `e5ff47a3dd08377298783969aa0dacbc8583dcfb`
+Corpus reconciliation master: `da3be8db9f6b1f4b26622126708a439e869fc8b9`
 
 ## Scope
 
-This evidence records the exact merged-master real KWS acceptance result for the reusable Wake Word V1 acceptance harness. It supports WWR-610 and WWR-620 real native KWS acceptance. It also supports the WWR-600 harness/corpus acceptance criteria that were actually exercised by the workflow, but it does not claim that every named WWR-600 corpus-expansion subitem is complete unless that fixture class is present in `docs/wake-word-corpus.json`.
+This evidence records the exact-master real KWS acceptance result after the deterministic corpus contained six positive recipes and eight negative/near-miss recipes. It supports WWR-610 and WWR-620 real native KWS acceptance. It also supports the WWR-600 harness/corpus acceptance criteria that were actually exercised by the workflow. It does not claim WWR-630 performance acceptance, WWR-640 integrated lifecycle soak acceptance, WWR-950 final qualification, or WWR-960 exact-master closeout.
 
 ## Exact merged-master validation
 
-All runs below are bound to master commit `f95abbef2f458688666d0bb1fb479c14fb90d6de`.
+All acceptance runs below are bound to master commit `e5ff47a3dd08377298783969aa0dacbc8583dcfb`:
 
-- Ordinary CI: run `35989146305`, success.
-- Wake Word real KWS acceptance: run `35989146296`, success.
-- Wake Word corpus validation: run `35989146276`, success.
-- Wake Word corpus contract: run `35989146272`, success.
-- Wake Word required gates audit: run `35989146229`, success.
-- Wake Word privacy audit: run `35989146323`, success.
-- Wake Word source security audit: run `35989146245`, success.
+- Ordinary CI: run `35992665763`, success.
+- Wake Word corpus contract: run `35992665769`, success.
+- Wake Word corpus validation: run `35992665914`, success.
+- Wake Word privacy audit: run `35992665883`, success.
+- Wake Word real KWS acceptance: run `35992665781`, success.
+
+`da3be8db9f6b1f4b26622126708a439e869fc8b9` subsequently merged documentation-only WWR-600 acceptance evidence (#431). Ordinary CI run `35993867191` passed on that documentation-only master.
 
 ## Real KWS workflow jobs
 
-`Wake Word real KWS acceptance` run `35989146296` completed successfully with these jobs:
+`Wake Word real KWS acceptance` run `35992665781` completed successfully with these jobs:
 
 - `Generate deterministic Wake corpus`: success.
 - `Real KWS acceptance (linux-x86_64)`: success.
@@ -30,11 +30,11 @@ All runs below are bound to master commit `f95abbef2f458688666d0bb1fb479c14fb90d
 
 The run uploaded these artifacts:
 
-- `wake-word-v1-corpus` — deterministic generated corpus artifact, 382173 bytes.
-- `wake-word-real-kws-linux-x86_64` — Linux x86_64 real KWS platform report artifact, 1525 bytes.
-- `wake-word-real-kws-macos-arm64` — macOS arm64 real KWS platform report artifact, 1552 bytes.
+- `wake-word-v1-corpus` — deterministic generated corpus artifact, 532756 bytes.
+- `wake-word-real-kws-linux-x86_64` — Linux x86_64 real KWS platform report artifact, 1694 bytes.
+- `wake-word-real-kws-macos-arm64` — macOS arm64 real KWS platform report artifact, 1703 bytes.
 
-## Corpus and harness properties verified on master
+## Corpus and harness properties verified
 
 The merged corpus manifest `docs/wake-word-corpus.json` is schema version 2 and declares:
 
@@ -52,15 +52,15 @@ The merged corpus manifest `docs/wake-word-corpus.json` is schema version 2 and 
 - positive recall minimum: `0.67`;
 - negative false-accept maximum: `0`.
 
-The corpus includes six positive recipes and six negative/near-miss recipes. Positive fixtures include plain wake phrase, wake phrase plus command, varied synthetic speaker/source settings, gain/distance variation, and low-amplitude deterministic noise variants. Negative fixtures include ordinary speech without the wake phrase, `Moose` alone, `Hey Bruce`, phonetically similar near-miss speech, and a sentence containing `moose` without the complete wake phrase.
+The accepted corpus includes six positive recipes and eight negative/near-miss recipes. Positive fixtures include the plain wake phrase, wake phrase plus command, varied reproducible synthetic speaker/source settings, gain/distance variation, and deterministic background-noise variants. Negative fixtures include ordinary speech without the wake phrase, `Moose` alone, `Hey Bruce`, `Hey Moosey`, phonetically similar near-miss speech, a sentence containing `moose` without the complete wake phrase, and deterministic media/background-style ordinary speech generated from repository-authored fixture text.
 
 ## WWR-610 result
 
-Linux x86_64 support is backed by real pinned sherpa KWS inference at exact master `f95abbef2f458688666d0bb1fb479c14fb90d6de` in workflow run `35989146296`, job `Real KWS acceptance (linux-x86_64)`. The platform job prepared the deterministic corpus, used the exact frozen model/runtime identities, enforced the V1 one-thread score/threshold policy, executed positive and negative fixtures offline, and produced a privacy-safe platform report artifact.
+Linux x86_64 support is backed by real pinned sherpa KWS inference at exact master `e5ff47a3dd08377298783969aa0dacbc8583dcfb` in workflow run `35992665781`, job `Real KWS acceptance (linux-x86_64)`. The platform job prepared the deterministic corpus, used the exact frozen model/runtime identities, enforced the V1 one-thread score/threshold policy, executed positive and negative fixtures offline, and produced a privacy-safe platform report artifact.
 
 ## WWR-620 result
 
-macOS arm64 support is backed by real pinned sherpa KWS inference at exact master `f95abbef2f458688666d0bb1fb479c14fb90d6de` in workflow run `35989146296`, job `Real KWS acceptance (macos-arm64)`. The platform job prepared the deterministic corpus, used the exact frozen model/runtime identities, enforced the V1 one-thread score/threshold policy, executed positive and negative fixtures offline, and produced a privacy-safe platform report artifact.
+macOS arm64 support is backed by real pinned sherpa KWS inference at exact master `e5ff47a3dd08377298783969aa0dacbc8583dcfb` in workflow run `35992665781`, job `Real KWS acceptance (macos-arm64)`. The platform job prepared the deterministic corpus, used the exact frozen model/runtime identities, enforced the V1 one-thread score/threshold policy, executed positive and negative fixtures offline, and produced a privacy-safe platform report artifact.
 
 ## Boundaries and remaining work
 

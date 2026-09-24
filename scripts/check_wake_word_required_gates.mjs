@@ -77,8 +77,8 @@ for (const gate of manifest.gates) {
 
   if (gate.status === "implemented") {
     implemented += 1;
-    if (gate.specialized_runner_required !== false) {
-      fail(`${gate.id} implemented policy gate unexpectedly requires specialized runner`);
+    if (typeof gate.specialized_runner_required !== "boolean") {
+      fail(`${gate.id} must declare whether a specialized runner is required`);
     }
     if (typeof gate.workflow !== "string" || !gate.workflow.startsWith(".github/workflows/")) {
       fail(`${gate.id} must reference a workflow file`);
@@ -104,7 +104,7 @@ for (const id of requiredIds) {
   if (!ids.has(id)) fail(`required gate inventory is missing ${id}`);
 }
 if (implemented < 10) fail("expected at least ten implemented policy/source gates");
-if (pending < 4) fail("expected real KWS, lifecycle, and performance acceptance to remain pending");
+if (pending < 2) fail("expected integrated lifecycle and measured performance acceptance to remain pending");
 
 for (const sentence of [
   "ordinary CI alone is not final Wake Word V1 qualification",

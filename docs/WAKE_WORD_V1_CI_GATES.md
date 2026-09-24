@@ -34,7 +34,7 @@ Purpose:
 - verify implemented gates point at real workflow files and include pull-request triggers
 - verify every final-closeout gate requires exact-head evidence
 - verify skipped workflow conclusions are never treated as passing acceptance evidence
-- preserve pending specialized-runner entries for Linux real KWS, macOS real KWS, integrated lifecycle, and measured performance acceptance
+- preserve required specialized-runner entries for Linux real KWS, macOS real KWS, integrated lifecycle, and measured performance acceptance
 
 Audited manifest gate titles:
 
@@ -53,8 +53,8 @@ Audited manifest gate titles:
 
 Policy:
 
-- This is a policy/source-of-truth gate, not a real KWS acceptance run.
-- A passing manifest audit means the gate inventory is internally consistent; it does not mean pending real KWS, integrated lifecycle, or performance acceptance is complete.
+- This is a policy/source-of-truth gate; it records which real KWS, lifecycle, and performance gates are required for final closeout.
+- A passing manifest audit means the gate inventory is internally consistent; it does not replace the exact-head run evidence required by WWR-950.
 
 ### Deterministic corpus manifest and contract gates
 
@@ -107,7 +107,36 @@ Purpose:
 Policy:
 
 - This gate does not by itself prove real KWS inference or that a packaged application loaded the native runtime.
-- WWR-610/620 real positive/negative inference and final packaged-runtime evidence remain separate acceptance requirements.
+- Final packaged-runtime evidence remains separate from real KWS acceptance.
+
+### Real KWS acceptance
+
+Workflow: `.github/workflows/wake-word-real-kws.yml`
+
+Matrix:
+
+- Linux x86_64 on `ubuntu-latest`
+- macOS arm64 on `macos-15`
+
+Current checks:
+
+- generate the deterministic Wake Word V1 PCM corpus from `docs/wake-word-corpus.json`
+- build the exact-head `wake_word_acceptance` binary
+- prepare and verify the pinned model/runtime artifacts
+- assert the host architecture for each matrix target
+- run positive and negative real pinned sherpa KWS inference offline
+- upload privacy-safe corpus and per-platform real KWS acceptance reports
+
+Purpose:
+
+- bind Linux x86_64 and macOS arm64 real KWS acceptance to an exact commit
+- exercise the production native KWS boundary with the frozen model/runtime identities, one-thread policy, score `1.0`, and threshold `0.25`
+- prove both recall and false-trigger behavior on the deterministic generated fixture set instead of a single happy path
+
+Policy:
+
+- The workflow is a required final-closeout gate for WWR-610 and WWR-620.
+- A skipped real-KWS workflow is not acceptance evidence; final closeout must record exact run IDs and artifacts for both matrix targets.
 
 ### Lifecycle stability gate
 
@@ -197,23 +226,6 @@ Purpose:
 
 The following evidence is still required before final Wake Word V1 closeout. Implemented policy or component gates above must not be confused with these production acceptance scenarios.
 
-### Linux x86_64 real KWS acceptance
-
-Required proof:
-
-- prepare the exact pinned model and runtime and verify every hash
-- verify ELF x86_64 runtime architecture
-- verify CPU-only production path and one-thread policy
-- run real positive and negative Wake Word fixtures
-- prove inference succeeds offline after artifact preparation
-- record privacy-safe diagnostics, exact commit, manifest, runner/platform details, and run ID
-
-A component test or manifest check is not sufficient for this claim.
-
-### macOS arm64 real KWS acceptance
-
-Required proof mirrors Linux acceptance but must verify the Mach-O arm64 runtime and execute on macOS arm64. Linux evidence must not be reused as macOS evidence.
-
 ### Packaged-runtime load acceptance
 
 The native packaging/architecture policy workflow is implemented. Final packaging acceptance still must verify the runtime library actually loaded by a packaged build on each claimed platform and must remain fail-closed for unsupported platforms.
@@ -235,8 +247,8 @@ The automated privacy and source/security gates are implemented, but final WWR-9
 - Deterministic corpus schema/contract, performance-policy, privacy-source, source/security, required-gates, and documentation gates run on ordinary hosted CI and do not constitute real KWS acceptance.
 - Native packaging policy runs on hosted Linux x86_64 and macOS arm64; it validates policy/tests rather than real KWS audio acceptance.
 - Deterministic lifecycle stability currently runs on hosted Linux CI and does not constitute a production audio soak.
-- Linux x86_64 real KWS acceptance requires a runner/environment capable of loading and executing the pinned Linux native runtime and real redistributable fixtures.
-- macOS arm64 real KWS acceptance requires an arm64 macOS runner/environment capable of loading and executing the pinned macOS native runtime and the same acceptance corpus policy.
+- Linux x86_64 real KWS acceptance runs through `.github/workflows/wake-word-real-kws.yml` on a runner/environment capable of loading and executing the pinned Linux native runtime and deterministic generated fixtures.
+- macOS arm64 real KWS acceptance runs through `.github/workflows/wake-word-real-kws.yml` on an arm64 macOS runner/environment capable of loading and executing the pinned macOS native runtime and the same deterministic generated fixture policy.
 - Representative performance evidence must be recorded on the acceptance environments; hosted policy validation cannot manufacture those measurements.
 
 ## Final merge eligibility
