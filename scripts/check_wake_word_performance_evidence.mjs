@@ -28,11 +28,47 @@ for (const metric of [
   if (!requiredMetrics.includes(metric)) fail(`missing required metric ${metric}`);
 }
 
+const assertProvenance = (entry, label) => {
+  if (!entry.commit_sha || !entry.runner || !entry.measured_at) {
+    fail(`${label} lacks commit/runner/timestamp provenance`);
+  }
+};
+
+const assertNumericMetric = (metrics, metric, label) => {
+  if (!(metric in metrics)) fail(`${label} lacks metric ${metric}`);
+  if (typeof metrics[metric] !== "number" || !Number.isFinite(metrics[metric])) {
+    fail(`${label} metric ${metric} must be finite number`);
+  }
+};
+
+const validatePartialMeasurements = () => {
+  const partialMeasurements = report.partial_measurements ?? [];
+  if (!Array.isArray(partialMeasurements)) fail("partial_measurements must be an array");
+  for (const entry of partialMeasurements) {
+    if (!platforms.has(entry.platform)) fail(`partial measurement uses unknown platform ${entry.platform}`);
+    assertProvenance(entry, `${entry.platform} partial measurement`);
+    const metrics = entry.metrics ?? {};
+    for (const metric of ["idle_cpu_percent", "runtime_memory_mib", "inference_latency_ms"]) {
+      assertNumericMetric(metrics, metric, `${entry.platform} partial measurement`);
+    }
+    if (metrics.inference_threads !== 1) {
+      fail(`${entry.platform} partial measurement must preserve one-thread policy`);
+    }
+    const pending = new Set(entry.pending_metrics ?? []);
+    for (const metric of pending) {
+      if (!requiredMetrics.includes(metric)) {
+        fail(`${entry.platform} partial measurement has unknown pending metric ${metric}`);
+      }
+    }
+  }
+};
+
 if (report.status === "pending_measurement") {
   if ((report.measurements ?? []).length !== 0) {
-    fail("pending report must not contain unqualified measurements");
+    fail("pending report must not contain accepted measurements");
   }
-  console.log("Wake Word performance evidence policy is valid; measurements remain pending.");
+  validatePartialMeasurements();
+  console.log("Wake Word performance evidence policy is valid; accepted measurements remain pending.");
   process.exit(0);
 }
 
@@ -40,11 +76,9 @@ const measurements = report.measurements ?? [];
 for (const platform of platforms) {
   const sample = measurements.find((entry) => entry.platform === platform);
   if (!sample) fail(`accepted report lacks ${platform} measurement`);
-  if (!sample.commit_sha || !sample.runner || !sample.measured_at) {
-    fail(`${platform} measurement lacks commit/runner/timestamp provenance`);
-  }
+  assertProvenance(sample, `${platform} measurement`);
   for (const metric of requiredMetrics) {
-    if (!(metric in sample.metrics)) fail(`${platform} lacks metric ${metric}`);
+    assertNumericMetric(sample.metrics ?? {}, metric, platform);
   }
   if (!(sample.metrics.idle_cpu_percent < sample.metrics.continuous_asr_idle_cpu_percent)) {
     fail(`${platform} does not demonstrate KWS lighter than continuous ASR`);

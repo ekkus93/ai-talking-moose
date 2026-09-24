@@ -14,5 +14,57 @@
       "continuous_asr_idle_cpu_percent"
     ]
   },
+  "partial_measurements": [
+    {
+      "platform": "linux-x86_64",
+      "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
+      "runner": "GitHub Actions 1000171442",
+      "measured_at": "github-actions",
+      "source": "Wake Word real KWS acceptance run 36036701173 job 107758609860",
+      "metrics": {
+        "corpus_active_cpu_percent": 102.591,
+        "idle_cpu_percent": 0.1,
+        "idle_observation_ms": 2000,
+        "runtime_memory_mib": 60.625,
+        "inference_latency_ms": 68.929,
+        "inference_p95_ms": 99,
+        "corpus_audio_ms": 30178,
+        "corpus_inference_wall_ms": 965,
+        "max_real_time_factor": 0.31884984025559104,
+        "inference_threads": 1
+      },
+      "pending_metrics": [
+        "wake_to_command_asr_ms",
+        "pre_roll_startup_ms",
+        "repeated_cycle_resource_delta",
+        "continuous_asr_idle_cpu_percent"
+      ]
+    },
+    {
+      "platform": "macos-arm64",
+      "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
+      "runner": "GitHub Actions 1000171443",
+      "measured_at": "github-actions",
+      "source": "Wake Word real KWS acceptance run 36036701173 job 107758609893",
+      "metrics": {
+        "corpus_active_cpu_percent": 94.044,
+        "idle_cpu_percent": 0.0,
+        "idle_observation_ms": 2037,
+        "runtime_memory_mib": 77.922,
+        "inference_latency_ms": 62.357,
+        "inference_p95_ms": 103,
+        "corpus_audio_ms": 30178,
+        "corpus_inference_wall_ms": 873,
+        "max_real_time_factor": 0.2702875399361022,
+        "inference_threads": 1
+      },
+      "pending_metrics": [
+        "wake_to_command_asr_ms",
+        "pre_roll_startup_ms",
+        "repeated_cycle_resource_delta",
+        "continuous_asr_idle_cpu_percent"
+      ]
+    }
+  ],
   "measurements": []
 }
