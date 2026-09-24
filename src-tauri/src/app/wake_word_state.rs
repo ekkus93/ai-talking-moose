@@ -10,14 +10,31 @@ use super::wake_word_local_listener_thread::{
     spawn_wake_local_listener_thread, WakeLocalListenerEvent, WakeLocalListenerHandle,
 };
 use parking_lot::Mutex;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tokio::sync::mpsc;
 
 static NATIVE_WAKE_LISTENER: OnceLock<Mutex<Option<WakeLocalListenerHandle>>> = OnceLock::new();
+static NATIVE_WAKE_LISTENER_CONFIG: OnceLock<NativeWakeListenerConfig> = OnceLock::new();
+
+#[derive(Clone)]
+struct NativeWakeListenerConfig {
+    app_data_dir: PathBuf,
+    event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
+}
 
 fn native_wake_listener_slot() -> &'static Mutex<Option<WakeLocalListenerHandle>> {
     NATIVE_WAKE_LISTENER.get_or_init(|| Mutex::new(None))
+}
+
+fn remember_native_wake_listener_config(
+    app_data_dir: &Path,
+    event_tx: &mpsc::UnboundedSender<WakeLocalListenerEvent>,
+) {
+    let _ = NATIVE_WAKE_LISTENER_CONFIG.set(NativeWakeListenerConfig {
+        app_data_dir: app_data_dir.to_path_buf(),
+        event_tx: event_tx.clone(),
+    });
 }
 
 /// Access the one Wake Word runtime owned directly by authoritative application state.
@@ -157,6 +174,16 @@ pub(crate) fn start_native_wake_listener_thread_from_app_state(
         return Ok(false);
     }
 
+    remember_native_wake_listener_config(app_data_dir, &event_tx);
+    start_native_wake_listener_thread_with_config(state, app_data_dir, event_tx)
+}
+
+fn start_native_wake_listener_thread_with_config(
+    state: &AppState,
+    app_data_dir: &Path,
+    event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
+) -> Result<bool, String> {
+    let settings = state.settings.read().clone();
     let slot = native_wake_listener_slot();
     if slot.lock().is_some() {
         return Ok(false);
@@ -186,6 +213,25 @@ pub(crate) fn start_native_wake_listener_thread_from_app_state(
 
     *slot.lock() = Some(handle);
     Ok(true)
+}
+
+/// Restart the native listener from the startup configuration after command ASR/TTS completes.
+pub(crate) fn restart_native_wake_listener_thread_from_configured_app_state(
+    state: &AppState,
+) -> Result<bool, String> {
+    if !state.settings.read().wake_word_enabled {
+        stop_native_wake_listener_thread();
+        return Ok(false);
+    }
+
+    let Some(config) = NATIVE_WAKE_LISTENER_CONFIG.get() else {
+        return Ok(false);
+    };
+    start_native_wake_listener_thread_with_config(
+        state,
+        &config.app_data_dir,
+        config.event_tx.clone(),
+    )
 }
 
 /// Join and clear the retained native Wake listener handle after a terminal listener event.
