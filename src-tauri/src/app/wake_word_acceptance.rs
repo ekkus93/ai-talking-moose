@@ -102,13 +102,22 @@ pub fn run_real_kws_acceptance(
         let bytes = fs::read(&fixture_path)
             .map_err(|_| format!("failed to read generated fixture {}", fixture.id))?;
         if bytes.len() as u64 != fixture.bytes {
-            return Err(format!("generated fixture {} byte size mismatch", fixture.id));
+            return Err(format!(
+                "generated fixture {} byte size mismatch",
+                fixture.id
+            ));
         }
         if bytes.len() % 2 != 0 {
-            return Err(format!("generated fixture {} is not PCM16 aligned", fixture.id));
+            return Err(format!(
+                "generated fixture {} is not PCM16 aligned",
+                fixture.id
+            ));
         }
         if sha256_hex(&bytes) != fixture.sha256 {
-            return Err(format!("generated fixture {} identity mismatch", fixture.id));
+            return Err(format!(
+                "generated fixture {} identity mismatch",
+                fixture.id
+            ));
         }
         let samples: Vec<i16> = bytes
             .chunks_exact(2)
