@@ -503,81 +503,87 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ### Positive corpus
 
-- [ ] Add multiple reproducible/licensable speakers where available.
-- [ ] Add varied speaking volume.
-- [ ] Add varied/simulated distance or gain.
-- [ ] Add natural `Hey Moose` pronunciation variants.
-- [ ] Add Wake Word immediately followed by command.
-- [ ] Add reproducible background-noise variants.
+- [x] Add multiple reproducible/licensable speakers where available.
+- [x] Add varied speaking volume.
+- [x] Add varied/simulated distance or gain.
+- [x] Add natural `Hey Moose` pronunciation variants.
+- [x] Add Wake Word immediately followed by command.
+- [x] Add reproducible background-noise variants.
 
 ### Negative/near-miss corpus
 
-- [ ] Add ordinary speech without Wake Word.
-- [ ] Add `Moose` alone.
-- [ ] Add `Hey Bruce`.
-- [ ] Add `Hey Moosey`.
-- [ ] Add phonetically similar phrases.
-- [ ] Add sentences containing `moose` without full phrase.
-- [ ] Add reproducible background speech/media-like negatives where licensing permits.
+- [x] Add ordinary speech without Wake Word.
+- [x] Add `Moose` alone.
+- [x] Add `Hey Bruce`.
+- [x] Add `Hey Moosey`.
+- [x] Add phonetically similar phrases.
+- [x] Add sentences containing `moose` without full phrase.
+- [x] Add reproducible background speech/media-like negatives where licensing permits.
 
 ### Harness
 
-- [ ] Record fixture provenance/license.
-- [ ] Record exact model/runtime identity.
-- [ ] Record score/threshold.
-- [ ] Record positive detections.
+- [x] Record fixture provenance/license.
+- [x] Record exact model/runtime identity.
+- [x] Record score/threshold.
+- [x] Record positive detections.
 
-- [ ] Record false rejects.
-- [ ] Record negative false accepts.
-- [ ] Version explicit pass/fail criteria.
-- [ ] Make harness deterministic and CI/report friendly.
-- [ ] Prevent copyrighted/non-redistributable fixture leakage.
+- [x] Record false rejects.
+- [x] Record negative false accepts.
+- [x] Version explicit pass/fail criteria.
+- [x] Make harness deterministic and CI/report friendly.
+- [x] Prevent copyrighted/non-redistributable fixture leakage.
 
 **Acceptance**
 
-- [ ] Acceptance measures recall and false-trigger behavior, not a single happy path.
-- [ ] Claims are limited to tested conditions.
+- [x] Acceptance measures recall and false-trigger behavior, not a single happy path.
+- [x] Claims are limited to tested conditions.
+
+
+**Evidence:** `docs/evidence/WWR-600_DETERMINISTIC_CORPUS_ACCEPTANCE_2026-09-24.md`; exact-master corpus/real-KWS acceptance on `e5ff47a3dd08377298783969aa0dacbc8583dcfb`, including real-KWS run `35992665781`.
 
 ---
-
 ## WWR-610 — Add real Linux x86_64 sherpa KWS acceptance
 
-- [ ] Prepare exact pinned model/runtime.
-- [ ] Verify every hash before inference.
-- [ ] Verify ELF x86_64 runtime architecture.
-- [ ] Verify CPU-only production path.
-- [ ] Verify one-thread policy.
-- [ ] Run real positive Wake Word fixture.
-- [ ] Run at least one real negative fixture.
-- [ ] Verify inference succeeds offline after artifact preparation.
-- [ ] Capture privacy-safe diagnostics/evidence.
-- [ ] Record exact commit, manifest, runner/platform details, and CI/run ID.
+- [x] Prepare exact pinned model/runtime.
+- [x] Verify every hash before inference.
+- [x] Verify ELF x86_64 runtime architecture.
+- [x] Verify CPU-only production path.
+- [x] Verify one-thread policy.
+- [x] Run real positive Wake Word fixture.
+- [x] Run at least one real negative fixture.
+- [x] Verify inference succeeds offline after artifact preparation.
+- [x] Capture privacy-safe diagnostics/evidence.
+- [x] Record exact commit, manifest, runner/platform details, and CI/run ID.
 
 **Acceptance**
 
-- [ ] Linux x86_64 support claim is backed by real KWS inference.
+- [x] Linux x86_64 support claim is backed by real KWS inference.
+
+
+**Evidence:** `docs/evidence/WWR-610_620_REAL_KWS_ACCEPTANCE_2026-09-24.md`; Linux x86_64 real pinned sherpa KWS acceptance passed on exact master `e5ff47a3dd08377298783969aa0dacbc8583dcfb` in run `35992665781`.
 
 ---
-
 ## WWR-620 — Add real macOS arm64 sherpa KWS acceptance
 
-- [ ] Prepare exact pinned model/runtime.
-- [ ] Verify every hash before inference.
-- [ ] Verify Mach-O arm64 runtime architecture.
-- [ ] Verify CPU-only production path.
-- [ ] Verify one-thread policy.
-- [ ] Run real positive Wake Word fixture.
-- [ ] Run at least one real negative fixture.
-- [ ] Verify inference succeeds offline after artifact preparation.
-- [ ] Capture privacy-safe diagnostics/evidence.
-- [ ] Record exact commit, manifest, runner/platform details, and CI/run ID.
+- [x] Prepare exact pinned model/runtime.
+- [x] Verify every hash before inference.
+- [x] Verify Mach-O arm64 runtime architecture.
+- [x] Verify CPU-only production path.
+- [x] Verify one-thread policy.
+- [x] Run real positive Wake Word fixture.
+- [x] Run at least one real negative fixture.
+- [x] Verify inference succeeds offline after artifact preparation.
+- [x] Capture privacy-safe diagnostics/evidence.
+- [x] Record exact commit, manifest, runner/platform details, and CI/run ID.
 
 **Acceptance**
 
-- [ ] macOS arm64 support claim is backed by real KWS inference.
+- [x] macOS arm64 support claim is backed by real KWS inference.
+
+
+**Evidence:** `docs/evidence/WWR-610_620_REAL_KWS_ACCEPTANCE_2026-09-24.md`; macOS arm64 real pinned sherpa KWS acceptance passed on exact master `e5ff47a3dd08377298783969aa0dacbc8583dcfb` in run `35992665781`.
 
 ---
-
 ## WWR-630 — Add performance evidence
 
 - [ ] Measure idle Wake Word CPU utilization on representative Linux acceptance environment.
@@ -600,25 +606,27 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-640 — Add integrated lifecycle stability acceptance
 
-- [ ] Run repeated wake→ASR→Thinking→Talking→wake cycles.
-- [ ] Verify no native runtime/session growth.
-- [ ] Verify no capture-stream multiplication.
-- [ ] Verify ring-buffer memory remains bounded.
-- [ ] Verify successful TTS repeatedly resumes Wake Word.
-- [ ] Verify cancelled TTS repeatedly resumes Wake Word.
-- [ ] Verify recoverable TTS failure resumes Wake Word.
-- [ ] Verify repeated disable/enable cycles.
-- [ ] Verify shutdown while Listening.
-- [ ] Verify shutdown during handoff.
-- [ ] Add bounded soak/false-trigger acceptance where practical.
-- [ ] Record resource counts/state after each cycle or suitable intervals.
+- [x] Run repeated wake→ASR→Thinking→Talking→wake cycles.
+- [x] Verify no native runtime/session growth.
+- [x] Verify no capture-stream multiplication.
+- [x] Verify ring-buffer memory remains bounded.
+- [x] Verify successful TTS repeatedly resumes Wake Word.
+- [x] Verify cancelled TTS repeatedly resumes Wake Word.
+- [x] Verify recoverable TTS failure resumes Wake Word.
+- [x] Verify repeated disable/enable cycles.
+- [x] Verify shutdown while Listening.
+- [x] Verify shutdown during handoff.
+- [x] Add bounded soak/false-trigger acceptance where practical.
+- [x] Record resource counts/state after each cycle or suitable intervals.
 
 **Acceptance**
 
-- [ ] No leak, duplicate stream, or stuck state is observed under the defined acceptance.
+- [x] No leak, duplicate stream, or stuck state is observed under the defined acceptance.
+
+
+**Evidence:** integrated lifecycle evidence merged through PR #435; exact master `3d892865241579eccfcfc6a5084a522b43eefa08` passed ordinary CI `35999823102` and Wake Word lifecycle stability `35999823097`.
 
 ---
-
 ## WWR-700 — Correct and complete documentation
 
 - [ ] Update architecture docs to the one authoritative Wake Word subsystem.
@@ -647,23 +655,25 @@ The ordering is intentional. Do not implement later integration around unresolve
 
 ## WWR-800 — Add specialized Wake CI gates
 
-- [ ] Define deterministic corpus CI/validation gate.
-- [ ] Define Linux real KWS acceptance gate.
-- [ ] Define macOS arm64 real KWS acceptance gate.
-- [ ] Define native packaging/architecture gate.
-- [ ] Define repeated lifecycle stability gate.
-- [ ] Define performance evidence gate/report policy.
-- [ ] Ensure required gates are exact-head bound.
-- [ ] Ensure required gates are not silently treated as passed when skipped.
-- [ ] Document which gates require specialized runners/hardware.
-- [ ] Ensure final merge eligibility checks required Wake gates in addition to ordinary CI.
+- [x] Define deterministic corpus CI/validation gate.
+- [x] Define Linux real KWS acceptance gate.
+- [x] Define macOS arm64 real KWS acceptance gate.
+- [x] Define native packaging/architecture gate.
+- [x] Define repeated lifecycle stability gate.
+- [x] Define performance evidence gate/report policy.
+- [x] Ensure required gates are exact-head bound.
+- [x] Ensure required gates are not silently treated as passed when skipped.
+- [x] Document which gates require specialized runners/hardware.
+- [x] Ensure final merge eligibility checks required Wake gates in addition to ordinary CI.
 
 **Acceptance**
 
-- [ ] A final feature head cannot qualify using ordinary CI alone.
+- [x] A final feature head cannot qualify using ordinary CI alone.
+
+
+**Evidence:** `docs/wake-word-required-gates.json` and `docs/WAKE_WORD_V1_CI_GATES.md`; real Linux/macOS KWS gates were reconciled in PR #433 and exact-master required-gates audit `35996642298` passed on `35b60204f53a8d9af09887c4f5dcec5a8cf71182`. Lifecycle and performance remain mandatory final-closeout gates rather than being silently treated as passed.
 
 ---
-
 ## WWR-900 — Final source/privacy/security audit
 
 - [ ] Audit single Wake runtime ownership.
