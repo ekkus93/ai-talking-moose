@@ -12,7 +12,7 @@ The canonical Wake input is 16 kHz mono PCM. `CanonicalWakePcmRouter` validates 
 
 Production KWS uses the pinned sherpa-onnx runtime and model identities in `wake-word-artifacts.json`. Artifact preparation verifies byte sizes, SHA-256 identities, and native architecture before use and fails closed on mismatch. The fixed V1 policy is one inference thread, score `1.0`, threshold `0.25`, and a two-second pre-roll. The KWS engine performs keyword spotting only; it is not a full-time transcription path.
 
-component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 remain subject to their dedicated real-KWS acceptance tasks. Until those tasks and the integrated acceptance sections are complete, Wake Word V1 is implementation under qualification rather than as fully accepted cross-platform production functionality.
+Component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 real-KWS acceptance passed on exact merged-master evidence, but final closeout still depends on measured performance, documentation/source audits, original TODO reconciliation, and exact final qualification. Wake Word V1 remains under qualification rather than fully accepted production functionality until those final sections close.
 
 ## Wake-to-command handoff
 
@@ -24,7 +24,7 @@ The handoff is memory-only. Raw Wake PCM is not written to diagnostics or logs, 
 
 ## Lifecycle
 
-The intended integrated lifecycle is:
+The integrated lifecycle is:
 
 1. Disabled setting → `Disabled`; manual interaction remains available.
 2. Enabled startup → `Loading` while verified native KWS resources are prepared.
@@ -35,7 +35,7 @@ The intended integrated lifecycle is:
 7. If Wake is disabled during an interaction, terminal resolution ends in `Disabled`, never an unconditional resume.
 8. Wake-specific runtime/capture failure fails Wake closed without preventing the ordinary manual interaction path.
 
-Some lifecycle wiring and real acceptance remain tracked as open work in `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`; this document describes the authoritative design and must not be read as evidence that unchecked acceptance items have passed.
+Deterministic lifecycle acceptance now covers repeated wake→ASR→Thinking→Talking→wake cycles, repeated terminal TTS outcomes, repeated disable/enable cycles, shutdown while Listening, shutdown during handoff, and bounded retained-audio/resource state. This document remains architecture/current-behavior documentation, not final WWR-950/960 closeout evidence.
 
 ## Privacy and diagnostics
 
