@@ -44,7 +44,10 @@ fn repeated_lifecycle_cycles_remain_bounded_and_return_to_listening() {
 
     let final_snapshot = runtime.snapshot(Instant::now());
     assert_eq!(final_snapshot.trigger_count, 100);
-    assert_eq!(final_snapshot.ring_buffer_samples, initial.ring_buffer_samples);
+    assert_eq!(
+        final_snapshot.ring_buffer_samples,
+        initial.ring_buffer_samples
+    );
     assert_eq!(
         final_snapshot.handoff_pre_roll_samples,
         initial.handoff_pre_roll_samples
