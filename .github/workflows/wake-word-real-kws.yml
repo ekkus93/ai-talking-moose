@@ -126,7 +126,7 @@ jobs:
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
       - name: Build exact-head acceptance binary
-        run: cargo build --manifest-path src-tauri/Cargo.toml --features wake-word-acceptance --bin wake_word_acceptance
+        run: cargo build --manifest-path src-tauri/Cargo.toml --bin wake_word_acceptance
       - name: Download deterministic corpus
         uses: actions/download-artifact@v5
         with:

@@ -7,7 +7,6 @@ pub mod state;
 pub(crate) mod tray;
 #[allow(dead_code)]
 pub(crate) mod wake_word;
-#[cfg(feature = "wake-word-acceptance")]
 pub mod wake_word_acceptance;
 #[allow(dead_code)]
 pub(crate) mod wake_word_authoritative_capture;
@@ -25,6 +24,8 @@ pub(crate) mod wake_word_command_handoff;
 pub(crate) mod wake_word_command_lifecycle;
 #[allow(dead_code)]
 pub(crate) mod wake_word_composition;
+#[allow(dead_code)]
+pub(crate) mod wake_word_local_listener_thread;
 #[allow(dead_code)]
 pub(crate) mod wake_word_pcm_router;
 pub(crate) mod wake_word_state;
