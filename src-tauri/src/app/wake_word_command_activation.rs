@@ -30,11 +30,7 @@ pub(crate) struct WakeCommandActivationTiming {
 }
 
 fn elapsed_ms(started: Instant) -> u64 {
-    started
-        .elapsed()
-        .as_millis()
-        .try_into()
-        .unwrap_or(u64::MAX)
+    started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
 }
 
 /// Activate the normal command-ASR boundary for one accepted Wake trigger.
