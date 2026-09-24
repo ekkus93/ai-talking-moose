@@ -337,15 +337,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (event_tx, _event_rx) = mpsc::unbounded_channel();
 
-        let started = start_native_wake_listener_thread_from_app_state(
-            &state,
-            temp.path(),
-            event_tx,
-        )
-        .unwrap();
+        let started = start_native_wake_listener_thread_from_app_state(&state, temp.path(), event_tx)
+            .unwrap();
 
         assert!(!started);
         assert!(native_wake_listener_slot().lock().is_none());
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
     }
 }
