@@ -63,7 +63,7 @@ Runtime and model licensing are tracked separately. The pinned sherpa-onnx runti
 
 Wake Word diagnostics expose privacy-safe state useful for lifecycle and artifact troubleshooting, including enabled state, authoritative runtime phase, exact model/runtime identity, platform/architecture, one-thread policy, canonical sample rate/channels, bounded ring/pre-roll counts, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension state, and sanitized last error.
 
-Optional measured CPU, memory, inference, and handoff timing fields are present for diagnostics/reporting. Accepted WWR-630 performance closeout remains pending until all required metrics, including command-ASR latency, pre-roll startup, repeated-cycle resource delta, and continuous-ASR comparison, are complete.
+Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist. Partial WWR-630 evidence exists for idle KWS CPU, memory, and inference timing, but accepted performance closeout remains pending until all required metrics, including command-ASR latency, pre-roll startup, repeated-cycle resource delta, and continuous-ASR comparison, are complete.
 
 Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content. The WWR-510 privacy audits cover Wake Word diagnostics, production error strings, and production logging surfaces for credentials, unnecessary filesystem paths, and audio content.
 
