@@ -199,6 +199,9 @@ pub(crate) fn restart_native_wake_listener_thread_from_configured_app_state(
     let Some(config) = NATIVE_WAKE_LISTENER_CONFIG.get() else {
         return Ok(false);
     };
+    if config.event_tx.is_closed() {
+        return Ok(false);
+    }
     start_native_wake_listener_thread_with_config(
         state,
         &config.app_data_dir,
