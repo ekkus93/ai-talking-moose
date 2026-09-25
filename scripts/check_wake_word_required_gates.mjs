@@ -104,7 +104,7 @@ for (const id of requiredIds) {
   if (!ids.has(id)) fail(`required gate inventory is missing ${id}`);
 }
 if (implemented < 10) fail("expected at least ten implemented policy/source gates");
-if (pending < 2) fail("expected integrated lifecycle and measured performance acceptance to remain pending");
+if (pending !== 0) fail("all required acceptance gates must be implemented after WWR-630/640 closeout");
 
 for (const sentence of [
   "ordinary CI alone is not final Wake Word V1 qualification",

@@ -80,7 +80,7 @@ for (const token of engineRequirements) if (!engine.includes(token)) fail(`${eng
 const sanitizerTestRequirements = ["assert_eq!(error.message, \"failed <path> token <redacted>\")", "contains(temp.path().to_string_lossy().as_ref())", "assert_eq!(error.message, \"native runtime architecture mismatch\")"];
 for (const token of sanitizerTestRequirements) requireText(engine, token, "Wake Word sanitized error regression coverage");
 
-const docRequirements = ["Wake Word diagnostics do not serialize or expose raw PCM.", "Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content.", "Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist.", "Do not describe Wake Word V1 as fully user-ready or fully accepted"];
+const docRequirements = ["Wake Word diagnostics do not serialize or expose raw PCM.", "Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content.", "WWR-630 accepted performance evidence records platform-specific idle KWS CPU, memory, inference timing, and continuous-ASR comparisons", "Do not describe Wake Word V1 as fully user-ready or fully accepted"];
 for (const sentence of docRequirements) if (!docs.includes(sentence)) fail(`${docsPath} is missing required privacy/truthfulness statement: ${sentence}`);
 
 if (!String(corpus.policy?.privacy ?? "").includes("Do not commit private room audio")) fail("corpus manifest must forbid private room audio");
