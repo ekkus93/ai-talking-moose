@@ -25,6 +25,7 @@ pub(crate) trait WakeCommandStarter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct WakeCommandActivationTiming {
     pub wake_to_command_asr_ms: u64,
+    pub pre_roll_startup_ms: u64,
     pub command_start_ms: u64,
     pub total_activation_ms: u64,
 }
@@ -72,15 +73,46 @@ pub(crate) async fn activate_wake_command_and_measure_start_normal_asr_once(
     wake_word_enabled: bool,
 ) -> Result<(bool, WakeCommandActivationTiming), String> {
     let total_started = Instant::now();
-    let handoff_started = Instant::now();
-    let delivered = activate_wake_command_once(runtime, handoff, ingress, wake_word_enabled)?;
-    let wake_to_command_asr_ms = elapsed_ms(handoff_started);
+    let wake_to_command_started = Instant::now();
+
+    if !suspend_for_command_interaction(runtime)? {
+        return Ok((
+            false,
+            WakeCommandActivationTiming {
+                wake_to_command_asr_ms: elapsed_ms(wake_to_command_started),
+                pre_roll_startup_ms: 0,
+                command_start_ms: 0,
+                total_activation_ms: elapsed_ms(total_started),
+            },
+        ));
+    }
+
+    let pre_roll_started = Instant::now();
+    let delivered = match handoff.deliver_once(ingress) {
+        Ok(delivered) => delivered,
+        Err(startup_error) => {
+            let recovery = resume_after_command_interaction(runtime, wake_word_enabled);
+            return match recovery {
+                Ok(()) => Err(startup_error),
+                Err(recovery_error) => Err(format!(
+                    "{startup_error}; Wake Word recovery also failed: {recovery_error}"
+                )),
+            };
+        }
+    };
+    let pre_roll_startup_ms = if delivered {
+        elapsed_ms(pre_roll_started)
+    } else {
+        0
+    };
+    let wake_to_command_asr_ms = elapsed_ms(wake_to_command_started);
 
     if !delivered {
         return Ok((
             false,
             WakeCommandActivationTiming {
                 wake_to_command_asr_ms,
+                pre_roll_startup_ms,
                 command_start_ms: 0,
                 total_activation_ms: elapsed_ms(total_started),
             },
@@ -93,6 +125,7 @@ pub(crate) async fn activate_wake_command_and_measure_start_normal_asr_once(
             true,
             WakeCommandActivationTiming {
                 wake_to_command_asr_ms,
+                pre_roll_startup_ms,
                 command_start_ms: elapsed_ms(command_start_started),
                 total_activation_ms: elapsed_ms(total_started),
             },
@@ -313,6 +346,7 @@ mod tests {
         assert_eq!(ingress.activations, 1);
         assert_eq!(starter.start_count, 1);
         assert!(timing.total_activation_ms >= timing.wake_to_command_asr_ms);
+        assert!(timing.wake_to_command_asr_ms >= timing.pre_roll_startup_ms);
         assert!(timing.total_activation_ms >= timing.command_start_ms);
         assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
     }
@@ -344,6 +378,7 @@ mod tests {
         .unwrap();
 
         assert!(!delivered);
+        assert_eq!(timing.pre_roll_startup_ms, 0);
         assert_eq!(timing.command_start_ms, 0);
         assert!(timing.total_activation_ms >= timing.wake_to_command_asr_ms);
         assert_eq!(ingress.activations, 1);

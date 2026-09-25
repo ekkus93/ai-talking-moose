@@ -1,6 +1,13 @@
 use super::state::AppSettings;
 use super::wake_word::runtime::WakeWordRuntimePhase;
+use super::wake_word_command_activation::{
+    activate_wake_command_and_measure_start_normal_asr_once, WakeCommandStarter,
+};
+use super::wake_word_command_asr_ingress::{WakeCommandAsrHandoff, WakeCommandAsrIngress};
+use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 use super::wake_word_composition::WakeWordApplicationRuntime;
+use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
+use async_trait::async_trait;
 use std::time::Instant;
 
 fn listening_runtime() -> WakeWordApplicationRuntime {
@@ -11,6 +18,33 @@ fn listening_runtime() -> WakeWordApplicationRuntime {
     let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
     runtime.mark_loaded().unwrap();
     runtime
+}
+
+#[derive(Default)]
+struct StabilityIngress {
+    activations: usize,
+    samples: Vec<i16>,
+}
+
+impl WakeCommandAsrIngress for StabilityIngress {
+    fn accept_wake_handoff(&mut self, audio: WakeCommandHandoffAudio) -> Result<(), String> {
+        self.activations += 1;
+        self.samples = audio.samples_i16().to_vec();
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct StabilityStarter {
+    starts: usize,
+}
+
+#[async_trait]
+impl WakeCommandStarter for StabilityStarter {
+    async fn start_normal_command_interaction(&mut self) -> Result<(), String> {
+        self.starts += 1;
+        Ok(())
+    }
 }
 
 #[test]
@@ -63,6 +97,45 @@ fn wake_word_stability_repeated_lifecycle_cycles_remain_bounded_and_return_to_li
         final_snapshot.trigger_count.saturating_sub(initial.trigger_count),
         final_snapshot.phase,
         capacity
+    );
+}
+
+#[tokio::test]
+async fn wake_word_stability_command_activation_timing_reports_privacy_safe_metrics() {
+    let runtime = listening_runtime();
+    let samples: Vec<i16> = (0_i16..3200).collect();
+    let handoff_audio = WakeCommandHandoffAudio::new(V1_KWS_SAMPLE_RATE_HZ, samples.clone())
+        .expect("stability timing handoff should be canonical");
+    let mut handoff = WakeCommandAsrHandoff::new(handoff_audio);
+    let mut ingress = StabilityIngress::default();
+    let mut starter = StabilityStarter::default();
+
+    let (delivered, timing) = activate_wake_command_and_measure_start_normal_asr_once(
+        &runtime,
+        &mut handoff,
+        &mut ingress,
+        &mut starter,
+        true,
+    )
+    .await
+    .expect("activation timing path should succeed");
+
+    assert!(delivered);
+    assert_eq!(ingress.activations, 1);
+    assert_eq!(starter.starts, 1);
+    assert_eq!(ingress.samples.len(), samples.len());
+    assert_eq!(runtime.phase(), WakeWordRuntimePhase::SuspendedTalking);
+    assert!(timing.wake_to_command_asr_ms >= timing.pre_roll_startup_ms);
+    assert!(timing.total_activation_ms >= timing.wake_to_command_asr_ms);
+    assert!(timing.total_activation_ms >= timing.command_start_ms);
+    println!(
+        "WWR630_WAKE_COMMAND_ACTIVATION_TIMING wake_to_command_asr_ms={} pre_roll_startup_ms={} command_start_ms={} total_activation_ms={} handoff_samples={} ingress_samples={}",
+        timing.wake_to_command_asr_ms,
+        timing.pre_roll_startup_ms,
+        timing.command_start_ms,
+        timing.total_activation_ms,
+        samples.len(),
+        ingress.samples.len()
     );
 }
 
