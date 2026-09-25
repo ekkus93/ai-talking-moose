@@ -220,7 +220,8 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
 ) -> Result<(), String> {
     let wake_enabled_changed = previous.wake_word_enabled != next.wake_word_enabled;
     let input_device_changed = previous.input_device != next.input_device;
-    let wake_listener_must_change = wake_enabled_changed || (next.wake_word_enabled && input_device_changed);
+    let wake_listener_must_change =
+        wake_enabled_changed || (next.wake_word_enabled && input_device_changed);
     if !wake_listener_must_change {
         return Ok(());
     }
@@ -432,7 +433,10 @@ mod tests {
         apply_configured_native_wake_listener_settings_change(&state, &previous, &next).unwrap();
 
         assert!(!native_wake_listener_is_active());
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
     }
 
     #[test]
@@ -448,6 +452,9 @@ mod tests {
         apply_configured_native_wake_listener_settings_change(&state, &previous, &next).unwrap();
 
         assert!(!native_wake_listener_is_active());
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Loading
+        );
     }
 }
