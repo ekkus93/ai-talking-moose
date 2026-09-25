@@ -22,11 +22,14 @@ const productionRust = (source) =>
 const rustStringLiterals = (source) =>
   [...source.matchAll(/"(?:\\.|[^"\\])*"/gu)].map((match) => match[0]);
 
+const isTestOnlyRustPath = (path) =>
+  path.endsWith("_tests.rs") || path.includes("/tests/");
+
 const wakeProductionFiles = [
   ...listRustFiles("src-tauri/src/app").filter((path) => path.includes("/wake_word")),
   ...listRustFiles("src-tauri/src/asr").filter((path) => path.includes("/wake_word")),
   ...listRustFiles("src-tauri/src/commands").filter((path) => path.includes("/wake_word")),
-];
+].filter((path) => !isTestOnlyRustPath(path));
 
 const fail = (message) => {
   throw new Error(`Wake Word privacy audit failed: ${message}`);
