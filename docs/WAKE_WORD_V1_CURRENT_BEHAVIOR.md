@@ -34,7 +34,7 @@ V1 disclosure requirements:
 - Raw Wake Word PCM is retained only in bounded in-memory ring/pre-roll buffers.
 - Wake Word diagnostics do not serialize or expose raw PCM.
 
-The one-stream production microphone routing is the authoritative design and deterministic source/tests cover the shared-capture boundary. Documentation and source/privacy audit evidence are merged for the current evidence boundaries. Remaining final closeout still depends on WWR-630 measured performance acceptance and WWR-950/960 exact final qualification/merge verification.
+The one-stream production microphone routing is the authoritative design and deterministic source/tests cover the shared-capture boundary. Documentation and source/privacy audit evidence are merged for the current evidence boundaries. WWR-630 measured performance acceptance is now recorded; remaining final closeout depends on WWR-900/910 audit/reconciliation and WWR-950/960 exact final qualification/merge verification.
 
 ## Lifecycle policy
 
@@ -63,7 +63,7 @@ Runtime and model licensing are tracked separately. The pinned sherpa-onnx runti
 
 Wake Word diagnostics expose privacy-safe state useful for lifecycle and artifact troubleshooting, including enabled state, authoritative runtime phase, exact model/runtime identity, platform/architecture, one-thread policy, canonical sample rate/channels, bounded ring/pre-roll counts, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension state, and sanitized last error.
 
-Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist. Partial WWR-630 evidence exists for idle KWS CPU, memory, inference timing, wake→command-ASR activation timing, pre-roll startup timing, repeated-cycle resource behavior, and a continuous-ASR idle comparison diagnostic. Accepted performance closeout remains pending until the required measurements are reconciled into accepted platform baselines.
+WWR-630 accepted performance evidence records platform-specific idle KWS CPU, memory, inference timing, and continuous-ASR comparisons for Linux x86_64 and macOS arm64, plus cross-cutting wake→command-ASR activation timing, pre-roll startup timing, and repeated-cycle resource behavior. On the measured acceptance environments, idle KWS CPU is lower than continuous ASR while preserving the one-thread policy.
 
 Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content. The WWR-510 privacy audits cover Wake Word diagnostics, production error strings, and production logging surfaces for credentials, unnecessary filesystem paths, and audio content.
 
@@ -75,8 +75,7 @@ Linux x86_64 and macOS arm64 real native KWS acceptance have passed on exact mer
 
 Current limitations:
 
-- WWR-630 measured performance acceptance is still pending.
 - WWR-910 original TODO reconciliation has a merged evidence matrix, but final reconciliation cannot close until WWR-630 and WWR-950/960 are complete.
 - WWR-950/960 exact-head and exact-master final closeout are still pending.
 
-Do not describe Wake Word V1 as fully user-ready or fully accepted until the measured performance, original TODO final reconciliation, and exact final closeout tasks are complete.
+Do not describe Wake Word V1 as fully user-ready or fully accepted until the final source/privacy audit, original TODO final reconciliation, and exact final closeout tasks are complete.

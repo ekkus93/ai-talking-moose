@@ -139,8 +139,8 @@
     {
       "id": "integrated_production_lifecycle_acceptance",
       "title": "Integrated production lifecycle acceptance",
-      "status": "pending_integrated_acceptance",
-      "workflow": null,
+      "status": "implemented",
+      "workflow": ".github/workflows/wake-word-lifecycle-stability.yml",
       "required_for_final_closeout": true,
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
@@ -150,8 +150,8 @@
     {
       "id": "measured_performance_acceptance",
       "title": "Measured performance acceptance",
-      "status": "pending_measurement",
-      "workflow": null,
+      "status": "implemented",
+      "workflow": ".github/workflows/wake-word-performance-evidence.yml",
       "required_for_final_closeout": true,
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,

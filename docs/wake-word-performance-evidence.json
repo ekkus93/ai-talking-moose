@@ -1,9 +1,12 @@
 {
   "schema_version": 1,
-  "status": "pending_measurement",
+  "status": "accepted",
   "policy": {
     "inference_threads": 1,
-    "required_platforms": ["linux-x86_64", "macos-arm64"],
+    "required_platforms": [
+      "linux-x86_64",
+      "macos-arm64"
+    ],
     "required_metrics": [
       "idle_cpu_percent",
       "runtime_memory_mib",
@@ -12,6 +15,17 @@
       "pre_roll_startup_ms",
       "repeated_cycle_resource_delta",
       "continuous_asr_idle_cpu_percent"
+    ],
+    "platform_required_metrics": [
+      "idle_cpu_percent",
+      "runtime_memory_mib",
+      "inference_latency_ms",
+      "continuous_asr_idle_cpu_percent"
+    ],
+    "cross_cutting_required_metrics": [
+      "wake_to_command_asr_ms",
+      "pre_roll_startup_ms",
+      "repeated_cycle_resource_delta"
     ]
   },
   "partial_measurements": [
@@ -48,7 +62,7 @@
       "source": "Wake Word real KWS acceptance run 36036701173 job 107758609893",
       "metrics": {
         "corpus_active_cpu_percent": 94.044,
-        "idle_cpu_percent": 0.0,
+        "idle_cpu_percent": 0,
         "idle_observation_ms": 2037,
         "runtime_memory_mib": 77.922,
         "inference_latency_ms": 62.357,
@@ -134,12 +148,47 @@
         "tiny_dropped_chunks_max": 0,
         "small_measured_cpu_percent_median": 9.9,
         "small_measured_cpu_percent_max": 10.6,
-        "small_measured_rtf_median": 0.180,
-        "small_measured_rtf_worst": 0.190,
+        "small_measured_rtf_median": 0.18,
+        "small_measured_rtf_worst": 0.19,
         "small_peak_rss_mib_max": 776.3,
         "small_dropped_chunks_max": 0
       }
     }
   ],
-  "measurements": []
+  "measurements": [
+    {
+      "platform": "linux-x86_64",
+      "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
+      "runner": "GitHub Actions 1000171442 plus job 108120281495",
+      "measured_at": "github-actions",
+      "sources": [
+        "Wake Word real KWS acceptance run 36036701173 job 107758609860",
+        "Wake Word lifecycle stability run 36149916357 job 108120281495"
+      ],
+      "metrics": {
+        "idle_cpu_percent": 0.1,
+        "runtime_memory_mib": 60.625,
+        "inference_latency_ms": 68.929,
+        "continuous_asr_idle_cpu_percent": 5.151,
+        "inference_threads": 1
+      }
+    },
+    {
+      "platform": "macos-arm64",
+      "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
+      "runner": "GitHub Actions 1000171443 plus job 108126013399",
+      "measured_at": "github-actions",
+      "sources": [
+        "Wake Word real KWS acceptance run 36036701173 job 107758609893",
+        "ASR-015 Native Acceptance run 36151618627 job 108126013399 artifact 10871959290"
+      ],
+      "metrics": {
+        "idle_cpu_percent": 0,
+        "runtime_memory_mib": 77.922,
+        "inference_latency_ms": 62.357,
+        "continuous_asr_idle_cpu_percent": 4.4,
+        "inference_threads": 1
+      }
+    }
+  ]
 }

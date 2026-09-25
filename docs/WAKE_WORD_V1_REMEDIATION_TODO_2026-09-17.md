@@ -586,21 +586,24 @@ The ordering is intentional. Do not implement later integration around unresolve
 ---
 ## WWR-630 — Add performance evidence
 
-- [ ] Measure idle Wake Word CPU utilization on representative Linux acceptance environment.
-- [ ] Measure idle Wake Word CPU utilization on representative macOS acceptance environment.
-- [ ] Measure Wake Word runtime memory overhead.
-- [ ] Measure inference timing/real-time behavior.
-- [ ] Measure wake detection → command ASR activation latency.
-- [ ] Measure pre-roll replay/startup timing.
-- [ ] Measure repeated-cycle resource behavior.
-- [ ] Compare idle KWS cost with continuously running full ASR path.
-- [ ] Preserve one-thread policy unless measured evidence requires change.
-- [ ] If thread policy changes, update spec/config/corpus thresholds and record justification.
+- [x] Measure idle Wake Word CPU utilization on representative Linux acceptance environment.
+- [x] Measure idle Wake Word CPU utilization on representative macOS acceptance environment.
+- [x] Measure Wake Word runtime memory overhead.
+- [x] Measure inference timing/real-time behavior.
+- [x] Measure wake detection → command ASR activation latency.
+- [x] Measure pre-roll replay/startup timing.
+- [x] Measure repeated-cycle resource behavior.
+- [x] Compare idle KWS cost with continuously running full ASR path.
+- [x] Preserve one-thread policy unless measured evidence requires change.
+- [x] If thread policy changes, update spec/config/corpus thresholds and record justification.
 
 **Acceptance**
 
-- [ ] A reproducible performance baseline exists.
-- [ ] KWS is demonstrably lighter than continuous full ASR for idle wake detection.
+- [x] A reproducible performance baseline exists.
+- [x] KWS is demonstrably lighter than continuous full ASR for idle wake detection.
+
+
+**Evidence:** `docs/wake-word-performance-evidence.json`; Linux x86_64 real-KWS run `36036701173` records 0.1% idle KWS CPU, 60.625 MiB runtime memory, and 68.929 ms inference latency; macOS arm64 records 0.0% idle KWS CPU, 77.922 MiB runtime memory, and 62.357 ms inference latency. Linux continuous-ASR idle CPU is 5.151% from lifecycle run `36149916357`; macOS native Tiny ASR median CPU is 4.4% from ASR-015 run `36151618627`. Cross-cutting lifecycle evidence records 100-cycle zero retained-audio growth and deterministic wake→ASR/pre-roll activation timing. The accepted report preserves the one-thread policy and demonstrates lower idle KWS CPU than continuous ASR on both acceptance platforms.
 
 ---
 
