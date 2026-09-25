@@ -1,12 +1,29 @@
+use super::state::AppSettings;
 use super::wake_word::engine::{
     NativeKwsSession, NativeKwsSessionPaths, SherpaKwsEngine, V1_KWS_SAMPLE_RATE_HZ,
 };
+use super::wake_word_command_activation::{
+    activate_wake_command_and_measure_start_normal_asr_once, WakeCommandStarter,
+};
+use super::wake_word_command_asr_ingress::{WakeCommandAsrHandoff, WakeCommandAsrIngress};
+use super::wake_word_command_handoff::WakeCommandHandoffAudio;
+use super::wake_word_composition::WakeWordApplicationRuntime;
+use crate::asr::moonshine::{
+    MoonshineModelArchitecture, MoonshineModelInstallCancellation, MoonshineModelInstaller,
+};
+use crate::asr::pipeline::{LocalAsrPipeline, LocalAsrPipelineEventCallback};
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 const FRAME_SAMPLES: usize = 1_600;
+const HANDOFF_MEASUREMENT_SAMPLES: usize = V1_KWS_SAMPLE_RATE_HZ as usize * 2;
+const CONTINUOUS_ASR_BASELINE_AUDIO_MS: u64 = 2_000;
+const CONTINUOUS_ASR_CHUNK_SAMPLES: usize = 1_600;
+const CONTINUOUS_ASR_CHUNK_AUDIO_MS: u64 = 100;
 
 #[derive(Debug, Deserialize)]
 pub struct GeneratedCorpusIndex {
@@ -69,6 +86,15 @@ pub struct WakeWordAcceptanceReport {
     pub idle_cpu_percent: f64,
     pub idle_observation_ms: u64,
     pub peak_resident_memory_bytes: Option<u64>,
+    pub wake_to_command_asr_ms: u64,
+    pub command_start_ms: u64,
+    pub total_activation_ms: u64,
+    pub pre_roll_startup_ms: u64,
+    pub pre_roll_samples: u64,
+    pub continuous_asr_idle_cpu_percent: Option<f64>,
+    pub continuous_asr_observation_ms: Option<u64>,
+    pub continuous_asr_audio_ms: Option<u64>,
+    pub continuous_asr_processed_audio_ms: Option<u64>,
     pub criteria_version: u32,
     pub positive_recall_minimum: f64,
     pub negative_false_accepts_maximum: u64,
@@ -182,6 +208,10 @@ pub fn run_real_kws_acceptance(
         });
     }
     session.shutdown().map_err(|error| error.message)?;
+    let kws_peak_resident_memory_bytes = peak_resident_memory_bytes();
+
+    let activation_measurement = measure_wake_command_activation_timing()?;
+    let continuous_asr_measurement = measure_continuous_asr_idle_baseline()?;
 
     let positive: Vec<_> = results
         .iter()
@@ -197,8 +227,12 @@ pub fn run_real_kws_acceptance(
     let positive_detected = positive.iter().filter(|item| item.detected).count() as u64;
     let negative_false_accepts = negative.iter().filter(|item| item.detected).count() as u64;
     let positive_recall = positive_detected as f64 / positive.len() as f64;
+    let continuous_asr_comparison_passed = continuous_asr_measurement
+        .map(|measurement| idle_cpu_percent < measurement.idle_cpu_percent)
+        .unwrap_or(true);
     let passed = positive_recall >= index.acceptance_criteria.positive_recall_minimum
-        && negative_false_accepts <= index.acceptance_criteria.negative_false_accepts_maximum;
+        && negative_false_accepts <= index.acceptance_criteria.negative_false_accepts_maximum
+        && continuous_asr_comparison_passed;
 
     Ok(WakeWordAcceptanceReport {
         schema_version: 1,
@@ -219,12 +253,206 @@ pub fn run_real_kws_acceptance(
         process_cpu_time_ms: process_cpu_time_ms().saturating_sub(cpu_before),
         idle_cpu_percent,
         idle_observation_ms: idle_wall_ms,
-        peak_resident_memory_bytes: peak_resident_memory_bytes(),
+        peak_resident_memory_bytes: kws_peak_resident_memory_bytes,
+        wake_to_command_asr_ms: activation_measurement.wake_to_command_asr_ms,
+        command_start_ms: activation_measurement.command_start_ms,
+        total_activation_ms: activation_measurement.total_activation_ms,
+        pre_roll_startup_ms: activation_measurement.pre_roll_startup_ms,
+        pre_roll_samples: activation_measurement.pre_roll_samples,
+        continuous_asr_idle_cpu_percent: continuous_asr_measurement
+            .map(|measurement| measurement.idle_cpu_percent),
+        continuous_asr_observation_ms: continuous_asr_measurement
+            .map(|measurement| measurement.observation_ms),
+        continuous_asr_audio_ms: continuous_asr_measurement.map(|measurement| measurement.audio_ms),
+        continuous_asr_processed_audio_ms: continuous_asr_measurement
+            .map(|measurement| measurement.processed_audio_ms),
         criteria_version: index.acceptance_criteria.criteria_version,
         positive_recall_minimum: index.acceptance_criteria.positive_recall_minimum,
         negative_false_accepts_maximum: index.acceptance_criteria.negative_false_accepts_maximum,
         passed,
         fixtures: results,
+    })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ActivationMeasurement {
+    wake_to_command_asr_ms: u64,
+    command_start_ms: u64,
+    total_activation_ms: u64,
+    pre_roll_startup_ms: u64,
+    pre_roll_samples: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ContinuousAsrMeasurement {
+    idle_cpu_percent: f64,
+    observation_ms: u64,
+    audio_ms: u64,
+    processed_audio_ms: u64,
+}
+
+#[derive(Default)]
+struct MeasurementCommandIngress {
+    accepted_samples: usize,
+    accepted_bytes: usize,
+}
+
+impl WakeCommandAsrIngress for MeasurementCommandIngress {
+    fn accept_wake_handoff(&mut self, audio: WakeCommandHandoffAudio) -> Result<(), String> {
+        self.accepted_samples = audio.samples_i16().len();
+        self.accepted_bytes = audio.to_pcm16_le_bytes().len();
+        Ok(())
+    }
+}
+
+struct ImmediateCommandStarter;
+
+#[async_trait]
+impl WakeCommandStarter for ImmediateCommandStarter {
+    async fn start_normal_command_interaction(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+fn measure_wake_command_activation_timing() -> Result<ActivationMeasurement, String> {
+    let settings = AppSettings {
+        wake_word_enabled: true,
+        ..Default::default()
+    };
+    let runtime = WakeWordApplicationRuntime::from_settings(&settings)
+        .map_err(|error| format!("failed to create Wake Word runtime: {error}"))?;
+    runtime
+        .mark_loaded()
+        .map_err(|error| format!("failed to load Wake Word runtime: {error}"))?;
+    let samples = vec![0_i16; HANDOFF_MEASUREMENT_SAMPLES];
+    let audio = WakeCommandHandoffAudio::new(V1_KWS_SAMPLE_RATE_HZ, samples)?;
+    let mut handoff = WakeCommandAsrHandoff::new(audio);
+    let mut ingress = MeasurementCommandIngress::default();
+    let mut starter = ImmediateCommandStarter;
+    let tokio_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| "failed to create Wake Word timing runtime".to_string())?;
+    let (delivered, timing) = tokio_runtime.block_on(async {
+        activate_wake_command_and_measure_start_normal_asr_once(
+            &runtime,
+            &mut handoff,
+            &mut ingress,
+            &mut starter,
+            true,
+        )
+        .await
+    })?;
+    if !delivered {
+        return Err("Wake command timing measurement did not deliver handoff".to_string());
+    }
+    if ingress.accepted_samples != HANDOFF_MEASUREMENT_SAMPLES {
+        return Err(
+            "Wake command timing measurement delivered an unexpected sample count".to_string(),
+        );
+    }
+    if ingress.accepted_bytes != HANDOFF_MEASUREMENT_SAMPLES.saturating_mul(2) {
+        return Err(
+            "Wake command timing measurement delivered an unexpected byte count".to_string(),
+        );
+    }
+    Ok(ActivationMeasurement {
+        wake_to_command_asr_ms: timing.wake_to_command_asr_ms,
+        command_start_ms: timing.command_start_ms,
+        total_activation_ms: timing.total_activation_ms,
+        pre_roll_startup_ms: timing.wake_to_command_asr_ms,
+        pre_roll_samples: HANDOFF_MEASUREMENT_SAMPLES as u64,
+    })
+}
+
+fn measure_continuous_asr_idle_baseline() -> Result<Option<ContinuousAsrMeasurement>, String> {
+    let tokio_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| "failed to create continuous ASR timing runtime".to_string())?;
+    match tokio_runtime.block_on(measure_continuous_asr_idle_baseline_async()) {
+        Ok(measurement) => Ok(Some(measurement)),
+        Err(error) if error.contains("Moonshine native runtime is not linked into this build") => {
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+async fn measure_continuous_asr_idle_baseline_async() -> Result<ContinuousAsrMeasurement, String> {
+    let install_root = std::env::temp_dir().join("talking-moose-moonshine-asr-acceptance");
+    let installer = Arc::new(
+        MoonshineModelInstaller::new(install_root)
+            .map_err(|error| format!("failed to initialize Moonshine installer: {error}"))?,
+    );
+    let cancellation = MoonshineModelInstallCancellation::default();
+    installer
+        .install(MoonshineModelArchitecture::TinyStreaming, &cancellation)
+        .await
+        .map_err(|error| format!("failed to install Moonshine Tiny baseline: {error}"))?;
+    let callback: LocalAsrPipelineEventCallback = Arc::new(|_event| {});
+    let mut pipeline = LocalAsrPipeline::start_tiny(installer, callback)
+        .await
+        .map_err(|error| error.message)?;
+    let measurement = feed_continuous_asr_silence(&pipeline).await;
+    let stop_result = pipeline
+        .stop_and_join()
+        .await
+        .map_err(|error| error.message);
+    match (measurement, stop_result) {
+        (Ok(measurement), Ok(())) => Ok(measurement),
+        (Err(error), _) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+async fn feed_continuous_asr_silence(
+    pipeline: &LocalAsrPipeline,
+) -> Result<ContinuousAsrMeasurement, String> {
+    let silence = vec![0_i16; CONTINUOUS_ASR_CHUNK_SAMPLES];
+    let started = Instant::now();
+    let cpu_before = process_cpu_time_ms();
+    let mut accepted_audio_ms = 0_u64;
+
+    while accepted_audio_ms < CONTINUOUS_ASR_BASELINE_AUDIO_MS {
+        let audio = WakeCommandHandoffAudio::new(V1_KWS_SAMPLE_RATE_HZ, silence.clone())?;
+        match pipeline.prime_wake_handoff(audio) {
+            Ok(()) => {
+                accepted_audio_ms = accepted_audio_ms.saturating_add(CONTINUOUS_ASR_CHUNK_AUDIO_MS);
+                tokio::time::sleep(Duration::from_millis(CONTINUOUS_ASR_CHUNK_AUDIO_MS)).await;
+            }
+            Err(error) if error.retryable => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(error) => return Err(error.message),
+        }
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while pipeline.diagnostics().processed_audio_ms < accepted_audio_ms && Instant::now() < deadline
+    {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let observation_ms: u64 = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    let cpu_ms = process_cpu_time_ms().saturating_sub(cpu_before);
+    let idle_cpu_percent = if observation_ms == 0 {
+        0.0
+    } else {
+        (cpu_ms as f64 * 100.0) / observation_ms as f64
+    };
+    let processed_audio_ms = pipeline.diagnostics().processed_audio_ms;
+    if processed_audio_ms < accepted_audio_ms {
+        return Err(
+            "continuous ASR baseline did not process the requested audio window".to_string(),
+        );
+    }
+
+    Ok(ContinuousAsrMeasurement {
+        idle_cpu_percent,
+        observation_ms,
+        audio_ms: accepted_audio_ms,
+        processed_audio_ms,
     })
 }
 
