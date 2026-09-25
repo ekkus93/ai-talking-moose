@@ -125,6 +125,7 @@ fn set_tray_visible<R: Runtime>(app: &tauri::AppHandle<R>, visible: bool) -> Res
     tray.set_visible(visible).map_err(|error| error.to_string())
 }
 
+#[allow(dead_code)]
 fn apply_wake_word_setting_change(
     runtime: &WakeWordApplicationRuntime,
     previous_enabled: bool,
@@ -138,6 +139,7 @@ fn apply_wake_word_setting_change(
         .map_err(|error| error.to_string())
 }
 
+#[allow(dead_code)]
 fn rollback_wake_word_setting(runtime: &WakeWordApplicationRuntime, enabled: bool) {
     let _ = runtime.apply_enabled_setting(enabled);
 }
