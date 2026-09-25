@@ -1,4 +1,5 @@
 name: Wake Artifact Verification
+# WWR-950 exact-head trigger: final closeout qualification.
 
 on:
   pull_request:
