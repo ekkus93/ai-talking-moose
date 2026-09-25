@@ -1,4 +1,5 @@
 name: Wake Word privacy audit
+# WWR-950 exact-head trigger: final closeout qualification.
 
 on:
   push:
