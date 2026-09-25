@@ -23,7 +23,7 @@ const behaviorRequirements = [
   "diagnostics",
   "Live enable/disable changes are applied to the authoritative runtime",
   "one-stream production microphone routing",
-  "WWR-630 measured performance acceptance is still pending",
+  "WWR-630 accepted performance evidence",
 ];
 for (const token of behaviorRequirements) {
   if (!behavior.toLowerCase().includes(token.toLowerCase())) {
@@ -82,9 +82,9 @@ const gateRequirements = [
   "Passing schema/contract gates do not mean the repository contains real audio fixtures",
   "production Wake Word Rust error/log surfaces",
   "does not by itself prove real KWS inference",
-  "pending_measurement",
+  "`accepted` with Linux x86_64 and macOS arm64 platform baselines",
   "A workflow with conclusion `skipped`",
-  "command-ASR latency, pre-roll startup, and continuous-ASR comparison remain open",
+  "Cross-cutting exact-run evidence records wake→command-ASR latency, pre-roll startup timing, and repeated-cycle resource behavior",
 ];
 for (const sentence of gateRequirements) {
   if (!gates.includes(sentence)) {
@@ -117,11 +117,11 @@ if (readmeMentionsWakeWord) {
   }
 }
 
-if (performance.status !== "pending_measurement") {
-  fail("performance status changed; update documentation audit with accepted measured evidence");
+if (performance.status !== "accepted") {
+  fail("performance report must remain accepted after WWR-630 closeout");
 }
-if (!Array.isArray(performance.measurements) || performance.measurements.length !== 0) {
-  fail("pending performance report unexpectedly contains measurements");
+if (!Array.isArray(performance.measurements) || performance.measurements.length !== 2) {
+  fail("accepted performance report must contain both platform baselines");
 }
 
 const forbiddenClaims = [
@@ -135,4 +135,4 @@ for (const pattern of forbiddenClaims) {
   }
 }
 
-console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, UI disclosures, README truthfulness boundary, gate boundaries, and pending performance status are consistent.");
+console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, UI disclosures, README truthfulness boundary, gate boundaries, and accepted performance status are consistent.");

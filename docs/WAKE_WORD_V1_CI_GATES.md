@@ -171,9 +171,9 @@ Purpose:
 
 Current status:
 
-- `docs/wake-word-performance-evidence.json` is intentionally `pending_measurement` with no accepted measurement set.
-- A passing policy gate proves report structure/policy validity only; it does not prove WWR-630 performance acceptance.
-- Exact real-KWS reports now provide partial idle CPU, memory, and inference timing evidence; exact-master lifecycle run `36090294124` provides repeated-cycle resource-delta evidence; command-ASR latency, pre-roll startup, and continuous-ASR comparison remain open.
+- `docs/wake-word-performance-evidence.json` is `accepted` with Linux x86_64 and macOS arm64 platform baselines.
+- Platform baselines record idle KWS CPU, runtime memory, inference latency, continuous-ASR idle CPU comparison, and the one-thread policy.
+- Cross-cutting exact-run evidence records wake→command-ASR latency, pre-roll startup timing, and repeated-cycle resource behavior.
 
 ### Privacy/security source audit gate
 
@@ -231,10 +231,6 @@ The following evidence is still required before final Wake Word V1 closeout. Imp
 ### Packaged-runtime load acceptance
 
 The native packaging/architecture policy workflow is implemented. Final packaging acceptance still must verify the runtime library actually loaded by a packaged build on each claimed platform and must remain fail-closed for unsupported platforms.
-
-### Measured performance acceptance
-
-The performance evidence policy gate is implemented, but WWR-630 remains pending until Measured performance acceptance populates `docs/wake-word-performance-evidence.json` with representative Linux and macOS measurements and demonstrates that idle KWS is lighter than continuously running full ASR.
 
 ### Final source/privacy/security audit
 
