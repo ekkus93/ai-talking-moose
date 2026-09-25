@@ -1,5 +1,6 @@
 use crate::app::state::{AppSettings, AppState};
 use crate::app::wake_word_composition::WakeWordApplicationRuntime;
+use crate::app::wake_word_state;
 #[cfg(any(target_os = "macos", test))]
 use std::path::Path;
 use tauri::{Manager, Runtime};
@@ -157,25 +158,32 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     let launch_changed = previous.launch_at_login != next.launch_at_login;
     let window_changed = previous.always_on_top != next.always_on_top;
     let tray_changed = previous.show_in_menu_bar != next.show_in_menu_bar;
-    let wake_word_changed = previous.wake_word_enabled != next.wake_word_enabled;
-    let managed_state = if wake_word_changed {
+    let wake_listener_changed = previous.wake_word_enabled != next.wake_word_enabled
+        || (next.wake_word_enabled && previous.input_device != next.input_device);
+    let managed_state = if wake_listener_changed {
         Some(app.try_state::<AppState>().ok_or_else(|| "application state is unavailable".to_string())?)
     } else {
         None
     };
     let wake_runtime = managed_state.as_ref().map(|state| &state.wake_word_runtime);
 
-    if let Some(runtime) = wake_runtime {
-        apply_wake_word_setting_change(
-            runtime,
-            previous.wake_word_enabled,
-            next.wake_word_enabled,
+    if let Some(state) = managed_state.as_ref() {
+        wake_word_state::apply_configured_native_wake_listener_settings_change(
+            state,
+            previous,
+            next,
         )?;
     }
 
     if launch_changed {
         if let Err(error) = sync_launch_at_login(app, next.launch_at_login) {
-            if let Some(runtime) = wake_runtime {
+            if let Some(state) = managed_state.as_ref() {
+                let _ = wake_word_state::apply_configured_native_wake_listener_settings_change(
+                    state,
+                    next,
+                    previous,
+                );
+            } else if let Some(runtime) = wake_runtime {
                 rollback_wake_word_setting(runtime, previous.wake_word_enabled);
             }
             return Err(error);
@@ -187,7 +195,13 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
             if launch_changed {
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
             }
-            if let Some(runtime) = wake_runtime {
+            if let Some(state) = managed_state.as_ref() {
+                let _ = wake_word_state::apply_configured_native_wake_listener_settings_change(
+                    state,
+                    next,
+                    previous,
+                );
+            } else if let Some(runtime) = wake_runtime {
                 rollback_wake_word_setting(runtime, previous.wake_word_enabled);
             }
             return Err(error);
@@ -202,7 +216,13 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
             if launch_changed {
                 let _ = sync_launch_at_login(app, previous.launch_at_login);
             }
-            if let Some(runtime) = wake_runtime {
+            if let Some(state) = managed_state.as_ref() {
+                let _ = wake_word_state::apply_configured_native_wake_listener_settings_change(
+                    state,
+                    next,
+                    previous,
+                );
+            } else if let Some(runtime) = wake_runtime {
                 rollback_wake_word_setting(runtime, previous.wake_word_enabled);
             }
             return Err(error);
