@@ -347,7 +347,9 @@ fn measure_wake_command_activation_timing() -> Result<ActivationMeasurement, Str
         return Err("Wake command timing measurement did not deliver handoff".to_string());
     }
     if ingress.accepted_samples != HANDOFF_MEASUREMENT_SAMPLES {
-        return Err(\n            "Wake command timing measurement delivered an unexpected sample count".to_string(),\n        );
+        return Err(
+            "Wake command timing measurement delivered an unexpected sample count".to_string(),
+        );
     }
     if ingress.accepted_bytes != HANDOFF_MEASUREMENT_SAMPLES.saturating_mul(2) {
         return Err(
