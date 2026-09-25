@@ -162,14 +162,24 @@ if (report.status === "pending_measurement") {
   process.exit(0);
 }
 
+const platformRequiredMetrics = report.policy?.platform_required_metrics ?? [];
+for (const metric of ["idle_cpu_percent", "runtime_memory_mib", "inference_latency_ms", "continuous_asr_idle_cpu_percent"]) {
+  if (!platformRequiredMetrics.includes(metric)) fail(`missing platform-required metric ${metric}`);
+}
+const crossCuttingRequiredMetrics = report.policy?.cross_cutting_required_metrics ?? [];
+for (const metric of ["wake_to_command_asr_ms", "pre_roll_startup_ms", "repeated_cycle_resource_delta"]) {
+  if (!crossCuttingRequiredMetrics.includes(metric)) fail(`missing cross-cutting-required metric ${metric}`);
+}
+validateCrossCuttingMeasurements();
 const measurements = report.measurements ?? [];
 for (const platform of platforms) {
   const sample = measurements.find((entry) => entry.platform === platform);
   if (!sample) fail(`accepted report lacks ${platform} measurement`);
   assertProvenance(sample, `${platform} measurement`);
-  for (const metric of requiredMetrics) {
+  for (const metric of platformRequiredMetrics) {
     assertNumericMetric(sample.metrics ?? {}, metric, platform);
   }
+  if (sample.metrics.inference_threads !== 1) fail(`${platform} must preserve one-thread policy`);
   if (!(sample.metrics.idle_cpu_percent < sample.metrics.continuous_asr_idle_cpu_percent)) {
     fail(`${platform} does not demonstrate KWS lighter than continuous ASR`);
   }
