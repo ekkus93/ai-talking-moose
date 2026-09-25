@@ -25,11 +25,18 @@ struct NativeWakeListenerConfig {
 }
 
 pub(crate) fn wake_word_asr_mode_supported(mode: AsrMode) -> bool {
-    matches!(mode, AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming)
+    matches!(
+        mode,
+        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
+    )
 }
 
 fn ensure_wake_word_asr_mode_supported(mode: AsrMode) -> Result<(), String> {
-    if wake_word_asr_mode_supported(mode) { Ok(()) } else { Err("Wake Word V1 requires local Moonshine command ASR".to_string()) }
+    if wake_word_asr_mode_supported(mode) {
+        Ok(())
+    } else {
+        Err("Wake Word V1 requires local Moonshine command ASR".to_string())
+    }
 }
 
 fn native_wake_listener_slot() -> &'static Mutex<Option<WakeLocalListenerHandle>> {
@@ -330,8 +337,12 @@ mod tests {
 
     #[test]
     fn wake_v1_supports_only_local_moonshine_command_asr() {
-        assert!(wake_word_asr_mode_supported(AsrMode::MoonshineTinyStreaming));
-        assert!(wake_word_asr_mode_supported(AsrMode::MoonshineSmallStreaming));
+        assert!(wake_word_asr_mode_supported(
+            AsrMode::MoonshineTinyStreaming
+        ));
+        assert!(wake_word_asr_mode_supported(
+            AsrMode::MoonshineSmallStreaming
+        ));
         assert!(!wake_word_asr_mode_supported(AsrMode::GeminiLiveAudio));
     }
 
@@ -340,8 +351,13 @@ mod tests {
         stop_native_wake_listener_thread();
         let state = AppState::new_for_tests().unwrap();
         let previous = AppSettings::default();
-        let next = AppSettings { wake_word_enabled: true, asr_mode: AsrMode::GeminiLiveAudio, ..Default::default() };
-        let error = apply_configured_native_wake_listener_settings_change(&state, &previous, &next).unwrap_err();
+        let next = AppSettings {
+            wake_word_enabled: true,
+            asr_mode: AsrMode::GeminiLiveAudio,
+            ..Default::default()
+        };
+        let error = apply_configured_native_wake_listener_settings_change(&state, &previous, &next)
+            .unwrap_err();
         assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
         assert!(!native_wake_listener_is_active());
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Error);
