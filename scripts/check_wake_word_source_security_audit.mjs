@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 
+// WWR-900 final audit evidence uses this checker as the executable guardrail for
+// Wake Word ownership, capture, lifecycle, command activation, provider separation,
+// artifact/runtime verification, native architecture verification, and memory-only
+// PCM retention invariants.
 const read = (path) => readFileSync(path, "utf8");
 const fail = (message) => {
   throw new Error(`Wake Word source/security audit failed: ${message}`);
