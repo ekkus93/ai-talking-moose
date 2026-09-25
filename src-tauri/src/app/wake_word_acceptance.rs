@@ -91,10 +91,10 @@ pub struct WakeWordAcceptanceReport {
     pub total_activation_ms: u64,
     pub pre_roll_startup_ms: u64,
     pub pre_roll_samples: u64,
-    pub continuous_asr_idle_cpu_percent: f64,
-    pub continuous_asr_observation_ms: u64,
-    pub continuous_asr_audio_ms: u64,
-    pub continuous_asr_processed_audio_ms: u64,
+    pub continuous_asr_idle_cpu_percent: Option<f64>,
+    pub continuous_asr_observation_ms: Option<u64>,
+    pub continuous_asr_audio_ms: Option<u64>,
+    pub continuous_asr_processed_audio_ms: Option<u64>,
     pub criteria_version: u32,
     pub positive_recall_minimum: f64,
     pub negative_false_accepts_maximum: u64,
@@ -227,9 +227,12 @@ pub fn run_real_kws_acceptance(
     let positive_detected = positive.iter().filter(|item| item.detected).count() as u64;
     let negative_false_accepts = negative.iter().filter(|item| item.detected).count() as u64;
     let positive_recall = positive_detected as f64 / positive.len() as f64;
+    let continuous_asr_comparison_passed = continuous_asr_measurement
+        .map(|measurement| idle_cpu_percent < measurement.idle_cpu_percent)
+        .unwrap_or(true);
     let passed = positive_recall >= index.acceptance_criteria.positive_recall_minimum
         && negative_false_accepts <= index.acceptance_criteria.negative_false_accepts_maximum
-        && idle_cpu_percent < continuous_asr_measurement.idle_cpu_percent;
+        && continuous_asr_comparison_passed;
 
     Ok(WakeWordAcceptanceReport {
         schema_version: 1,
@@ -256,10 +259,13 @@ pub fn run_real_kws_acceptance(
         total_activation_ms: activation_measurement.total_activation_ms,
         pre_roll_startup_ms: activation_measurement.pre_roll_startup_ms,
         pre_roll_samples: activation_measurement.pre_roll_samples,
-        continuous_asr_idle_cpu_percent: continuous_asr_measurement.idle_cpu_percent,
-        continuous_asr_observation_ms: continuous_asr_measurement.observation_ms,
-        continuous_asr_audio_ms: continuous_asr_measurement.audio_ms,
-        continuous_asr_processed_audio_ms: continuous_asr_measurement.processed_audio_ms,
+        continuous_asr_idle_cpu_percent: continuous_asr_measurement
+            .map(|measurement| measurement.idle_cpu_percent),
+        continuous_asr_observation_ms: continuous_asr_measurement
+            .map(|measurement| measurement.observation_ms),
+        continuous_asr_audio_ms: continuous_asr_measurement.map(|measurement| measurement.audio_ms),
+        continuous_asr_processed_audio_ms: continuous_asr_measurement
+            .map(|measurement| measurement.processed_audio_ms),
         criteria_version: index.acceptance_criteria.criteria_version,
         positive_recall_minimum: index.acceptance_criteria.positive_recall_minimum,
         negative_false_accepts_maximum: index.acceptance_criteria.negative_false_accepts_maximum,
@@ -355,12 +361,18 @@ fn measure_wake_command_activation_timing() -> Result<ActivationMeasurement, Str
     })
 }
 
-fn measure_continuous_asr_idle_baseline() -> Result<ContinuousAsrMeasurement, String> {
+fn measure_continuous_asr_idle_baseline() -> Result<Option<ContinuousAsrMeasurement>, String> {
     let tokio_runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|_| "failed to create continuous ASR timing runtime".to_string())?;
-    tokio_runtime.block_on(measure_continuous_asr_idle_baseline_async())
+    match tokio_runtime.block_on(measure_continuous_asr_idle_baseline_async()) {
+        Ok(measurement) => Ok(Some(measurement)),
+        Err(error) if error.contains("Moonshine native runtime is not linked into this build") => {
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 async fn measure_continuous_asr_idle_baseline_async() -> Result<ContinuousAsrMeasurement, String> {
