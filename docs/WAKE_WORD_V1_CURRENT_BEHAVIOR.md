@@ -49,7 +49,7 @@ The authoritative runtime manager implements these state-machine rules:
 - Disabling Wake Word during a triggered or suspended interaction leaves the runtime disabled and prevents a later completion/resume path from unintentionally restoring listening.
 - Wake Word V1 does **not** implement wake-word barge-in while Moose is talking.
 
-Integrated lifecycle stability evidence now exists for repeated wake→ASR→Thinking→Talking→wake cycles, bounded retained audio, repeated TTS terminal outcomes, repeated disable/enable cycles, shutdown while listening, and shutdown during handoff. That evidence is recorded in the remediation TODO and WWR-640 evidence. It is still not a substitute for final WWR-950/960 closeout.
+Integrated lifecycle stability evidence now exists for repeated wake→ASR→Thinking→Talking→wake cycles, bounded retained audio, repeated TTS terminal outcomes, repeated disable/enable cycles, shutdown while listening, and shutdown during handoff. Exact-master run `36090294124` on `755d02b738742513419778043b524e8b94f9c340` also records WWR-630 repeated-cycle resource behavior: 100 cycles, zero ring-buffer sample delta, zero handoff pre-roll sample delta, final phase `Listening`, and capacity bounded at 32,000 samples. That evidence is still not a substitute for final WWR-950/960 closeout.
 
 ## Artifacts, model, runtime, and licenses
 
@@ -63,7 +63,7 @@ Runtime and model licensing are tracked separately. The pinned sherpa-onnx runti
 
 Wake Word diagnostics expose privacy-safe state useful for lifecycle and artifact troubleshooting, including enabled state, authoritative runtime phase, exact model/runtime identity, platform/architecture, one-thread policy, canonical sample rate/channels, bounded ring/pre-roll counts, threshold/score, trigger count, last-trigger age, initialization duration, Talking suspension state, and sanitized last error.
 
-Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist. Partial WWR-630 evidence exists for idle KWS CPU, memory, and inference timing, but accepted performance closeout remains pending until all required metrics, including command-ASR latency, pre-roll startup, repeated-cycle resource delta, and continuous-ASR comparison, are complete.
+Optional measured CPU, memory, inference, and handoff timing fields remain empty until accepted measurements exist. Partial WWR-630 evidence exists for idle KWS CPU, memory, inference timing, and repeated-cycle resource behavior, but accepted performance closeout remains pending until all required metrics, including command-ASR latency, pre-roll startup, and continuous-ASR comparison, are complete.
 
 Diagnostics intentionally do not expose raw PCM, transcripts, credentials, or private audio content. The WWR-510 privacy audits cover Wake Word diagnostics, production error strings, and production logging surfaces for credentials, unnecessary filesystem paths, and audio content.
 

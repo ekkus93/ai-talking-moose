@@ -84,7 +84,7 @@ const gateRequirements = [
   "does not by itself prove real KWS inference",
   "pending_measurement",
   "A workflow with conclusion `skipped`",
-  "command-ASR latency, pre-roll startup, repeated-cycle resource delta, and continuous-ASR comparison remain open",
+  "command-ASR latency, pre-roll startup, and continuous-ASR comparison remain open",
 ];
 for (const sentence of gateRequirements) {
   if (!gates.includes(sentence)) {

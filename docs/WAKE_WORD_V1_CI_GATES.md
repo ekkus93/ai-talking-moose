@@ -173,7 +173,7 @@ Current status:
 
 - `docs/wake-word-performance-evidence.json` is intentionally `pending_measurement` with no accepted measurement set.
 - A passing policy gate proves report structure/policy validity only; it does not prove WWR-630 performance acceptance.
-- Exact real-KWS reports now provide partial idle CPU, memory, and inference timing evidence; command-ASR latency, pre-roll startup, repeated-cycle resource delta, and continuous-ASR comparison remain open.
+- Exact real-KWS reports now provide partial idle CPU, memory, and inference timing evidence; exact-master lifecycle run `36090294124` provides repeated-cycle resource-delta evidence; command-ASR latency, pre-roll startup, and continuous-ASR comparison remain open.
 
 ### Privacy/security source audit gate
 
