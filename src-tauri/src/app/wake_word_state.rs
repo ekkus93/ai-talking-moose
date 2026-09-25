@@ -1,4 +1,4 @@
-use super::state::AppState;
+use super::state::{AppSettings, AppState};
 use super::wake_word::engine::{
     NativeKwsSession, NativeKwsSessionPaths, SherpaKwsEngine, WakeWordError,
 };
@@ -209,6 +209,58 @@ pub(crate) fn restart_native_wake_listener_thread_from_configured_app_state(
     )
 }
 
+#[allow(dead_code)]
+pub(crate) fn native_wake_listener_is_active() -> bool {
+    native_wake_listener_slot().lock().is_some()
+}
+
+pub(crate) fn apply_configured_native_wake_listener_settings_change(
+    state: &AppState,
+    previous: &AppSettings,
+    next: &AppSettings,
+) -> Result<(), String> {
+    let wake_enabled_changed = previous.wake_word_enabled != next.wake_word_enabled;
+    let input_device_changed = previous.input_device != next.input_device;
+    let wake_listener_must_change =
+        wake_enabled_changed || (next.wake_word_enabled && input_device_changed);
+    if !wake_listener_must_change {
+        return Ok(());
+    }
+
+    if !next.wake_word_enabled {
+        stop_native_wake_listener_thread();
+        state
+            .wake_word_runtime
+            .apply_enabled_setting(false)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    if input_device_changed {
+        stop_native_wake_listener_thread();
+    }
+
+    if state.conversation_mgr.is_active() {
+        state
+            .wake_word_runtime
+            .apply_enabled_setting(true)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    match restart_native_wake_listener_thread_from_configured_app_state(state) {
+        Ok(true) => Ok(()),
+        Ok(false) => state
+            .wake_word_runtime
+            .apply_enabled_setting(true)
+            .map_err(|error| error.to_string()),
+        Err(error) => {
+            state.wake_word_runtime.record_runtime_error();
+            Err(error)
+        }
+    }
+}
+
 pub(crate) fn clear_native_wake_listener_thread() {
     stop_native_wake_listener_thread();
 }
@@ -365,6 +417,45 @@ mod tests {
         assert_eq!(
             state.wake_word_runtime.phase(),
             WakeWordRuntimePhase::Disabled
+        );
+    }
+
+    #[test]
+    fn settings_disable_stops_listener_and_runtime_state() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        let previous = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        let next = AppSettings::default();
+
+        apply_configured_native_wake_listener_settings_change(&state, &previous, &next).unwrap();
+
+        assert!(!native_wake_listener_is_active());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
+    }
+
+    #[test]
+    fn settings_enable_without_startup_config_enters_loading_without_false_listener_claim() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        let previous = AppSettings::default();
+        let next = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+
+        apply_configured_native_wake_listener_settings_change(&state, &previous, &next).unwrap();
+
+        assert!(!native_wake_listener_is_active());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Loading
         );
     }
 }
