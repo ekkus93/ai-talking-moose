@@ -629,27 +629,29 @@ The ordering is intentional. Do not implement later integration around unresolve
 ---
 ## WWR-700 — Correct and complete documentation
 
-- [ ] Update architecture docs to the one authoritative Wake Word subsystem.
-- [ ] Remove references that imply duplicate runtime stacks are both authoritative.
-- [ ] Document fixed phrase `Hey, Moose`.
-- [ ] Document disabled-by-default policy.
-- [ ] Document local/offline KWS.
-- [ ] Document active local microphone behavior.
-- [ ] Document wake phrase + prompt may reach command ASR.
-- [ ] Document Talking suspension.
-- [ ] Document no-barge-in limitation.
-- [ ] Document memory-only ring/pre-roll behavior.
-- [ ] Document exact model/runtime provenance/licenses.
-- [ ] Document supported platforms based only on real acceptance.
-- [ ] Document diagnostics/troubleshooting.
-- [ ] Correct any current docs that describe planned behavior as already functional.
-- [ ] Update README/user docs when feature becomes usable.
-- [ ] Avoid unmeasured subjective accuracy claims.
+- [x] Update architecture docs to the one authoritative Wake Word subsystem.
+- [x] Remove references that imply duplicate runtime stacks are both authoritative.
+- [x] Document fixed phrase `Hey, Moose`.
+- [x] Document disabled-by-default policy.
+- [x] Document local/offline KWS.
+- [x] Document active local microphone behavior.
+- [x] Document wake phrase + prompt may reach command ASR.
+- [x] Document Talking suspension.
+- [x] Document no-barge-in limitation.
+- [x] Document memory-only ring/pre-roll behavior.
+- [x] Document exact model/runtime provenance/licenses.
+- [x] Document supported platforms based only on real acceptance.
+- [x] Document diagnostics/troubleshooting.
+- [x] Correct any current docs that describe planned behavior as already functional.
+- [x] Update README/user docs when feature becomes usable. — Not yet applicable: `docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md` explicitly states V1 is not fully user-ready and final closeout remains pending; README promotion is intentionally deferred until that condition becomes true.
+- [x] Avoid unmeasured subjective accuracy claims.
 
 **Acceptance**
 
-- [ ] User-facing docs match actual production behavior on master.
-- [ ] Developer docs match actual authoritative source ownership.
+- [x] User-facing docs match actual production behavior on master.
+- [x] Developer docs match actual authoritative source ownership.
+
+**Evidence:** `docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md` is the authoritative current-behavior reference and covers the single subsystem, fixed phrase/default, local microphone/privacy disclosures, Talking suspension/no-barge-in lifecycle policy, memory-only PCM retention, exact artifact/runtime provenance and licenses, accepted Linux/macOS platform claims, diagnostics/troubleshooting, and explicit pending-closeout limitations. `docs/WAKE_WORD_V1_CI_GATES.md` documents specialized acceptance policy. Documentation audit run `36153508516` passed on exact master `accfad51f83435f909ea56f67b9f4f16788ef478`. README promotion remains conditionally deferred because the feature is not yet fully accepted/user-ready.
 
 ---
 
