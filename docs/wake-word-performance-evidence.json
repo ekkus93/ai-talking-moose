@@ -98,6 +98,21 @@
         "handoff_samples": 3200,
         "ingress_samples": 3200
       }
+    },
+    {
+      "metric": "continuous_asr_idle_cpu_percent",
+      "platform": "linux-x86_64",
+      "commit_sha": "62dbfcc9e9d54acaa3927311478fb84846eda27d",
+      "runner": "GitHub Actions job 108120281495",
+      "measured_at": "github-actions",
+      "source": "Wake Word lifecycle stability run 36149916357 job 108120281495",
+      "metrics": {
+        "continuous_asr_idle_cpu_percent": 5.151,
+        "observation_ms": 2000,
+        "queue_depth": 0,
+        "queue_capacity": 8,
+        "architecture": "TinyStreaming"
+      }
     }
   ],
   "measurements": []
