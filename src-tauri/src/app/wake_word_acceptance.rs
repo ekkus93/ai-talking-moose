@@ -422,7 +422,8 @@ async fn feed_continuous_asr_silence(
     }
 
     let deadline = Instant::now() + Duration::from_secs(10);
-    while pipeline.diagnostics().processed_audio_ms < accepted_audio_ms && Instant::now() < deadline {
+    while pipeline.diagnostics().processed_audio_ms < accepted_audio_ms && Instant::now() < deadline
+    {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
@@ -435,7 +436,9 @@ async fn feed_continuous_asr_silence(
     };
     let processed_audio_ms = pipeline.diagnostics().processed_audio_ms;
     if processed_audio_ms < accepted_audio_ms {
-        return Err("continuous ASR baseline did not process the requested audio window".to_string());
+        return Err(
+            "continuous ASR baseline did not process the requested audio window".to_string(),
+        );
     }
 
     Ok(ContinuousAsrMeasurement {
