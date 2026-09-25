@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - "src-tauri/src/asr/pipeline.rs"
+      - "src-tauri/src/asr/pipeline_tests.rs"
       - "src-tauri/src/asr/wake_word_runtime.rs"
       - "src-tauri/src/asr/wake_word_stability.rs"
       - "src-tauri/src/app/wake_word_authoritative_capture.rs"
@@ -32,6 +33,7 @@ on:
       - master
     paths:
       - "src-tauri/src/asr/pipeline.rs"
+      - "src-tauri/src/asr/pipeline_tests.rs"
       - "src-tauri/src/asr/wake_word_runtime.rs"
       - "src-tauri/src/asr/wake_word_stability.rs"
       - "src-tauri/src/app/wake_word_authoritative_capture.rs"
