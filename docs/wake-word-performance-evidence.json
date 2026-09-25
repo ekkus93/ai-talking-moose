@@ -113,6 +113,32 @@
         "queue_capacity": 8,
         "architecture": "TinyStreaming"
       }
+    },
+    {
+      "metric": "continuous_asr_native_cpu_benchmark",
+      "platform": "macos-arm64",
+      "commit_sha": "fa6797a460daced343fa3d908a7a28d05c446b37",
+      "runner": "GitHub Actions job 108126013399",
+      "measured_at": "github-actions",
+      "source": "ASR-015 Native Acceptance run 36151618627 job 108126013399 artifact 10871959290",
+      "metrics": {
+        "hardware_model": "VirtualMac2,1",
+        "cpu_chip": "Apple M1 (Virtual)",
+        "architecture": "arm64",
+        "corpus_audio_ms": 13000,
+        "tiny_measured_cpu_percent_median": 4.4,
+        "tiny_measured_cpu_percent_max": 4.5,
+        "tiny_measured_rtf_median": 0.077,
+        "tiny_measured_rtf_worst": 0.079,
+        "tiny_peak_rss_mib_max": 314.9,
+        "tiny_dropped_chunks_max": 0,
+        "small_measured_cpu_percent_median": 9.9,
+        "small_measured_cpu_percent_max": 10.6,
+        "small_measured_rtf_median": 0.180,
+        "small_measured_rtf_worst": 0.190,
+        "small_peak_rss_mib_max": 776.3,
+        "small_dropped_chunks_max": 0
+      }
     }
   ],
   "measurements": []
