@@ -747,3 +747,31 @@ async fn pipeline_diagnostics_report_bound_and_running_state() {
     assert!(diagnostics.last_error.is_none());
     pipeline.stop_and_join().await.unwrap();
 }
+
+#[tokio::test]
+async fn wake_word_stability_continuous_asr_idle_cpu_measurement_reports_diagnostics() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline = fake_pipeline(state).await;
+    let observation = Duration::from_secs(2);
+
+    tokio::time::sleep(observation).await;
+
+    let diagnostics = pipeline.diagnostics();
+    let continuous_asr_idle_cpu_percent = diagnostics
+        .average_cpu_utilization_percent
+        .expect("continuous ASR idle diagnostics should include CPU utilization");
+    assert!(continuous_asr_idle_cpu_percent.is_finite());
+    assert!(diagnostics.running);
+    assert_eq!(diagnostics.queue_depth, 0);
+    assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+    println!(
+        "WWR630_CONTINUOUS_ASR_IDLE_CPU continuous_asr_idle_cpu_percent={:.3} observation_ms={} queue_depth={} queue_capacity={} architecture={:?}",
+        continuous_asr_idle_cpu_percent,
+        observation.as_millis(),
+        diagnostics.queue_depth,
+        diagnostics.queue_capacity,
+        diagnostics.architecture
+    );
+
+    pipeline.stop_and_join().await.unwrap();
+}
