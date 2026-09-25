@@ -209,6 +209,7 @@ pub(crate) fn restart_native_wake_listener_thread_from_configured_app_state(
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn native_wake_listener_is_active() -> bool {
     native_wake_listener_slot().lock().is_some()
 }
