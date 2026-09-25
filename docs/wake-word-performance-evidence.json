@@ -82,6 +82,22 @@
         "final_phase": "Listening",
         "capacity_samples": 32000
       }
+    },
+    {
+      "metric": "wake_command_activation_timing",
+      "platform": "linux-x86_64",
+      "commit_sha": "659bfdd0ec065840bcbfa4d465251ead795153c9",
+      "runner": "GitHub Actions job 108108653014",
+      "measured_at": "github-actions",
+      "source": "Wake Word lifecycle stability run 36146435162 job 108108653014",
+      "metrics": {
+        "wake_to_command_asr_ms": 0,
+        "pre_roll_startup_ms": 0,
+        "command_start_ms": 0,
+        "total_activation_ms": 0,
+        "handoff_samples": 3200,
+        "ingress_samples": 3200
+      }
     }
   ],
   "measurements": []
