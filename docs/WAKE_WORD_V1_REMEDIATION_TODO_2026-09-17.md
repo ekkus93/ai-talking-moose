@@ -1,11 +1,11 @@
 # AI Talking Moose — Wake Word V1 Remediation TODO
 
-**Date:** 2026-09-17  
-**Final reconciliation:** 2026-09-25  
-**Status:** Closed on `master`  
-**Final master:** `99e216e13f78c1a0605684801d89dbd6b33ca7c9`  
-**Specification:** `docs/WAKE_WORD_V1_REMEDIATION_SPEC_2026-09-17.md`  
-**Original TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`  
+**Date:** 2026-09-17
+**Final reconciliation:** 2026-09-25
+**Status:** Closed on `master`
+**Final master:** `99e216e13f78c1a0605684801d89dbd6b33ca7c9`
+**Specification:** `docs/WAKE_WORD_V1_REMEDIATION_SPEC_2026-09-17.md`
+**Original TODO:** `docs/WAKE_WORD_V1_TODO_2026-09-14.md`
 **Review baseline:** `ai-talking-moose-wake-word-v1-code-review-2026-09-17.md`
 
 This document is the reconciled closeout state for Wake Word V1 remediation. The detailed historical checklist remains available in Git history before the final closeout reconciliation commit; this version records the objective final status, exact evidence, and final PR-head / merged-master gate evidence.
@@ -58,7 +58,8 @@ This document is the reconciled closeout state for Wake Word V1 remediation. The
 
 ## WWR-950 exact-head final qualification evidence
 
-**Final PR:** #460  
+**Final PR:** #460
+
 **Exact PR head:** `007859746292206734922ee2a1345d036f4f58fe`
 
 ### Diff / review
@@ -98,7 +99,8 @@ This document is the reconciled closeout state for Wake Word V1 remediation. The
 
 ## WWR-960 guarded merge and exact-master verification evidence
 
-**Guarded merge:** PR #460 squash-merged through Ralph Bridge with expected head `007859746292206734922ee2a1345d036f4f58fe`.  
+**Guarded merge:** PR #460 squash-merged through Ralph Bridge with expected head `007859746292206734922ee2a1345d036f4f58fe`.
+
 **Merged master:** `99e216e13f78c1a0605684801d89dbd6b33ca7c9`
 
 - [x] Rechecked exact head SHA immediately before merge through the guarded merge call.
