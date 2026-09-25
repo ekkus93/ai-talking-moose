@@ -66,5 +66,23 @@
       ]
     }
   ],
+  "cross_cutting_measurements": [
+    {
+      "metric": "repeated_cycle_resource_delta",
+      "platform": "linux-x86_64",
+      "commit_sha": "755d02b738742513419778043b524e8b94f9c340",
+      "runner": "GitHub Actions job 107931090203",
+      "measured_at": "github-actions",
+      "source": "Wake Word lifecycle stability run 36090294124 job 107931090203",
+      "metrics": {
+        "cycles": 100,
+        "ring_buffer_delta_samples": 0,
+        "handoff_pre_roll_delta_samples": 0,
+        "trigger_count_delta": 100,
+        "final_phase": "Listening",
+        "capacity_samples": 32000
+      }
+    }
+  ],
   "measurements": []
 }
