@@ -4,10 +4,10 @@ use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
-use crate::app::wake_word_command_lifecycle::{
-    resume_after_command_interaction, suspend_for_command_interaction,
+use crate::app::wake_word_command_lifecycle::resume_after_command_interaction;
+use crate::app::wake_word_state::{
+    restart_native_wake_listener_thread_from_configured_app_state, stop_native_wake_listener_thread,
 };
-use crate::app::wake_word_state::restart_native_wake_listener_thread_from_configured_app_state;
 #[cfg(test)]
 use crate::asr::AsrMode;
 use crate::character::prompt::PromptBuilder;
@@ -132,7 +132,12 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
     let wake_runtime = state.wake_word_runtime.clone();
-    let wake_guarded = suspend_for_command_interaction(&wake_runtime)?;
+    let wake_guarded = settings.wake_word_enabled;
+    if wake_guarded {
+        // This is an intentional command-ownership transfer, not a capture failure. The native
+        // listener thread must release the shared `AudioCapture` before normal command ASR starts.
+        stop_native_wake_listener_thread();
+    }
     state.ambient_scheduler.claim_foreground_presentation();
     prepare_character_for_conversation(state, &app)?;
     let provider = state.get_live_provider();
@@ -188,8 +193,6 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
                         lifecycle,
                         ConversationLifecycle::Idle | ConversationLifecycle::Failed
                     )
-                    && wake_runtime_for_lifecycle.phase()
-                        == WakeWordRuntimePhase::SuspendedTalking
                 {
                     let wake_word_enabled = settings_for_lifecycle.read().wake_word_enabled;
                     match resume_after_command_interaction(
@@ -251,7 +254,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     let session_id = match session_start {
         Ok(session_id) => session_id,
         Err(error_value) => {
-            if wake_guarded && wake_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
+            if wake_guarded {
                 let wake_word_enabled = state.settings.read().wake_word_enabled;
                 match resume_after_command_interaction(&wake_runtime, wake_word_enabled) {
                     Ok(()) => {
@@ -306,6 +309,11 @@ pub async fn stop_conversation(
     if state.wake_word_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
         let wake_word_enabled = state.settings.read().wake_word_enabled;
         resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
+    }
+    if state.settings.read().wake_word_enabled {
+        if let Err(error) = restart_native_wake_listener_thread_from_configured_app_state(&state) {
+            warn!(error = %error, "Failed to restart Wake Word listener after explicit stop");
+        }
     }
 
     state.ambient_scheduler.claim_foreground_presentation();
