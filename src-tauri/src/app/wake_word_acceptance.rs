@@ -350,7 +350,9 @@ fn measure_wake_command_activation_timing() -> Result<ActivationMeasurement, Str
         return Err("Wake command timing measurement delivered an unexpected sample count".to_string());
     }
     if ingress.accepted_bytes != HANDOFF_MEASUREMENT_SAMPLES.saturating_mul(2) {
-        return Err("Wake command timing measurement delivered an unexpected byte count".to_string());
+        return Err(
+            "Wake command timing measurement delivered an unexpected byte count".to_string(),
+        );
     }
     Ok(ActivationMeasurement {
         wake_to_command_asr_ms: timing.wake_to_command_asr_ms,
@@ -391,7 +393,10 @@ async fn measure_continuous_asr_idle_baseline_async() -> Result<ContinuousAsrMea
         .await
         .map_err(|error| error.message)?;
     let measurement = feed_continuous_asr_silence(&pipeline).await;
-    let stop_result = pipeline.stop_and_join().await.map_err(|error| error.message);
+    let stop_result = pipeline
+        .stop_and_join()
+        .await
+        .map_err(|error| error.message);
     match (measurement, stop_result) {
         (Ok(measurement), Ok(())) => Ok(measurement),
         (Err(error), _) => Err(error),
