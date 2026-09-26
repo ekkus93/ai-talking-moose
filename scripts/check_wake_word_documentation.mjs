@@ -48,7 +48,8 @@ const architectureRequirements = [
   "does not implement barge-in",
   "Component tests are **not** a substitute",
   "Linux x86_64 and macOS arm64 real-KWS acceptance passed",
-  "final closeout still depends on measured performance, documentation/source audits, original TODO reconciliation, and exact final qualification",
+  "post-closeout review reopened production integration requirements",
+  "WAKE_WORD_V1_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-25.md",
   "Wake Word V1 supports this handoff only for local Moonshine streaming command ASR",
   "Unsupported modes such as Gemini Live audio are rejected before listener startup or Wake enablement",
   "local Moonshine command-ASR ingress boundary for Wake-triggered handoff audio",
@@ -162,6 +163,28 @@ if (performance.status !== "accepted") {
 }
 if (!Array.isArray(performance.measurements) || performance.measurements.length !== 2) {
   fail("accepted performance report must contain both platform baselines");
+}
+
+const postCloseoutRequirements = [
+  [behavior, "post-closeout WPCR checklist"],
+  [architecture, "WAKE_WORD_V1_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-25.md"],
+  [gates, "post-closeout WPCR checklist"],
+];
+for (const [document, token] of postCloseoutRequirements) {
+  if (!document.includes(token)) {
+    fail(`post-closeout documentation is missing authoritative remediation reference: ${token}`);
+  }
+}
+
+const staleCloseoutPhrases = [
+  "remaining final closeout depends on WWR-900/910",
+  "final closeout still depends on measured performance, documentation/source audits, original TODO reconciliation",
+  "WWR-950/960 exact-head and exact-master final closeout are still pending",
+];
+for (const phrase of staleCloseoutPhrases) {
+  if (behavior.includes(phrase) || architecture.includes(phrase) || gates.includes(phrase)) {
+    fail(`stale pre-WPCR closeout claim remains: ${phrase}`);
+  }
 }
 
 const forbiddenClaims = [
