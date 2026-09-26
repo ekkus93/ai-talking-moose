@@ -111,7 +111,9 @@ describe("WakeWordSettingsPanel", () => {
     ).toBeInTheDocument();
     await waitForRuntimeDiagnostics();
     expect(screen.getByText(/listener: stopped/i)).toBeInTheDocument();
-    expect(screen.getByText(/listener ownership is stopped/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/listener ownership is stopped/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("No").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -138,10 +140,16 @@ describe("WakeWordSettingsPanel", () => {
 
     renderPanel(true);
 
-    expect(await screen.findByText(/runtime: listening locally/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/runtime: listening locally/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/listener: active locally/i)).toBeInTheDocument();
-    expect(screen.getByText(/microphone is active locally/i)).toBeInTheDocument();
-    expect(screen.getByText(/preference is enabled and listener ownership is active/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/microphone is active locally/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/preference is enabled and listener ownership is active/i),
+    ).toBeInTheDocument();
   });
 
   it("shows pending listener ownership without claiming active listening", async () => {
@@ -167,10 +175,16 @@ describe("WakeWordSettingsPanel", () => {
 
     renderPanel(true);
 
-    expect(await screen.findByText(/listener: pending until idle/i)).toBeInTheDocument();
-    expect(screen.getByText(/pending until the current conversation/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/preference is enabled, but listener ownership is not active yet/i),
+      await screen.findByText(/listener: pending until idle/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/pending until the current conversation/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /preference is enabled, but listener ownership is not active yet/i,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -198,9 +212,15 @@ describe("WakeWordSettingsPanel", () => {
 
     renderPanel(true);
 
-    expect(await screen.findByText(/listener: failed closed/i)).toBeInTheDocument();
-    expect(screen.getByText(/check local Moonshine ASR mode/i)).toBeInTheDocument();
-    expect(screen.queryByText(/\/tmp|users\/|appdata/i)).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/listener: failed closed/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/check local Moonshine ASR mode/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/\/tmp|users\/|appdata/i),
+    ).not.toBeInTheDocument();
   });
 
   it("persists the fixed phrase when enabling Wake Word", async () => {
