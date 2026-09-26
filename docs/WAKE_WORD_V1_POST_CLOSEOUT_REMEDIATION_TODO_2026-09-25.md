@@ -45,6 +45,8 @@
 
 ## WPCR-100 — Build one native listener control plane
 
+**Incremental evidence:** intentional listener shutdown/capture-close race fixed by PR #473 and merged as `dcc855cd16a89e37a6894ef217ba0532fc4f068b`; exact-master CI run `36235465363` passed. Shutdown evidence is recorded in `docs/evidence/WPCR-100_LISTENER_SHUTDOWN_2026-09-26.md`, merged by PR #474 as `9d0f6530eac3169500d573f1039c57aa25b4fb72`; exact-master CI run `36236017079` passed. Current source also keeps `NativeKwsSession` construction/use inside the dedicated listener thread and retains fail-closed startup/capture handling. Broader WPCR-100 control-plane/state requirements remain open.
+
 ### Tasks
 
 - [ ] Introduce one authoritative listener control boundary in `src-tauri/src/app/wake_word_state.rs` or a focused new module.
@@ -59,24 +61,24 @@
   - [ ] listener failed closed;
   - [ ] listener stopped.
 - [ ] Ensure runtime `Disabled` is never reported as proof that microphone capture is stopped unless the listener thread has actually stopped.
-- [ ] Make intentional listener shutdown distinct from capture failure.
-- [ ] Prevent intentional command-transfer shutdown from recording Wake `Error`.
-- [ ] Keep the native KWS session local to the listener thread.
-- [ ] Preserve fail-closed behavior for artifact, runtime, architecture, and capture failures.
+- [x] Make intentional listener shutdown distinct from capture failure.
+- [x] Prevent intentional command-transfer shutdown from recording Wake `Error`.
+- [x] Keep the native KWS session local to the listener thread.
+- [x] Preserve fail-closed behavior for artifact, runtime, architecture, and capture failures.
 - [ ] Add unit tests for listener state transitions without real audio hardware.
 
 ### Acceptance
 
 - [ ] There is one public/internal control API for listener lifecycle.
 - [ ] Existing direct lifecycle call sites are migrated or explicitly justified.
-- [ ] Tests prove intentional shutdown does not become a Wake error.
+- [x] Tests prove intentional shutdown does not become a Wake error.
 - [ ] Diagnostics cannot say Wake is disabled/listening incorrectly relative to listener ownership.
 
 ## WPCR-110 — Wire Settings enable/disable to real listener ownership
 
 ### Tasks
 
-- [ ] Update `apply_changed_runtime_preferences` so Wake setting changes call the listener control plane, not only `apply_enabled_setting`.
+- [x] Update `apply_changed_runtime_preferences` so Wake setting changes call the listener control plane, not only `apply_enabled_setting`.
 - [ ] Turning Wake on while idle starts the native listener when artifacts and selected policy are valid.
 - [ ] Turning Wake off stops the listener thread, releases capture, clears retained audio, and reports disabled only after the stop boundary is complete or safely in progress.
 - [ ] Settings rollback restores listener state as well as runtime phase and persisted values.
@@ -98,12 +100,12 @@
 
 ### Tasks
 
-- [ ] Detect input-device changes while Wake is enabled.
+- [x] Detect input-device changes while Wake is enabled.
 - [ ] Restart the listener on the new input device when idle.
 - [ ] If a conversation is active, record a pending restart and apply it at the terminal boundary.
 - [ ] If restart fails, fail Wake closed with sanitized status and keep manual interaction available.
-- [ ] Detect ASR-mode changes while Wake is enabled.
-- [ ] Enforce the selected WPCR-300 ASR policy when ASR mode changes.
+- [x] Detect ASR-mode changes while Wake is enabled.
+- [x] Enforce the selected WPCR-300 ASR policy when ASR mode changes.
 - [ ] Add tests for input-device restart.
 - [ ] Add tests for input-device restart failure.
 - [ ] Add tests for ASR mode change while Wake is enabled.
