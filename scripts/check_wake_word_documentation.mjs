@@ -12,6 +12,7 @@ const readme = read("README.md");
 const panel = read("src/components/Settings/WakeWordSettingsPanel.tsx");
 const runtimePreferences = read("src-tauri/src/app/runtime_preferences.rs");
 const wakeWordState = read("src-tauri/src/app/wake_word_state.rs");
+const artifacts = JSON.parse(read("wake-word-artifacts.json"));
 const performance = JSON.parse(read("docs/wake-word-performance-evidence.json"));
 
 const behaviorRequirements = [
@@ -27,6 +28,8 @@ const behaviorRequirements = [
   "WWR-630 accepted performance evidence",
   "Wake-triggered command activation is limited to local Moonshine streaming command ASR",
   "unsupported command ASR modes such as Gemini Live audio remain available to ordinary manual interaction",
+  "developer-prepared rather than clean-install user-ready",
+  "empty app data fails closed until artifacts are prepared and verified",
 ];
 for (const token of behaviorRequirements) {
   if (!behavior.toLowerCase().includes(token.toLowerCase())) {
@@ -49,6 +52,9 @@ const architectureRequirements = [
   "Wake Word V1 supports this handoff only for local Moonshine streaming command ASR",
   "Unsupported modes such as Gemini Live audio are rejected before listener startup or Wake enablement",
   "local Moonshine command-ASR ingress boundary for Wake-triggered handoff audio",
+  "selected provisioning model is developer-prepared",
+  "clean app-data install with missing model/runtime files must fail closed",
+  "app does not silently download Wake artifacts",
 ];
 for (const token of architectureRequirements) {
   if (!architecture.includes(token)) {
@@ -88,6 +94,8 @@ const uiRequirements = [
   "The microphone remains locally active while listening.",
   "Wake detection is not full-time cloud transcription.",
   "Wake-triggered commands require local Moonshine command ASR.",
+  "Wake model/runtime artifacts are developer-prepared; a clean install",
+  "fails closed until the pinned artifacts are prepared and verified.",
   "Wake Word V1 has no barge-in support while Moose talks.",
 ];
 for (const sentence of uiRequirements) {
@@ -111,6 +119,17 @@ for (const sentence of gateRequirements) {
   if (!gates.includes(sentence)) {
     fail(`CI gate documentation is missing truthfulness boundary: ${sentence}`);
   }
+}
+
+const provisioningPolicy = artifacts.policy ?? {};
+if (provisioningPolicy.provisioning_model !== "developer-prepared") {
+  fail("artifact manifest must record developer-prepared provisioning model");
+}
+if (provisioningPolicy.clean_install_behavior !== "fail-closed-until-prepared") {
+  fail("artifact manifest must record fail-closed clean-install behavior");
+}
+if (provisioningPolicy.silent_network_download !== false) {
+  fail("artifact manifest must reject silent app-startup artifact downloads");
 }
 
 const readmeMentionsWakeWord = /wake[- ]word/i.test(readme);
@@ -151,6 +170,8 @@ const forbiddenClaims = [
   /production acceptance (?:is )?complete/i,
   /wake-triggered commands? support(?:s)? gemini live audio/i,
   /wake word[^\n.]*provider-neutral command-asr/i,
+  /wake word[^\n.]*clean[- ]install user[- ]ready/i,
+  /wake word[^\n.]*silently downloads/i,
 ];
 for (const pattern of forbiddenClaims) {
   if (pattern.test(behavior) || pattern.test(architecture) || pattern.test(gates) || pattern.test(panel)) {
@@ -158,4 +179,4 @@ for (const pattern of forbiddenClaims) {
   }
 }
 
-console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, local-Moonshine Wake ASR policy, UI disclosures, README truthfulness boundary, gate boundaries, and accepted performance status are consistent.");
+console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, local-Moonshine Wake ASR policy, developer-prepared artifact provisioning, UI disclosures, README truthfulness boundary, gate boundaries, and accepted performance status are consistent.");

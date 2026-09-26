@@ -4,7 +4,10 @@
     "runtime_version": "v1.13.8",
     "model_family": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
     "verification": "size-and-sha256-required-before-use",
-    "production_mode": true
+    "production_mode": true,
+    "provisioning_model": "developer-prepared",
+    "clean_install_behavior": "fail-closed-until-prepared",
+    "silent_network_download": false
   },
   "artifacts": [
     {

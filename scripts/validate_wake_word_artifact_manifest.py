@@ -45,6 +45,12 @@ def validate(document: dict, *, production: bool) -> None:
     production_enabled = bool(policy.get("production_mode"))
     if production and not production_enabled:
         raise ManifestError("production validation requested but production_mode is disabled")
+    if policy.get("provisioning_model") != "developer-prepared":
+        raise ManifestError("Wake Word provisioning model must be developer-prepared")
+    if policy.get("clean_install_behavior") != "fail-closed-until-prepared":
+        raise ManifestError("Wake Word clean-install behavior must fail closed until prepared")
+    if policy.get("silent_network_download") is not False:
+        raise ManifestError("Wake Word app startup must not silently download artifacts")
 
     model_freezer = load_module(ROOT / "scripts/freeze_wake_word_model_identity.py", "model_freezer")
     runtime_freezer = load_module(ROOT / "scripts/freeze_wake_word_runtime_identity.py", "runtime_freezer")

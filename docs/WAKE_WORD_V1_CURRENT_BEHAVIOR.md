@@ -24,6 +24,7 @@ Wake Word V1 is a local keyword-spotting feature for the fixed phrase **`Hey, Mo
 - Settings blocks Wake enablement when the selected command ASR mode is unsupported for Wake-triggered command activation.
 - ASR-mode changes while Wake is enabled are re-evaluated at the listener boundary so unsupported modes cannot leave Wake in a misleading listening state.
 - Wake runtime changes are reversible with the other runtime preferences if a later preference side effect or persistence step fails.
+- Settings discloses that Wake artifacts are developer-prepared and that a clean install fails closed until pinned artifacts are prepared and verified.
 - When Wake Word is disabled, manual listen/start behavior remains available.
 
 ## Local/offline microphone behavior
@@ -34,6 +35,7 @@ V1 disclosure requirements:
 
 - The microphone may remain locally active while listening for the wake phrase.
 - Wake-triggered commands require local Moonshine command ASR in Wake Word V1.
+- Wake model/runtime artifacts are developer-prepared; clean installs fail closed until pinned artifacts are prepared and verified.
 - The wake phrase and immediate spoken command may enter the local Moonshine command ASR path after a trigger.
 - Raw Wake Word PCM is retained only in bounded in-memory ring/pre-roll buffers.
 - Wake Word diagnostics do not serialize or expose raw PCM.
@@ -61,6 +63,8 @@ The production KWS policy is frozen to 16 kHz mono, feature dimension 80, one in
 
 Model/runtime identity and provenance are recorded in `wake-word-artifacts.json`, `docs/evidence/WWR-100_MODEL_IDENTITY_2026-09-17.md`, `docs/evidence/WWR-110_SHERPA_RUNTIME_IDENTITY_2026-09-17.md`, and `docs/licenses/SHERPA_ONNX_RUNTIME_NOTICE.md`.
 
+The selected artifact provisioning model is developer-prepared. `wake-word-artifacts.json` records `provisioning_model: developer-prepared`, `clean_install_behavior: fail-closed-until-prepared`, and `silent_network_download: false`. Runtime preparation is an explicit developer action through `scripts/prepare_wake_word_runtime.py`; model identity freezing is performed by `scripts/freeze_wake_word_model_identity.py`. App startup and listener enablement must verify prepared files and fail closed when the app-data model/runtime directories are empty or corrupt.
+
 Runtime and model licensing are tracked separately. The pinned sherpa-onnx runtime is Apache-2.0. The selected GigaSpeech KWS model provenance/license evidence is documented in the artifact manifest and WWR-100 evidence.
 
 ## Diagnostics and troubleshooting
@@ -80,6 +84,7 @@ Linux x86_64 and macOS arm64 real native KWS acceptance have passed on exact mer
 Current limitations:
 
 - Wake Word V1 is local-Moonshine-only for Wake-triggered command ASR.
+- Wake Word V1 remains developer-prepared rather than clean-install user-ready; empty app data fails closed until artifacts are prepared and verified.
 - WWR-910 original TODO reconciliation has a merged evidence matrix, but final reconciliation cannot close until WWR-630 and WWR-950/960 are complete.
 - WWR-950/960 exact-head and exact-master final closeout are still pending.
 

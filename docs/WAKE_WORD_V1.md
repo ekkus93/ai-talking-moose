@@ -16,6 +16,12 @@ Wake-triggered command ASR is explicitly limited to local Moonshine streaming mo
 
 The exact model and native-runtime identities are defined by `wake-word-artifacts.json`. Preparation and loading are fail-closed: required files are checked against frozen byte sizes and SHA-256 identities, and native libraries are architecture-checked before use. Runtime and model licensing/provenance are recorded separately in `docs/evidence/WWR-100_MODEL_IDENTITY_2026-09-17.md`, `docs/evidence/WWR-110_SHERPA_RUNTIME_IDENTITY_2026-09-17.md`, and the repository license notices.
 
+## Artifact provisioning
+
+The selected WPCR-400 provisioning model is **developer-prepared artifacts**. Wake Word V1 is not clean-install user-ready: an empty app-data directory without the pinned model/runtime files must fail closed until artifacts are prepared and verified. The app must not silently download Wake artifacts during startup or listener enablement.
+
+Developers prepare the pinned runtime with `python3 scripts/prepare_wake_word_runtime.py --root <app-data-root> --platform <linux-x86_64|macos-arm64> --archive <approved-runtime-archive>`. Model identities are frozen and audited with `python3 scripts/freeze_wake_word_model_identity.py --output <identity-json>`, and the prepared app-data model directory must contain the exact consumed files and keyword artifact recorded in `wake-word-artifacts.json`. Listener startup then re-verifies the prepared model/runtime files before reporting `Listening`.
+
 ## Audio ownership and privacy
 
 Wake Word uses the same authoritative `AppState::audio_capture` object used by normal microphone interaction. Canonical Wake PCM is routed chronologically to both the bounded ring buffer and KWS. On a trigger, the handoff path preserves the chronological pre-roll plus subsequent live PCM so local Moonshine command ASR can receive the wake phrase and immediate command without intentionally trimming `Hey, Moose`.
@@ -32,13 +38,13 @@ These lifecycle rules describe the required and implemented state-machine policy
 
 ## Settings and user-visible behavior
 
-Settings exposes an **Enable wake word** toggle and the fixed phrase `Hey, Moose`. The UI explains that keyword spotting is local/offline, that the microphone remains locally active while Wake Word is listening, and that Wake-triggered commands require local Moonshine command ASR. The runtime status is reported as loading, listening, suspended, disabled, or error using sanitized user-facing error text. Disabling Wake Word preserves normal manual-listen behavior.
+Settings exposes an **Enable wake word** toggle and the fixed phrase `Hey, Moose`. The UI explains that keyword spotting is local/offline, that the microphone remains locally active while Wake Word is listening, that Wake-triggered commands require local Moonshine command ASR, and that Wake model/runtime artifacts are developer-prepared rather than clean-install ready. The runtime status is reported as loading, listening, suspended, disabled, or error using sanitized user-facing error text. Disabling Wake Word preserves normal manual-listen behavior.
 
 ## Diagnostics and troubleshooting
 
 Wake diagnostics expose privacy-safe state needed to diagnose initialization and lifecycle problems: enabled/runtime state, model/runtime identity, platform/architecture, canonical audio policy, ring capacity, threshold/score, trigger count and approved trigger timing, initialization timing, Talking suspension, and sanitized last error. Raw audio, credentials, and unnecessary absolute filesystem paths are not diagnostic payloads.
 
-If Wake Word cannot initialize, first verify the pinned model/runtime artifacts, selected local Moonshine command ASR mode, and platform architecture rather than bypassing identity checks. Artifact verification failures and unsupported ASR-mode failures are intentional fail-closed behavior. A capture/device failure moves Wake to a recoverable error state; recovery must reuse the authoritative application capture owner rather than opening a second microphone stream.
+If Wake Word cannot initialize, first verify the pinned model/runtime artifacts, selected local Moonshine command ASR mode, and platform architecture rather than bypassing identity checks. Artifact verification failures, missing clean-install artifacts, and unsupported ASR-mode failures are intentional fail-closed behavior. A capture/device failure moves Wake to a recoverable error state; recovery must reuse the authoritative application capture owner rather than opening a second microphone stream.
 
 ## Supported-platform claims
 
@@ -46,4 +52,4 @@ The manifest currently contains pinned native runtime identities for Linux x86_6
 
 ## Developer references
 
-The remediation specification is `docs/WAKE_WORD_V1_REMEDIATION_SPEC_2026-09-17.md` and the live qualification queue is `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`. Architecture consolidation evidence is in `docs/evidence/WWR-020_WAKE_WORD_ARCHITECTURE_CONSOLIDATION_2026-09-17.md`; capture ownership/routing evidence is in the WWR-300 evidence files; handoff evidence is `docs/evidence/WWR-310_HANDOFF_BOUNDARY_2026-09-22.md`; diagnostics/privacy evidence is linked from WWR-510 in the remediation TODO.
+The remediation specification is `docs/WAKE_WORD_V1_REMEDIATION_SPEC_2026-09-17.md` and the live qualification queue is `docs/WAKE_WORD_V1_REMEDIATION_TODO_2026-09-17.md`. Architecture consolidation evidence is in `docs/evidence/WWR-020_WAKE_WORD_ARCHITECTURE_CONSOLIDATION_2026-09-17.md`; capture ownership/routing evidence is in the WWR-300 evidence files; handoff evidence is `docs/evidence/WWR-310_HANDOFF_BOUNDARY_2026-09-22.md`; diagnostics/privacy evidence is linked from WWR-510 in the remediation TODO; WPCR-400 provisioning evidence is `docs/evidence/WPCR-400_ARTIFACT_PROVISIONING_MODEL_2026-09-25.md`.

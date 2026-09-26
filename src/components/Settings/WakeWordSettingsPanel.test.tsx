@@ -62,6 +62,8 @@ describe("WakeWordSettingsPanel", () => {
     expect(
       screen.getByText(/local Moonshine command ASR/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/developer-prepared/i)).toBeInTheDocument();
+    expect(screen.getByText(/clean install fails closed/i)).toBeInTheDocument();
     expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
     expect(
       screen.getByText("Disabled — manual start remains available."),
@@ -79,7 +81,7 @@ describe("WakeWordSettingsPanel", () => {
     expect(wakeToggle()).toBeChecked();
     expect(
       screen.getByText(
-        "Enabled — runtime starts when local KWS artifacts, local Moonshine ASR policy, and lifecycle state permit.",
+        "Enabled — runtime starts only after developer-prepared local KWS artifacts, local Moonshine ASR policy, and lifecycle state permit.",
       ),
     ).toBeInTheDocument();
   });

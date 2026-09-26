@@ -15,6 +15,12 @@ wake_runtime = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(wake_runtime)
 
+VALIDATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "validate_wake_word_artifact_manifest.py"
+VALIDATE_SPEC = importlib.util.spec_from_file_location("wake_manifest_validator", VALIDATE_SCRIPT)
+wake_manifest_validator = importlib.util.module_from_spec(VALIDATE_SPEC)
+assert VALIDATE_SPEC.loader is not None
+VALIDATE_SPEC.loader.exec_module(wake_manifest_validator)
+
 
 def ident(data: bytes) -> dict:
     return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
@@ -69,6 +75,23 @@ class WakeRuntimeArtifactsTests(unittest.TestCase):
             self.assertEqual(target, root / "out" / "runtime/test")
             self.assertTrue((target / "native/libwake.so").is_file())
             self.assertEqual(wake_runtime.verify_installed(root / "out", "test", runtime["platforms"]["test"]), target)
+
+    def test_clean_app_data_without_prepared_runtime_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            data = elf_x86_64()
+            archive = self.make_archive(root, "native/libwake.so", data)
+            runtime = synthetic_runtime("elf-x86_64", data, archive)
+            with self.assertRaisesRegex(wake_runtime.RuntimePreparationError, "missing required"):
+                wake_runtime.verify_installed(root / "empty-app-data", "test", runtime["platforms"]["test"])
+
+    def test_manifest_records_developer_prepared_clean_install_policy(self):
+        manifest = json.loads((Path(__file__).resolve().parents[1] / "wake-word-artifacts.json").read_text())
+        policy = manifest["policy"]
+        self.assertEqual(policy["provisioning_model"], "developer-prepared")
+        self.assertEqual(policy["clean_install_behavior"], "fail-closed-until-prepared")
+        self.assertIs(policy["silent_network_download"], False)
+        wake_manifest_validator.validate(manifest, production=True)
 
     def test_wrong_architecture_fails(self):
         with tempfile.TemporaryDirectory() as td:
