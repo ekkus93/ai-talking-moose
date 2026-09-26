@@ -223,9 +223,12 @@ export const WakeWordSettingsPanel: React.FC = () => {
           className="text-green-800 flex gap-1 items-center text-[11px]"
           aria-live="polite"
         >
-          <CheckCircle className="w-3.5 h-3.5" /> Wake Word preference is
-          enabled. Runtime availability still depends on developer-prepared local
-          KWS artifacts, local Moonshine command ASR policy, and lifecycle state.
+          <CheckCircle className="w-3.5 h-3.5" />
+          <span>
+            Wake Word preference is enabled. Runtime availability still depends
+            on developer-prepared local KWS artifacts, local Moonshine command
+            ASR policy, and lifecycle state.
+          </span>
         </div>
       )}
     </div>
