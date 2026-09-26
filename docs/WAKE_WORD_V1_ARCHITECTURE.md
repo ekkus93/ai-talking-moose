@@ -10,7 +10,7 @@ The canonical Wake input is 16 kHz mono PCM. `CanonicalWakePcmRouter` validates 
 
 ## Native KWS
 
-Production KWS uses the pinned sherpa-onnx runtime and model identities in `wake-word-artifacts.json`. Artifact preparation verifies byte sizes, SHA-256 identities, and native architecture before use and fails closed on mismatch. The fixed V1 policy is one inference thread, score `1.0`, threshold `0.25`, and a two-second pre-roll. The KWS engine performs keyword spotting only; it is not a full-time transcription path.
+Production KWS uses the pinned sherpa-onnx runtime and model identities in `wake-word-artifacts.json`. Artifact preparation verifies byte sizes, SHA-256 identities, and native architecture before use and fails closed on mismatch. The selected provisioning model is developer-prepared: a clean app-data install with missing model/runtime files must fail closed until the pinned artifacts are explicitly prepared and verified. The app does not silently download Wake artifacts during startup or listener enablement. The fixed V1 policy is one inference thread, score `1.0`, threshold `0.25`, and a two-second pre-roll. The KWS engine performs keyword spotting only; it is not a full-time transcription path.
 
 Component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 real-KWS acceptance passed on exact merged-master evidence, but final closeout still depends on measured performance, documentation/source audits, original TODO reconciliation, and exact final qualification. Wake Word V1 remains under qualification rather than fully accepted production functionality until those final sections close.
 
@@ -43,7 +43,7 @@ Deterministic lifecycle acceptance now covers repeated wake→ASR→Thinking→T
 
 Wake diagnostics expose state and bounded metadata such as enabled/runtime phase, model/runtime identity, platform/architecture, fixed policy, ring capacity, trigger count/timing, initialization timing, and sanitized errors. They must not expose raw PCM, audio content, credentials, or unnecessary absolute paths.
 
-The microphone remains locally active while Wake is enabled and listening. This behavior is disclosed in Settings. Normal idle Wake inference has no network dependency after verified artifacts are prepared. Wake-triggered commands use local Moonshine command ASR in V1; cloud command-ASR providers such as Gemini Live audio are manual-interaction choices, not Wake-triggered command-ASR targets.
+The microphone remains locally active while Wake is enabled and listening. This behavior is disclosed in Settings. Normal idle Wake inference has no network dependency after verified artifacts are prepared. Wake-triggered commands use local Moonshine command ASR in V1; cloud command-ASR providers such as Gemini Live audio are manual-interaction choices, not Wake-triggered command-ASR targets. Missing clean-install artifacts are reported as fail-closed availability errors, not as a listening state.
 
 ## Source map
 
@@ -58,4 +58,4 @@ The microphone remains locally active while Wake is enabled and listening. This 
 - `src-tauri/src/app/wake_word/` and `src-tauri/src/app/wake_word_engine.rs` — runtime state and native sherpa KWS implementation.
 - `src-tauri/src/app/wake_word_state.rs` — native listener thread control and Wake V1 command-ASR policy enforcement.
 - `src-tauri/src/asr/pipeline.rs` — existing Moonshine command-ASR pipeline and Wake handoff ingress.
-- `wake-word-artifacts.json` — authoritative immutable model/runtime identities.
+- `wake-word-artifacts.json` — authoritative immutable model/runtime identities and developer-prepared provisioning policy.

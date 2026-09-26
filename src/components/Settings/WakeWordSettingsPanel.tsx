@@ -64,7 +64,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
   const phase = diagnostics?.runtime_phase ?? "disabled";
   const enabled = settings.wake_word_enabled;
   const preferenceStatus = enabled
-    ? "Enabled — runtime starts when local KWS artifacts, local Moonshine ASR policy, and lifecycle state permit."
+    ? "Enabled — runtime starts only after developer-prepared local KWS artifacts, local Moonshine ASR policy, and lifecycle state permit."
     : "Disabled — manual start remains available.";
 
   const setEnabled = async (nextEnabled: boolean) => {
@@ -150,6 +150,10 @@ export const WakeWordSettingsPanel: React.FC = () => {
         <p>The microphone remains locally active while listening.</p>
         <p>Wake detection is not full-time cloud transcription.</p>
         <p>Wake-triggered commands require local Moonshine command ASR.</p>
+        <p>
+          Wake model/runtime artifacts are developer-prepared; a clean install
+          fails closed until the pinned artifacts are prepared and verified.
+        </p>
         <p>Wake Word V1 has no barge-in support while Moose talks.</p>
         <p>
           Manual start remains available. Existing command ASR still starts only
@@ -219,9 +223,12 @@ export const WakeWordSettingsPanel: React.FC = () => {
           className="text-green-800 flex gap-1 items-center text-[11px]"
           aria-live="polite"
         >
-          <CheckCircle className="w-3.5 h-3.5" /> Wake Word preference is
-          enabled. Runtime availability still depends on the verified local KWS
-          artifacts, local Moonshine command ASR policy, and lifecycle state.
+          <CheckCircle className="w-3.5 h-3.5" />
+          <span>
+            Wake Word preference is enabled. Runtime availability still depends
+            on developer-prepared local KWS artifacts, local Moonshine command
+            ASR policy, and lifecycle state.
+          </span>
         </div>
       )}
     </div>
