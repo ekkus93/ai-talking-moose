@@ -162,7 +162,12 @@ mod tests {
         };
 
         assert_eq!(
-            classify_native_listener_status_parts(settings, WakeWordRuntimePhase::Loading, false, true),
+            classify_native_listener_status_parts(
+                settings,
+                WakeWordRuntimePhase::Loading,
+                false,
+                true,
+            ),
             WakeWordListenerStatus::PendingUntilIdle
         );
     }
@@ -176,7 +181,12 @@ mod tests {
         };
 
         assert_eq!(
-            classify_native_listener_status_parts(settings, WakeWordRuntimePhase::Loading, false, false),
+            classify_native_listener_status_parts(
+                settings,
+                WakeWordRuntimePhase::Loading,
+                false,
+                false,
+            ),
             WakeWordListenerStatus::FailedClosed
         );
     }
@@ -198,7 +208,10 @@ mod tests {
         );
 
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Error);
-        assert_eq!(diagnostics.listener_status, WakeWordListenerStatus::FailedClosed);
+        assert_eq!(
+            diagnostics.listener_status,
+            WakeWordListenerStatus::FailedClosed
+        );
         assert!(!diagnostics.listener_active);
         assert!(!diagnostics.listening);
         assert_eq!(

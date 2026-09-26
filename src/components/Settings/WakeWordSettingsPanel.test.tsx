@@ -111,9 +111,7 @@ describe("WakeWordSettingsPanel", () => {
     ).toBeInTheDocument();
     await waitForRuntimeDiagnostics();
     expect(screen.getByText(/listener: stopped/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/listener ownership is stopped/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/listener ownership is stopped/i)).toBeInTheDocument();
     expect(screen.getAllByText("No").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -132,7 +130,10 @@ describe("WakeWordSettingsPanel", () => {
       return (
         window as unknown as {
           __TAURI_INTERNALS__: {
-            invoke: (command: string, commandArgs?: unknown) => Promise<unknown>;
+            invoke: (
+              command: string,
+              commandArgs?: unknown,
+            ) => Promise<unknown>;
           };
         }
       ).__TAURI_INTERNALS__.invoke(cmd, args as Record<string, unknown>);
@@ -148,7 +149,9 @@ describe("WakeWordSettingsPanel", () => {
       screen.getByText(/microphone is active locally/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/preference is enabled and listener ownership is active/i),
+      screen.getByText(
+        /preference is enabled and listener ownership is active/i,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -167,7 +170,10 @@ describe("WakeWordSettingsPanel", () => {
       return (
         window as unknown as {
           __TAURI_INTERNALS__: {
-            invoke: (command: string, commandArgs?: unknown) => Promise<unknown>;
+            invoke: (
+              command: string,
+              commandArgs?: unknown,
+            ) => Promise<unknown>;
           };
         }
       ).__TAURI_INTERNALS__.invoke(cmd, args as Record<string, unknown>);
@@ -204,7 +210,10 @@ describe("WakeWordSettingsPanel", () => {
       return (
         window as unknown as {
           __TAURI_INTERNALS__: {
-            invoke: (command: string, commandArgs?: unknown) => Promise<unknown>;
+            invoke: (
+              command: string,
+              commandArgs?: unknown,
+            ) => Promise<unknown>;
           };
         }
       ).__TAURI_INTERNALS__.invoke(cmd, args as Record<string, unknown>);
@@ -218,9 +227,7 @@ describe("WakeWordSettingsPanel", () => {
     expect(
       screen.getByText(/check local Moonshine ASR mode/i),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/\/tmp|users\/|appdata/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/tmp|users\/|appdata/i)).not.toBeInTheDocument();
   });
 
   it("persists the fixed phrase when enabling Wake Word", async () => {
