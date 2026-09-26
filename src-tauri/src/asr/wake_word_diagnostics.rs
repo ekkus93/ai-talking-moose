@@ -18,6 +18,24 @@ pub const WAKE_WORD_RUNTIME_LINUX_X86_64_C_API_SHA256: &str =
 pub const WAKE_WORD_RUNTIME_MACOS_ARM64_C_API_SHA256: &str =
     "ee098d8b419d49b92101cde3c970a333b361066eb2d79a11ab480a116552b908";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WakeWordListenerStatus {
+    Stopped,
+    Starting,
+    Active,
+    PendingUntilIdle,
+    SuspendedForCommand,
+    FailedClosed,
+    ShuttingDown,
+}
+
+impl WakeWordListenerStatus {
+    pub fn active(self) -> bool {
+        matches!(self, Self::Active)
+    }
+}
+
 /// Privacy-safe Wake Word V1 runtime diagnostics.
 ///
 /// This intentionally exposes only bounded counters, fixed configuration,
@@ -28,6 +46,9 @@ pub const WAKE_WORD_RUNTIME_MACOS_ARM64_C_API_SHA256: &str =
 pub struct WakeWordDiagnostics {
     pub enabled: bool,
     pub runtime_phase: WakeWordRuntimePhase,
+    pub listener_status: WakeWordListenerStatus,
+    pub listener_active: bool,
+    pub listening: bool,
     pub engine_id: &'static str,
     pub model_id: &'static str,
     pub model_archive_sha256: &'static str,
@@ -61,12 +82,23 @@ pub struct WakeWordDiagnostics {
 
 impl WakeWordDiagnostics {
     pub fn from_runtime(snapshot: &WakeWordRuntimeSnapshot) -> Self {
+        Self::from_runtime_and_listener(snapshot, WakeWordListenerStatus::Stopped)
+    }
+
+    pub fn from_runtime_and_listener(
+        snapshot: &WakeWordRuntimeSnapshot,
+        listener_status: WakeWordListenerStatus,
+    ) -> Self {
+        let listener_active = listener_status.active();
         Self {
             enabled: !matches!(
                 snapshot.phase,
                 WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::ShuttingDown
             ),
             runtime_phase: snapshot.phase,
+            listener_status,
+            listener_active,
+            listening: listener_active && snapshot.phase == WakeWordRuntimePhase::Listening,
             engine_id: WAKE_WORD_ENGINE_ID,
             model_id: V1_SHERPA_KWS_MODEL_MANIFEST.id,
             model_archive_sha256: V1_SHERPA_KWS_MODEL_MANIFEST.archive_sha256,
@@ -139,6 +171,9 @@ mod tests {
 
         assert!(!diagnostics.enabled);
         assert_eq!(diagnostics.runtime_phase, WakeWordRuntimePhase::Disabled);
+        assert_eq!(diagnostics.listener_status, WakeWordListenerStatus::Stopped);
+        assert!(!diagnostics.listener_active);
+        assert!(!diagnostics.listening);
         assert_eq!(diagnostics.engine_id, "sherpa-onnx-kws");
         assert_eq!(diagnostics.model_id, V1_SHERPA_KWS_MODEL_MANIFEST.id);
         assert_eq!(
@@ -174,6 +209,28 @@ mod tests {
         assert!(!json.contains("transcript"));
         assert!(!json.contains("credential"));
         assert!(!json.contains("path"));
+    }
+
+    #[test]
+    fn listener_status_distinguishes_runtime_phase_from_physical_listener() {
+        let manager = WakeWordRuntimeManager::new();
+        manager.begin_enable().unwrap();
+        manager.mark_loaded().unwrap();
+
+        let inactive = WakeWordDiagnostics::from_runtime(&manager.snapshot(Instant::now()));
+        assert_eq!(inactive.runtime_phase, WakeWordRuntimePhase::Listening);
+        assert_eq!(inactive.listener_status, WakeWordListenerStatus::Stopped);
+        assert!(!inactive.listener_active);
+        assert!(!inactive.listening);
+
+        let active = WakeWordDiagnostics::from_runtime_and_listener(
+            &manager.snapshot(Instant::now()),
+            WakeWordListenerStatus::Active,
+        );
+        assert_eq!(active.runtime_phase, WakeWordRuntimePhase::Listening);
+        assert_eq!(active.listener_status, WakeWordListenerStatus::Active);
+        assert!(active.listener_active);
+        assert!(active.listening);
     }
 
     #[test]
