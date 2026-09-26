@@ -170,7 +170,7 @@ const forbiddenClaims = [
   /production acceptance (?:is )?complete/i,
   /wake-triggered commands? support(?:s)? gemini live audio/i,
   /wake word[^\n.]*provider-neutral command-asr/i,
-  /wake word[^\n.]*clean[- ]install user[- ]ready/i,
+  /wake word[^\n.]*automatic clean[- ]install provisioning/i,
   /wake word[^\n.]*silently downloads/i,
 ];
 for (const pattern of forbiddenClaims) {
