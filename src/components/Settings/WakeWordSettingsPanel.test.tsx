@@ -58,13 +58,11 @@ const mockWakeDiagnosticsResponse = (diagnostics: WakeWordDiagnostics) => {
   if (!defaultInvoke) {
     throw new Error("Tauri invoke test fixture is missing its default implementation");
   }
-  vi.mocked(invoke).mockImplementation(
-    async (cmd: string, args?: Record<string, unknown>) => {
-      if (cmd === "get_wake_word_diagnostics") return diagnostics;
-      if (cmd === "update_settings") return undefined;
-      return defaultInvoke(cmd, args);
-    },
-  );
+  vi.mocked(invoke).mockImplementation(async (cmd, args, options) => {
+    if (cmd === "get_wake_word_diagnostics") return diagnostics;
+    if (cmd === "update_settings") return undefined;
+    return defaultInvoke(cmd, args, options);
+  });
 };
 
 const renderPanel = (wakeWordEnabled = false) => {
