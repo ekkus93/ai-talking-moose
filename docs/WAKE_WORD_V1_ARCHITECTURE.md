@@ -18,7 +18,9 @@ Component tests are **not** a substitute for native-platform qualification. Linu
 
 On an accepted trigger, the runtime snapshots pre-roll chronologically and retains subsequent live canonical samples while command ASR initializes. Transfer is single-use. Wake capture stops on the shared `AudioCapture` before normal command capture replaces it, so Wake and command ASR do not open competing microphone streams.
 
-V1 deliberately does **not** acoustically trim the wake phrase. The handoff therefore may contain both “Hey, Moose” and the immediately following command, and that wake phrase plus prompt may reach the selected command ASR. The existing Moonshine command-ASR ingress accepts the handoff before subsequent live microphone PCM so the boundary can remain gap-free and ordered.
+Wake Word V1 supports this handoff only for local Moonshine streaming command ASR. `MoonshineTinyStreaming` and `MoonshineSmallStreaming` are the supported Wake-triggered command-ASR modes. Unsupported modes such as Gemini Live audio are rejected before listener startup or Wake enablement, and an ASR-mode change while Wake is enabled re-enters the same listener-control boundary instead of letting Wake continue in a misleading listening state.
+
+V1 deliberately does **not** acoustically trim the wake phrase. The handoff therefore may contain both “Hey, Moose” and the immediately following command. The Moonshine command-ASR ingress accepts the handoff before subsequent live microphone PCM so the boundary can remain gap-free and ordered.
 
 The handoff is memory-only. Raw Wake PCM is not written to diagnostics or logs, and the ring/pre-roll is cleared at lifecycle boundaries that invalidate retained audio.
 
@@ -27,11 +29,11 @@ The handoff is memory-only. Raw Wake PCM is not written to diagnostics or logs, 
 The integrated lifecycle is:
 
 1. Disabled setting → `Disabled`; manual interaction remains available.
-2. Enabled startup → `Loading` while verified native KWS resources are prepared.
+2. Enabled startup → `Loading` while verified native KWS resources and the selected local Moonshine command-ASR policy are prepared.
 3. Successful preparation and eligible idle state → `Listening`.
 4. One accepted trigger → one normal command interaction, with Wake activation suspended before command ASR owns the microphone.
 5. Thinking/Talking/TTS keep Wake activation suspended. V1 does not implement barge-in.
-6. Terminal command/TTS success, cancellation, or recoverable failure clears stale retained audio, resets KWS state where required, and returns to `Listening` only if Wake is still enabled.
+6. Terminal command/TTS success, cancellation, or recoverable failure clears stale retained audio, resets KWS state where required, and returns to `Listening` only if Wake is still enabled and the selected command ASR remains supported for Wake V1.
 7. If Wake is disabled during an interaction, terminal resolution ends in `Disabled`, never an unconditional resume.
 8. Wake-specific runtime/capture failure fails Wake closed without preventing the ordinary manual interaction path.
 
@@ -41,7 +43,7 @@ Deterministic lifecycle acceptance now covers repeated wake→ASR→Thinking→T
 
 Wake diagnostics expose state and bounded metadata such as enabled/runtime phase, model/runtime identity, platform/architecture, fixed policy, ring capacity, trigger count/timing, initialization timing, and sanitized errors. They must not expose raw PCM, audio content, credentials, or unnecessary absolute paths.
 
-The microphone remains locally active while Wake is enabled and listening. This behavior is disclosed in Settings. Normal inference has no network dependency after verified artifacts are prepared.
+The microphone remains locally active while Wake is enabled and listening. This behavior is disclosed in Settings. Normal idle Wake inference has no network dependency after verified artifacts are prepared. Wake-triggered commands use local Moonshine command ASR in V1; cloud command-ASR providers such as Gemini Live audio are manual-interaction choices, not Wake-triggered command-ASR targets.
 
 ## Source map
 
@@ -50,9 +52,10 @@ The microphone remains locally active while Wake is enabled and listening. This 
 - `src-tauri/src/app/wake_word_authoritative_capture.rs` — serialized use of the shared `AudioCapture`.
 - `src-tauri/src/app/wake_word_pcm_router.rs` — canonical PCM routing, pre-roll, trigger/live handoff ordering.
 - `src-tauri/src/app/wake_word_command_handoff.rs` — owned single-use handoff audio.
-- `src-tauri/src/app/wake_word_command_asr_ingress.rs` — provider-neutral command-ASR ingress boundary.
+- `src-tauri/src/app/wake_word_command_asr_ingress.rs` — local Moonshine command-ASR ingress boundary for Wake-triggered handoff audio.
 - `src-tauri/src/app/wake_word_command_activation.rs` — one-shot command activation boundary.
 - `src-tauri/src/app/wake_word_command_lifecycle.rs` — suspend/resume lifecycle policy.
 - `src-tauri/src/app/wake_word/` and `src-tauri/src/app/wake_word_engine.rs` — runtime state and native sherpa KWS implementation.
+- `src-tauri/src/app/wake_word_state.rs` — native listener thread control and Wake V1 command-ASR policy enforcement.
 - `src-tauri/src/asr/pipeline.rs` — existing Moonshine command-ASR pipeline and Wake handoff ingress.
 - `wake-word-artifacts.json` — authoritative immutable model/runtime identities.
