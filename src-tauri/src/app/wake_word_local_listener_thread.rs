@@ -264,13 +264,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(matches!(
-            terminal,
-            WakeLocalListenerEvent::Stopped | WakeLocalListenerEvent::CaptureFailed(_)
-        ));
-        assert!(matches!(
-            runtime.phase(),
-            WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::Error
-        ));
+        assert_eq!(terminal, WakeLocalListenerEvent::Stopped);
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
     }
 }
