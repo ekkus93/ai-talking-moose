@@ -252,13 +252,13 @@ mod tests {
         )
         .unwrap();
 
+        handle.shutdown().unwrap();
+
         let started = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
             .await
             .unwrap()
             .unwrap();
         assert_eq!(started, WakeLocalListenerEvent::Started);
-
-        handle.shutdown().unwrap();
 
         let terminal = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
             .await
