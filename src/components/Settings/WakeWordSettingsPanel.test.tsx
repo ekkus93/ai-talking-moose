@@ -59,7 +59,9 @@ describe("WakeWordSettingsPanel", () => {
     expect(screen.getByText(/local\/offline keyword/i)).toBeInTheDocument();
     expect(screen.getByText(/locally active/i)).toBeInTheDocument();
     expect(screen.getByText(/not full-time cloud/i)).toBeInTheDocument();
-    expect(screen.getByText(/local Moonshine command ASR/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/local Moonshine command ASR/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
     expect(
       screen.getByText("Disabled — manual start remains available."),
