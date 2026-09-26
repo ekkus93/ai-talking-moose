@@ -53,6 +53,20 @@ const wakeDiagnostics = (
   ...patch,
 });
 
+const mockWakeDiagnosticsResponse = (diagnostics: WakeWordDiagnostics) => {
+  const defaultInvoke = vi.mocked(invoke).getMockImplementation();
+  if (!defaultInvoke) {
+    throw new Error("Tauri invoke test fixture is missing its default implementation");
+  }
+  vi.mocked(invoke).mockImplementation(
+    async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "get_wake_word_diagnostics") return diagnostics;
+      if (cmd === "update_settings") return undefined;
+      return defaultInvoke(cmd, args);
+    },
+  );
+};
+
 const renderPanel = (wakeWordEnabled = false) => {
   resetSettingsPersistenceForTests();
   useMooseStore.setState({
@@ -116,28 +130,15 @@ describe("WakeWordSettingsPanel", () => {
   });
 
   it("distinguishes active listener ownership from runtime phase", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "get_wake_word_diagnostics") {
-        return wakeDiagnostics({
-          enabled: true,
-          runtime_phase: "listening",
-          listener_status: "active",
-          listener_active: true,
-          listening: true,
-        });
-      }
-      if (cmd === "update_settings") return undefined;
-      return (
-        window as unknown as {
-          __TAURI_INTERNALS__: {
-            invoke: (
-              command: string,
-              commandArgs?: unknown,
-            ) => Promise<unknown>;
-          };
-        }
-      ).__TAURI_INTERNALS__.invoke(cmd, args as Record<string, unknown>);
-    });
+    mockWakeDiagnosticsResponse(
+      wakeDiagnostics({
+        enabled: true,
+        runtime_phase: "listening",
+        listener_status: "active",
+        listener_active: true,
+        listening: true,
+      }),
+    );
 
     renderPanel(true);
 
@@ -156,28 +157,15 @@ describe("WakeWordSettingsPanel", () => {
   });
 
   it("shows pending listener ownership without claiming active listening", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "get_wake_word_diagnostics") {
-        return wakeDiagnostics({
-          enabled: true,
-          runtime_phase: "loading",
-          listener_status: "pending_until_idle",
-          listener_active: false,
-          listening: false,
-        });
-      }
-      if (cmd === "update_settings") return undefined;
-      return (
-        window as unknown as {
-          __TAURI_INTERNALS__: {
-            invoke: (
-              command: string,
-              commandArgs?: unknown,
-            ) => Promise<unknown>;
-          };
-        }
-      ).__TAURI_INTERNALS__.invoke(cmd, args as Record<string, unknown>);
-    });
+    mockWakeDiagnosticsResponse(
+      wakeDiagnostics({
+        enabled: true,
+        runtime_phase: "loading",
+        listener_status: "pending_until_idle",
+        listener_active: false,
+        listening: false,
+      }),
+    );
 
     renderPanel(true);
 
@@ -195,29 +183,16 @@ describe("WakeWordSettingsPanel", () => {
   });
 
   it("shows failed-closed listener ownership without leaking artifact paths", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "get_wake_word_diagnostics") {
-        return wakeDiagnostics({
-          enabled: true,
-          runtime_phase: "error",
-          listener_status: "failed_closed",
-          listener_active: false,
-          listening: false,
-          last_error: "The Wake Word runtime encountered an internal error.",
-        });
-      }
-      if (cmd === "update_settings") return undefined;
-      return (
-        window as unknown as {
-          __TAURI_INTERNALS__: {
-            invoke: (
-              command: string,
-              commandArgs?: unknown,
-            ) => Promise<unknown>;
-          };
-        }
-      ).__TAURI_INTERNALS__.invoke(cmd, args as Record<string, unknown>);
-    });
+    mockWakeDiagnosticsResponse(
+      wakeDiagnostics({
+        enabled: true,
+        runtime_phase: "error",
+        listener_status: "failed_closed",
+        listener_active: false,
+        listening: false,
+        last_error: "The Wake Word runtime encountered an internal error.",
+      }),
+    );
 
     renderPanel(true);
 
