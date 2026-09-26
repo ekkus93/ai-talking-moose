@@ -65,7 +65,7 @@ for (const fragment of forbiddenDiagnosticsFragments) {
 
 const diagnosticFields = [...diagnosticsStruct.matchAll(/pub\s+([a-zA-Z0-9_]+):/g)].map((match) => match[1]);
 const requiredPrivacySafeFields = [
-  "enabled", "runtime_phase", "model_id", "runtime_id", "platform", "architecture", "canonical_sample_rate_hz", "canonical_channels", "inference_threads", "threshold", "score", "ring_buffer_capacity_samples", "ring_buffer_samples", "handoff_pre_roll_samples", "handoff_pre_roll_duration_ms", "trigger_count", "last_trigger_age_ms", "runtime_initialization_ms", "measured_idle_cpu_percent", "measured_memory_rss_bytes", "last_inference_duration_ms", "last_handoff_duration_ms", "talking_suspended", "last_error",
+  "enabled", "runtime_phase", "listener_status", "listener_active", "listening", "model_id", "runtime_id", "platform", "architecture", "canonical_sample_rate_hz", "canonical_channels", "inference_threads", "threshold", "score", "ring_buffer_capacity_samples", "ring_buffer_samples", "handoff_pre_roll_samples", "handoff_pre_roll_duration_ms", "trigger_count", "last_trigger_age_ms", "runtime_initialization_ms", "measured_idle_cpu_percent", "measured_memory_rss_bytes", "last_inference_duration_ms", "last_handoff_duration_ms", "talking_suspended", "last_error",
 ];
 for (const field of requiredPrivacySafeFields) {
   if (!diagnosticFields.includes(field)) fail(`WakeWordDiagnostics is missing expected privacy-safe field ${field}`);

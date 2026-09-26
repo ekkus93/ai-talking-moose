@@ -4,6 +4,7 @@ import { tauriBridge } from "../../lib/tauriBridge";
 import { useMooseStore } from "../../stores/mooseStore";
 import type {
   WakeWordDiagnostics,
+  WakeWordListenerStatus,
   WakeWordRuntimePhase,
 } from "../../types/moose";
 
@@ -14,6 +15,16 @@ const RUNTIME_LABELS: Record<WakeWordRuntimePhase, string> = {
   triggered: "Triggered / handing off",
   suspended_talking: "Suspended while Moose talks",
   error: "Error",
+  shutting_down: "Shutting down",
+};
+
+const LISTENER_LABELS: Record<WakeWordListenerStatus, string> = {
+  stopped: "Stopped",
+  starting: "Starting",
+  active: "Active locally",
+  pending_until_idle: "Pending until idle",
+  suspended_for_command: "Suspended for command",
+  failed_closed: "Failed closed",
   shutting_down: "Shutting down",
 };
 
@@ -31,6 +42,43 @@ const statusTone = (phase: WakeWordRuntimePhase) => {
     case "shutting_down":
     default:
       return "bg-gray-50 text-gray-900 border-gray-500";
+  }
+};
+
+const listenerTone = (status: WakeWordListenerStatus) => {
+  switch (status) {
+    case "active":
+      return "bg-green-50 text-green-900 border-green-800";
+    case "starting":
+    case "pending_until_idle":
+    case "suspended_for_command":
+      return "bg-amber-50 text-amber-900 border-amber-800";
+    case "failed_closed":
+      return "bg-red-50 text-red-900 border-red-800";
+    case "stopped":
+    case "shutting_down":
+    default:
+      return "bg-gray-50 text-gray-900 border-gray-500";
+  }
+};
+
+const listenerHelp = (diagnostics: WakeWordDiagnostics | null) => {
+  switch (diagnostics?.listener_status ?? "stopped") {
+    case "active":
+      return "Listener ownership is active; the microphone is active locally for keyword spotting.";
+    case "starting":
+      return "Listener startup is in progress or waiting for verified artifacts and policy checks.";
+    case "pending_until_idle":
+      return "Listener startup is pending until the current conversation reaches an idle boundary.";
+    case "suspended_for_command":
+      return "Listener ownership is intentionally suspended while command capture owns the microphone.";
+    case "failed_closed":
+      return "Listener failed closed; check local Moonshine ASR mode and developer-prepared Wake artifacts.";
+    case "shutting_down":
+      return "Listener shutdown is in progress.";
+    case "stopped":
+    default:
+      return "Listener ownership is stopped; Wake is not listening locally.";
   }
 };
 
@@ -62,6 +110,9 @@ export const WakeWordSettingsPanel: React.FC = () => {
   if (!settings) return null;
 
   const phase = diagnostics?.runtime_phase ?? "disabled";
+  const listenerStatus = diagnostics?.listener_status ?? "stopped";
+  const listenerActive = diagnostics?.listener_active ?? false;
+  const listenerListening = diagnostics?.listening ?? false;
   const enabled = settings.wake_word_enabled;
   const preferenceStatus = enabled
     ? "Enabled — runtime starts only after developer-prepared local KWS artifacts, local Moonshine ASR policy, and lifecycle state permit."
@@ -175,6 +226,17 @@ export const WakeWordSettingsPanel: React.FC = () => {
             Runtime: {RUNTIME_LABELS[phase]}
           </span>
         </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-bold">Listener ownership</span>
+          <span
+            role="status"
+            aria-live="polite"
+            className={`px-2 py-0.5 border rounded font-bold ${listenerTone(listenerStatus)}`}
+          >
+            Listener: {LISTENER_LABELS[listenerStatus]}
+          </span>
+        </div>
+        <p className="text-[11px] text-gray-700">{listenerHelp(diagnostics)}</p>
         {diagnostics ? (
           <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
             <dt className="font-bold">Engine</dt>
@@ -189,6 +251,10 @@ export const WakeWordSettingsPanel: React.FC = () => {
             <dd>
               {`${diagnostics.inference_threads} thread, threshold ${diagnostics.threshold}, score ${diagnostics.score}`}
             </dd>
+            <dt className="font-bold">Listener active</dt>
+            <dd>{listenerActive ? "Yes" : "No"}</dd>
+            <dt className="font-bold">Actually listening</dt>
+            <dd>{listenerListening ? "Yes" : "No"}</dd>
           </dl>
         ) : (
           <p className="text-gray-600 text-[11px]">
@@ -220,14 +286,18 @@ export const WakeWordSettingsPanel: React.FC = () => {
 
       {!error && enabled && diagnostics?.last_error === null && (
         <div
-          className="text-green-800 flex gap-1 items-center text-[11px]"
+          className={`flex gap-1 items-center text-[11px] ${
+            listenerListening ? "text-green-800" : "text-amber-800"
+          }`}
           aria-live="polite"
         >
           <CheckCircle className="w-3.5 h-3.5" />
           <span>
-            Wake Word preference is enabled. Runtime availability still depends
-            on developer-prepared local KWS artifacts, local Moonshine command
-            ASR policy, and lifecycle state.
+            {listenerListening
+              ? "Wake Word preference is enabled and listener ownership is active."
+              : "Wake Word preference is enabled, but listener ownership is not active yet."}{" "}
+            Runtime availability still depends on developer-prepared local KWS
+            artifacts, local Moonshine command ASR policy, and lifecycle state.
           </span>
         </div>
       )}

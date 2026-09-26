@@ -114,9 +114,21 @@ export type WakeWordRuntimePhase =
   | "error"
   | "shutting_down";
 
+export type WakeWordListenerStatus =
+  | "stopped"
+  | "starting"
+  | "active"
+  | "pending_until_idle"
+  | "suspended_for_command"
+  | "failed_closed"
+  | "shutting_down";
+
 export interface WakeWordDiagnostics {
   enabled: boolean;
   runtime_phase: WakeWordRuntimePhase;
+  listener_status: WakeWordListenerStatus;
+  listener_active: boolean;
+  listening: boolean;
   engine_id: string;
   model_id: string;
   model_archive_sha256: string;
@@ -136,9 +148,14 @@ export interface WakeWordDiagnostics {
   ring_buffer_capacity_ms: number;
   ring_buffer_samples: number;
   handoff_pre_roll_samples: number;
+  handoff_pre_roll_duration_ms: number;
   trigger_count: number;
   last_trigger_age_ms: number | null;
   runtime_initialization_ms: number | null;
+  measured_idle_cpu_percent: number | null;
+  measured_memory_rss_bytes: number | null;
+  last_inference_duration_ms: number | null;
+  last_handoff_duration_ms: number | null;
   talking_suspended: boolean;
   last_error: string | null;
 }
