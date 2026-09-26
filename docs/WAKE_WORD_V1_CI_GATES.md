@@ -156,6 +156,28 @@ Policy:
 - A successful deterministic stability run is required WWR-640 evidence for the defined lifecycle acceptance.
 - A skipped lifecycle workflow is not lifecycle acceptance evidence.
 
+### Selected ASR policy acceptance
+
+Current checks:
+
+- ordinary Rust tests in `src-tauri/src/app/wake_word_state.rs`
+- frontend disclosure tests in `src/components/Settings/WakeWordSettingsPanel.test.tsx`
+- documentation truthfulness audit in `.github/workflows/wake-word-documentation-audit.yml`
+- source/security ownership audit in `.github/workflows/wake-word-source-security-audit.yml`
+
+Purpose:
+
+- preserve the selected Wake Word V1 Policy B: Wake-triggered command ASR supports local Moonshine streaming modes only
+- verify Gemini Live audio and other unsupported command ASR modes cannot start or keep the Wake listener active
+- keep user-facing Settings disclosure aligned with the selected policy
+- distinguish ordinary manual ASR choices from Wake-triggered command-ASR eligibility
+
+Policy:
+
+- A passing policy/unit/disclosure path proves the selected Wake ASR policy boundary, not full command transcription accuracy.
+- Wake-triggered Gemini Live audio is not a supported V1 claim and must not be advertised by documentation or Settings UI.
+- Manual command interaction remains outside the Wake-triggered command-ASR restriction.
+
 ### Performance evidence policy gate
 
 Workflow: `.github/workflows/wake-word-performance-evidence.yml`
@@ -206,6 +228,7 @@ Purpose:
 - preserve shared `AudioCapture` ownership without a competing Wake-specific capture owner
 - verify lifecycle, shutdown, Talking suspension, and one-trigger router boundaries stay present
 - verify model/runtime identity checks and native architecture verification boundaries stay present
+- verify local Moonshine-only Wake command-ASR policy enforcement stays present
 - reject network or cloud/full-ASR references in the production KWS engine boundary
 
 Policy:
@@ -221,7 +244,7 @@ Current check: `node scripts/check_wake_word_documentation.mjs`.
 Purpose:
 
 - keep current-behavior documentation aligned with implemented and still-pending production integration
-- preserve local/offline, active-microphone, cloud-boundary, and no-barge-in Settings disclosures
+- preserve local/offline, active-microphone, cloud-boundary, local-Moonshine Wake ASR policy, and no-barge-in Settings disclosures
 - reject unqualified final-acceptance claims while performance/final-audit/final-closeout work remains pending
 
 ## Pending required acceptance evidence
@@ -234,7 +257,7 @@ The native packaging/architecture policy workflow is implemented. Final packagin
 
 ### Final source/privacy/security audit
 
-The automated privacy and source/security gates are implemented, but final WWR-900 still requires review of runtime ownership, microphone transitions, cancellation/shutdown, ring clearing, Wake-disabled behavior, Talking suspension/resume, one-trigger/one-command behavior, provider separation, exact artifact loading, architecture verification, offline idle inference, and documentation truthfulness.
+The automated privacy and source/security gates are implemented, but final WWR-900 still requires review of runtime ownership, microphone transitions, cancellation/shutdown, ring clearing, Wake-disabled behavior, Talking suspension/resume, one-trigger/one-command behavior, selected local-Moonshine ASR policy, provider separation, exact artifact loading, architecture verification, offline idle inference, and documentation truthfulness.
 
 ## Specialized runners and hardware
 

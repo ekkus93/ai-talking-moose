@@ -9,7 +9,8 @@ Wake Word V1 is a local keyword-spotting feature for the fixed phrase **`Hey, Mo
 - The application owns one authoritative Wake Word application runtime through the application composition layer.
 - Startup initializes that runtime from persisted settings before normal runtime preference application.
 - The Wake Word runtime manager owns lifecycle state, ring-buffer state, trigger debounce state, pre-roll retention, and privacy-safe diagnostics.
-- Wake Word does not define a second command-ASR provider. After a wake trigger, the existing normal command interaction path remains the intended downstream path.
+- Wake Word does not define a second command-ASR provider. Wake-triggered command activation is limited to local Moonshine streaming command ASR (`MoonshineTinyStreaming` or `MoonshineSmallStreaming`).
+- Unsupported command ASR modes such as Gemini Live audio remain available to ordinary manual interaction, but they are not valid Wake-triggered command ASR modes for Wake Word V1.
 - The Wake Word runtime does **not** open an independent always-on full ASR stream, and it does not transcribe idle speech.
 
 ## Settings and user-visible behavior
@@ -20,6 +21,8 @@ Wake Word V1 is a local keyword-spotting feature for the fixed phrase **`Hey, Mo
 - V1 does not expose a sensitivity control.
 - The Settings UI can enable or disable Wake Word and persists the setting through the normal settings transaction.
 - Live enable/disable changes are applied to the authoritative runtime without requiring an app restart through `apply_changed_runtime_preferences`.
+- Settings blocks Wake enablement when the selected command ASR mode is unsupported for Wake-triggered command activation.
+- ASR-mode changes while Wake is enabled are re-evaluated at the listener boundary so unsupported modes cannot leave Wake in a misleading listening state.
 - Wake runtime changes are reversible with the other runtime preferences if a later preference side effect or persistence step fails.
 - When Wake Word is disabled, manual listen/start behavior remains available.
 
@@ -30,7 +33,8 @@ When Wake Word is enabled and listening, microphone samples are intended to be c
 V1 disclosure requirements:
 
 - The microphone may remain locally active while listening for the wake phrase.
-- The wake phrase and immediate spoken command may enter the normal command ASR path after a trigger.
+- Wake-triggered commands require local Moonshine command ASR in Wake Word V1.
+- The wake phrase and immediate spoken command may enter the local Moonshine command ASR path after a trigger.
 - Raw Wake Word PCM is retained only in bounded in-memory ring/pre-roll buffers.
 - Wake Word diagnostics do not serialize or expose raw PCM.
 
@@ -75,6 +79,7 @@ Linux x86_64 and macOS arm64 real native KWS acceptance have passed on exact mer
 
 Current limitations:
 
+- Wake Word V1 is local-Moonshine-only for Wake-triggered command ASR.
 - WWR-910 original TODO reconciliation has a merged evidence matrix, but final reconciliation cannot close until WWR-630 and WWR-950/960 are complete.
 - WWR-950/960 exact-head and exact-master final closeout are still pending.
 
