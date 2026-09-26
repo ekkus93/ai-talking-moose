@@ -20,8 +20,8 @@ if (manifest.ordinary_ci_alone_is_final_qualification !== false) {
 if (manifest.skipped_conclusion_counts_as_pass !== false) {
   fail("skipped workflow conclusions must not count as acceptance evidence");
 }
-if (!Array.isArray(manifest.gates) || manifest.gates.length < 10) {
-  fail("manifest must contain the full implemented and pending Wake gate inventory");
+if (!Array.isArray(manifest.gates) || manifest.gates.length < 20) {
+  fail("manifest must contain the full implemented and post-closeout Wake gate inventory");
 }
 
 const ids = new Set();
@@ -32,7 +32,13 @@ const requiredIds = new Set([
   "deterministic_corpus_contract",
   "native_packaging_architecture_policy",
   "lifecycle_stability_policy",
+  "settings_listener_lifecycle_acceptance",
+  "manual_shared_capture_transfer_acceptance",
+  "selected_asr_policy_acceptance",
+  "downstream_first_command_word_acceptance",
+  "clean_install_artifact_provisioning_acceptance",
   "performance_evidence_policy",
+  "production_listener_performance_evidence",
   "privacy_audit",
   "documentation_audit",
   "source_security_audit",
@@ -103,12 +109,18 @@ for (const gate of manifest.gates) {
 for (const id of requiredIds) {
   if (!ids.has(id)) fail(`required gate inventory is missing ${id}`);
 }
-if (implemented < 10) fail("expected at least ten implemented policy/source gates");
-if (pending !== 0) fail("all required acceptance gates must be implemented after WWR-630/640 closeout");
+if (implemented < 20) fail("expected at least twenty implemented policy/source/post-closeout gates");
+if (pending !== 0) fail("all required post-closeout acceptance gates must be implemented before final closeout");
 
 for (const sentence of [
   "ordinary CI alone is not final Wake Word V1 qualification",
   "A workflow with conclusion `skipped` is evidence only that its path filter or condition did not select that workflow",
+  "Settings/listener lifecycle acceptance",
+  "Manual shared-capture transfer acceptance",
+  "Selected ASR policy acceptance",
+  "Downstream first-command-word acceptance",
+  "Clean-install artifact provisioning acceptance",
+  "Production listener performance evidence",
   "Linux x86_64 real KWS acceptance",
   "macOS arm64 real KWS acceptance",
   "Integrated production lifecycle acceptance",
