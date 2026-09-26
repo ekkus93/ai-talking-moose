@@ -245,11 +245,11 @@ Purpose:
 
 - keep current-behavior documentation aligned with implemented and still-pending production integration
 - preserve local/offline, active-microphone, cloud-boundary, local-Moonshine Wake ASR policy, and no-barge-in Settings disclosures
-- reject unqualified final-acceptance claims while performance/final-audit/final-closeout work remains pending
+- reject unqualified final-acceptance claims while post-closeout WPCR integration, production-listener performance, audit, and final qualification work remains pending
 
 ## Pending required acceptance evidence
 
-The following evidence is still required before final Wake Word V1 closeout. Implemented policy or component gates above must not be confused with these production acceptance scenarios.
+The original WWR gates below remain historical qualification evidence, but the post-closeout WPCR checklist is now authoritative for final Wake Word V1 closeout. Implemented policy or component gates must not be confused with the reopened production integration and acceptance requirements.
 
 ### Packaged-runtime load acceptance
 
@@ -270,6 +270,6 @@ The automated privacy and source/security gates are implemented, but final WWR-9
 
 ## Final merge eligibility
 
-A final Wake Word V1 feature head is not eligible based on ordinary CI alone. Final closeout must record exact PR-head and exact merged-master evidence for every required Wake-specific gate and acceptance scenario applicable to the final feature claim.
+A final Wake Word V1 feature head is not eligible based on ordinary CI alone. WPCR-950/960 final closeout must record exact PR-head and exact merged-master evidence for every required Wake-specific gate and reopened acceptance scenario applicable to the final feature claim.
 
 A workflow with conclusion `skipped` is evidence only that its path filter or condition did not select that workflow. It is not evidence that the acceptance scenario passed. Likewise, a passing policy/schema gate is not evidence that still-pending real-world measurements or native acceptance passed.

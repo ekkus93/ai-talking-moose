@@ -12,7 +12,7 @@ The canonical Wake input is 16 kHz mono PCM. `CanonicalWakePcmRouter` validates 
 
 Production KWS uses the pinned sherpa-onnx runtime and model identities in `wake-word-artifacts.json`. Artifact preparation verifies byte sizes, SHA-256 identities, and native architecture before use and fails closed on mismatch. The selected provisioning model is developer-prepared: a clean app-data install with missing model/runtime files must fail closed until the pinned artifacts are explicitly prepared and verified. The app does not silently download Wake artifacts during startup or listener enablement. The fixed V1 policy is one inference thread, score `1.0`, threshold `0.25`, and a two-second pre-roll. The KWS engine performs keyword spotting only; it is not a full-time transcription path.
 
-Component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 real-KWS acceptance passed on exact merged-master evidence, but final closeout still depends on measured performance, documentation/source audits, original TODO reconciliation, and exact final qualification. Wake Word V1 remains under qualification rather than fully accepted production functionality until those final sections close.
+Component tests are **not** a substitute for native-platform qualification. Linux x86_64 and macOS arm64 real-KWS acceptance passed for the original remediation, but the post-closeout review reopened production integration requirements. The authoritative remaining scope is `docs/WAKE_WORD_V1_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-25.md`, including listener control/Settings/manual-transfer integration, downstream first-command-word acceptance, production-listener performance, documentation/gate updates, audit, and exact final requalification. Wake Word V1 remains under qualification rather than fully accepted production functionality until that WPCR checklist closes.
 
 ## Wake-to-command handoff
 
@@ -37,7 +37,7 @@ The integrated lifecycle is:
 7. If Wake is disabled during an interaction, terminal resolution ends in `Disabled`, never an unconditional resume.
 8. Wake-specific runtime/capture failure fails Wake closed without preventing the ordinary manual interaction path.
 
-Deterministic lifecycle acceptance now covers repeated wake→ASR→Thinking→Talking→wake cycles, repeated terminal TTS outcomes, repeated disable/enable cycles, shutdown while Listening, shutdown during handoff, and bounded retained-audio/resource state. This document remains architecture/current-behavior documentation, not final WWR-950/960 closeout evidence.
+Deterministic lifecycle acceptance now covers repeated wake→ASR→Thinking→Talking→wake cycles, repeated terminal TTS outcomes, repeated disable/enable cycles, shutdown while Listening, shutdown during handoff, and bounded retained-audio/resource state. This document remains architecture/current-behavior documentation, not WPCR-950/960 post-closeout qualification evidence.
 
 ## Privacy and diagnostics
 
