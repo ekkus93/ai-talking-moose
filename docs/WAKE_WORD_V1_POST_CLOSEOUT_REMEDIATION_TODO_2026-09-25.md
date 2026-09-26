@@ -18,28 +18,30 @@
 
 ## WPCR-000 — Reopen and freeze post-closeout remediation baseline
 
+**Evidence:** baseline evidence merged in `docs/evidence/WPCR-000_POST_CLOSEOUT_BASELINE_2026-09-25.md` on `master` at `362ec673d0195fb360a3ffc32fd22ad616cdb169`; ordinary CI run `36230401074` passed for that exact master.
+
 ### Tasks
 
-- [ ] Reload current `master` and record exact baseline SHA.
-- [ ] Record the code-review findings that reopened this remediation.
-- [ ] Preserve links to the prior closeout TODO, final implementation SHA, and exact-master final-gate runs.
-- [ ] Identify all code paths touched by the reopened issues:
-  - [ ] Settings persistence/runtime preference path.
-  - [ ] Wake native listener state path.
-  - [ ] manual `start_conversation` path.
-  - [ ] wake-triggered conversation path.
-  - [ ] local Moonshine ASR path.
-  - [ ] Gemini Live audio path, if provider-neutral support is selected.
-  - [ ] artifact provisioning path.
-  - [ ] performance evidence path.
-  - [ ] documentation and UI surfaces.
-- [ ] Add a short evidence note under `docs/evidence/` describing why this post-closeout remediation exists.
+- [x] Reload current `master` and record exact baseline SHA.
+- [x] Record the code-review findings that reopened this remediation.
+- [x] Preserve links to the prior closeout TODO, final implementation SHA, and exact-master final-gate runs.
+- [x] Identify all code paths touched by the reopened issues:
+  - [x] Settings persistence/runtime preference path.
+  - [x] Wake native listener state path.
+  - [x] manual `start_conversation` path.
+  - [x] wake-triggered conversation path.
+  - [x] local Moonshine ASR path.
+  - [x] Gemini Live audio path, if provider-neutral support is selected.
+  - [x] artifact provisioning path.
+  - [x] performance evidence path.
+  - [x] documentation and UI surfaces.
+- [x] Add a short evidence note under `docs/evidence/` describing why this post-closeout remediation exists.
 
 ### Acceptance
 
-- [ ] Baseline evidence file is merged.
-- [ ] The new spec and TODO are referenced by the evidence note.
-- [ ] No production behavior changes are included in WPCR-000 unless required by repository formatting or doc policy.
+- [x] Baseline evidence file is merged.
+- [x] The new spec and TODO are referenced by the evidence note.
+- [x] No production behavior changes are included in WPCR-000 unless required by repository formatting or doc policy.
 
 ## WPCR-100 — Build one native listener control plane
 
@@ -137,11 +139,13 @@
 
 ## WPCR-300 — Resolve Wake command-ASR policy mismatch
 
+**Evidence:** Policy B is selected and enforced in current `master`: `wake_word_state.rs` accepts only local Moonshine streaming ASR for Wake-triggered command activation, Settings/docs disclose local-Moonshine-only behavior, and unsupported modes are rejected before listener startup/enablement. Exact-master ordinary CI `36230401074` passed at `362ec673d0195fb360a3ffc32fd22ad616cdb169`.
+
 ### Decision task
 
-- [ ] Choose one supported Wake command-ASR policy and record it in code, docs, and evidence:
+- [x] Choose one supported Wake command-ASR policy and record it in code, docs, and evidence:
   - [ ] Policy A: provider-neutral handoff to every supported normal command ASR mode.
-  - [ ] Policy B: explicit local-Moonshine-only Wake V1.
+  - [x] Policy B: explicit local-Moonshine-only Wake V1.
 
 ### Policy A implementation tasks
 
@@ -155,19 +159,19 @@
 
 ### Policy B implementation tasks
 
-- [ ] Explicitly define supported ASR modes for Wake V1.
-- [ ] Settings prevents enabling Wake with unsupported ASR modes, or requires switching to a supported local ASR mode.
-- [ ] ASR-mode changes to unsupported modes disable or suspend Wake with visible status.
-- [ ] Wake listener cannot start when unsupported ASR mode is selected.
-- [ ] Docs and UI disclose local-ASR-only behavior.
-- [ ] Add tests for enable blocked by unsupported ASR mode.
-- [ ] Add tests for ASR-mode switch while Wake is enabled.
+- [x] Explicitly define supported ASR modes for Wake V1.
+- [x] Settings prevents enabling Wake with unsupported ASR modes, or requires switching to a supported local ASR mode.
+- [x] ASR-mode changes to unsupported modes disable or suspend Wake with visible status.
+- [x] Wake listener cannot start when unsupported ASR mode is selected.
+- [x] Docs and UI disclose local-ASR-only behavior.
+- [x] Add tests for enable blocked by unsupported ASR mode.
+- [x] Add tests for ASR-mode switch while Wake is enabled.
 
 ### Acceptance
 
-- [ ] Wake cannot fail only after trigger because the selected ASR mode was unsupported.
-- [ ] Product docs and Settings UI match the selected policy.
-- [ ] No hidden cloud or full-ASR fallback exists for idle wake detection.
+- [x] Wake cannot fail only after trigger because the selected ASR mode was unsupported.
+- [x] Product docs and Settings UI match the selected policy.
+- [x] No hidden cloud or full-ASR fallback exists for idle wake detection.
 
 ## WPCR-310 — Add downstream first-command-word acceptance
 
@@ -190,12 +194,14 @@
 
 ## WPCR-400 — Add clean-install Wake artifact provisioning
 
+**Evidence:** WPCR-400 selected the developer-prepared model. Current `master` records this in `wake-word-artifacts.json`, `docs/evidence/WPCR-400_ARTIFACT_PROVISIONING_MODEL_2026-09-25.md`, Wake docs, Settings UI disclosure, manifest validation, and clean-app-data fail-closed tests. Exact-master ordinary CI `36230401074` passed at `362ec673d0195fb360a3ffc32fd22ad616cdb169`; prior exact-head artifact/documentation/privacy/native packaging gates for the provisioning slice passed at `a7ff8b74ed2b4556b821e9b4047ef149b2d8b306`.
+
 ### Decision task
 
-- [ ] Choose one artifact provisioning model and record it in docs and code:
+- [x] Choose one artifact provisioning model and record it in docs and code:
   - [ ] bundled/offline resources copied into app data;
   - [ ] explicit user/developer installer flow;
-  - [ ] developer-only Wake feature hidden or clearly marked not user-ready.
+  - [x] developer-only Wake feature hidden or clearly marked not user-ready.
 
 ### Bundled/offline model tasks
 
@@ -215,16 +221,16 @@
 
 ### Developer-only model tasks
 
-- [ ] Hide or clearly mark Wake as developer-prepared/not user-ready.
-- [ ] Docs must state exactly how artifacts are prepared.
-- [ ] UI must not imply the feature works on a clean install.
+- [x] Hide or clearly mark Wake as developer-prepared/not user-ready.
+- [x] Docs must state exactly how artifacts are prepared.
+- [x] UI must not imply the feature works on a clean install.
 
 ### Acceptance
 
-- [ ] Empty Wake app-data directories do not produce misleading listener status.
-- [ ] Clean-install behavior is tested.
-- [ ] Artifact verification remains fail-closed.
-- [ ] No silent network download is introduced unless explicitly approved and disclosed.
+- [x] Empty Wake app-data directories do not produce misleading listener status.
+- [x] Clean-install behavior is tested.
+- [x] Artifact verification remains fail-closed.
+- [x] No silent network download is introduced unless explicitly approved and disclosed.
 
 ## WPCR-500 — Measure production idle listener performance
 
@@ -250,21 +256,23 @@
 
 ## WPCR-600 — Fix diagnostics and Settings UI truthfulness
 
+**Evidence:** PR #469 merged listener ownership diagnostics at `9e35b47c85278646e8933f5bb601fe312a8d1b4b` with exact-head ordinary CI, Wake source-security audit, Wake documentation audit, and Wake privacy audit passing at `47b368b23aeac9c4dfd7238d033304984d97e54d`. Current exact-master ordinary CI `36230401074` passed at `362ec673d0195fb360a3ffc32fd22ad616cdb169`.
+
 ### Tasks
 
-- [ ] Add listener ownership/status fields to diagnostics or otherwise prevent misleading `enabled`/`disabled` state.
-- [ ] Display pending, unsupported-ASR, missing-artifacts, startup-failed, and listener-active states clearly in Settings.
-- [ ] Keep sanitized help text free of raw paths, credentials, and audio content.
-- [ ] Ensure UI disclosure changes according to selected ASR policy.
-- [ ] Ensure active microphone disclosure appears whenever the native listener can be active.
-- [ ] Add frontend tests for all new status states.
-- [ ] Add backend serialization tests proving diagnostics remain privacy-safe.
+- [x] Add listener ownership/status fields to diagnostics or otherwise prevent misleading `enabled`/`disabled` state.
+- [x] Display pending, unsupported-ASR, missing-artifacts, startup-failed, and listener-active states clearly in Settings.
+- [x] Keep sanitized help text free of raw paths, credentials, and audio content.
+- [x] Ensure UI disclosure changes according to selected ASR policy.
+- [x] Ensure active microphone disclosure appears whenever the native listener can be active.
+- [x] Add frontend tests for all new status states.
+- [x] Add backend serialization tests proving diagnostics remain privacy-safe.
 
 ### Acceptance
 
-- [ ] The UI cannot report Wake as fully disabled while the listener is still active.
-- [ ] The UI cannot report Wake as listening when artifacts/ASR mode/listener state make listening impossible.
-- [ ] Privacy disclosures remain visible and accurate.
+- [x] The UI cannot report Wake as fully disabled while the listener is still active.
+- [x] The UI cannot report Wake as listening when artifacts/ASR mode/listener state make listening impossible.
+- [x] Privacy disclosures remain visible and accurate.
 
 ## WPCR-700 — Reconcile Wake documentation
 
