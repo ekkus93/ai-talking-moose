@@ -141,6 +141,14 @@ fn run_listener_thread<E, Build>(
                     }
                 }
                 routed = owner.route_next(Instant::now()) => {
+                    // An intentional shutdown closes capture to unblock route_next. If that
+                    // closure wins the select race, consume the queued shutdown before treating
+                    // CaptureClosed as a real capture failure.
+                    if matches!(command_rx.try_recv(), Ok(WakeLocalListenerCommand::Shutdown) | Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)) {
+                        owner.disable().await;
+                        let _ = event_tx.send(WakeLocalListenerEvent::Stopped);
+                        return;
+                    }
                     match routed {
                         Ok(outcome) if outcome.trigger_accepted => {
                             match owner.transfer_to_command_asr().await {
