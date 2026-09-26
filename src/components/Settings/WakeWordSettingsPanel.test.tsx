@@ -56,7 +56,9 @@ const wakeDiagnostics = (
 const mockWakeDiagnosticsResponse = (diagnostics: WakeWordDiagnostics) => {
   const defaultInvoke = vi.mocked(invoke).getMockImplementation();
   if (!defaultInvoke) {
-    throw new Error("Tauri invoke test fixture is missing its default implementation");
+    throw new Error(
+      "Tauri invoke test fixture is missing its default implementation",
+    );
   }
   vi.mocked(invoke).mockImplementation(async (cmd, args, options) => {
     if (cmd === "get_wake_word_diagnostics") return diagnostics;
@@ -123,7 +125,9 @@ describe("WakeWordSettingsPanel", () => {
     ).toBeInTheDocument();
     await waitForRuntimeDiagnostics();
     expect(screen.getByText(/listener: stopped/i)).toBeInTheDocument();
-    expect(screen.getByText(/listener ownership is stopped/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/listener ownership is stopped/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("No").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -200,7 +204,9 @@ describe("WakeWordSettingsPanel", () => {
     expect(
       screen.getByText(/check local Moonshine ASR mode/i),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/\/tmp|users\/|appdata/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/\/tmp|users\/|appdata/i),
+    ).not.toBeInTheDocument();
   });
 
   it("persists the fixed phrase when enabling Wake Word", async () => {
