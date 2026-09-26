@@ -141,6 +141,14 @@ fn run_listener_thread<E, Build>(
                     }
                 }
                 routed = owner.route_next(Instant::now()) => {
+                    // An intentional shutdown closes capture to unblock route_next. If that
+                    // closure wins the select race, consume the queued shutdown before treating
+                    // CaptureClosed as a real capture failure.
+                    if matches!(command_rx.try_recv(), Ok(WakeLocalListenerCommand::Shutdown) | Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)) {
+                        owner.disable().await;
+                        let _ = event_tx.send(WakeLocalListenerEvent::Stopped);
+                        return;
+                    }
                     match routed {
                         Ok(outcome) if outcome.trigger_accepted => {
                             match owner.transfer_to_command_asr().await {
@@ -252,25 +260,19 @@ mod tests {
         )
         .unwrap();
 
+        handle.shutdown().unwrap();
+
         let started = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
             .await
             .unwrap()
             .unwrap();
         assert_eq!(started, WakeLocalListenerEvent::Started);
 
-        handle.shutdown().unwrap();
-
         let terminal = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
             .await
             .unwrap()
             .unwrap();
-        assert!(matches!(
-            terminal,
-            WakeLocalListenerEvent::Stopped | WakeLocalListenerEvent::CaptureFailed(_)
-        ));
-        assert!(matches!(
-            runtime.phase(),
-            WakeWordRuntimePhase::Disabled | WakeWordRuntimePhase::Error
-        ));
+        assert_eq!(terminal, WakeLocalListenerEvent::Stopped);
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Disabled);
     }
 }
