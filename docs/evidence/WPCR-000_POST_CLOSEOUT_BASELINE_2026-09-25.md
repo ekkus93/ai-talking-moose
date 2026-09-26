@@ -1,7 +1,8 @@
 # WPCR-000 — post-closeout remediation baseline
 
 Date: 2026-09-25
-Baseline master: `058534f59ac1ac907ca44ae875f3e3783ed79649`
+Baseline master reloaded for this evidence: `9e35b47c85278646e8933f5bb601fe312a8d1b4b`
+Post-closeout review source: `0ea5e03f9012884e2858d7b478fde916f0f163d7`
 
 ## Why this remediation exists
 
@@ -39,4 +40,4 @@ The reopened scope includes these source and evidence areas:
 
 ## Baseline rule
 
-This evidence file records the reopened baseline only. It does not claim implementation closure for any reopened finding. Each WPCR section must be closed only by source changes, tests, and exact-head/exact-master evidence that directly satisfy that section's acceptance criteria.
+This evidence file records why the remediation was reopened and the exact current `master` observed while recording WPCR-000 evidence. It does not claim implementation closure for any reopened finding. Each WPCR section must be closed only by source changes, tests, and exact-head/exact-master evidence that directly satisfy that section's acceptance criteria.
