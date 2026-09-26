@@ -9,6 +9,7 @@ use super::wake_word_composition::WakeWordApplicationRuntime;
 use super::wake_word_local_listener_thread::{
     spawn_wake_local_listener_thread, WakeLocalListenerEvent, WakeLocalListenerHandle,
 };
+use crate::asr::AsrMode;
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -21,6 +22,21 @@ static NATIVE_WAKE_LISTENER_CONFIG: OnceLock<NativeWakeListenerConfig> = OnceLoc
 struct NativeWakeListenerConfig {
     app_data_dir: PathBuf,
     event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
+}
+
+pub(crate) fn wake_word_asr_mode_supported(mode: AsrMode) -> bool {
+    matches!(
+        mode,
+        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
+    )
+}
+
+fn ensure_wake_word_asr_mode_supported(mode: AsrMode) -> Result<(), String> {
+    if wake_word_asr_mode_supported(mode) {
+        Ok(())
+    } else {
+        Err("Wake Word V1 requires local Moonshine command ASR".to_string())
+    }
 }
 
 fn native_wake_listener_slot() -> &'static Mutex<Option<WakeLocalListenerHandle>> {
@@ -148,6 +164,7 @@ pub(crate) fn start_native_wake_listener_thread_from_app_state(
         return Ok(false);
     }
 
+    ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
     start_native_wake_listener_thread_with_config(state, app_data_dir, event_tx)
 }
 
@@ -157,6 +174,7 @@ fn start_native_wake_listener_thread_with_config(
     event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
 ) -> Result<bool, String> {
     let settings = state.settings.read().clone();
+    ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
     let slot = native_wake_listener_slot();
     if slot.lock().is_some() {
         return Ok(false);
@@ -221,8 +239,9 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
 ) -> Result<(), String> {
     let wake_enabled_changed = previous.wake_word_enabled != next.wake_word_enabled;
     let input_device_changed = previous.input_device != next.input_device;
-    let wake_listener_must_change =
-        wake_enabled_changed || (next.wake_word_enabled && input_device_changed);
+    let asr_mode_changed = previous.asr_mode != next.asr_mode;
+    let wake_listener_must_change = wake_enabled_changed
+        || (next.wake_word_enabled && (input_device_changed || asr_mode_changed));
     if !wake_listener_must_change {
         return Ok(());
     }
@@ -236,7 +255,13 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
         return Ok(());
     }
 
-    if input_device_changed {
+    if next.wake_word_enabled && !wake_word_asr_mode_supported(next.asr_mode) {
+        stop_native_wake_listener_thread();
+        state.wake_word_runtime.record_runtime_error();
+        return Err("Wake Word V1 requires local Moonshine command ASR".to_string());
+    }
+
+    if input_device_changed || asr_mode_changed {
         stop_native_wake_listener_thread();
     }
 
@@ -308,6 +333,34 @@ mod tests {
         fn shutdown(&mut self) -> Result<(), WakeWordError> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn wake_v1_supports_only_local_moonshine_command_asr() {
+        assert!(wake_word_asr_mode_supported(
+            AsrMode::MoonshineTinyStreaming
+        ));
+        assert!(wake_word_asr_mode_supported(
+            AsrMode::MoonshineSmallStreaming
+        ));
+        assert!(!wake_word_asr_mode_supported(AsrMode::GeminiLiveAudio));
+    }
+
+    #[test]
+    fn settings_reject_unsupported_asr_before_listener_start() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        let previous = AppSettings::default();
+        let next = AppSettings {
+            wake_word_enabled: true,
+            asr_mode: AsrMode::GeminiLiveAudio,
+            ..Default::default()
+        };
+        let error = apply_configured_native_wake_listener_settings_change(&state, &previous, &next)
+            .unwrap_err();
+        assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
+        assert!(!native_wake_listener_is_active());
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Error);
     }
 
     #[test]

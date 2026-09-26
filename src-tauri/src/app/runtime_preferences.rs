@@ -161,7 +161,8 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     let window_changed = previous.always_on_top != next.always_on_top;
     let tray_changed = previous.show_in_menu_bar != next.show_in_menu_bar;
     let wake_listener_changed = previous.wake_word_enabled != next.wake_word_enabled
-        || (next.wake_word_enabled && previous.input_device != next.input_device);
+        || (next.wake_word_enabled
+            && (previous.input_device != next.input_device || previous.asr_mode != next.asr_mode));
     let managed_state = if wake_listener_changed {
         Some(app.try_state::<AppState>().ok_or_else(|| "application state is unavailable".to_string())?)
     } else {
