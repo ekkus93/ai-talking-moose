@@ -241,6 +241,25 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     previous: &AppSettings,
     next: &AppSettings,
 ) -> Result<(), String> {
+    apply_configured_native_wake_listener_settings_change_with_control(
+        state,
+        previous,
+        next,
+        state.conversation_mgr.is_active(),
+        control_native_wake_listener,
+    )
+}
+
+pub(crate) fn apply_configured_native_wake_listener_settings_change_with_control<F>(
+    state: &AppState,
+    previous: &AppSettings,
+    next: &AppSettings,
+    conversation_active: bool,
+    mut control: F,
+) -> Result<(), String>
+where
+    F: FnMut(&AppState, NativeWakeListenerControl) -> Result<bool, String>,
+{
     let wake_enabled_changed = previous.wake_word_enabled != next.wake_word_enabled;
     let input_device_changed = previous.input_device != next.input_device;
     let asr_mode_changed = previous.asr_mode != next.asr_mode;
@@ -251,7 +270,7 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     }
 
     if !next.wake_word_enabled {
-        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
+        control(state, NativeWakeListenerControl::Stop)?;
         state
             .wake_word_runtime
             .apply_enabled_setting(false)
@@ -259,22 +278,22 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
         return Ok(());
     }
 
-    if next.wake_word_enabled && !wake_word_asr_mode_supported(next.asr_mode) {
-        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
+    if !wake_word_asr_mode_supported(next.asr_mode) {
+        control(state, NativeWakeListenerControl::Stop)?;
         state.wake_word_runtime.record_runtime_error();
         return Err("Wake Word V1 requires local Moonshine command ASR".to_string());
     }
 
     if input_device_changed || asr_mode_changed {
-        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
+        control(state, NativeWakeListenerControl::Stop)?;
     }
 
-    if state.conversation_mgr.is_active() {
+    if conversation_active {
         prepare_runtime_for_pending_listener_restart(&state.wake_word_runtime)?;
         return Ok(());
     }
 
-    match control_native_wake_listener(
+    match control(
         state,
         NativeWakeListenerControl::RestartForSettings {
             settings: Box::new(next.clone()),
