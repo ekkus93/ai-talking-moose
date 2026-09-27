@@ -1,15 +1,15 @@
 use super::state::{AppSettings, AppState};
 use super::wake_word_state::{
-    apply_configured_native_wake_listener_settings_change, native_wake_listener_is_active,
-    stop_native_wake_listener_thread,
+    apply_configured_native_wake_listener_settings_change, control_native_wake_listener,
+    native_wake_listener_is_active, NativeWakeListenerControl,
 };
 use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
 use crate::asr::AsrMode;
 
 #[test]
 fn enabled_asr_mode_change_to_unsupported_fails_closed_without_listener() {
-    stop_native_wake_listener_thread();
     let state = AppState::new_for_tests().unwrap();
+    control_native_wake_listener(&state, NativeWakeListenerControl::Stop).unwrap();
     state.wake_word_runtime.apply_enabled_setting(true).unwrap();
 
     let previous = AppSettings {
@@ -33,8 +33,8 @@ fn enabled_asr_mode_change_to_unsupported_fails_closed_without_listener() {
 
 #[test]
 fn enabled_input_device_change_without_startup_config_enters_loading_without_listener_claim() {
-    stop_native_wake_listener_thread();
     let state = AppState::new_for_tests().unwrap();
+    control_native_wake_listener(&state, NativeWakeListenerControl::Stop).unwrap();
 
     let previous = AppSettings {
         wake_word_enabled: true,
