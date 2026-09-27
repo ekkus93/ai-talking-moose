@@ -4,8 +4,8 @@ use super::wake_word::engine::SherpaKwsEngine;
 use super::wake_word::engine::{NativeKwsSession, NativeKwsSessionPaths};
 #[cfg(test)]
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
-use super::wake_word_composition::WakeWordApplicationRuntime;
 use super::wake_word_command_lifecycle::suspend_for_command_interaction;
+use super::wake_word_composition::WakeWordApplicationRuntime;
 use super::wake_word_local_listener_thread::{
     spawn_wake_local_listener_thread, WakeLocalListenerEvent, WakeLocalListenerHandle,
 };

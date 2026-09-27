@@ -248,7 +248,6 @@ pub fn run_real_kws_acceptance(
     })
 }
 
-
 #[derive(Debug, Serialize)]
 pub struct ProductionListenerPerformanceReport {
     pub schema_version: u32,
@@ -467,7 +466,9 @@ fn send_pcm_frame(sender: &mpsc::Sender<Vec<u8>>, samples: &[i16]) -> Result<(),
         .map_err(|_| "Wake listener PCM queue closed".to_string())
 }
 
-fn triggered_handoff_from_event(event: WakeLocalListenerEvent) -> Result<WakeCommandHandoffAudio, String> {
+fn triggered_handoff_from_event(
+    event: WakeLocalListenerEvent,
+) -> Result<WakeCommandHandoffAudio, String> {
     match event {
         WakeLocalListenerEvent::Triggered(audio) => Ok(audio),
         WakeLocalListenerEvent::StartupFailed(error)
