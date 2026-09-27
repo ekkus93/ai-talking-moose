@@ -371,7 +371,7 @@ pub fn get_memories(state: State<'_, AppState>) -> Result<Vec<MemoryRecord>, Str
 }
 
 #[tauri::command]
-pub fn delete_memory(id: i64, state: State<'_, AppState>) -> Result<bool, String> {
+pub fn delete_memory(id: i64, state: State<'_, AppState>) -> Result<bool> {
     state.memory.forget(id)
 }
 
@@ -391,7 +391,8 @@ pub fn forget_everything(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub fn get_transcripts(
     limit: usize,
-    state: State<'_, AppState>) -> Result<Vec<TranscriptRecord>, String> {
+    state: State<'_, AppState>,
+) -> Result<Vec<TranscriptRecord>, String> {
     state.db.get_transcripts(limit).map_err(|e| e.to_string())
 }
 
