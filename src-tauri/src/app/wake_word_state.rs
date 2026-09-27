@@ -1,7 +1,7 @@
 use super::state::{AppSettings, AppState};
-use super::wake_word::engine::{NativeKwsSession, NativeKwsSessionPaths};
 #[cfg(test)]
 use super::wake_word::engine::SherpaKwsEngine;
+use super::wake_word::engine::{NativeKwsSession, NativeKwsSessionPaths};
 #[cfg(test)]
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_composition::WakeWordApplicationRuntime;

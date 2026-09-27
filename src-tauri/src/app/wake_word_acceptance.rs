@@ -572,7 +572,9 @@ pub fn run_production_listener_performance_acceptance(
         .fixtures
         .iter()
         .find(|fixture| fixture.expected_detection)
-        .ok_or_else(|| "production listener acceptance requires a positive Wake fixture".to_string())?;
+        .ok_or_else(|| {
+            "production listener acceptance requires a positive Wake fixture".to_string()
+        })?;
     let positive_samples = fixture_samples(positive, corpus_dir)?;
     let paths = NativeKwsSessionPaths {
         model_dir: model_dir.to_path_buf(),
