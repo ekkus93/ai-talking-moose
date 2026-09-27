@@ -361,6 +361,20 @@ pub(crate) fn control_native_wake_listener(
         NativeWakeListenerControl::TransferToCommand => {
             let was_active = native_wake_listener_is_active();
             stop_native_wake_listener_thread();
+            if was_active {
+                state
+                    .wake_word_runtime
+                    .apply_enabled_setting(true)
+                    .map_err(|error| error.to_string())?;
+                if state.wake_word_runtime.phase()
+                    == crate::asr::wake_word_runtime::WakeWordRuntimePhase::Loading
+                {
+                    state
+                        .wake_word_runtime
+                        .mark_loaded()
+                        .map_err(|error| error.to_string())?;
+                }
+            }
             suspend_for_command_interaction(&state.wake_word_runtime)?;
             Ok(was_active)
         }
@@ -400,9 +414,12 @@ mod tests {
     use crate::app::wake_word::engine::{
         validate_pcm_frame, SherpaKwsConfig, WakeWordDetection, WakeWordError,
     };
+    use crate::app::wake_word_capture_consumer::WakeCapturePcmConsumer;
+    use crate::app::wake_word_pcm_router::CanonicalWakePcmRouter;
     use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
     use crate::audio::capture::AudioCapture;
     use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
+    use std::time::Duration;
 
     #[derive(Default)]
     struct TestWakeEngine {
@@ -662,6 +679,68 @@ mod tests {
 
         assert!(!was_active);
         assert!(!native_wake_listener_is_active());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::SuspendedTalking
+        );
+        assert_eq!(
+            state
+                .wake_word_runtime
+                .snapshot(std::time::Instant::now())
+                .last_error,
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn active_listener_transfer_releases_capture_and_preserves_command_suspension() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        *state.audio_capture.lock() = AudioCapture::new_mock();
+        state.settings.write().wake_word_enabled = true;
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        let runtime_for_consumer = state.wake_word_runtime.clone();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+
+        let handle = spawn_wake_local_listener_thread::<TestWakeEngine, _>(
+            state.audio_capture.clone(),
+            state.wake_word_runtime.clone(),
+            None,
+            move |_| {
+                Ok(WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(
+                    runtime_for_consumer.manager().clone(),
+                    TestWakeEngine::default(),
+                )))
+            },
+            event_tx,
+        )
+        .unwrap();
+        *native_wake_listener_slot().lock() = Some(handle);
+
+        let started = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(started, WakeLocalListenerEvent::Started);
+        assert!(native_wake_listener_is_active());
+        assert!(state.audio_capture.lock().is_active());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Listening
+        );
+
+        let was_active =
+            control_native_wake_listener(&state, NativeWakeListenerControl::TransferToCommand)
+                .unwrap();
+
+        assert!(was_active);
+        assert!(!native_wake_listener_is_active());
+        let stopped = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped, WakeLocalListenerEvent::Stopped);
+        assert!(!state.audio_capture.lock().is_active());
         assert_eq!(
             state.wake_word_runtime.phase(),
             WakeWordRuntimePhase::SuspendedTalking
