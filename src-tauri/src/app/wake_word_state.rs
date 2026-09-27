@@ -5,7 +5,8 @@ use super::wake_word::engine::{NativeKwsSession, NativeKwsSessionPaths};
 #[cfg(test)]
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_command_lifecycle::{
-    complete_command_interaction, suspend_for_command_interaction, CommandInteractionTerminalOutcome,
+    complete_command_interaction, suspend_for_command_interaction,
+    CommandInteractionTerminalOutcome,
 };
 use super::wake_word_composition::WakeWordApplicationRuntime;
 use super::wake_word_local_listener_thread::{
@@ -354,7 +355,9 @@ pub(crate) fn complete_native_wake_command_interaction(
     let wake_word_enabled = state.settings.read().wake_word_enabled;
     complete_command_interaction(&state.wake_word_runtime, wake_word_enabled, outcome)?;
     if wake_word_enabled {
-        if let Err(error) = control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured) {
+        if let Err(error) =
+            control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured)
+        {
             state.wake_word_runtime.record_runtime_error();
             return Err(error);
         }
@@ -696,7 +699,10 @@ mod tests {
         .unwrap();
 
         assert!(should_restart);
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Loading
+        );
     }
 
     #[test]
@@ -737,7 +743,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Loading
+        );
     }
 
     #[test]
