@@ -118,19 +118,21 @@
 
 ## WPCR-200 — Fix manual conversation shared-capture transfer
 
+**Incremental evidence:** current `master` routes manual start through `NativeWakeListenerControl::TransferToCommand` before normal ASR capture, uses `complete_native_wake_command_interaction` for start failure and terminal resolution, and routes explicit stop through the same boundary. Deterministic lifecycle tests cover disabled/failed Wake availability, start-failure recovery, latest-setting terminal behavior, and intentional transfer without Wake error. Exact-master ordinary CI `36346852425` passed at `cc593f8d4ae1ac8d399073c6cfb8784c8451bdab`. Active-listener ownership tests and final acceptance remain open.
+
 ### Tasks
 
-- [ ] Before manual `start_conversation`, intentionally stop or suspend the native Wake listener through the listener control plane.
-- [ ] Ensure the listener thread has released or is guaranteed not to use `AudioCapture` before normal command ASR starts capture.
-- [ ] Preserve manual start behavior when Wake is disabled, loading, failed, or unavailable.
-- [ ] On conversation start failure, resume or restart Wake according to latest settings.
-- [ ] On conversation terminal success, cancellation, recoverable failure, and stop, restart Wake according to latest settings.
-- [ ] Ensure `stop_conversation` uses the same resume/restart boundary as natural lifecycle completion.
+- [x] Before manual `start_conversation`, intentionally stop or suspend the native Wake listener through the listener control plane.
+- [x] Ensure the listener thread has released or is guaranteed not to use `AudioCapture` before normal command ASR starts capture.
+- [x] Preserve manual start behavior when Wake is disabled, loading, failed, or unavailable.
+- [x] On conversation start failure, resume or restart Wake according to latest settings.
+- [x] On conversation terminal success, cancellation, recoverable failure, and stop, restart Wake according to latest settings.
+- [x] Ensure `stop_conversation` uses the same resume/restart boundary as natural lifecycle completion.
 - [ ] Ensure barge-in/cancel paths do not leave Wake permanently suspended.
 - [ ] Add tests for manual start while Wake listener is active.
 - [ ] Add tests for manual start failure while Wake was active.
-- [ ] Add tests for stop/cancel/recoverable failure restart.
-- [ ] Add tests that no capture failure is recorded for intentional manual transfer.
+- [x] Add tests for stop/cancel/recoverable failure restart.
+- [x] Add tests that no capture failure is recorded for intentional manual transfer.
 
 ### Acceptance
 
