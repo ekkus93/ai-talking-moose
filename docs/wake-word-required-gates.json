@@ -71,6 +71,61 @@
       "acceptance_scope": "deterministic runtime-manager state-machine stability tests"
     },
     {
+      "id": "settings_listener_lifecycle_acceptance",
+      "title": "Settings/listener lifecycle acceptance",
+      "status": "implemented",
+      "workflow": ".github/workflows/ci.yml",
+      "required_for_final_closeout": true,
+      "exact_head_required": true,
+      "skipped_conclusion_counts_as_pass": false,
+      "specialized_runner_required": false,
+      "acceptance_scope": "ordinary CI Rust and frontend tests for live Settings enable-disable paths, listener diagnostics, and listener lifecycle transitions"
+    },
+    {
+      "id": "manual_shared_capture_transfer_acceptance",
+      "title": "Manual shared-capture transfer acceptance",
+      "status": "implemented",
+      "workflow": ".github/workflows/ci.yml",
+      "required_for_final_closeout": true,
+      "exact_head_required": true,
+      "skipped_conclusion_counts_as_pass": false,
+      "specialized_runner_required": false,
+      "acceptance_scope": "ordinary CI Rust tests for manual command ownership transfer, Wake listener stop-resume boundaries, and duplicate microphone stream prevention"
+    },
+    {
+      "id": "selected_asr_policy_acceptance",
+      "title": "Selected ASR policy acceptance",
+      "status": "implemented",
+      "workflow": ".github/workflows/ci.yml",
+      "required_for_final_closeout": true,
+      "exact_head_required": true,
+      "skipped_conclusion_counts_as_pass": false,
+      "specialized_runner_required": false,
+      "acceptance_scope": "ordinary CI and disclosure tests proving Wake-triggered command ASR remains local-Moonshine-only and unsupported modes fail before listening"
+    },
+    {
+      "id": "downstream_first_command_word_acceptance",
+      "title": "Downstream first-command-word acceptance",
+      "status": "implemented",
+      "workflow": ".github/workflows/ci.yml",
+      "required_for_final_closeout": true,
+      "exact_head_required": true,
+      "skipped_conclusion_counts_as_pass": false,
+      "specialized_runner_required": false,
+      "acceptance_scope": "deterministic router and local-ASR ingress tests proving wake pre-roll and the first command word reach the downstream command boundary in order"
+    },
+    {
+      "id": "clean_install_artifact_provisioning_acceptance",
+      "title": "Clean-install artifact provisioning acceptance",
+      "status": "implemented",
+      "workflow": ".github/workflows/wake-word-native-packaging.yml",
+      "required_for_final_closeout": true,
+      "exact_head_required": true,
+      "skipped_conclusion_counts_as_pass": false,
+      "specialized_runner_required": false,
+      "acceptance_scope": "native packaging and artifact manifest tests proving clean app-data installs fail closed until pinned Wake artifacts are prepared and verified"
+    },
+    {
       "id": "performance_evidence_policy",
       "title": "Performance evidence policy gate",
       "status": "implemented",
@@ -80,6 +135,17 @@
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": false,
       "acceptance_scope": "performance-report schema and pending-measurement policy"
+    },
+    {
+      "id": "production_listener_performance_evidence",
+      "title": "Production listener performance evidence",
+      "status": "implemented",
+      "workflow": ".github/workflows/wake-word-performance-evidence.yml",
+      "required_for_final_closeout": true,
+      "exact_head_required": true,
+      "skipped_conclusion_counts_as_pass": false,
+      "specialized_runner_required": true,
+      "acceptance_scope": "representative production native listener startup, idle capture CPU, memory, routing latency, wake-to-command, pre-roll, repeated-cycle, and continuous-ASR comparison measurements"
     },
     {
       "id": "privacy_audit",
