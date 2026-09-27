@@ -28,10 +28,31 @@ for (const metric of [
   if (!requiredMetrics.includes(metric)) fail(`missing required metric ${metric}`);
 }
 
+const scope = report.wpcr500_scope ?? {};
+if (scope.production_listener_measurement_required !== true) {
+  fail("WPCR-500 must explicitly require production-listener measurement");
+}
+if (scope.production_listener_status !== "pending_measurement") {
+  fail("WPCR-500 production-listener status must remain pending until measured");
+}
+if (scope.accepted_wwr630_is_full_wpcr500_closeout !== false) {
+  fail("accepted WWR-630 evidence must not be represented as full WPCR-500 closeout");
+}
+if (typeof scope.accepted_wwr630_scope !== "string" || scope.accepted_wwr630_scope.length === 0) {
+  fail("WPCR-500 scope must describe the accepted WWR-630 evidence boundary");
+}
+
+const assertMeasurementPath = (entry, label) => {
+  if (typeof entry.measurement_path !== "string" || entry.measurement_path.length === 0) {
+    fail(`${label} lacks measurement_path scope`);
+  }
+};
+
 const assertProvenance = (entry, label) => {
   if (!entry.commit_sha || !entry.runner || !entry.measured_at) {
     fail(`${label} lacks commit/runner/timestamp provenance`);
   }
+  assertMeasurementPath(entry, label);
 };
 
 const assertNumericMetric = (metrics, metric, label) => {
@@ -52,6 +73,9 @@ const validatePartialMeasurements = () => {
   for (const entry of partialMeasurements) {
     if (!platforms.has(entry.platform)) fail(`partial measurement uses unknown platform ${entry.platform}`);
     assertProvenance(entry, `${entry.platform} partial measurement`);
+    if (entry.measurement_path === "production_native_listener") {
+      fail("partial measurements must not masquerade as production listener measurements");
+    }
     const metrics = entry.metrics ?? {};
     for (const metric of ["idle_cpu_percent", "runtime_memory_mib", "inference_latency_ms"]) {
       assertNonNegativeMetric(metrics, metric, `${entry.platform} partial measurement`);
@@ -176,6 +200,9 @@ for (const platform of platforms) {
   const sample = measurements.find((entry) => entry.platform === platform);
   if (!sample) fail(`accepted report lacks ${platform} measurement`);
   assertProvenance(sample, `${platform} measurement`);
+  if (sample.measurement_path === "production_native_listener") {
+    fail("accepted WWR-630 measurements cannot be labeled as full production native-listener measurements");
+  }
   for (const metric of platformRequiredMetrics) {
     assertNumericMetric(sample.metrics ?? {}, metric, platform);
   }
@@ -184,4 +211,4 @@ for (const platform of platforms) {
     fail(`${platform} does not demonstrate KWS lighter than continuous ASR`);
   }
 }
-console.log("Wake Word performance evidence is structurally complete and accepted.");
+console.log("Wake Word performance evidence is structurally complete, accepted for WWR-630, and explicitly pending full WPCR-500 production-listener measurement.");
