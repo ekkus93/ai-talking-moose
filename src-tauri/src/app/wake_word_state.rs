@@ -5,6 +5,7 @@ use super::wake_word::engine::{NativeKwsSession, NativeKwsSessionPaths};
 #[cfg(test)]
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_composition::WakeWordApplicationRuntime;
+use super::wake_word_command_lifecycle::suspend_for_command_interaction;
 use super::wake_word_local_listener_thread::{
     spawn_wake_local_listener_thread, WakeLocalListenerEvent, WakeLocalListenerHandle,
 };
@@ -338,6 +339,7 @@ pub(crate) fn control_native_wake_listener(
         NativeWakeListenerControl::TransferToCommand => {
             let was_active = native_wake_listener_is_active();
             stop_native_wake_listener_thread();
+            suspend_for_command_interaction(&state.wake_word_runtime)?;
             Ok(was_active)
         }
     }
@@ -603,6 +605,62 @@ mod tests {
             state.wake_word_runtime.phase(),
             WakeWordRuntimePhase::Loading
         );
+    }
+
+    #[test]
+    fn command_transfer_suspends_listening_runtime_without_recording_error() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        state.wake_word_runtime.mark_loaded().unwrap();
+
+        let was_active =
+            control_native_wake_listener(&state, NativeWakeListenerControl::TransferToCommand)
+                .unwrap();
+
+        assert!(!was_active);
+        assert!(!native_wake_listener_is_active());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::SuspendedTalking
+        );
+        assert_eq!(
+            state
+                .wake_word_runtime
+                .snapshot(std::time::Instant::now())
+                .last_error,
+            None
+        );
+    }
+
+    #[test]
+    fn command_transfer_preserves_manual_availability_from_non_listening_wake_states() {
+        for phase in ["disabled", "loading", "error"] {
+            stop_native_wake_listener_thread();
+            let state = AppState::new_for_tests().unwrap();
+            match phase {
+                "disabled" => {}
+                "loading" => {
+                    state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+                }
+                "error" => {
+                    state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+                    state.wake_word_runtime.record_runtime_error();
+                }
+                _ => unreachable!(),
+            }
+
+            control_native_wake_listener(&state, NativeWakeListenerControl::TransferToCommand)
+                .unwrap();
+
+            let expected = match phase {
+                "disabled" => WakeWordRuntimePhase::Disabled,
+                "loading" => WakeWordRuntimePhase::Loading,
+                "error" => WakeWordRuntimePhase::Error,
+                _ => unreachable!(),
+            };
+            assert_eq!(state.wake_word_runtime.phase(), expected, "{phase}");
+        }
     }
 
     #[test]
