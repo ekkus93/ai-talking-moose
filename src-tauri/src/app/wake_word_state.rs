@@ -567,13 +567,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (event_tx, _event_rx) = mpsc::unbounded_channel();
 
-        let error = start_native_wake_listener_thread_with_config(
-            &state,
-            &pending,
-            temp.path(),
-            event_tx,
-        )
-        .unwrap_err();
+        let error =
+            start_native_wake_listener_thread_with_config(&state, &pending, temp.path(), event_tx)
+                .unwrap_err();
 
         assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
         assert!(!native_wake_listener_is_active());
