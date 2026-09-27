@@ -556,6 +556,34 @@ mod tests {
     }
 
     #[test]
+    fn listener_start_validates_pending_settings_instead_of_persisted_settings() {
+        let state = AppState::new_for_tests().unwrap();
+        assert_eq!(state.settings.read().asr_mode, AsrMode::MoonshineTinyStreaming);
+        let pending = AppSettings {
+            wake_word_enabled: true,
+            asr_mode: AsrMode::GeminiLiveAudio,
+            ..state.settings.read().clone()
+        };
+        let temp = tempfile::tempdir().unwrap();
+        let (event_tx, _event_rx) = mpsc::unbounded_channel();
+
+        let error = start_native_wake_listener_thread_with_config(
+            &state,
+            &pending,
+            temp.path(),
+            event_tx,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
+        assert!(!native_wake_listener_is_active());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
+    }
+
+    #[test]
     fn pending_restart_preserves_suspended_command_ownership() {
         let state = AppState::new_for_tests().unwrap();
         state.wake_word_runtime.apply_enabled_setting(true).unwrap();
