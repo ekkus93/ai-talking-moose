@@ -45,34 +45,34 @@
 
 ## WPCR-100 — Build one native listener control plane
 
-**Incremental evidence:** intentional listener shutdown/capture-close race fixed by PR #473 and merged as `dcc855cd16a89e37a6894ef217ba0532fc4f068b`; exact-master CI run `36235465363` passed. Shutdown evidence is recorded in `docs/evidence/WPCR-100_LISTENER_SHUTDOWN_2026-09-26.md`, merged by PR #474 as `9d0f6530eac3169500d573f1039c57aa25b4fb72`; exact-master CI run `36236017079` passed. Current source also keeps `NativeKwsSession` construction/use inside the dedicated listener thread and retains fail-closed startup/capture handling. Broader WPCR-100 control-plane/state requirements remain open.
+**Incremental evidence:** intentional listener shutdown/capture-close race fixed by PR #473 and merged as `dcc855cd16a89e37a6894ef217ba0532fc4f068b`; exact-master CI run `36235465363` passed. Shutdown evidence is recorded in `docs/evidence/WPCR-100_LISTENER_SHUTDOWN_2026-09-26.md`, merged by PR #474 as `9d0f6530eac3169500d573f1039c57aa25b4fb72`; exact-master CI run `36236017079` passed. Current source also keeps `NativeKwsSession` construction/use inside the dedicated listener thread and retains fail-closed startup/capture handling. The authoritative `control_native_wake_listener` boundary, listener-status classifier, centralized terminal completion boundary, and deterministic mock-capture listener tests are present on `master` at `e4606ee2f5a649d01468ed002d41beb09989da05`; exact-master ordinary CI `36341840706`, lifecycle stability `36341840594`, and source-security audit `36341840687` passed.
 
 ### Tasks
 
-- [ ] Introduce one authoritative listener control boundary in `src-tauri/src/app/wake_word_state.rs` or a focused new module.
-- [ ] Ensure startup, Settings changes, manual conversation, wake-triggered conversation, shutdown, and tests use the same listener lifecycle API.
-- [ ] Add explicit listener states or diagnostics sufficient to distinguish:
-  - [ ] runtime disabled;
-  - [ ] runtime loading;
-  - [ ] listener starting;
-  - [ ] listener active/listening;
-  - [ ] listener intentionally suspended for command ownership;
-  - [ ] listener pending until conversation ends;
-  - [ ] listener failed closed;
-  - [ ] listener stopped.
-- [ ] Ensure runtime `Disabled` is never reported as proof that microphone capture is stopped unless the listener thread has actually stopped.
+- [x] Introduce one authoritative listener control boundary in `src-tauri/src/app/wake_word_state.rs` or a focused new module.
+- [x] Ensure startup, Settings changes, manual conversation, wake-triggered conversation, shutdown, and tests use the same listener lifecycle API.
+- [x] Add explicit listener states or diagnostics sufficient to distinguish:
+  - [x] runtime disabled;
+  - [x] runtime loading;
+  - [x] listener starting;
+  - [x] listener active/listening;
+  - [x] listener intentionally suspended for command ownership;
+  - [x] listener pending until conversation ends;
+  - [x] listener failed closed;
+  - [x] listener stopped.
+- [x] Ensure runtime `Disabled` is never reported as proof that microphone capture is stopped unless the listener thread has actually stopped.
 - [x] Make intentional listener shutdown distinct from capture failure.
 - [x] Prevent intentional command-transfer shutdown from recording Wake `Error`.
 - [x] Keep the native KWS session local to the listener thread.
 - [x] Preserve fail-closed behavior for artifact, runtime, architecture, and capture failures.
-- [ ] Add unit tests for listener state transitions without real audio hardware.
+- [x] Add unit tests for listener state transitions without real audio hardware.
 
 ### Acceptance
 
-- [ ] There is one public/internal control API for listener lifecycle.
-- [ ] Existing direct lifecycle call sites are migrated or explicitly justified.
+- [x] There is one public/internal control API for listener lifecycle.
+- [x] Existing direct lifecycle call sites are migrated or explicitly justified.
 - [x] Tests prove intentional shutdown does not become a Wake error.
-- [ ] Diagnostics cannot say Wake is disabled/listening incorrectly relative to listener ownership.
+- [x] Diagnostics cannot say Wake is disabled/listening incorrectly relative to listener ownership.
 
 ## WPCR-110 — Wire Settings enable/disable to real listener ownership
 
