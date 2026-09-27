@@ -117,12 +117,7 @@ mod tests {
         let settings = wake_enabled_settings();
 
         assert_eq!(
-            classify_native_listener_status(
-                &settings,
-                WakeWordRuntimePhase::Loading,
-                false,
-                true,
-            ),
+            classify_native_listener_status(&settings, WakeWordRuntimePhase::Loading, false, true,),
             WakeWordListenerStatus::PendingUntilIdle
         );
     }
@@ -167,12 +162,7 @@ mod tests {
             WakeWordListenerStatus::FailedClosed
         );
         assert_eq!(
-            classify_native_listener_status(
-                &supported,
-                WakeWordRuntimePhase::Error,
-                false,
-                false,
-            ),
+            classify_native_listener_status(&supported, WakeWordRuntimePhase::Error, false, false,),
             WakeWordListenerStatus::FailedClosed
         );
     }
