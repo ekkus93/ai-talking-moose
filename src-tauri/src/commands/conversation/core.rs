@@ -6,8 +6,7 @@ use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::app::wake_word_command_lifecycle::resume_after_command_interaction;
 use crate::app::wake_word_state::{
-    restart_native_wake_listener_thread_from_configured_app_state,
-    transfer_native_wake_listener_to_command_ownership,
+    control_native_wake_listener, NativeWakeListenerControl,
 };
 #[cfg(test)]
 use crate::asr::AsrMode;
@@ -137,7 +136,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     if wake_guarded {
         // This is an intentional command-ownership transfer, not a capture failure. The native
         // listener thread must release the shared `AudioCapture` before normal command ASR starts.
-        transfer_native_wake_listener_to_command_ownership();
+        control_native_wake_listener(state, NativeWakeListenerControl::TransferToCommand)?;
     }
     state.ambient_scheduler.claim_foreground_presentation();
     prepare_character_for_conversation(state, &app)?;
@@ -203,8 +202,9 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
                         Ok(()) => {
                             if wake_word_enabled {
                                 if let Err(error_value) =
-                                    restart_native_wake_listener_thread_from_configured_app_state(
+                                    control_native_wake_listener(
                                         &wake_restart_state,
+                                        NativeWakeListenerControl::RestartConfigured,
                                     )
                                 {
                                     warn!(error = %error_value, "Failed to restart Wake Word listener after command interaction");
@@ -261,7 +261,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
                     Ok(()) => {
                         if wake_word_enabled {
                             if let Err(restart_error) =
-                                restart_native_wake_listener_thread_from_configured_app_state(state)
+                                control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured)
                             {
                                 warn!(error = %restart_error, "Failed to restart Wake Word listener after conversation start failure");
                             }
@@ -312,7 +312,7 @@ pub async fn stop_conversation(
         resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
     }
     if state.settings.read().wake_word_enabled {
-        if let Err(error) = restart_native_wake_listener_thread_from_configured_app_state(&state) {
+        if let Err(error) = control_native_wake_listener(&state, NativeWakeListenerControl::RestartConfigured) {
             warn!(error = %error, "Failed to restart Wake Word listener after explicit stop");
         }
     }
