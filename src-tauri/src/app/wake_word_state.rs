@@ -89,23 +89,23 @@ fn native_runtime_platform_dir() -> &'static str {
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn capture_owner_from_app_state<E: SherpaKwsEngine>(
+#[cfg(test)]
+fn capture_owner_from_app_state<E: SherpaKwsEngine>(
     state: &AppState,
 ) -> AuthoritativeWakeCaptureOwner<E> {
     AuthoritativeWakeCaptureOwner::from_shared_capture(state.audio_capture.clone())
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 #[derive(Debug)]
-pub(crate) enum WakeWordStartupError {
+enum WakeWordStartupError {
     Runtime(WakeWordRuntimeError),
     Native(WakeWordError),
     Capture(WakeCaptureOrchestratorError),
 }
 
-#[allow(dead_code)]
-pub(crate) async fn start_native_wake_from_app_state(
+#[cfg(test)]
+async fn start_native_wake_from_app_state(
     state: &AppState,
     paths: NativeKwsSessionPaths,
 ) -> Result<Option<AuthoritativeWakeCaptureOwner<NativeKwsSession>>, WakeWordStartupError> {
@@ -186,7 +186,7 @@ fn start_native_wake_listener_thread_with_config(
     Ok(true)
 }
 
-pub(crate) fn restart_native_wake_listener_thread_from_configured_app_state(
+fn restart_native_wake_listener_thread_from_configured_app_state(
     state: &AppState,
 ) -> Result<bool, String> {
     if !state.settings.read().wake_word_enabled {
