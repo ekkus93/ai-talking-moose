@@ -696,7 +696,10 @@ mod tests {
         .unwrap();
 
         assert!(should_restart);
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Loading
+        );
     }
 
     #[test]
@@ -737,7 +740,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Loading
+        );
     }
 
     #[test]
