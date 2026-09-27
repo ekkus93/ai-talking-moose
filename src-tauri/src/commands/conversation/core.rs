@@ -2,7 +2,6 @@ use crate::ai::types::{LiveOutboundDiagnostics, LiveSessionConfig};
 use crate::app::request_snapshot::TextRequestSettingsSnapshot;
 use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
-use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::app::wake_word_command_lifecycle::resume_after_command_interaction;
 use crate::app::wake_word_state::{
@@ -113,6 +112,21 @@ fn prepare_character_for_conversation<R: Runtime>(
     transition_and_emit(&state.character_state, app, CharacterState::Idle)
 }
 
+fn resolve_wake_runtime_after_command_interaction(state: &AppState) -> Result<bool, String> {
+    let wake_word_enabled = state.settings.read().wake_word_enabled;
+    resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
+    Ok(wake_word_enabled)
+}
+
+fn resolve_wake_after_command_interaction(state: &AppState) -> Result<(), String> {
+    if resolve_wake_runtime_after_command_interaction(state)? {
+        control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured)?;
+    } else {
+        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
+    }
+    Ok(())
+}
+
 async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     state: &AppState,
     app: tauri::AppHandle<R>,
@@ -131,7 +145,6 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     // start request is still constructing or activating the old graph.
     let _settings_guard = settings_runtime_lock().lock().await;
     let settings = state.settings.read().clone();
-    let wake_runtime = state.wake_word_runtime.clone();
     let wake_guarded = settings.wake_word_enabled;
     if wake_guarded {
         // This is an intentional command-ownership transfer, not a capture failure. The native
@@ -157,8 +170,6 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     let character_state = state.character_state.clone();
     let app_state = app.clone();
     let app_lifecycle = app.clone();
-    let wake_runtime_for_lifecycle = wake_runtime.clone();
-    let settings_for_lifecycle = state.settings.clone();
     let wake_restart_state = state.clone();
     let app_provider_error = app.clone();
     let app_transcript = app.clone();
@@ -188,32 +199,14 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
             },
             move |lifecycle: ConversationLifecycle| {
                 let _ = app_lifecycle.emit("moose://conversation/lifecycle", lifecycle);
-                if wake_guarded
-                    && matches!(
-                        lifecycle,
-                        ConversationLifecycle::Idle | ConversationLifecycle::Failed
-                    )
-                {
-                    let wake_word_enabled = settings_for_lifecycle.read().wake_word_enabled;
-                    match resume_after_command_interaction(
-                        &wake_runtime_for_lifecycle,
-                        wake_word_enabled,
-                    ) {
-                        Ok(()) => {
-                            if wake_word_enabled {
-                                if let Err(error_value) =
-                                    control_native_wake_listener(
-                                        &wake_restart_state,
-                                        NativeWakeListenerControl::RestartConfigured,
-                                    )
-                                {
-                                    warn!(error = %error_value, "Failed to restart Wake Word listener after command interaction");
-                                }
-                            }
-                        }
-                        Err(error_value) => {
-                            warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
-                        }
+                if matches!(
+                    lifecycle,
+                    ConversationLifecycle::Idle | ConversationLifecycle::Failed
+                ) {
+                    if let Err(error_value) =
+                        resolve_wake_after_command_interaction(&wake_restart_state)
+                    {
+                        warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
                     }
                 }
             },
@@ -255,22 +248,8 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     let session_id = match session_start {
         Ok(session_id) => session_id,
         Err(error_value) => {
-            if wake_guarded {
-                let wake_word_enabled = state.settings.read().wake_word_enabled;
-                match resume_after_command_interaction(&wake_runtime, wake_word_enabled) {
-                    Ok(()) => {
-                        if wake_word_enabled {
-                            if let Err(restart_error) =
-                                control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured)
-                            {
-                                warn!(error = %restart_error, "Failed to restart Wake Word listener after conversation start failure");
-                            }
-                        }
-                    }
-                    Err(resume_error) => {
-                        warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
-                    }
-                }
+            if let Err(resume_error) = resolve_wake_after_command_interaction(state) {
+                warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
             }
             return Err(error_value);
         }
@@ -307,15 +286,7 @@ pub async fn stop_conversation(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
-    if state.wake_word_runtime.phase() == WakeWordRuntimePhase::SuspendedTalking {
-        let wake_word_enabled = state.settings.read().wake_word_enabled;
-        resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
-    }
-    if state.settings.read().wake_word_enabled {
-        if let Err(error) = control_native_wake_listener(&state, NativeWakeListenerControl::RestartConfigured) {
-            warn!(error = %error, "Failed to restart Wake Word listener after explicit stop");
-        }
-    }
+    resolve_wake_after_command_interaction(&state)?;
 
     state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Idle)
@@ -472,4 +443,37 @@ pub async fn send_text_message<R: Runtime>(
     schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
 
     Ok(reply)
+}
+
+
+#[cfg(test)]
+mod wake_terminal_resolution_tests {
+    use super::*;
+    use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
+
+    #[test]
+    fn terminal_resolution_uses_latest_enable_setting_not_start_snapshot() {
+        let state = AppState::new_for_tests().unwrap();
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+
+        state.settings.write().wake_word_enabled = true;
+        let should_restart = resolve_wake_runtime_after_command_interaction(&state).unwrap();
+
+        assert!(should_restart);
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+    }
+
+    #[test]
+    fn terminal_resolution_honors_latest_disable_setting() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().wake_word_enabled = true;
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        state.wake_word_runtime.mark_loaded().unwrap();
+        state.settings.write().wake_word_enabled = false;
+
+        let should_restart = resolve_wake_runtime_after_command_interaction(&state).unwrap();
+
+        assert!(!should_restart);
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+    }
 }
