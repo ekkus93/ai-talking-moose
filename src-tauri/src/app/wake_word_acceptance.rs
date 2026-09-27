@@ -28,6 +28,13 @@ const PRODUCTION_LISTENER_IDLE_FRAMES: usize = 20;
 const PRODUCTION_LISTENER_REPEATED_WAKE_CYCLES: u32 = 3;
 const PRODUCTION_LISTENER_REPEATED_ENABLE_CYCLES: u32 = 3;
 
+type ProductionListenerSpawn = (
+    WakeLocalListenerHandle,
+    mpsc::UnboundedReceiver<WakeLocalListenerEvent>,
+    mpsc::Sender<Vec<u8>>,
+    u64,
+);
+
 #[derive(Debug, Deserialize)]
 pub struct GeneratedCorpusIndex {
     pub corpus_id: String,
@@ -400,15 +407,7 @@ fn spawn_measured_production_listener(
     capture: Arc<Mutex<AudioCapture>>,
     runtime: WakeWordApplicationRuntime,
     measurements: Arc<Mutex<ProductionListenerMeasurements>>,
-) -> Result<
-    (
-        WakeLocalListenerHandle,
-        mpsc::UnboundedReceiver<WakeLocalListenerEvent>,
-        mpsc::Sender<Vec<u8>>,
-        u64,
-    ),
-    String,
-> {
+) -> Result<ProductionListenerSpawn, String> {
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     let session_paths = paths.clone();
     let measurement_state = measurements.clone();
@@ -513,9 +512,16 @@ fn fixture_samples(fixture: &GeneratedFixture, corpus_dir: &Path) -> Result<Vec<
             fixture.id
         ));
     }
-    Ok(bytes
-        .chunks_exact(2)
-        .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+    let (sample_bytes, remainder) = bytes.as_chunks::<2>();
+    if !remainder.is_empty() {
+        return Err(format!(
+            "generated fixture {} is not PCM16 aligned",
+            fixture.id
+        ));
+    }
+    Ok(sample_bytes
+        .iter()
+        .map(|pair| i16::from_le_bytes(*pair))
         .collect())
 }
 
