@@ -111,8 +111,11 @@ fn stop_lifecycle_boundary_resumes_suspended_enabled_wake_runtime() {
         WakeWordRuntimePhase::SuspendedTalking
     );
 
-    let wake_word_enabled = app_state.settings.read().wake_word_enabled;
-    resume_after_command_interaction(&app_state.wake_word_runtime, wake_word_enabled).unwrap();
+    complete_native_wake_command_interaction(
+        &app_state,
+        CommandInteractionTerminalOutcome::Success,
+    )
+    .unwrap();
 
     assert_eq!(
         app_state.wake_word_runtime.phase(),
@@ -133,8 +136,11 @@ fn stop_lifecycle_boundary_honors_disabled_setting_after_suspension() {
         WakeWordRuntimePhase::SuspendedTalking
     );
 
-    let wake_word_enabled = app_state.settings.read().wake_word_enabled;
-    resume_after_command_interaction(&app_state.wake_word_runtime, wake_word_enabled).unwrap();
+    complete_native_wake_command_interaction(
+        &app_state,
+        CommandInteractionTerminalOutcome::Cancelled,
+    )
+    .unwrap();
 
     assert_eq!(
         app_state.wake_word_runtime.phase(),
