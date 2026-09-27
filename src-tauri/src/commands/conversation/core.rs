@@ -6,7 +6,8 @@ use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::app::wake_word_command_lifecycle::resume_after_command_interaction;
 use crate::app::wake_word_state::{
-    restart_native_wake_listener_thread_from_configured_app_state, stop_native_wake_listener_thread,
+    restart_native_wake_listener_thread_from_configured_app_state,
+    transfer_native_wake_listener_to_command_ownership,
 };
 #[cfg(test)]
 use crate::asr::AsrMode;
@@ -136,7 +137,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     if wake_guarded {
         // This is an intentional command-ownership transfer, not a capture failure. The native
         // listener thread must release the shared `AudioCapture` before normal command ASR starts.
-        stop_native_wake_listener_thread();
+        transfer_native_wake_listener_to_command_ownership();
     }
     state.ambient_scheduler.claim_foreground_presentation();
     prepare_character_for_conversation(state, &app)?;
@@ -390,8 +391,7 @@ pub fn forget_everything(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub fn get_transcripts(
     limit: usize,
-    state: State<'_, AppState>,
-) -> Result<Vec<TranscriptRecord>, String> {
+    state: State<'_, AppState>) -> Result<Vec<TranscriptRecord>, String> {
     state.db.get_transcripts(limit).map_err(|e| e.to_string())
 }
 

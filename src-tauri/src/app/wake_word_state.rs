@@ -286,6 +286,12 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     }
 }
 
+pub(crate) fn transfer_native_wake_listener_to_command_ownership() -> bool {
+    let was_active = native_wake_listener_is_active();
+    stop_native_wake_listener_thread();
+    was_active
+}
+
 pub(crate) fn clear_native_wake_listener_thread() {
     stop_native_wake_listener_thread();
 }
