@@ -3,9 +3,10 @@ use crate::app::request_snapshot::TextRequestSettingsSnapshot;
 use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
-use crate::app::wake_word_command_lifecycle::resume_after_command_interaction;
+use crate::app::wake_word_command_lifecycle::CommandInteractionTerminalOutcome;
 use crate::app::wake_word_state::{
-    control_native_wake_listener, NativeWakeListenerControl,
+    complete_native_wake_command_interaction, control_native_wake_listener,
+    NativeWakeListenerControl,
 };
 #[cfg(test)]
 use crate::asr::AsrMode;
@@ -112,28 +113,18 @@ fn prepare_character_for_conversation<R: Runtime>(
     transition_and_emit(&state.character_state, app, CharacterState::Idle)
 }
 
-fn resolve_wake_runtime_after_command_interaction(state: &AppState) -> Result<bool, String> {
-    let wake_word_enabled = state.settings.read().wake_word_enabled;
-    resume_after_command_interaction(&state.wake_word_runtime, wake_word_enabled)?;
-    Ok(wake_word_enabled)
-}
-
-fn resolve_wake_after_command_interaction(state: &AppState) -> Result<(), String> {
-    if resolve_wake_runtime_after_command_interaction(state)? {
-        if let Err(error) =
-            control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured)
-        {
-            state.wake_word_runtime.record_runtime_error();
-            return Err(error);
-        }
-    } else {
-        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
-    }
-    Ok(())
+fn resolve_wake_after_command_interaction(
+    state: &AppState,
+    outcome: CommandInteractionTerminalOutcome,
+) -> Result<(), String> {
+    complete_native_wake_command_interaction(state, outcome).map(|_| ())
 }
 
 fn resolve_wake_after_start_failure(state: &AppState, context: &'static str) {
-    if let Err(error_value) = resolve_wake_after_command_interaction(state) {
+    if let Err(error_value) = resolve_wake_after_command_interaction(
+        state,
+        CommandInteractionTerminalOutcome::RecoverableFailure,
+    ) {
         warn!(
             error = %error_value,
             context = context,
@@ -217,12 +208,16 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
             },
             move |lifecycle: ConversationLifecycle| {
                 let _ = app_lifecycle.emit("moose://conversation/lifecycle", lifecycle);
-                if matches!(
-                    lifecycle,
-                    ConversationLifecycle::Idle | ConversationLifecycle::Failed
-                ) {
+                let terminal_outcome = match lifecycle {
+                    ConversationLifecycle::Idle => Some(CommandInteractionTerminalOutcome::Success),
+                    ConversationLifecycle::Failed => {
+                        Some(CommandInteractionTerminalOutcome::RecoverableFailure)
+                    }
+                    _ => None,
+                };
+                if let Some(outcome) = terminal_outcome {
                     if let Err(error_value) =
-                        resolve_wake_after_command_interaction(&wake_restart_state)
+                        resolve_wake_after_command_interaction(&wake_restart_state, outcome)
                     {
                         warn!(error = %error_value, "Failed to resolve Wake Word after command interaction");
                     }
@@ -302,7 +297,7 @@ pub async fn stop_conversation(
         .conversation_mgr
         .stop_session(state.audio_capture.clone(), state.audio_playback.clone())
         .await;
-    resolve_wake_after_command_interaction(&state)?;
+    resolve_wake_after_command_interaction(&state, CommandInteractionTerminalOutcome::Cancelled)?;
 
     state.ambient_scheduler.claim_foreground_presentation();
     transition_and_emit(&state.character_state, &app, CharacterState::Idle)
@@ -472,9 +467,12 @@ mod wake_terminal_resolution_tests {
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
 
         state.settings.write().wake_word_enabled = true;
-        let should_restart = resolve_wake_runtime_after_command_interaction(&state).unwrap();
+        resolve_wake_after_command_interaction(
+            &state,
+            CommandInteractionTerminalOutcome::Success,
+        )
+        .unwrap();
 
-        assert!(should_restart);
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
     }
 
@@ -486,9 +484,12 @@ mod wake_terminal_resolution_tests {
         state.wake_word_runtime.mark_loaded().unwrap();
         state.settings.write().wake_word_enabled = false;
 
-        let should_restart = resolve_wake_runtime_after_command_interaction(&state).unwrap();
+        resolve_wake_after_command_interaction(
+            &state,
+            CommandInteractionTerminalOutcome::Cancelled,
+        )
+        .unwrap();
 
-        assert!(!should_restart);
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
     }
 

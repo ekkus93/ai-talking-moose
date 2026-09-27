@@ -4,7 +4,9 @@ use super::wake_word::engine::SherpaKwsEngine;
 use super::wake_word::engine::{NativeKwsSession, NativeKwsSessionPaths};
 #[cfg(test)]
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
-use super::wake_word_command_lifecycle::suspend_for_command_interaction;
+use super::wake_word_command_lifecycle::{
+    complete_command_interaction, suspend_for_command_interaction, CommandInteractionTerminalOutcome,
+};
 use super::wake_word_composition::WakeWordApplicationRuntime;
 use super::wake_word_local_listener_thread::{
     spawn_wake_local_listener_thread, WakeLocalListenerEvent, WakeLocalListenerHandle,
@@ -345,6 +347,24 @@ pub(crate) fn control_native_wake_listener(
     }
 }
 
+pub(crate) fn complete_native_wake_command_interaction(
+    state: &AppState,
+    outcome: CommandInteractionTerminalOutcome,
+) -> Result<bool, String> {
+    let wake_word_enabled = state.settings.read().wake_word_enabled;
+    complete_command_interaction(&state.wake_word_runtime, wake_word_enabled, outcome)?;
+    if wake_word_enabled {
+        if let Err(error) = control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured) {
+            state.wake_word_runtime.record_runtime_error();
+            return Err(error);
+        }
+        Ok(true)
+    } else {
+        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
+        Ok(false)
+    }
+}
+
 fn stop_native_wake_listener_thread() {
     let Some(handle) = native_wake_listener_slot().lock().take() else {
         return;
@@ -661,6 +681,63 @@ mod tests {
             };
             assert_eq!(state.wake_word_runtime.phase(), expected, "{phase}");
         }
+    }
+
+    #[test]
+    fn terminal_command_completion_uses_latest_enable_setting() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().wake_word_enabled = true;
+
+        let should_restart = complete_native_wake_command_interaction(
+            &state,
+            CommandInteractionTerminalOutcome::Success,
+        )
+        .unwrap();
+
+        assert!(should_restart);
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+    }
+
+    #[test]
+    fn terminal_command_completion_honors_latest_disable_setting() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().wake_word_enabled = true;
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        state.wake_word_runtime.mark_loaded().unwrap();
+        state.wake_word_runtime.suspend_for_talking().unwrap();
+        state.settings.write().wake_word_enabled = false;
+
+        let should_restart = complete_native_wake_command_interaction(
+            &state,
+            CommandInteractionTerminalOutcome::Cancelled,
+        )
+        .unwrap();
+
+        assert!(!should_restart);
+        assert!(!native_wake_listener_is_active());
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
+    }
+
+    #[test]
+    fn terminal_command_completion_recovers_wake_error_when_still_enabled() {
+        stop_native_wake_listener_thread();
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().wake_word_enabled = true;
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        state.wake_word_runtime.record_runtime_error();
+
+        complete_native_wake_command_interaction(
+            &state,
+            CommandInteractionTerminalOutcome::RecoverableFailure,
+        )
+        .unwrap();
+
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
     }
 
     #[test]
