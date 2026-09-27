@@ -23,9 +23,8 @@ fn enabled_asr_mode_change_to_unsupported_fails_closed_without_listener() {
         ..previous.clone()
     };
 
-    let error =
-        apply_configured_native_wake_listener_settings_change(&state, &previous, &next)
-            .unwrap_err();
+    let error = apply_configured_native_wake_listener_settings_change(&state, &previous, &next)
+        .unwrap_err();
 
     assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
     assert!(!native_wake_listener_is_active());
@@ -51,5 +50,8 @@ fn enabled_input_device_change_without_startup_config_enters_loading_without_lis
     apply_configured_native_wake_listener_settings_change(&state, &previous, &next).unwrap();
 
     assert!(!native_wake_listener_is_active());
-    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
+    assert_eq!(
+        state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Loading
+    );
 }
