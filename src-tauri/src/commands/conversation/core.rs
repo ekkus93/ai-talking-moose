@@ -120,7 +120,12 @@ fn resolve_wake_runtime_after_command_interaction(state: &AppState) -> Result<bo
 
 fn resolve_wake_after_command_interaction(state: &AppState) -> Result<(), String> {
     if resolve_wake_runtime_after_command_interaction(state)? {
-        control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured)?;
+        if let Err(error) =
+            control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured)
+        {
+            state.wake_word_runtime.record_runtime_error();
+            return Err(error);
+        }
     } else {
         control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
     }
