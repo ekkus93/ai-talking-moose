@@ -195,10 +195,12 @@ pub fn run() {
             });
 
             let (wake_event_tx, mut wake_event_rx) = mpsc::unbounded_channel();
-            match app::wake_word_state::start_native_wake_listener_thread_from_app_state(
+            match app::wake_word_state::control_native_wake_listener(
                 &app_state,
-                &app_data_dir,
-                wake_event_tx,
+                app::wake_word_state::NativeWakeListenerControl::ConfigureAndStart {
+                    app_data_dir: app_data_dir.clone(),
+                    event_tx: wake_event_tx,
+                },
             ) {
                 Ok(true) => {
                     info!("Wake Word native listener started from persisted settings");
@@ -216,7 +218,10 @@ pub fn run() {
                     match event {
                         WakeLocalListenerEvent::Started => {}
                         WakeLocalListenerEvent::Triggered(handoff_audio) => {
-                            app::wake_word_state::clear_native_wake_listener_thread();
+                            let _ = app::wake_word_state::control_native_wake_listener(
+                                &wake_state,
+                                app::wake_word_state::NativeWakeListenerControl::Stop,
+                            );
                             if let Err(error) = commands::conversation::start_wake_conversation(
                                 &wake_state,
                                 wake_app.clone(),
@@ -229,11 +234,17 @@ pub fn run() {
                         }
                         WakeLocalListenerEvent::StartupFailed(error)
                         | WakeLocalListenerEvent::CaptureFailed(error) => {
-                            app::wake_word_state::clear_native_wake_listener_thread();
+                            let _ = app::wake_word_state::control_native_wake_listener(
+                                &wake_state,
+                                app::wake_word_state::NativeWakeListenerControl::Stop,
+                            );
                             warn!(error = %error, "Wake Word native listener stopped fail-closed");
                         }
                         WakeLocalListenerEvent::Stopped => {
-                            app::wake_word_state::clear_native_wake_listener_thread();
+                            let _ = app::wake_word_state::control_native_wake_listener(
+                                &wake_state,
+                                app::wake_word_state::NativeWakeListenerControl::Stop,
+                            );
                         }
                     }
                 }
@@ -320,7 +331,10 @@ pub fn run() {
             if let Some(state) = app_handle.try_state::<AppState>() {
                 state.local_llm_runtime.begin_shutdown();
                 state.local_tts_runtime.begin_shutdown();
-                app::wake_word_state::stop_native_wake_listener_thread();
+                let _ = app::wake_word_state::control_native_wake_listener(
+                    &state,
+                    app::wake_word_state::NativeWakeListenerControl::Stop,
+                );
                 app::wake_word_state::runtime_from_app_state(&state).begin_shutdown();
             }
             let handle = app_handle.clone();

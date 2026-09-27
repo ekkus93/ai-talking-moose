@@ -152,6 +152,28 @@ pub(crate) fn apply_startup_runtime_preferences<R: Runtime>(
     set_always_on_top(app, settings.always_on_top)
 }
 
+fn apply_wake_listener_change_transactionally(
+    state: &AppState,
+    previous: &AppSettings,
+    next: &AppSettings,
+) -> Result<(), String> {
+    if let Err(error) =
+        wake_word_state::apply_configured_native_wake_listener_settings_change(state, previous, next)
+    {
+        if let Err(rollback_error) =
+            wake_word_state::apply_configured_native_wake_listener_settings_change(
+                state, next, previous,
+            )
+        {
+            return Err(format!(
+                "{error}; failed to restore previous Wake listener state: {rollback_error}"
+            ));
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
 pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     app: &tauri::AppHandle<R>,
     previous: &AppSettings,
@@ -171,11 +193,7 @@ pub(crate) fn apply_changed_runtime_preferences<R: Runtime>(
     let wake_runtime = managed_state.as_ref().map(|state| &state.wake_word_runtime);
 
     if let Some(state) = managed_state.as_ref() {
-        wake_word_state::apply_configured_native_wake_listener_settings_change(
-            state,
-            previous,
-            next,
-        )?;
+        apply_wake_listener_change_transactionally(state, previous, next)?;
     }
 
     if launch_changed {
@@ -258,6 +276,27 @@ mod tests {
         sync_launch_agent_file(directory.path(), &executable, false).unwrap();
         assert!(!path.exists());
         sync_launch_agent_file(directory.path(), &executable, false).unwrap();
+    }
+
+    #[test]
+    fn failed_wake_listener_change_restores_previous_runtime_state() {
+        let state = AppState::new_for_tests().unwrap();
+        let previous = AppSettings::default();
+        let next = AppSettings {
+            wake_word_enabled: true,
+            asr_mode: crate::asr::AsrMode::GeminiLiveAudio,
+            ..previous.clone()
+        };
+
+        let error =
+            apply_wake_listener_change_transactionally(&state, &previous, &next).unwrap_err();
+
+        assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Disabled
+        );
+        assert!(!crate::app::wake_word_state::native_wake_listener_is_active());
     }
 
     #[test]
