@@ -1,10 +1,9 @@
 use super::state::{AppSettings, AppState};
-use super::wake_word::engine::{
-    NativeKwsSession, NativeKwsSessionPaths, SherpaKwsEngine, WakeWordError,
-};
-use super::wake_word::runtime::WakeWordRuntimeError;
+use super::wake_word::engine::{NativeKwsSession, NativeKwsSessionPaths};
+#[cfg(test)]
+use super::wake_word::engine::{SherpaKwsEngine, WakeWordError};
+#[cfg(test)]
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
-use super::wake_word_capture_orchestrator::WakeCaptureOrchestratorError;
 use super::wake_word_composition::WakeWordApplicationRuntime;
 use super::wake_word_local_listener_thread::{
     spawn_wake_local_listener_thread, WakeLocalListenerEvent, WakeLocalListenerHandle,
@@ -99,9 +98,9 @@ fn capture_owner_from_app_state<E: SherpaKwsEngine>(
 #[cfg(test)]
 #[derive(Debug)]
 enum WakeWordStartupError {
-    Runtime(WakeWordRuntimeError),
-    Native(WakeWordError),
-    Capture(WakeCaptureOrchestratorError),
+    Runtime,
+    Native,
+    Capture,
 }
 
 #[cfg(test)]
@@ -114,27 +113,27 @@ async fn start_native_wake_from_app_state(
         state
             .wake_word_runtime
             .apply_enabled_setting(false)
-            .map_err(WakeWordStartupError::Runtime)?;
+            .map_err(|_| WakeWordStartupError::Runtime)?;
         return Ok(None);
     }
 
     state
         .wake_word_runtime
         .apply_enabled_setting(true)
-        .map_err(WakeWordStartupError::Runtime)?;
+        .map_err(|_| WakeWordStartupError::Runtime)?;
 
     let consumer = match state.wake_word_runtime.native_capture_consumer(paths) {
         Ok(consumer) => consumer,
         Err(error) => {
             state.wake_word_runtime.record_runtime_error();
-            return Err(WakeWordStartupError::Native(error));
+            return Err(WakeWordStartupError::Native);
         }
     };
 
     state
         .wake_word_runtime
         .mark_loaded()
-        .map_err(WakeWordStartupError::Runtime)?;
+        .map_err(|_| WakeWordStartupError::Runtime)?;
 
     let owner = capture_owner_from_app_state::<NativeKwsSession>(state);
     if let Err(error) = owner
@@ -142,7 +141,7 @@ async fn start_native_wake_from_app_state(
         .await
     {
         state.wake_word_runtime.record_capture_error();
-        return Err(WakeWordStartupError::Capture(error));
+        return Err(WakeWordStartupError::Capture);
     }
 
     Ok(Some(owner))
@@ -472,7 +471,7 @@ mod tests {
         };
 
         let result = start_native_wake_from_app_state(&state, paths).await;
-        assert!(matches!(result, Err(WakeWordStartupError::Native(_))));
+        assert!(matches!(result, Err(WakeWordStartupError::Native)));
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Error);
         assert!(!state.audio_capture.lock().is_active());
     }
