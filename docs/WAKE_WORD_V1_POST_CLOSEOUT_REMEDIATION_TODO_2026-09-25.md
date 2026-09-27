@@ -278,40 +278,44 @@
 
 ## WPCR-700 — Reconcile Wake documentation
 
+**Evidence:** Post-closeout documentation truthfulness updates merged through PR #476 at `d85e1a601219ff857e8e08b150bba6f249b3db7f`; exact-master ordinary CI `36249865635`, Wake documentation audit `36249865640`, Wake privacy audit `36249865636`, and Wake required-gates audit `36249865639` passed. WPCR-700 evidence note `docs/evidence/WPCR-700_POST_CLOSEOUT_DOCUMENTATION_2026-09-26.md` merged through PR #477 at `ebeb2a118c63df4f8d71b3f41476163df80dfc3a`; exact-master ordinary CI `36250002298` passed. Reopened-gate documentation was completed by PR #479 at `8b0022742288c2183be15e297393d72194a16b32`; exact-master ordinary CI `36303647425`, documentation audit `36303647388`, and required-gates audit `36303647268` passed.
+
 ### Tasks
 
-- [ ] Update `docs/WAKE_WORD_V1.md` to match the post-remediation support state.
-- [ ] Update `docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md` to remove stale pending-closeout language or accurately describe remaining limits.
-- [ ] Update `docs/WAKE_WORD_V1_ARCHITECTURE.md` for listener control plane, Settings, manual transfer, selected ASR policy, and artifact provisioning.
-- [ ] Update `docs/WAKE_WORD_V1_CI_GATES.md` for new gates.
-- [ ] Update README only if the feature is genuinely user-ready after this remediation.
-- [ ] Ensure docs do not contradict the canonical TODO.
-- [ ] Add documentation audit rules for stale pending/final-closeout contradictions.
+- [x] Update `docs/WAKE_WORD_V1.md` to match the post-remediation support state.
+- [x] Update `docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md` to remove stale pending-closeout language or accurately describe remaining limits.
+- [x] Update `docs/WAKE_WORD_V1_ARCHITECTURE.md` for listener control plane, Settings, manual transfer, selected ASR policy, and artifact provisioning.
+- [x] Update `docs/WAKE_WORD_V1_CI_GATES.md` for new gates.
+- [x] Update README only if the feature is genuinely user-ready after this remediation. README was not promoted; documentation audit continues to enforce truthful non-user-ready/pending-qualification boundaries if Wake is mentioned.
+- [x] Ensure docs do not contradict the canonical TODO.
+- [x] Add documentation audit rules for stale pending/final-closeout contradictions.
 
 ### Acceptance
 
-- [ ] Documentation audit fails on stale claims found in the code review.
-- [ ] Docs accurately distinguish production behavior, accepted evidence, and remaining limits.
-- [ ] User-facing docs do not advertise unsupported ASR modes, missing clean-install artifacts, or unmeasured performance.
+- [x] Documentation audit fails on stale claims found in the code review.
+- [x] Docs accurately distinguish production behavior, accepted evidence, and remaining limits.
+- [x] User-facing docs do not advertise unsupported ASR modes, missing clean-install artifacts, or unmeasured performance.
 
 ## WPCR-800 — Add required CI gates for reopened issues
 
+**Incremental evidence:** Reopened WPCR gate inventory updates merged through PR #479 at `8b0022742288c2183be15e297393d72194a16b32`. Exact PR head `4441973809779a4d92941faa701b08a29ecfe2fd` passed ordinary CI `36266232016`, Wake required-gates audit `36266231835`, and Wake documentation audit `36266231845`. Exact merged master passed ordinary CI `36303647425`, Wake documentation audit `36303647388`, and Wake required-gates audit `36303647268`. Evidence note: `docs/evidence/WPCR-800_REQUIRED_GATES_2026-09-26.md`. The gate manifest now requires the reopened WPCR gates for final closeout, but WPCR-110 and WPCR-200 still own the remaining implementation/test proof for live Settings/listener lifecycle and manual shared-capture transfer behavior.
+
 ### Tasks
 
-- [ ] Add or extend a Settings/listener lifecycle workflow or ordinary CI test coverage.
-- [ ] Add or extend a shared-capture manual conversation transfer workflow/test suite.
-- [ ] Add selected ASR policy acceptance to CI.
-- [ ] Add downstream first-command-word acceptance to CI.
-- [ ] Add clean-install artifact provisioning acceptance to CI.
-- [ ] Add production idle listener performance evidence gate.
-- [ ] Update `docs/wake-word-required-gates.json` so final closeout requires the new gates.
-- [ ] Ensure skipped required gates fail the required-gates audit.
-- [ ] Ensure path filters include the new source, docs, scripts, and workflow files.
+- [ ] Add or extend a Settings/listener lifecycle workflow or ordinary CI test coverage. Gate inventory is present, but full acceptance remains coupled to WPCR-110 implementation/tests.
+- [ ] Add or extend a shared-capture manual conversation transfer workflow/test suite. Gate inventory is present, but full acceptance remains coupled to WPCR-200 implementation/tests.
+- [x] Add selected ASR policy acceptance to CI.
+- [x] Add downstream first-command-word acceptance to CI.
+- [x] Add clean-install artifact provisioning acceptance to CI.
+- [x] Add production idle listener performance evidence gate.
+- [x] Update `docs/wake-word-required-gates.json` so final closeout requires the new gates.
+- [x] Ensure skipped required gates fail the required-gates audit.
+- [x] Ensure path filters include the new source, docs, scripts, and workflow files.
 
 ### Acceptance
 
-- [ ] Required-gates audit proves the new gates are mandatory for final closeout.
-- [ ] CI names and reports clearly distinguish component, deterministic integrated, real native, and product-level acceptance.
+- [x] Required-gates audit proves the new gates are mandatory for final closeout.
+- [x] CI names and reports clearly distinguish component, deterministic integrated, real native, and product-level acceptance.
 
 ## WPCR-900 — Final source/privacy/security audit
 
