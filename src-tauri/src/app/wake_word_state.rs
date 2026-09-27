@@ -148,26 +148,6 @@ pub(crate) async fn start_native_wake_from_app_state(
     Ok(Some(owner))
 }
 
-pub(crate) fn start_native_wake_listener_thread_from_app_state(
-    state: &AppState,
-    app_data_dir: &Path,
-    event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
-) -> Result<bool, String> {
-    remember_native_wake_listener_config(app_data_dir, &event_tx);
-    let settings = state.settings.read().clone();
-    if !settings.wake_word_enabled {
-        state
-            .wake_word_runtime
-            .apply_enabled_setting(false)
-            .map_err(|error| error.to_string())?;
-        stop_native_wake_listener_thread();
-        return Ok(false);
-    }
-
-    ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
-    start_native_wake_listener_thread_with_config(state, app_data_dir, event_tx)
-}
-
 fn start_native_wake_listener_thread_with_config(
     state: &AppState,
     app_data_dir: &Path,
@@ -286,8 +266,12 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) enum NativeWakeListenerControl {
+    ConfigureAndStart {
+        app_data_dir: PathBuf,
+        event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
+    },
     RestartConfigured,
     Stop,
     TransferToCommand,
@@ -298,6 +282,23 @@ pub(crate) fn control_native_wake_listener(
     action: NativeWakeListenerControl,
 ) -> Result<bool, String> {
     match action {
+        NativeWakeListenerControl::ConfigureAndStart {
+            app_data_dir,
+            event_tx,
+        } => {
+            remember_native_wake_listener_config(&app_data_dir, &event_tx);
+            let settings = state.settings.read().clone();
+            if !settings.wake_word_enabled {
+                state
+                    .wake_word_runtime
+                    .apply_enabled_setting(false)
+                    .map_err(|error| error.to_string())?;
+                stop_native_wake_listener_thread();
+                return Ok(false);
+            }
+            ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
+            start_native_wake_listener_thread_with_config(state, &app_data_dir, event_tx)
+        }
         NativeWakeListenerControl::RestartConfigured => {
             restart_native_wake_listener_thread_from_configured_app_state(state)
         }
@@ -313,11 +314,7 @@ pub(crate) fn control_native_wake_listener(
     }
 }
 
-pub(crate) fn clear_native_wake_listener_thread() {
-    stop_native_wake_listener_thread();
-}
-
-pub(crate) fn stop_native_wake_listener_thread() {
+fn stop_native_wake_listener_thread() {
     let Some(handle) = native_wake_listener_slot().lock().take() else {
         return;
     };
@@ -487,9 +484,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (event_tx, _event_rx) = mpsc::unbounded_channel();
 
-        let started =
-            start_native_wake_listener_thread_from_app_state(&state, temp.path(), event_tx.clone())
-                .unwrap();
+        let started = control_native_wake_listener(
+            &state,
+            NativeWakeListenerControl::ConfigureAndStart {
+                app_data_dir: temp.path().to_path_buf(),
+                event_tx: event_tx.clone(),
+            },
+        )
+        .unwrap();
 
         assert!(!started);
         assert!(native_wake_listener_slot().lock().is_none());
