@@ -248,6 +248,7 @@ pub struct AudioCapture {
     sample_rate_hz: Option<u32>,
     sample_format: Option<String>,
     channels: Option<u16>,
+    mock_pcm_sender: Option<mpsc::Sender<Vec<u8>>>,
     _stream: Option<cpal::Stream>,
 }
 
@@ -271,6 +272,7 @@ impl AudioCapture {
             sample_rate_hz: None,
             sample_format: None,
             channels: None,
+            mock_pcm_sender: None,
             _stream: None,
         }
     }
@@ -317,6 +319,7 @@ impl AudioCapture {
         self.sample_rate_hz = None;
         self.sample_format = None;
         self.channels = None;
+        self.mock_pcm_sender = None;
 
         let result = self.start_inner(device_name, target_sample_rate, pcm_sender, level_sender);
         if let Err(ref error_value) = result {
@@ -337,6 +340,7 @@ impl AudioCapture {
             self.sample_rate_hz = Some(target_sample_rate);
             self.sample_format = Some("I16".to_string());
             self.channels = Some(1);
+            self.mock_pcm_sender = Some(pcm_sender);
             self.is_running.store(true, Ordering::SeqCst);
             info!("Explicit mock microphone capture started");
             return Ok(());
@@ -455,9 +459,18 @@ impl AudioCapture {
         Ok(())
     }
 
+    pub(crate) fn mock_pcm_sender(&self) -> Option<mpsc::Sender<Vec<u8>>> {
+        if self.mode == AudioCaptureMode::Mock && self.is_active() {
+            self.mock_pcm_sender.clone()
+        } else {
+            None
+        }
+    }
+
     pub fn stop(&mut self) {
         self.is_running.store(false, Ordering::SeqCst);
         self.input_level.store(0.0_f32.to_bits(), Ordering::Relaxed);
+        self.mock_pcm_sender = None;
         self._stream = None;
     }
 }
@@ -498,8 +511,10 @@ mod tests {
         assert_eq!(diagnostics.channels, Some(1));
         assert!(diagnostics.active);
 
+        assert!(capture.mock_pcm_sender().is_some());
         capture.stop();
         assert!(!capture.is_active());
+        assert!(capture.mock_pcm_sender().is_none());
         assert_eq!(capture.diagnostics().input_level, 0.0);
     }
 

@@ -14,6 +14,8 @@ on:
       - "scripts/check_wake_word_corpus_manifest.mjs"
       - "scripts/extract_wake_word_performance_measurement.py"
       - "src-tauri/src/app/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_local_listener_thread.rs"
+      - "src-tauri/src/audio/capture.rs"
       - "src-tauri/src/bin/wake_word_acceptance.rs"
       - "src-tauri/src/app/wake_word_engine.rs"
       - "src-tauri/src/asr/wake_word_sherpa_manifest.rs"
@@ -31,6 +33,8 @@ on:
       - "scripts/check_wake_word_corpus_manifest.mjs"
       - "scripts/extract_wake_word_performance_measurement.py"
       - "src-tauri/src/app/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_local_listener_thread.rs"
+      - "src-tauri/src/audio/capture.rs"
       - "src-tauri/src/bin/wake_word_acceptance.rs"
       - "src-tauri/src/app/wake_word_engine.rs"
       - "src-tauri/src/asr/wake_word_sherpa_manifest.rs"
@@ -131,6 +135,13 @@ jobs:
       - name: Extract reusable performance measurement
         run: |
           python3 scripts/extract_wake_word_performance_measurement.py --acceptance-report "target/wake-word-reports/${{ matrix.label }}.json" --output "target/wake-word-reports/${{ matrix.label }}-performance.json" --platform "${{ matrix.label }}" --commit-sha "${{ github.event.pull_request.head.sha || github.sha }}" --runner "${{ runner.name }}"
+      - name: Run production listener performance acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          model_id="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+          asset_root="$RUNNER_TEMP/wake-assets"
+          src-tauri/target/debug/wake_word_acceptance --production-listener --model-dir "$asset_root/models/wake-word/$model_id" --runtime-dir "$asset_root/${{ matrix.runtime_root }}" --corpus-dir target/wake-word-v1-corpus --index target/wake-word-v1-corpus/corpus-index.json --output "target/wake-word-reports/${{ matrix.label }}-production-listener.json"
       - name: Upload exact-head acceptance reports
         if: always()
         uses: actions/upload-artifact@v4

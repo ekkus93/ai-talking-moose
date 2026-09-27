@@ -1,7 +1,9 @@
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use talking_moose_lib::app::wake_word_acceptance::run_real_kws_acceptance;
+use talking_moose_lib::app::wake_word_acceptance::{
+    run_production_listener_performance_acceptance, run_real_kws_acceptance,
+};
 
 fn value_after(args: &[String], flag: &str) -> Result<PathBuf, String> {
     let index = args
@@ -28,14 +30,32 @@ fn run() -> Result<(), String> {
     let index = value_after(&args, "--index")?;
     let output = value_after(&args, "--output")?;
 
-    let report = run_real_kws_acceptance(&model_dir, &runtime_dir, &corpus_dir, &index)?;
-    let json = serde_json::to_string_pretty(&report)
-        .map_err(|_| "failed to serialize Wake Word acceptance report".to_string())?;
-    fs::write(&output, format!("{json}\n"))
-        .map_err(|_| "failed to write Wake Word acceptance report".to_string())?;
-    println!("{json}");
-    if !report.passed {
-        return Err("real KWS corpus acceptance criteria were not met".to_string());
+    if args.iter().any(|arg| arg == "--production-listener") {
+        let report = run_production_listener_performance_acceptance(
+            &model_dir,
+            &runtime_dir,
+            &corpus_dir,
+            &index,
+        )?;
+        let json = serde_json::to_string_pretty(&report)
+            .map_err(|_| "failed to serialize production listener report".to_string())?;
+        fs::write(&output, format!("{json}\n"))
+            .map_err(|_| "failed to write production listener report".to_string())?;
+        println!("WPCR500_PRODUCTION_LISTENER_JSON={}", serde_json::to_string(&report).map_err(|_| "failed to serialize compact production listener report".to_string())?);
+        println!("{json}");
+        if !report.passed {
+            return Err("production Wake listener performance acceptance failed".to_string());
+        }
+    } else {
+        let report = run_real_kws_acceptance(&model_dir, &runtime_dir, &corpus_dir, &index)?;
+        let json = serde_json::to_string_pretty(&report)
+            .map_err(|_| "failed to serialize Wake Word acceptance report".to_string())?;
+        fs::write(&output, format!("{json}\n"))
+            .map_err(|_| "failed to write Wake Word acceptance report".to_string())?;
+        println!("{json}");
+        if !report.passed {
+            return Err("real KWS corpus acceptance criteria were not met".to_string());
+        }
     }
     Ok(())
 }
