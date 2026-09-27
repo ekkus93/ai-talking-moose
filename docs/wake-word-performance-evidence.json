@@ -28,9 +28,16 @@
       "repeated_cycle_resource_delta"
     ]
   },
+  "wpcr500_scope": {
+    "production_listener_measurement_required": true,
+    "production_listener_status": "pending_measurement",
+    "accepted_wwr630_is_full_wpcr500_closeout": false,
+    "accepted_wwr630_scope": "real KWS session baselines plus deterministic lifecycle and ASR-comparison measurements; not a full production native-listener performance closeout"
+  },
   "partial_measurements": [
     {
       "platform": "linux-x86_64",
+      "measurement_path": "standalone_real_kws_session",
       "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
       "runner": "GitHub Actions 1000171442",
       "measured_at": "github-actions",
@@ -56,6 +63,7 @@
     },
     {
       "platform": "macos-arm64",
+      "measurement_path": "standalone_real_kws_session",
       "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
       "runner": "GitHub Actions 1000171443",
       "measured_at": "github-actions",
@@ -84,6 +92,7 @@
     {
       "metric": "repeated_cycle_resource_delta",
       "platform": "linux-x86_64",
+      "measurement_path": "deterministic_lifecycle_harness",
       "commit_sha": "755d02b738742513419778043b524e8b94f9c340",
       "runner": "GitHub Actions job 107931090203",
       "measured_at": "github-actions",
@@ -100,6 +109,7 @@
     {
       "metric": "wake_command_activation_timing",
       "platform": "linux-x86_64",
+      "measurement_path": "deterministic_lifecycle_harness",
       "commit_sha": "659bfdd0ec065840bcbfa4d465251ead795153c9",
       "runner": "GitHub Actions job 108108653014",
       "measured_at": "github-actions",
@@ -116,6 +126,7 @@
     {
       "metric": "continuous_asr_idle_cpu_percent",
       "platform": "linux-x86_64",
+      "measurement_path": "continuous_asr_diagnostic_comparison",
       "commit_sha": "62dbfcc9e9d54acaa3927311478fb84846eda27d",
       "runner": "GitHub Actions job 108120281495",
       "measured_at": "github-actions",
@@ -131,6 +142,7 @@
     {
       "metric": "continuous_asr_native_cpu_benchmark",
       "platform": "macos-arm64",
+      "measurement_path": "continuous_asr_native_comparison",
       "commit_sha": "fa6797a460daced343fa3d908a7a28d05c446b37",
       "runner": "GitHub Actions job 108126013399",
       "measured_at": "github-actions",
@@ -158,6 +170,7 @@
   "measurements": [
     {
       "platform": "linux-x86_64",
+      "measurement_path": "accepted_wwr630_composite_not_full_production_listener",
       "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
       "runner": "GitHub Actions 1000171442 plus job 108120281495",
       "measured_at": "github-actions",
@@ -175,6 +188,7 @@
     },
     {
       "platform": "macos-arm64",
+      "measurement_path": "accepted_wwr630_composite_not_full_production_listener",
       "commit_sha": "8329804e566fe8087959f058a34f2733805750bf",
       "runner": "GitHub Actions 1000171443 plus job 108126013399",
       "measured_at": "github-actions",
