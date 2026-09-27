@@ -247,7 +247,7 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     }
 
     if !next.wake_word_enabled {
-        stop_native_wake_listener_thread();
+        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
         state
             .wake_word_runtime
             .apply_enabled_setting(false)
@@ -256,13 +256,13 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     }
 
     if next.wake_word_enabled && !wake_word_asr_mode_supported(next.asr_mode) {
-        stop_native_wake_listener_thread();
+        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
         state.wake_word_runtime.record_runtime_error();
         return Err("Wake Word V1 requires local Moonshine command ASR".to_string());
     }
 
     if input_device_changed || asr_mode_changed {
-        stop_native_wake_listener_thread();
+        control_native_wake_listener(state, NativeWakeListenerControl::Stop)?;
     }
 
     if state.conversation_mgr.is_active() {
@@ -273,7 +273,7 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
         return Ok(());
     }
 
-    match restart_native_wake_listener_thread_from_configured_app_state(state) {
+    match control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured) {
         Ok(true) => Ok(()),
         Ok(false) => state
             .wake_word_runtime
@@ -286,10 +286,31 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     }
 }
 
-pub(crate) fn transfer_native_wake_listener_to_command_ownership() -> bool {
-    let was_active = native_wake_listener_is_active();
-    stop_native_wake_listener_thread();
-    was_active
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum NativeWakeListenerControl {
+    RestartConfigured,
+    Stop,
+    TransferToCommand,
+}
+
+pub(crate) fn control_native_wake_listener(
+    state: &AppState,
+    action: NativeWakeListenerControl,
+) -> Result<bool, String> {
+    match action {
+        NativeWakeListenerControl::RestartConfigured => {
+            restart_native_wake_listener_thread_from_configured_app_state(state)
+        }
+        NativeWakeListenerControl::Stop => {
+            stop_native_wake_listener_thread();
+            Ok(false)
+        }
+        NativeWakeListenerControl::TransferToCommand => {
+            let was_active = native_wake_listener_is_active();
+            stop_native_wake_listener_thread();
+            Ok(was_active)
+        }
+    }
 }
 
 pub(crate) fn clear_native_wake_listener_thread() {
