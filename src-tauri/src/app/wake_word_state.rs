@@ -149,10 +149,10 @@ async fn start_native_wake_from_app_state(
 
 fn start_native_wake_listener_thread_with_config(
     state: &AppState,
+    settings: &AppSettings,
     app_data_dir: &Path,
     event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
 ) -> Result<bool, String> {
-    let settings = state.settings.read().clone();
     ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
     let slot = native_wake_listener_slot();
     if slot.lock().is_some() {
@@ -185,11 +185,12 @@ fn start_native_wake_listener_thread_with_config(
     Ok(true)
 }
 
-fn restart_native_wake_listener_thread_from_configured_app_state(
+fn restart_native_wake_listener_thread_with_settings(
     state: &AppState,
+    settings: &AppSettings,
 ) -> Result<bool, String> {
-    if !state.settings.read().wake_word_enabled {
-        stop_native_wake_listener_thread();
+    stop_native_wake_listener_thread();
+    if !settings.wake_word_enabled {
         return Ok(false);
     }
 
@@ -201,6 +202,7 @@ fn restart_native_wake_listener_thread_from_configured_app_state(
     }
     start_native_wake_listener_thread_with_config(
         state,
+        settings,
         &config.app_data_dir,
         config.event_tx.clone(),
     )
@@ -252,7 +254,12 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
         return Ok(());
     }
 
-    match control_native_wake_listener(state, NativeWakeListenerControl::RestartConfigured) {
+    match control_native_wake_listener(
+        state,
+        NativeWakeListenerControl::RestartForSettings {
+            settings: next.clone(),
+        },
+    ) {
         Ok(true) => Ok(()),
         Ok(false) => state
             .wake_word_runtime
@@ -272,6 +279,9 @@ pub(crate) enum NativeWakeListenerControl {
         event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
     },
     RestartConfigured,
+    RestartForSettings {
+        settings: AppSettings,
+    },
     Stop,
     TransferToCommand,
 }
@@ -296,10 +306,19 @@ pub(crate) fn control_native_wake_listener(
                 return Ok(false);
             }
             ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
-            start_native_wake_listener_thread_with_config(state, &app_data_dir, event_tx)
+            start_native_wake_listener_thread_with_config(
+                state,
+                &settings,
+                &app_data_dir,
+                event_tx,
+            )
         }
         NativeWakeListenerControl::RestartConfigured => {
-            restart_native_wake_listener_thread_from_configured_app_state(state)
+            let settings = state.settings.read().clone();
+            restart_native_wake_listener_thread_with_settings(state, &settings)
+        }
+        NativeWakeListenerControl::RestartForSettings { settings } => {
+            restart_native_wake_listener_thread_with_settings(state, &settings)
         }
         NativeWakeListenerControl::Stop => {
             stop_native_wake_listener_thread();
