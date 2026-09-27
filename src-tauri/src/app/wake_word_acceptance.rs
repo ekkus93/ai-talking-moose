@@ -302,8 +302,9 @@ impl MeasuredNativeKwsSession {
         {
             let mut state = measurements.lock();
             state.active_native_sessions += 1;
-            state.peak_active_native_sessions =
-                state.peak_active_native_sessions.max(state.active_native_sessions);
+            state.peak_active_native_sessions = state
+                .peak_active_native_sessions
+                .max(state.active_native_sessions);
         }
         Ok(Self {
             inner,
@@ -331,11 +332,7 @@ impl SherpaKwsEngine for MeasuredNativeKwsSession {
     ) -> Result<Option<WakeWordDetection>, WakeWordError> {
         let started = Instant::now();
         let result = self.inner.accept_pcm16_mono(sample_rate_hz, samples);
-        let elapsed_us = started
-            .elapsed()
-            .as_micros()
-            .try_into()
-            .unwrap_or(u64::MAX);
+        let elapsed_us = started.elapsed().as_micros().try_into().unwrap_or(u64::MAX);
         self.measurements
             .lock()
             .inference_durations_us
@@ -441,11 +438,7 @@ fn spawn_measured_production_listener(
         }
     }
 
-    let startup_duration_ms = started
-        .elapsed()
-        .as_millis()
-        .try_into()
-        .unwrap_or(u64::MAX);
+    let startup_duration_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
     let sender = capture
         .lock()
         .mock_pcm_sender()
