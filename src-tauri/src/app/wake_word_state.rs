@@ -321,12 +321,7 @@ pub(crate) fn control_native_wake_listener(
                 return Ok(false);
             }
             ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
-            start_native_wake_listener_thread_with_config(
-                state,
-                &settings,
-                &app_data_dir,
-                event_tx,
-            )
+            start_native_wake_listener_thread_with_config(state, &settings, &app_data_dir, event_tx)
         }
         NativeWakeListenerControl::RestartConfigured => {
             let settings = state.settings.read().clone();
@@ -558,7 +553,10 @@ mod tests {
     #[test]
     fn listener_start_validates_pending_settings_instead_of_persisted_settings() {
         let state = AppState::new_for_tests().unwrap();
-        assert_eq!(state.settings.read().asr_mode, AsrMode::MoonshineTinyStreaming);
+        assert_eq!(
+            state.settings.read().asr_mode,
+            AsrMode::MoonshineTinyStreaming
+        );
         let pending = AppSettings {
             wake_word_enabled: true,
             asr_mode: AsrMode::GeminiLiveAudio,
