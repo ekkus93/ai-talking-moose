@@ -76,18 +76,20 @@
 
 ## WPCR-110 — Wire Settings enable/disable to real listener ownership
 
+**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records the Settings/listener remediation present at `bf79159fb389bbe1961c83fcad1918aae43233af`; exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passed. The evidence note itself is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba`; exact-master ordinary CI `36349151759` passed.
+
 ### Tasks
 
 - [x] Update `apply_changed_runtime_preferences` so Wake setting changes call the listener control plane, not only `apply_enabled_setting`.
-- [ ] Turning Wake on while idle starts the native listener when artifacts and selected policy are valid.
-- [ ] Turning Wake off stops the listener thread, releases capture, clears retained audio, and reports disabled only after the stop boundary is complete or safely in progress.
+- [x] Turning Wake on while idle starts the native listener when artifacts and selected policy are valid.
+- [x] Turning Wake off stops the listener thread, releases capture, clears retained audio, and reports disabled only after the stop boundary is complete or safely in progress.
 - [ ] Settings rollback restores listener state as well as runtime phase and persisted values.
 - [ ] Settings failure surfaces sanitized actionable errors without raw paths, secrets, or audio content.
 - [ ] UI refreshes diagnostics/status after enable/disable completes.
-- [ ] Add tests for enable from disabled.
-- [ ] Add tests for disable from active listening.
+- [x] Add tests for enable from disabled.
+- [x] Add tests for disable from active listening.
 - [ ] Add tests for settings persistence failure rollback.
-- [ ] Add tests that diagnostics do not report disabled while a listener handle remains active.
+- [x] Add tests that diagnostics do not report disabled while a listener handle remains active.
 
 ### Acceptance
 
@@ -98,23 +100,25 @@
 
 ## WPCR-120 — Handle input-device and ASR-mode settings changes while Wake is enabled
 
+**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records deterministic coverage for idle input-device restart, active-conversation pending restart, restart failure fail-closed behavior, supported ASR-mode restart, and unsupported ASR-mode fail-closed behavior. Evidence is bound to `bf79159fb389bbe1961c83fcad1918aae43233af` with exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passing; the evidence note is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba` with exact-master ordinary CI `36349151759` passing.
+
 ### Tasks
 
 - [x] Detect input-device changes while Wake is enabled.
-- [ ] Restart the listener on the new input device when idle.
-- [ ] If a conversation is active, record a pending restart and apply it at the terminal boundary.
-- [ ] If restart fails, fail Wake closed with sanitized status and keep manual interaction available.
+- [x] Restart the listener on the new input device when idle.
+- [x] If a conversation is active, record a pending restart and apply it at the terminal boundary.
+- [x] If restart fails, fail Wake closed with sanitized status and keep manual interaction available.
 - [x] Detect ASR-mode changes while Wake is enabled.
 - [x] Enforce the selected WPCR-300 ASR policy when ASR mode changes.
-- [ ] Add tests for input-device restart.
-- [ ] Add tests for input-device restart failure.
-- [ ] Add tests for ASR mode change while Wake is enabled.
+- [x] Add tests for input-device restart.
+- [x] Add tests for input-device restart failure.
+- [x] Add tests for ASR mode change while Wake is enabled.
 
 ### Acceptance
 
-- [ ] Wake does not keep listening on a stale input device after a successful device change.
-- [ ] Wake does not enter a misleading listening state for an unsupported ASR mode.
-- [ ] Diagnostics explain pending/restart/failure state without leaking paths or secrets.
+- [x] Wake does not keep listening on a stale input device after a successful device change.
+- [x] Wake does not enter a misleading listening state for an unsupported ASR mode.
+- [x] Diagnostics explain pending/restart/failure state without leaking paths or secrets.
 
 ## WPCR-200 — Fix manual conversation shared-capture transfer
 
