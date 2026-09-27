@@ -153,6 +153,15 @@ fn run_listener_thread<E, Build>(
             return;
         }
 
+        if runtime.phase() == super::wake_word::runtime::WakeWordRuntimePhase::Loading {
+            if let Err(error) = runtime.mark_loaded() {
+                owner.disable().await;
+                runtime.record_runtime_error();
+                let _ = event_tx.send(WakeLocalListenerEvent::StartupFailed(error.to_string()));
+                return;
+            }
+        }
+
         let _ = event_tx.send(WakeLocalListenerEvent::Started);
 
         loop {
@@ -275,6 +284,43 @@ mod tests {
         let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
         runtime.mark_loaded().unwrap();
         runtime
+    }
+
+    #[tokio::test]
+    async fn successful_listener_start_transitions_loading_runtime_to_listening() {
+        let capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let settings = super::super::state::AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Loading);
+        let runtime_for_consumer = runtime.clone();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+
+        let handle = spawn_wake_local_listener_thread::<NonSendTestEngine, _>(
+            capture.clone(),
+            runtime.clone(),
+            None,
+            move |_| {
+                Ok(WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(
+                    runtime_for_consumer.manager().clone(),
+                    NonSendTestEngine::default(),
+                )))
+            },
+            event_tx,
+        )
+        .unwrap();
+
+        let started = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(started, WakeLocalListenerEvent::Started);
+        assert_eq!(runtime.phase(), WakeWordRuntimePhase::Listening);
+        assert!(capture.lock().is_active());
+
+        handle.shutdown().unwrap();
     }
 
     #[tokio::test]
