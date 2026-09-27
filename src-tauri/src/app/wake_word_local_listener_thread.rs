@@ -1,14 +1,17 @@
 use super::wake_word::engine::SherpaKwsEngine;
 use super::wake_word_authoritative_capture::AuthoritativeWakeCaptureOwner;
 use super::wake_word_capture_consumer::WakeCapturePcmConsumer;
+use super::wake_word_capture_orchestrator::WakeCaptureOrchestratorError;
 use super::wake_word_command_handoff::WakeCommandHandoffAudio;
 use super::wake_word_composition::WakeWordApplicationRuntime;
 use crate::audio::capture::AudioCapture;
 use parking_lot::Mutex as CaptureMutex;
 use std::sync::Arc;
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
+
+const SHUTDOWN_CAPTURE_CLOSE_GRACE: Duration = Duration::from_millis(25);
 
 /// Events emitted by the dedicated Wake listener thread.
 ///
@@ -87,6 +90,29 @@ where
     })
 }
 
+fn shutdown_command_ready(
+    command_rx: &mut mpsc::UnboundedReceiver<WakeLocalListenerCommand>,
+) -> bool {
+    matches!(
+        command_rx.try_recv(),
+        Ok(WakeLocalListenerCommand::Shutdown)
+            | Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+    )
+}
+
+async fn shutdown_command_ready_after_capture_close(
+    command_rx: &mut mpsc::UnboundedReceiver<WakeLocalListenerCommand>,
+) -> bool {
+    if shutdown_command_ready(command_rx) {
+        return true;
+    }
+
+    matches!(
+        tokio::time::timeout(SHUTDOWN_CAPTURE_CLOSE_GRACE, command_rx.recv()).await,
+        Ok(Some(WakeLocalListenerCommand::Shutdown)) | Ok(None)
+    )
+}
+
 fn run_listener_thread<E, Build>(
     capture: Arc<CaptureMutex<AudioCapture>>,
     runtime: WakeWordApplicationRuntime,
@@ -144,7 +170,7 @@ fn run_listener_thread<E, Build>(
                     // An intentional shutdown closes capture to unblock route_next. If that
                     // closure wins the select race, consume the queued shutdown before treating
                     // CaptureClosed as a real capture failure.
-                    if matches!(command_rx.try_recv(), Ok(WakeLocalListenerCommand::Shutdown) | Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)) {
+                    if shutdown_command_ready(&mut command_rx) {
                         owner.disable().await;
                         let _ = event_tx.send(WakeLocalListenerEvent::Stopped);
                         return;
@@ -169,6 +195,18 @@ fn run_listener_thread<E, Build>(
                             return;
                         }
                         Ok(_) => {}
+                        Err(WakeCaptureOrchestratorError::CaptureClosed) => {
+                            if shutdown_command_ready_after_capture_close(&mut command_rx).await {
+                                owner.disable().await;
+                                let _ = event_tx.send(WakeLocalListenerEvent::Stopped);
+                                return;
+                            }
+                            runtime.record_capture_error();
+                            let _ = event_tx.send(WakeLocalListenerEvent::CaptureFailed(
+                                "CaptureClosed".to_string(),
+                            ));
+                            return;
+                        }
                         Err(error) => {
                             runtime.record_capture_error();
                             let _ = event_tx.send(WakeLocalListenerEvent::CaptureFailed(format!("{error:?}")));
