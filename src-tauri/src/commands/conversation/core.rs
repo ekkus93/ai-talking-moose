@@ -371,7 +371,7 @@ pub fn get_memories(state: State<'_, AppState>) -> Result<Vec<MemoryRecord>, Str
 }
 
 #[tauri::command]
-pub fn delete_memory(id: i64, state: State<'_, AppState>) -> Result<bool> {
+pub fn delete_memory(id: i64, state: State<'_, AppState>) -> Result<bool, String> {
     state.memory.forget(id)
 }
 
