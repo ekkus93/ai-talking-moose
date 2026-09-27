@@ -132,6 +132,16 @@ fn resolve_wake_after_command_interaction(state: &AppState) -> Result<(), String
     Ok(())
 }
 
+fn resolve_wake_after_start_failure(state: &AppState, context: &'static str) {
+    if let Err(error_value) = resolve_wake_after_command_interaction(state) {
+        warn!(
+            error = %error_value,
+            context = context,
+            "Failed to resolve Wake Word after conversation start failure"
+        );
+    }
+}
+
 async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     state: &AppState,
     app: tauri::AppHandle<R>,
@@ -157,7 +167,10 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
         control_native_wake_listener(state, NativeWakeListenerControl::TransferToCommand)?;
     }
     state.ambient_scheduler.claim_foreground_presentation();
-    prepare_character_for_conversation(state, &app)?;
+    if let Err(error_value) = prepare_character_for_conversation(state, &app) {
+        resolve_wake_after_start_failure(state, "character_preparation");
+        return Err(error_value);
+    }
     let provider = state.get_live_provider();
     let tool_router = state.tool_router.clone();
 
@@ -253,9 +266,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
     let session_id = match session_start {
         Ok(session_id) => session_id,
         Err(error_value) => {
-            if let Err(resume_error) = resolve_wake_after_command_interaction(state) {
-                warn!(error = %resume_error, "Failed to resolve Wake Word after conversation start failure");
-            }
+            resolve_wake_after_start_failure(state, "session_start");
             return Err(error_value);
         }
     };
@@ -450,7 +461,6 @@ pub async fn send_text_message<R: Runtime>(
     Ok(reply)
 }
 
-
 #[cfg(test)]
 mod wake_terminal_resolution_tests {
     use super::*;
@@ -480,5 +490,30 @@ mod wake_terminal_resolution_tests {
 
         assert!(!should_restart);
         assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+    }
+
+    #[test]
+    fn start_failure_resolves_suspended_wake_back_to_listening() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().wake_word_enabled = true;
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        state.wake_word_runtime.mark_loaded().unwrap();
+        state.wake_word_runtime.suspend_for_talking().unwrap();
+
+        resolve_wake_after_start_failure(&state, "test_start_failure");
+
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Listening);
+    }
+
+    #[test]
+    fn start_failure_recovers_wake_error_to_loading_when_still_enabled() {
+        let state = AppState::new_for_tests().unwrap();
+        state.settings.write().wake_word_enabled = true;
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        state.wake_word_runtime.record_runtime_error();
+
+        resolve_wake_after_start_failure(&state, "test_start_failure");
+
+        assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Loading);
     }
 }
