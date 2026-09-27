@@ -122,7 +122,7 @@
 
 ## WPCR-200 — Fix manual conversation shared-capture transfer
 
-**Incremental evidence:** current `master` routes manual start through `NativeWakeListenerControl::TransferToCommand` before normal ASR capture, uses `complete_native_wake_command_interaction` for start failure and terminal resolution, and routes explicit stop through the same boundary. Deterministic lifecycle tests cover disabled/failed Wake availability, start-failure recovery, latest-setting terminal behavior, and intentional transfer without Wake error. Exact-master ordinary CI `36346852425` passed at `cc593f8d4ae1ac8d399073c6cfb8784c8451bdab`. Active-listener ownership tests and final acceptance remain open.
+**Incremental evidence:** current `master` routes manual start through `NativeWakeListenerControl::TransferToCommand` before normal ASR capture, uses `complete_native_wake_command_interaction` for start failure and terminal resolution, and routes explicit stop through the same boundary. Deterministic lifecycle tests cover disabled/failed Wake availability, start-failure recovery, latest-setting terminal behavior, and intentional transfer without Wake error. Exact-master ordinary CI `36346852425` passed at `cc593f8d4ae1ac8d399073c6cfb8784c8451bdab`. Active-listener transfer was fixed by PR #494 and recorded in `docs/evidence/WPCR-200_ACTIVE_LISTENER_TRANSFER_2026-09-27.md`: exact PR head `614e0458a4123648681ebcbc4b07b753aa273545` passed ordinary CI `36349867506`, lifecycle stability `36349867516`, and source-security audit `36349867526`; merged `master` `b040fa1cd63917f91963f1b3fd323c153dab0662` passed ordinary CI `36350297078`, lifecycle stability `36350297048`, and source-security audit `36350297103`.
 
 ### Tasks
 
@@ -133,7 +133,7 @@
 - [x] On conversation terminal success, cancellation, recoverable failure, and stop, restart Wake according to latest settings.
 - [x] Ensure `stop_conversation` uses the same resume/restart boundary as natural lifecycle completion.
 - [ ] Ensure barge-in/cancel paths do not leave Wake permanently suspended.
-- [ ] Add tests for manual start while Wake listener is active.
+- [x] Add tests for manual start while Wake listener is active.
 - [ ] Add tests for manual start failure while Wake was active.
 - [x] Add tests for stop/cancel/recoverable failure restart.
 - [x] Add tests that no capture failure is recorded for intentional manual transfer.
@@ -141,8 +141,8 @@
 ### Acceptance
 
 - [ ] Manual interaction remains available and reliable regardless of Wake state.
-- [ ] Manual interaction does not strand Wake in `Error` after normal command completion.
-- [ ] No duplicate microphone streams are opened.
+- [x] Manual interaction does not strand Wake in `Error` after normal command completion.
+- [x] No duplicate microphone streams are opened.
 - [ ] No path leaves Wake permanently suspended unintentionally.
 
 ## WPCR-300 — Resolve Wake command-ASR policy mismatch
