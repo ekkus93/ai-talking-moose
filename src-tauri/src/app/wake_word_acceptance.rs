@@ -533,17 +533,18 @@ fn activate_performance_handoff(
     let mut handoff = WakeCommandAsrHandoff::new(audio);
     let mut ingress = PerformanceIngress::default();
     let mut starter = PerformanceStarter::default();
-    let (delivered, timing) = executor.block_on(
-        activate_wake_command_and_measure_start_normal_asr_once(
+    let (delivered, timing) =
+        executor.block_on(activate_wake_command_and_measure_start_normal_asr_once(
             runtime,
             &mut handoff,
             &mut ingress,
             &mut starter,
             true,
-        ),
-    )?;
+        ))?;
     if !delivered || starter.starts != 1 || ingress.handoff_samples == 0 {
-        return Err("production listener handoff did not activate command ASR exactly once".to_string());
+        return Err(
+            "production listener handoff did not activate command ASR exactly once".to_string(),
+        );
     }
     Ok((timing, ingress.handoff_samples))
 }
