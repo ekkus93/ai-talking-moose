@@ -1,7 +1,7 @@
 use super::state::AppSettings;
 use super::wake_word::engine::{
-    NativeKwsSession, NativeKwsSessionPaths, SherpaKwsConfig, SherpaKwsEngine,
-    WakeWordDetection, WakeWordError, V1_KWS_SAMPLE_RATE_HZ,
+    NativeKwsSession, NativeKwsSessionPaths, SherpaKwsConfig, SherpaKwsEngine, WakeWordDetection,
+    WakeWordError, V1_KWS_SAMPLE_RATE_HZ,
 };
 use super::wake_word_command_activation::{
     activate_wake_command_and_measure_start_normal_asr_once, WakeCommandActivationTiming,
@@ -473,7 +473,9 @@ fn triggered_handoff_from_event(event: WakeLocalListenerEvent) -> Result<WakeCom
         WakeLocalListenerEvent::StartupFailed(error)
         | WakeLocalListenerEvent::CaptureFailed(error) => Err(error),
         WakeLocalListenerEvent::Stopped => Err("Wake listener stopped before trigger".to_string()),
-        WakeLocalListenerEvent::Started => Err("unexpected duplicate Wake listener start event".to_string()),
+        WakeLocalListenerEvent::Started => {
+            Err("unexpected duplicate Wake listener start event".to_string())
+        }
     }
 }
 
@@ -501,18 +503,21 @@ fn feed_until_trigger(
     )?)
 }
 
-fn fixture_samples(
-    fixture: &GeneratedFixture,
-    corpus_dir: &Path,
-) -> Result<Vec<i16>, String> {
+fn fixture_samples(fixture: &GeneratedFixture, corpus_dir: &Path) -> Result<Vec<i16>, String> {
     let fixture_path = safe_fixture_path(corpus_dir, &fixture.path)?;
     let bytes = fs::read(&fixture_path)
         .map_err(|_| format!("failed to read generated fixture {}", fixture.id))?;
     if bytes.len() as u64 != fixture.bytes || sha256_hex(&bytes) != fixture.sha256 {
-        return Err(format!("generated fixture {} identity mismatch", fixture.id));
+        return Err(format!(
+            "generated fixture {} identity mismatch",
+            fixture.id
+        ));
     }
     if bytes.len() % 2 != 0 {
-        return Err(format!("generated fixture {} is not PCM16 aligned", fixture.id));
+        return Err(format!(
+            "generated fixture {} is not PCM16 aligned",
+            fixture.id
+        ));
     }
     Ok(bytes
         .chunks_exact(2)
@@ -577,8 +582,8 @@ pub fn run_production_listener_performance_acceptance(
         wake_word_enabled: true,
         ..Default::default()
     };
-    let runtime = WakeWordApplicationRuntime::from_settings(&settings)
-        .map_err(|error| error.to_string())?;
+    let runtime =
+        WakeWordApplicationRuntime::from_settings(&settings).map_err(|error| error.to_string())?;
     let capture = Arc::new(Mutex::new(AudioCapture::new_mock()));
     let measurements = Arc::new(Mutex::new(ProductionListenerMeasurements::default()));
     let executor = tokio::runtime::Builder::new_current_thread()
@@ -692,8 +697,7 @@ pub fn run_production_listener_performance_acceptance(
             / inference_frames as f64
             / 1_000.0
     };
-    let p95_inference_latency_ms =
-        percentile_95_ms(&measurement_state.inference_durations_us);
+    let p95_inference_latency_ms = percentile_95_ms(&measurement_state.inference_durations_us);
     let final_capture_active = capture.lock().is_active();
     let startup_peak_memory_delta_bytes = match (memory_before, memory_after_start) {
         (Some(before), Some(after)) => Some(after.saturating_sub(before)),

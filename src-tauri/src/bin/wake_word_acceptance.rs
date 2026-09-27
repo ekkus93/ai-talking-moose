@@ -41,7 +41,11 @@ fn run() -> Result<(), String> {
             .map_err(|_| "failed to serialize production listener report".to_string())?;
         fs::write(&output, format!("{json}\n"))
             .map_err(|_| "failed to write production listener report".to_string())?;
-        println!("WPCR500_PRODUCTION_LISTENER_JSON={}", serde_json::to_string(&report).map_err(|_| "failed to serialize compact production listener report".to_string())?);
+        println!(
+            "WPCR500_PRODUCTION_LISTENER_JSON={}",
+            serde_json::to_string(&report)
+                .map_err(|_| "failed to serialize compact production listener report".to_string())?
+        );
         println!("{json}");
         if !report.passed {
             return Err("production Wake listener performance acceptance failed".to_string());
