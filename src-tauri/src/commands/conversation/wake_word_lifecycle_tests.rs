@@ -76,6 +76,30 @@ fn production_manual_start_failure_keeps_disabled_wake_runtime_disabled() {
 }
 
 #[test]
+fn production_manual_start_failure_preserves_manual_path_when_wake_failed() {
+    let app_state = AppState::new_for_tests().unwrap();
+    app_state.settings.write().wake_word_enabled = true;
+    app_state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+    app_state.wake_word_runtime.record_runtime_error();
+    assert_eq!(app_state.wake_word_runtime.phase(), WakeWordRuntimePhase::Error);
+    let wake_runtime = app_state.wake_word_runtime.clone();
+
+    let app = mock_builder()
+        .manage(app_state)
+        .invoke_handler(tauri::generate_handler![start_conversation])
+        .build(mock_context(noop_assets()))
+        .unwrap();
+    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+
+    get_ipc_response(&webview, ipc_request("start_conversation"))
+        .expect_err("missing Moonshine model should fail after manual command start reaches ASR");
+
+    assert_eq!(wake_runtime.phase(), WakeWordRuntimePhase::Loading);
+}
+
+#[test]
 fn stop_lifecycle_boundary_resumes_suspended_enabled_wake_runtime() {
     let app_state = AppState::new_for_tests().unwrap();
     app_state.settings.write().wake_word_enabled = true;
