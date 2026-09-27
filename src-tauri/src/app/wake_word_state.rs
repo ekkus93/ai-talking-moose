@@ -507,7 +507,7 @@ mod tests {
         state.wake_word_runtime.apply_enabled_setting(true).unwrap();
         state.wake_word_runtime.mark_loaded().unwrap();
 
-        let owner = capture_owner_from_app_state::<TestWakeEngine>(state);
+        let owner = capture_owner_from_app_state::<TestWakeEngine>(&state);
         let consumer = state
             .wake_word_runtime
             .capture_consumer(TestWakeEngine::default());
