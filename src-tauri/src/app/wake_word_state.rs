@@ -213,6 +213,24 @@ pub(crate) fn native_wake_listener_is_active() -> bool {
     native_wake_listener_slot().lock().is_some()
 }
 
+fn prepare_runtime_for_pending_listener_restart(
+    runtime: &WakeWordApplicationRuntime,
+) -> Result<(), String> {
+    match runtime.phase() {
+        crate::asr::wake_word_runtime::WakeWordRuntimePhase::Disabled
+        | crate::asr::wake_word_runtime::WakeWordRuntimePhase::Error => runtime
+            .apply_enabled_setting(true)
+            .map_err(|error| error.to_string()),
+        crate::asr::wake_word_runtime::WakeWordRuntimePhase::Loading
+        | crate::asr::wake_word_runtime::WakeWordRuntimePhase::Listening
+        | crate::asr::wake_word_runtime::WakeWordRuntimePhase::Triggered
+        | crate::asr::wake_word_runtime::WakeWordRuntimePhase::SuspendedTalking => Ok(()),
+        crate::asr::wake_word_runtime::WakeWordRuntimePhase::ShuttingDown => runtime
+            .apply_enabled_setting(true)
+            .map_err(|error| error.to_string()),
+    }
+}
+
 pub(crate) fn apply_configured_native_wake_listener_settings_change(
     state: &AppState,
     previous: &AppSettings,
@@ -247,10 +265,7 @@ pub(crate) fn apply_configured_native_wake_listener_settings_change(
     }
 
     if state.conversation_mgr.is_active() {
-        state
-            .wake_word_runtime
-            .apply_enabled_setting(true)
-            .map_err(|error| error.to_string())?;
+        prepare_runtime_for_pending_listener_restart(&state.wake_word_runtime)?;
         return Ok(());
     }
 
@@ -537,6 +552,33 @@ mod tests {
         assert_eq!(
             state.wake_word_runtime.phase(),
             WakeWordRuntimePhase::Disabled
+        );
+    }
+
+    #[test]
+    fn pending_restart_preserves_suspended_command_ownership() {
+        let state = AppState::new_for_tests().unwrap();
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        state.wake_word_runtime.mark_loaded().unwrap();
+        state.wake_word_runtime.suspend_for_talking().unwrap();
+
+        prepare_runtime_for_pending_listener_restart(&state.wake_word_runtime).unwrap();
+
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::SuspendedTalking
+        );
+    }
+
+    #[test]
+    fn pending_restart_moves_disabled_runtime_to_loading() {
+        let state = AppState::new_for_tests().unwrap();
+
+        prepare_runtime_for_pending_listener_restart(&state.wake_word_runtime).unwrap();
+
+        assert_eq!(
+            state.wake_word_runtime.phase(),
+            WakeWordRuntimePhase::Loading
         );
     }
 
