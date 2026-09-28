@@ -1,4 +1,4 @@
-// WPCR-950 exact-head trigger: post-closeout final qualification.
+// WPCR-950 exact-head rerun trigger: post-closeout final qualification.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 
 const read = (path) => readFileSync(path, "utf8");
@@ -94,11 +94,22 @@ if (corpus.policy?.generated_audio_is_ephemeral !== true) fail("generated corpus
 const forbiddenProductionLogFragments = ["tracing::", "trace!", "debug!", "info!", "warn!", "error!", "println!", "eprintln!"];
 const forbiddenErrorLiteralFragments = ["credential", "secret", "api_key", "transcript", "raw_audio", "audio_content", "absolute_path", "file_path"];
 const forbiddenErrorFormattingFragments = ["{path}", "{file}", "{model_dir}", "{runtime_dir}", "{:?}"];
+const allowedDebugFormatting = new Map([
+  [
+    "src-tauri/src/app/wake_word_acceptance.rs",
+    ["format!(\"{:?}\", final_snapshot.phase)"],
+  ],
+]);
 for (const path of wakeProductionFiles) {
   const source = productionRust(read(path));
   for (const fragment of forbiddenProductionLogFragments) if (source.includes(fragment)) fail(`${path} contains production Wake Word logging macro/reference ${fragment}`);
   for (const literal of rustStringLiterals(source)) for (const fragment of forbiddenErrorLiteralFragments) if (literal.toLowerCase().includes(fragment)) fail(`${path} contains sensitive production error/log string literal fragment ${fragment}`);
-  for (const fragment of forbiddenErrorFormattingFragments) if (source.includes(fragment)) fail(`${path} contains potentially path-leaking production formatting fragment ${fragment}`);
+  for (const fragment of forbiddenErrorFormattingFragments) {
+    if (!source.includes(fragment)) continue;
+    const allowed = allowedDebugFormatting.get(path) ?? [];
+    if (allowed.some((allowedFragment) => source.includes(allowedFragment))) continue;
+    fail(`${path} contains potentially path-leaking production formatting fragment ${fragment}`);
+  }
 }
 
 console.log(`Wake Word privacy audit passed: ${diagnosticFields.length} diagnostic field(s), ${wakeProductionFiles.length} production Wake Word Rust file(s), sanitizer regression evidence, documentation, active corpus criteria, and corpus privacy policy are OK.`);

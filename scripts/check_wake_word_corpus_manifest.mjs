@@ -1,4 +1,4 @@
-// WPCR-950 exact-head trigger: post-closeout final qualification.
+// WPCR-950 exact-head rerun trigger: post-closeout final qualification.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
