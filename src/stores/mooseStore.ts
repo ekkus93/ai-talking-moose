@@ -94,8 +94,8 @@ const processSettingsWriteQueue = async () => {
         queued.complete();
       } catch {
         settingsWriteQueue.shift();
-        queued.complete();
         await reconcileSettingsAfterWriteFailure();
+        queued.complete();
       }
     }
   } finally {
