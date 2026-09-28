@@ -76,7 +76,7 @@
 
 ## WPCR-110 — Wire Settings enable/disable to real listener ownership
 
-**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records the Settings/listener remediation present at `bf79159fb389bbe1961c83fcad1918aae43233af`; exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passed. The evidence note itself is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba`; exact-master ordinary CI `36349151759` passed.
+**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records the Settings/listener remediation present at `bf79159fb389bbe1961c83fcad1918aae43233af`; exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passed. The evidence note itself is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba`; exact-master ordinary CI `36349151759` passed. `docs/evidence/WPCR-110_SETTINGS_ROLLBACK_STATUS_2026-09-27.md` records focused listener rollback/status/sanitized-error coverage at exact master `1976d2ad3edb514ce0fea72c6b34dc700ab5e58c`; ordinary CI `36376930414` and source-security audit `36376930415` passed. The evidence file is merged at `82ddabe5c7e672307a492f1a3ede10fb643288d7` with ordinary CI `36377338615` passing, and explicitly leaves persisted Settings rollback and frontend UI assertions open.
 
 ### Tasks
 
@@ -84,7 +84,7 @@
 - [x] Turning Wake on while idle starts the native listener when artifacts and selected policy are valid.
 - [x] Turning Wake off stops the listener thread, releases capture, clears retained audio, and reports disabled only after the stop boundary is complete or safely in progress.
 - [ ] Settings rollback restores listener state as well as runtime phase and persisted values.
-- [ ] Settings failure surfaces sanitized actionable errors without raw paths, secrets, or audio content.
+- [x] Settings failure surfaces sanitized actionable errors without raw paths, secrets, or audio content.
 - [ ] UI refreshes diagnostics/status after enable/disable completes.
 - [x] Add tests for enable from disabled.
 - [x] Add tests for disable from active listening.
@@ -183,12 +183,12 @@
 
 ## WPCR-310 — Add downstream first-command-word acceptance
 
-**Incremental evidence:** `docs/evidence/WPCR-310_FIRST_COMMAND_WORD_BOUNDARY_2026-09-26.md` records deterministic production-router → `WakeCommandHandoffAudio` → normal Moonshine command-ASR ingress coverage on exact inspected master `ebeb2a118c63df4f8d71b3f41476163df80dfc3a`. The evidence explicitly scopes the result to deterministic downstream boundary receipt rather than real Moonshine transcription. Existing required-gates policy makes downstream first-command-word acceptance mandatory. A real/generated spoken fixture that is itself detected by native KWS remains open, so this section is not falsely closed.
+**Incremental evidence:** `docs/evidence/WPCR-310_FIRST_COMMAND_WORD_BOUNDARY_2026-09-26.md` records deterministic production-router → `WakeCommandHandoffAudio` → normal Moonshine command-ASR ingress coverage on exact inspected master `ebeb2a118c63df4f8d71b3f41476163df80dfc3a`. The evidence explicitly scopes the result to deterministic downstream boundary receipt rather than real Moonshine transcription. `docs/evidence/WPCR-310_COMMAND_FIXTURE_KWS_2026-09-27.md` records the generated `Hey Moose. Tell me the time` fixture and the hardened real-KWS workflow step that requires fixture `positive-command-sc` to be present, expected-positive, and detected on each native platform. Exact master `138384250a7133465e8b890701de4cbf3f93eb34` passed ordinary CI `36377539641`, required-gates audit `36377539545`, and real-KWS acceptance `36377539575`.
 
 ### Tasks
 
-- [ ] Add a deterministic fixture or generated fixture equivalent to `Hey Moose, tell me the time`.
-- [ ] Ensure KWS detects the wake phrase in that fixture.
+- [x] Add a deterministic fixture or generated fixture equivalent to `Hey Moose, tell me the time`.
+- [x] Ensure KWS detects the wake phrase in that fixture.
 - [x] Route pre-roll plus live command audio through the production handoff boundary.
 - [x] Verify downstream command-ASR test boundary receives one continuous utterance.
 - [x] Verify the first command word after the wake phrase is present at the downstream boundary.
