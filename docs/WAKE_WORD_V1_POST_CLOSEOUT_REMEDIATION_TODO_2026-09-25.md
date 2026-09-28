@@ -1,397 +1,138 @@
 # Wake Word V1 Post-Closeout Remediation TODO
 
 **Date:** 2026-09-25
-**Status:** Open
+**Final reconciliation:** 2026-09-28
+**Status:** Closed on `master`
+**Final evidence commit:** `b8e23d7c0fca0fa15035e07548cf1d13b1e52ec2`
+**Exact final qualification / exact-master gate head:** `bba5ea44a668f67baf32f0471dff2d75bb72cf22`
 **Spec:** `docs/WAKE_WORD_V1_POST_CLOSEOUT_REMEDIATION_SPEC_2026-09-25.md`
 **Source review:** post-closeout code review of `master` at `0ea5e03f9012884e2858d7b478fde916f0f163d7`
-**Scope:** Fix the integration, acceptance, packaging, performance, and documentation gaps found after the Wake Word V1 closeout.
-
-## Execution rules
-
-- Treat this file as the authoritative checklist for post-closeout remediation.
-- Do not weaken artifact verification, privacy boundaries, or exact-head discipline for speed.
-- Prefer coherent vertical-slice PRs when several tasks share listener lifecycle, Settings, capture ownership, or acceptance-gate code.
-- Do not mark a task complete because a component test exists if the task asks for integrated production behavior.
-- Do not count skipped required gates as passing.
-- Bind evidence to exact commit SHAs and run IDs.
-- After every merge, reload this TODO from `master` and re-evaluate remaining work.
-
-## WPCR-000 — Reopen and freeze post-closeout remediation baseline
-
-**Evidence:** baseline evidence merged in `docs/evidence/WPCR-000_POST_CLOSEOUT_BASELINE_2026-09-25.md` on `master` at `362ec673d0195fb360a3ffc32fd22ad616cdb169`; ordinary CI run `36230401074` passed for that exact master.
-
-### Tasks
-
-- [x] Reload current `master` and record exact baseline SHA.
-- [x] Record the code-review findings that reopened this remediation.
-- [x] Preserve links to the prior closeout TODO, final implementation SHA, and exact-master final-gate runs.
-- [x] Identify all code paths touched by the reopened issues:
-  - [x] Settings persistence/runtime preference path.
-  - [x] Wake native listener state path.
-  - [x] manual `start_conversation` path.
-  - [x] wake-triggered conversation path.
-  - [x] local Moonshine ASR path.
-  - [x] Gemini Live audio path, if provider-neutral support is selected.
-  - [x] artifact provisioning path.
-  - [x] performance evidence path.
-  - [x] documentation and UI surfaces.
-- [x] Add a short evidence note under `docs/evidence/` describing why this post-closeout remediation exists.
-
-### Acceptance
-
-- [x] Baseline evidence file is merged.
-- [x] The new spec and TODO are referenced by the evidence note.
-- [x] No production behavior changes are included in WPCR-000 unless required by repository formatting or doc policy.
-
-## WPCR-100 — Build one native listener control plane
-
-**Incremental evidence:** intentional listener shutdown/capture-close race fixed by PR #473 and merged as `dcc855cd16a89e37a6894ef217ba0532fc4f068b`; exact-master CI run `36235465363` passed. Shutdown evidence is recorded in `docs/evidence/WPCR-100_LISTENER_SHUTDOWN_2026-09-26.md`, merged by PR #474 as `9d0f6530eac3169500d573f1039c57aa25b4fb72`; exact-master CI run `36236017079` passed. Current source also keeps `NativeKwsSession` construction/use inside the dedicated listener thread and retains fail-closed startup/capture handling. The authoritative `control_native_wake_listener` boundary, listener-status classifier, centralized terminal completion boundary, and deterministic mock-capture listener tests are present on `master` at `e4606ee2f5a649d01468ed002d41beb09989da05`; exact-master ordinary CI `36341840706`, lifecycle stability `36341840594`, and source-security audit `36341840687` passed.
-
-### Tasks
-
-- [x] Introduce one authoritative listener control boundary in `src-tauri/src/app/wake_word_state.rs` or a focused new module.
-- [x] Ensure startup, Settings changes, manual conversation, wake-triggered conversation, shutdown, and tests use the same listener lifecycle API.
-- [x] Add explicit listener states or diagnostics sufficient to distinguish:
-  - [x] runtime disabled;
-  - [x] runtime loading;
-  - [x] listener starting;
-  - [x] listener active/listening;
-  - [x] listener intentionally suspended for command ownership;
-  - [x] listener pending until conversation ends;
-  - [x] listener failed closed;
-  - [x] listener stopped.
-- [x] Ensure runtime `Disabled` is never reported as proof that microphone capture is stopped unless the listener thread has actually stopped.
-- [x] Make intentional listener shutdown distinct from capture failure.
-- [x] Prevent intentional command-transfer shutdown from recording Wake `Error`.
-- [x] Keep the native KWS session local to the listener thread.
-- [x] Preserve fail-closed behavior for artifact, runtime, architecture, and capture failures.
-- [x] Add unit tests for listener state transitions without real audio hardware.
-
-### Acceptance
-
-- [x] There is one public/internal control API for listener lifecycle.
-- [x] Existing direct lifecycle call sites are migrated or explicitly justified.
-- [x] Tests prove intentional shutdown does not become a Wake error.
-- [x] Diagnostics cannot say Wake is disabled/listening incorrectly relative to listener ownership.
-
-## WPCR-110 — Wire Settings enable/disable to real listener ownership
-
-**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records the Settings/listener remediation present at `bf79159fb389bbe1961c83fcad1918aae43233af`; exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passed. The evidence note itself is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba`; exact-master ordinary CI `36349151759` passed. `docs/evidence/WPCR-110_SETTINGS_ROLLBACK_STATUS_2026-09-27.md` records focused listener rollback/status/sanitized-error coverage at exact master `1976d2ad3edb514ce0fea72c6b34dc700ab5e58c`; ordinary CI `36376930414` and source-security audit `36376930415` passed. The evidence file is merged at `82ddabe5c7e672307a492f1a3ede10fb643288d7` with ordinary CI `36377338615` passing. Persisted Settings rollback is recorded in `docs/evidence/WPCR-110_PERSISTENCE_ROLLBACK_2026-09-27.md`: exact master `4538ca0f9fb0feca694d98c73cc59954bdb5d472` passed ordinary CI `36381028445`. Frontend diagnostics refresh is recorded in `docs/evidence/WPCR-110_SETTINGS_UI_REFRESH_2026-09-28.md`: exact implementation/test master `a2abb402a618bd281599d76b288d61dd1cb12654` passed ordinary CI `36386721536`, and the evidence-note master `5cc56a598b28697340575a2d4b263a1a9b4d65bb` passed ordinary CI `36387048117`.
-
-### Tasks
-
-- [x] Update `apply_changed_runtime_preferences` so Wake setting changes call the listener control plane, not only `apply_enabled_setting`.
-- [x] Turning Wake on while idle starts the native listener when artifacts and selected policy are valid.
-- [x] Turning Wake off stops the listener thread, releases capture, clears retained audio, and reports disabled only after the stop boundary is complete or safely in progress.
-- [x] Settings rollback restores listener state as well as runtime phase and persisted values.
-- [x] Settings failure surfaces sanitized actionable errors without raw paths, secrets, or audio content.
-- [x] UI refreshes diagnostics/status after enable/disable completes.
-- [x] Add tests for enable from disabled.
-- [x] Add tests for disable from active listening.
-- [x] Add tests for settings persistence failure rollback.
-- [x] Add tests that diagnostics do not report disabled while a listener handle remains active.
-
-### Acceptance
-
-- [x] A user can enable Wake from Settings without app restart when prerequisites are satisfied.
-- [x] A user can disable Wake from Settings and microphone listener ownership stops boundedly.
-- [x] Manual conversation behavior is preserved immediately after disable.
-- [x] Existing Settings UI tests are updated to assert real backend state, not just patched frontend settings.
-
-## WPCR-120 — Handle input-device and ASR-mode settings changes while Wake is enabled
-
-**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records deterministic coverage for idle input-device restart, active-conversation pending restart, restart failure fail-closed behavior, supported ASR-mode restart, and unsupported ASR-mode fail-closed behavior. Evidence is bound to `bf79159fb389bbe1961c83fcad1918aae43233af` with exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passing; the evidence note is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba` with exact-master ordinary CI `36349151759` passing.
-
-### Tasks
-
-- [x] Detect input-device changes while Wake is enabled.
-- [x] Restart the listener on the new input device when idle.
-- [x] If a conversation is active, record a pending restart and apply it at the terminal boundary.
-- [x] If restart fails, fail Wake closed with sanitized status and keep manual interaction available.
-- [x] Detect ASR-mode changes while Wake is enabled.
-- [x] Enforce the selected WPCR-300 ASR policy when ASR mode changes.
-- [x] Add tests for input-device restart.
-- [x] Add tests for input-device restart failure.
-- [x] Add tests for ASR mode change while Wake is enabled.
 
-### Acceptance
+This document is the reconciled closeout state for the Wake Word V1 post-closeout remediation. The detailed historical checklist remains available in Git history before this final reconciliation commit; this version records the objective final status, exact evidence, and exact-head / exact-master validation used for closeout.
+
+## Final closeout summary
+
+- [x] Post-closeout baseline was reopened, frozen, and documented.
+- [x] One native listener control plane owns listener lifecycle transitions.
+- [x] Settings enable/disable, rollback, diagnostics, and UI refresh are wired to real listener ownership.
+- [x] Input-device and ASR-mode changes while Wake is enabled are handled through the listener control plane.
+- [x] Manual conversation shared-capture transfer is reliable and does not strand Wake in error/suspended state.
+- [x] Wake V1 command-ASR policy is explicitly local-Moonshine-only.
+- [x] Downstream first-command-word acceptance is covered at the deterministic boundary and in the real KWS command fixture.
+- [x] Artifact provisioning is documented as developer-prepared and fail-closed for clean installs.
+- [x] Production native listener performance evidence exists and distinguishes production-listener reports from standalone KWS-only reports.
+- [x] Diagnostics and Settings UI truthfulness are covered, including listener ownership states and privacy boundaries.
+- [x] Documentation was reconciled to the post-closeout support state.
+- [x] Required CI gates were added/reconciled for reopened issues.
+- [x] Final source/privacy/security audit was completed.
+- [x] Exact-head final qualification passed.
+- [x] Exact-master verification passed on the exact tested `master` head.
+
+## WPCR section reconciliation
+
+| WPCR section | Final status | Primary evidence |
+| --- | --- | --- |
+| WPCR-000 — Reopen and freeze post-closeout remediation baseline | Closed | `docs/evidence/WPCR-000_POST_CLOSEOUT_BASELINE_2026-09-25.md`; merged on `master` at `362ec673d0195fb360a3ffc32fd22ad616cdb169`; ordinary CI `36230401074`. |
+| WPCR-100 — Build one native listener control plane | Closed | `docs/evidence/WPCR-100_LISTENER_SHUTDOWN_2026-09-26.md`; authoritative listener control/status evidence through exact `master` `e4606ee2f5a649d01468ed002d41beb09989da05`; ordinary CI `36341840706`, lifecycle stability `36341840594`, source-security audit `36341840687`. |
+| WPCR-110 — Wire Settings enable/disable to real listener ownership | Closed | `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md`, `docs/evidence/WPCR-110_SETTINGS_ROLLBACK_STATUS_2026-09-27.md`, `docs/evidence/WPCR-110_PERSISTENCE_ROLLBACK_2026-09-27.md`, `docs/evidence/WPCR-110_SETTINGS_UI_REFRESH_2026-09-28.md`; ordinary CI includes `36386721536` and `36387048117` for the final UI-refresh evidence path. |
+| WPCR-120 — Handle input-device and ASR-mode settings changes while Wake is enabled | Closed | `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md`; exact `master` `bf79159fb389bbe1961c83fcad1918aae43233af`; ordinary CI `36347933313`, lifecycle stability `36347933318`, source-security audit `36347933322`. |
+| WPCR-200 — Fix manual conversation shared-capture transfer | Closed | `docs/evidence/WPCR-200_ACTIVE_LISTENER_TRANSFER_2026-09-27.md`, `docs/evidence/WPCR-200_MANUAL_TRANSFER_TERMINAL_RECOVERY_2026-09-27.md`; exact ordinary CI `36375659976`, source-security audit `36375659947`, evidence merge CI `36376132191`. |
+| WPCR-300 — Resolve Wake command-ASR policy mismatch | Closed | Policy B selected: explicit local-Moonshine-only Wake V1. Enforced in `wake_word_state.rs`, Settings, UI disclosures, and docs. |
+| WPCR-310 — Add downstream first-command-word acceptance | Closed | `docs/evidence/WPCR-310_FIRST_COMMAND_WORD_BOUNDARY_2026-09-26.md`, `docs/evidence/WPCR-310_COMMAND_FIXTURE_KWS_2026-09-27.md`; exact `master` `138384250a7133465e8b890701de4cbf3f93eb34`; ordinary CI `36377539641`, required-gates audit `36377539545`, real-KWS acceptance `36377539575`. |
+| WPCR-400 — Add clean-install Wake artifact provisioning | Closed | `docs/evidence/WPCR-400_ARTIFACT_PROVISIONING_MODEL_2026-09-25.md`; developer-prepared artifact model, UI/docs disclosure, fail-closed clean app-data behavior, and manifest validation. |
+| WPCR-500 — Measure production idle listener performance | Closed | `docs/evidence/WPCR-500_PRODUCTION_LISTENER_PERFORMANCE_2026-09-27.md`; exact `master` `5232ecf4fe7f9d20dd8de85f07526f43e8a48f64`; real KWS acceptance `36338240563`; evidence merge `7ebaf08c3a550801eb497432a7a0bb7f5bf32b86`; ordinary CI `36357695244`. |
+| WPCR-600 — Fix diagnostics and Settings UI truthfulness | Closed | Listener ownership diagnostics and Settings status truthfulness merged through PR #469; exact-head ordinary CI, Wake source-security audit, Wake documentation audit, and Wake privacy audit passed at `47b368b23aeac9c4dfd7238d033304984d97e54d`. |
+| WPCR-700 — Reconcile Wake documentation | Closed | `docs/evidence/WPCR-700_POST_CLOSEOUT_DOCUMENTATION_2026-09-26.md`; reopened-gate documentation updates through PR #479; exact-master ordinary CI `36303647425`, documentation audit `36303647388`, required-gates audit `36303647268`. |
+| WPCR-800 — Add required CI gates for reopened issues | Closed | `docs/evidence/WPCR-800_REQUIRED_GATES_2026-09-26.md`; `docs/wake-word-required-gates.json`; final exact-head required-gates audit `36391804741`. |
+| WPCR-900 — Final source/privacy/security audit | Closed | `docs/evidence/WPCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-09-28.md`; audited `master` `c56e658bd60bbd187296f82c04da06824fb7649c`; ordinary CI `36389559764`. |
+| WPCR-950 — Exact-head final qualification | Closed | `docs/evidence/WPCR-950_960_FINAL_QUALIFICATION_2026-09-28.md`; exact final qualification head `bba5ea44a668f67baf32f0471dff2d75bb72cf22`; all required exact-head gates passed. |
+| WPCR-960 — Guarded merge and exact-master verification | Closed | `docs/evidence/WPCR-950_960_FINAL_QUALIFICATION_2026-09-28.md`; direct-to-`master` remediation, so no PR merge step was applicable; exact tested `master` `bba5ea44a668f67baf32f0471dff2d75bb72cf22` passed all required exact-master gates. |
+
+## WPCR-950 exact-head final qualification
+
+**Exact final qualification head:** `bba5ea44a668f67baf32f0471dff2d75bb72cf22`
+
+This head changed only validation trigger comments, one narrow privacy-audit false-positive exception for `format!("{:?}", final_snapshot.phase)` in the acceptance-report path, and a lifecycle trigger note. It did not change Wake product behavior, model/runtime identities, corpus definitions, thresholds, scoring policy, listener behavior, Settings behavior, ASR/TTS behavior, or acceptance criteria.
+
+### WPCR-950 tasks
+
+- [x] Reload latest `master` before final qualification.
+- [x] Review final branch diff against current `master`.
+- [x] Confirm no unrelated ASR/TTS/settings regression is introduced.
+- [x] Record exact final PR/head SHA: `bba5ea44a668f67baf32f0471dff2d75bb72cf22`.
+- [x] Run ordinary CI at exact head: `36391804709`.
+- [x] Run Settings/listener lifecycle gate at exact head: ordinary CI `36391804709`.
+- [x] Run manual conversation shared-capture transfer gate at exact head: ordinary CI `36391804709`.
+- [x] Run selected ASR policy acceptance at exact head: ordinary CI `36391804709`.
+- [x] Run downstream first-command-word acceptance at exact head: ordinary CI `36391804709` plus real-KWS command fixture in `36391804703`.
+- [x] Run clean-install artifact provisioning acceptance at exact head: native packaging `36391804824`, artifact verification `36391804721`.
+- [x] Run production idle listener performance gate at exact head: real KWS / production-listener acceptance `36391804703`, performance evidence `36391804722`.
+- [x] Run privacy/source-security audit at exact head: privacy audit `36391804693`, source-security audit `36391804817`.
+- [x] Run documentation audit at exact head: `36391804809`.
+- [x] Run required-gates audit at exact head: `36391804741`.
+- [x] Record run IDs and report artifact names.
+
+### WPCR-950 acceptance
+
+- [x] Every required exact-head gate passed.
+- [x] No skipped required gate was counted as passing.
+- [x] Evidence is bound to the exact final head.
+
+### Exact-head run IDs
+
+| Gate | Run ID |
+| --- | ---: |
+| Ordinary CI | `36391804709` |
+| Wake Artifact Verification | `36391804721` |
+| Wake Word corpus validation | `36391804786` |
+| Wake Word corpus contract | `36391804740` |
+| Wake Word native packaging architecture | `36391804824` |
+| Wake Word lifecycle stability | `36391804798` |
+| Wake Word performance evidence | `36391804722` |
+| Wake Word privacy audit | `36391804693` |
+| Wake Word source security audit | `36391804817` |
+| Wake Word documentation audit | `36391804809` |
+| Wake Word required gates audit | `36391804741` |
+| Wake Word real KWS acceptance | `36391804703` |
+
+### Exact-head artifacts
+
+From `Wake Word real KWS acceptance` run `36391804703`:
+
+- `wake-word-v1-corpus` — artifact `10955834039`
+- `wake-word-real-kws-linux-x86_64` — artifact `10956920657`
+- `wake-word-real-kws-macos-arm64` — artifact `10956920850`
+
+## WPCR-960 guarded merge and exact-master verification
+
+This remediation was executed directly on `master` under the user's direct instruction. Therefore, PR mergeability and guarded merge substeps are not applicable. Exact-master verification is the exact tested `master` head verification recorded above.
+
+**Exact tested master:** `bba5ea44a668f67baf32f0471dff2d75bb72cf22`
 
-- [x] Wake does not keep listening on a stale input device after a successful device change.
-- [x] Wake does not enter a misleading listening state for an unsupported ASR mode.
-- [x] Diagnostics explain pending/restart/failure state without leaking paths or secrets.
+### WPCR-960 tasks
 
-## WPCR-200 — Fix manual conversation shared-capture transfer
+- [x] Recheck PR mergeability immediately before merge. Direct-to-`master`; no PR merge applicable.
+- [x] Recheck exact head SHA immediately before merge. Direct-to-`master`; exact tested head recorded as `bba5ea44a668f67baf32f0471dff2d75bb72cf22`.
+- [x] Merge only the exact tested head using an allowed guarded merge method. Direct-to-`master`; no PR merge applicable.
+- [x] Record exact merged/tested master SHA: `bba5ea44a668f67baf32f0471dff2d75bb72cf22`.
+- [x] Verify ordinary CI on exact merged/tested master: `36391804709`.
+- [x] Verify all required Wake-specific exact-master gates: run IDs listed above.
+- [x] Verify clean-install, listener lifecycle, ASR policy, downstream command, performance, privacy, source-security, docs, and required-gates evidence on exact merged/tested master.
+- [x] Reconcile this TODO with exact evidence.
+- [x] Do not close final status until all reopened code-review findings have implementation and acceptance evidence.
 
-**Incremental evidence:** current `master` routes manual start through `NativeWakeListenerControl::TransferToCommand` before normal ASR capture, uses `complete_native_wake_command_interaction` for start failure and terminal resolution, and routes explicit stop through the same boundary. Deterministic lifecycle tests cover disabled/failed Wake availability, start-failure recovery, latest-setting terminal behavior, and intentional transfer without Wake error. Exact-master ordinary CI `36346852425` passed at `cc593f8d4ae1ac8d399073c6cfb8784c8451bdab`. Active-listener transfer was fixed by PR #494 and recorded in `docs/evidence/WPCR-200_ACTIVE_LISTENER_TRANSFER_2026-09-27.md`: exact PR head `614e0458a4123648681ebcbc4b07b753aa273545` passed ordinary CI `36349867506`, lifecycle stability `36349867516`, and source-security audit `36349867526`; merged `master` `b040fa1cd63917f91963f1b3fd323c153dab0662` passed ordinary CI `36350297078`, lifecycle stability `36350297048`, and source-security audit `36350297103`. Manual-transfer terminal recovery evidence is recorded in `docs/evidence/WPCR-200_MANUAL_TRANSFER_TERMINAL_RECOVERY_2026-09-27.md`: exact-master `6cbf39b6dcafd545fb9da9365f36e377a701924b` passed ordinary CI `36375659976` and Wake source-security audit `36375659947`; the evidence file is merged at `e6f65757a337d7a5a3c84b2f290ae7e9de4d0c47` with exact-master ordinary CI `36376132191` passing.
+### WPCR-960 acceptance
 
-### Tasks
+- [x] `master` contains the complete post-closeout remediation.
+- [x] Required exact-master validation evidence passes.
+- [x] This TODO is reconciled with exact SHAs and run IDs.
+- [x] Final docs truthfully describe Wake Word V1 support state.
 
-- [x] Before manual `start_conversation`, intentionally stop or suspend the native Wake listener through the listener control plane.
-- [x] Ensure the listener thread has released or is guaranteed not to use `AudioCapture` before normal command ASR starts capture.
-- [x] Preserve manual start behavior when Wake is disabled, loading, failed, or unavailable.
-- [x] On conversation start failure, resume or restart Wake according to latest settings.
-- [x] On conversation terminal success, cancellation, recoverable failure, and stop, restart Wake according to latest settings.
-- [x] Ensure `stop_conversation` uses the same resume/restart boundary as natural lifecycle completion.
-- [x] Ensure barge-in/cancel paths do not leave Wake permanently suspended.
-- [x] Add tests for manual start while Wake listener is active.
-- [x] Add tests for manual start failure while Wake was active.
-- [x] Add tests for stop/cancel/recoverable failure restart.
-- [x] Add tests that no capture failure is recorded for intentional manual transfer.
+## Final validation notes
 
-### Acceptance
+- The final evidence file `docs/evidence/WPCR-950_960_FINAL_QUALIFICATION_2026-09-28.md` landed at `b8e23d7c0fca0fa15035e07548cf1d13b1e52ec2` and passed ordinary CI `36392549793`.
+- This final TODO reconciliation is documentation-only. It records the exact final qualification and exact-master verification already completed on `bba5ea44a668f67baf32f0471dff2d75bb72cf22` and does not change product behavior, validation policy, artifact identity, corpus identity, or acceptance criteria.
 
-- [x] Manual interaction remains available and reliable regardless of Wake state.
-- [x] Manual interaction does not strand Wake in `Error` after normal command completion.
-- [x] No duplicate microphone streams are opened.
-- [x] No path leaves Wake permanently suspended unintentionally.
+## Final status
 
-## WPCR-300 — Resolve Wake command-ASR policy mismatch
-
-**Evidence:** Policy B is selected and enforced in current `master`: `wake_word_state.rs` accepts only local Moonshine streaming ASR for Wake-triggered command activation, Settings/docs disclose local-Moonshine-only behavior, and unsupported modes are rejected before listener startup/enablement. Exact-master ordinary CI `36230401074` passed at `362ec673d0195fb360a3ffc32fd22ad616cdb169`.
-
-### Decision task
-
-- [x] Choose one supported Wake command-ASR policy and record it in code, docs, and evidence:
-  - [ ] Policy A: provider-neutral handoff to every supported normal command ASR mode.
-  - [x] Policy B: explicit local-Moonshine-only Wake V1.
-
-### Policy A implementation tasks
-
-- [ ] Add a provider-neutral command-ASR handoff boundary for `WakeCommandHandoffAudio`.
-- [ ] Local Moonshine modes receive handoff before subsequent live microphone PCM.
-- [ ] Gemini Live audio receives equivalent handoff audio before or with first live provider audio.
-- [ ] Unsupported ASR modes fail before listener startup or enablement.
-- [ ] Add tests for Moonshine handoff.
-- [ ] Add tests for Gemini Live audio handoff.
-- [ ] Add tests for unsupported modes.
-
-### Policy B implementation tasks
-
-- [x] Explicitly define supported ASR modes for Wake V1.
-- [x] Settings prevents enabling Wake with unsupported ASR modes, or requires switching to a supported local ASR mode.
-- [x] ASR-mode changes to unsupported modes disable or suspend Wake with visible status.
-- [x] Wake listener cannot start when unsupported ASR mode is selected.
-- [x] Docs and UI disclose local-ASR-only behavior.
-- [x] Add tests for enable blocked by unsupported ASR mode.
-- [x] Add tests for ASR-mode switch while Wake is enabled.
-
-### Acceptance
-
-- [x] Wake cannot fail only after trigger because the selected ASR mode was unsupported.
-- [x] Product docs and Settings UI match the selected policy.
-- [x] No hidden cloud or full-ASR fallback exists for idle wake detection.
-
-## WPCR-310 — Add downstream first-command-word acceptance
-
-**Incremental evidence:** `docs/evidence/WPCR-310_FIRST_COMMAND_WORD_BOUNDARY_2026-09-26.md` records deterministic production-router → `WakeCommandHandoffAudio` → normal Moonshine command-ASR ingress coverage on exact inspected master `ebeb2a118c63df4f8d71b3f41476163df80dfc3a`. The evidence explicitly scopes the result to deterministic downstream boundary receipt rather than real Moonshine transcription. `docs/evidence/WPCR-310_COMMAND_FIXTURE_KWS_2026-09-27.md` records the generated `Hey Moose. Tell me the time` fixture and the hardened real-KWS workflow step that requires fixture `positive-command-sc` to be present, expected-positive, and detected on each native platform. Exact master `138384250a7133465e8b890701de4cbf3f93eb34` passed ordinary CI `36377539641`, required-gates audit `36377539545`, and real-KWS acceptance `36377539575`.
-
-### Tasks
-
-- [x] Add a deterministic fixture or generated fixture equivalent to `Hey Moose, tell me the time`.
-- [x] Ensure KWS detects the wake phrase in that fixture.
-- [x] Route pre-roll plus live command audio through the production handoff boundary.
-- [x] Verify downstream command-ASR test boundary receives one continuous utterance.
-- [x] Verify the first command word after the wake phrase is present at the downstream boundary.
-- [x] Make the test fail if the first command word is clipped, duplicated, reordered, or omitted.
-- [x] If real ASR transcription is too nondeterministic for ordinary CI, add a deterministic downstream ASR harness plus a clearly scoped real-ASR/manual/scheduled gate.
-- [x] Store reports without raw PCM or transcript leakage beyond approved test strings.
-
-### Acceptance
-
-- [x] WWR-310 no longer relies only on router unit tests.
-- [x] Evidence proves the downstream command path receives the first command word.
-- [x] The acceptance report states exactly whether it proves deterministic boundary receipt, real ASR transcription, or both.
-
-## WPCR-400 — Add clean-install Wake artifact provisioning
-
-**Evidence:** WPCR-400 selected the developer-prepared model. Current `master` records this in `wake-word-artifacts.json`, `docs/evidence/WPCR-400_ARTIFACT_PROVISIONING_MODEL_2026-09-25.md`, Wake docs, Settings UI disclosure, manifest validation, and clean-app-data fail-closed tests. Exact-master ordinary CI `36230401074` passed at `362ec673d0195fb360a3ffc32fd22ad616cdb169`; prior exact-head artifact/documentation/privacy/native packaging gates for the provisioning slice passed at `a7ff8b74ed2b4556b821e9b4047ef149b2d8b306`.
-
-### Decision task
-
-- [x] Choose one artifact provisioning model and record it in docs and code:
-  - [ ] bundled/offline resources copied into app data;
-  - [ ] explicit user/developer installer flow;
-  - [x] developer-only Wake feature hidden or clearly marked not user-ready.
-
-### Bundled/offline model tasks
-
-- [ ] Add Wake model and runtime resources to Tauri bundle or platform-appropriate resource packaging.
-- [ ] Copy resources into app data on first use or verify them in place without weakening hash checks.
-- [ ] Verify every copied file against `wake-word-artifacts.json` before listener startup.
-- [ ] Support Linux x86_64 and macOS arm64 according to accepted platforms.
-- [ ] Add clean app-data install tests.
-
-### Explicit installer model tasks
-
-- [ ] Add a backend command or existing model-installer integration for Wake artifacts.
-- [ ] Expose install/preparation status in Settings.
-- [ ] Do not allow `Listening` until artifacts are verified.
-- [ ] Support offline deterministic preparation from approved archives where applicable.
-- [ ] Add installer success/failure/corrupt-cache tests.
-
-### Developer-only model tasks
-
-- [x] Hide or clearly mark Wake as developer-prepared/not user-ready.
-- [x] Docs must state exactly how artifacts are prepared.
-- [x] UI must not imply the feature works on a clean install.
-
-### Acceptance
-
-- [x] Empty Wake app-data directories do not produce misleading listener status.
-- [x] Clean-install behavior is tested.
-- [x] Artifact verification remains fail-closed.
-- [x] No silent network download is introduced unless explicitly approved and disclosed.
-
-## WPCR-500 — Measure production idle listener performance
-
-**Evidence:** `docs/evidence/WPCR-500_PRODUCTION_LISTENER_PERFORMANCE_2026-09-27.md` records the production-listener acceptance at exact master `5232ecf4fe7f9d20dd8de85f07526f43e8a48f64`; Wake Word real KWS acceptance run `36338240563` passed on Linux x86_64 and macOS arm64 and produced platform-specific `*-production-listener.json` reports. The evidence note is merged at `7ebaf08c3a550801eb497432a7a0bb7f5bf32b86`; exact-master ordinary CI `36357695244` passed. Reports explicitly distinguish production-listener, standalone KWS, and continuous full-ASR comparison scope.
-
-### Tasks
-
-- [x] Add a benchmark or acceptance path that starts the production native listener, not just a standalone KWS session.
-- [x] Measure listener startup duration.
-- [x] Measure idle CPU while capture is active and frames are routed.
-- [x] Measure memory overhead after startup.
-- [x] Measure route or inference latency under representative frames.
-- [x] Measure wake detection to command-ASR activation latency.
-- [x] Measure pre-roll handoff startup latency.
-- [x] Compare against continuous full-ASR idle behavior in the same environment where feasible.
-- [x] Measure repeated enable/disable and wake/command/resume cycles.
-- [x] Verify no thread, listener handle, native session, ring buffer, or capture multiplication across cycles.
-- [x] Write privacy-safe performance reports.
-
-### Acceptance
-
-- [x] Performance evidence covers the production listener path.
-- [x] Reports distinguish KWS-only measurement from full listener measurement.
-- [x] Final docs do not overstate performance claims beyond measured evidence.
-
-## WPCR-600 — Fix diagnostics and Settings UI truthfulness
-
-**Evidence:** PR #469 merged listener ownership diagnostics at `9e35b47c85278646e8933f5bb601fe312a8d1b4b` with exact-head ordinary CI, Wake source-security audit, Wake documentation audit, and Wake privacy audit passing at `47b368b23aeac9c4dfd7238d033304984d97e54d`. Current exact-master ordinary CI `36230401074` passed at `362ec673d0195fb360a3ffc32fd22ad616cdb169`.
-
-### Tasks
-
-- [x] Add listener ownership/status fields to diagnostics or otherwise prevent misleading `enabled`/`disabled` state.
-- [x] Display pending, unsupported-ASR, missing-artifacts, startup-failed, and listener-active states clearly in Settings.
-- [x] Keep sanitized help text free of raw paths, credentials, and audio content.
-- [x] Ensure UI disclosure changes according to selected ASR policy.
-- [x] Ensure active microphone disclosure appears whenever the native listener can be active.
-- [x] Add frontend tests for all new status states.
-- [x] Add backend serialization tests proving diagnostics remain privacy-safe.
-
-### Acceptance
-
-- [x] The UI cannot report Wake as fully disabled while the listener is still active.
-- [x] The UI cannot report Wake as listening when artifacts/ASR mode/listener state make listening impossible.
-- [x] Privacy disclosures remain visible and accurate.
-
-## WPCR-700 — Reconcile Wake documentation
-
-**Evidence:** Post-closeout documentation truthfulness updates merged through PR #476 at `d85e1a601219ff857e8e08b150bba6f249b3db7f`; exact-master ordinary CI `36249865635`, Wake documentation audit `36249865640`, Wake privacy audit `36249865636`, and Wake required-gates audit `36249865639` passed. WPCR-700 evidence note `docs/evidence/WPCR-700_POST_CLOSEOUT_DOCUMENTATION_2026-09-26.md` merged through PR #477 at `ebeb2a118c63df4f8d71b3f41476163df80dfc3a`; exact-master ordinary CI `36250002298` passed. Reopened-gate documentation was completed by PR #479 at `8b0022742288c2183be15e297393d72194a16b32`; exact-master ordinary CI `36303647425`, documentation audit `36303647388`, and required-gates audit `36303647268` passed.
-
-### Tasks
-
-- [x] Update `docs/WAKE_WORD_V1.md` to match the post-remediation support state.
-- [x] Update `docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md` to remove stale pending-closeout language or accurately describe remaining limits.
-- [x] Update `docs/WAKE_WORD_V1_ARCHITECTURE.md` for listener control plane, Settings, manual transfer, selected ASR policy, and artifact provisioning.
-- [x] Update `docs/WAKE_WORD_V1_CI_GATES.md` for new gates.
-- [x] Update README only if the feature is genuinely user-ready after this remediation. README was not promoted; documentation audit continues to enforce truthful non-user-ready/pending-qualification boundaries if Wake is mentioned.
-- [x] Ensure docs do not contradict the canonical TODO.
-- [x] Add documentation audit rules for stale pending/final-closeout contradictions.
-
-### Acceptance
-
-- [x] Documentation audit fails on stale claims found in the code review.
-- [x] Docs accurately distinguish production behavior, accepted evidence, and remaining limits.
-- [x] User-facing docs do not advertise unsupported ASR modes, missing clean-install artifacts, or unmeasured performance.
-
-## WPCR-800 — Add required CI gates for reopened issues
-
-**Incremental evidence:** Reopened WPCR gate inventory updates merged through PR #479 at `8b0022742288c2183be15e297393d72194a16b32`. Exact PR head `4441973809779a4d92941faa701b08a29ecfe2fd` passed ordinary CI `36266232016`, Wake required-gates audit `36266231835`, and Wake documentation audit `36266231845`. Exact merged master passed ordinary CI `36303647425`, Wake documentation audit `36303647388`, and Wake required-gates audit `36303647268`. Evidence note: `docs/evidence/WPCR-800_REQUIRED_GATES_2026-09-26.md`. The gate manifest now requires the reopened WPCR gates for final closeout. WPCR-200 manual-transfer ordinary-CI coverage is complete at exact `master` `6cbf39b6dcafd545fb9da9365f36e377a701924b` with CI `36375659976`; WPCR-110 Settings/listener lifecycle implementation and ordinary-CI proof are now covered by the persistence rollback and Settings UI diagnostics-refresh evidence above.
-
-### Tasks
-
-- [x] Add or extend a Settings/listener lifecycle workflow or ordinary CI test coverage. Ordinary CI now covers backend persistence/listener rollback and frontend post-save diagnostics refresh.
-- [x] Add or extend a shared-capture manual conversation transfer workflow/test suite.
-- [x] Add selected ASR policy acceptance to CI.
-- [x] Add downstream first-command-word acceptance to CI.
-- [x] Add clean-install artifact provisioning acceptance to CI.
-- [x] Add production idle listener performance evidence gate.
-- [x] Update `docs/wake-word-required-gates.json` so final closeout requires the new gates.
-- [x] Ensure skipped required gates fail the required-gates audit.
-- [x] Ensure path filters include the new source, docs, scripts, and workflow files.
-
-### Acceptance
-
-- [x] Required-gates audit proves the new gates are mandatory for final closeout.
-- [x] CI names and reports clearly distinguish component, deterministic integrated, real native, and product-level acceptance.
-
-## WPCR-900 — Final source/privacy/security audit
-
-**Evidence:** `docs/evidence/WPCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-09-28.md` records the final reopened-finding audit on master `c56e658bd60bbd187296f82c04da06824fb7649c`; ordinary CI `36389559764` passed for that exact audited head. The audit distinguishes deterministic/component closure from real native/product-level acceptance and explicitly leaves WPCR-950/960 exact-head/exact-master qualification mandatory.
-
-### Tasks
-
-- [x] Audit listener ownership and Settings transitions.
-- [x] Audit manual conversation transfer and restart paths.
-- [x] Audit wake-triggered conversation handoff and selected ASR policy.
-- [x] Audit clean-install artifact provisioning.
-- [x] Audit diagnostics and logs for misleading microphone state.
-- [x] Audit logs/errors/metrics for raw audio, transcripts, credentials, and unnecessary paths.
-- [x] Audit performance reports for privacy and claim scope.
-- [x] Audit docs for stale or contradictory closeout/user-ready claims.
-- [x] Confirm no mandatory review finding remains open.
-
-### Acceptance
-
-- [x] Audit evidence lists each reopened code-review finding and its closure evidence.
-- [x] Audit distinguishes implementation closure from evidence-only documentation.
-- [x] No product-level requirement is closed by component-only evidence unless explicitly scoped as component-only.
-
-## WPCR-950 — Exact-head final qualification
-
-### Tasks
-
-- [ ] Reload latest `master` before final qualification.
-- [ ] Review final branch diff against current `master`.
-- [ ] Confirm no unrelated ASR/TTS/settings regression is introduced.
-- [ ] Record exact final PR head SHA.
-- [ ] Run ordinary CI at exact head.
-- [ ] Run Settings/listener lifecycle gate at exact head.
-- [ ] Run manual conversation shared-capture transfer gate at exact head.
-- [ ] Run selected ASR policy acceptance at exact head.
-- [ ] Run downstream first-command-word acceptance at exact head.
-- [ ] Run clean-install artifact provisioning acceptance at exact head.
-- [ ] Run production idle listener performance gate at exact head.
-- [ ] Run privacy/source-security audit at exact head.
-- [ ] Run documentation audit at exact head.
-- [ ] Run required-gates audit at exact head.
-- [ ] Record run IDs and report artifact names.
-
-### Acceptance
-
-- [ ] Every required exact-head gate passes.
-- [ ] No skipped required gate is counted as passing.
-- [ ] Evidence is bound to the exact final PR head.
-
-## WPCR-960 — Guarded merge and exact-master verification
-
-### Tasks
-
-- [ ] Recheck PR mergeability immediately before merge.
-- [ ] Recheck exact head SHA immediately before merge.
-- [ ] Merge only the exact tested head using an allowed guarded merge method.
-- [ ] Record exact merged master SHA.
-- [ ] Verify ordinary CI on exact merged master.
-- [ ] Verify all required Wake-specific exact-master gates.
-- [ ] Verify clean-install, listener lifecycle, ASR policy, downstream command, performance, privacy, source-security, docs, and required-gates evidence on exact merged master.
-- [ ] Reconcile this TODO with exact evidence.
-- [ ] Do not close final status until all reopened code-review findings have implementation and acceptance evidence.
-
-### Acceptance
-
-- [ ] `master` contains the complete post-closeout remediation.
-- [ ] Required exact-master validation evidence passes.
-- [ ] This TODO is reconciled with exact SHAs and run IDs.
-- [ ] Final docs truthfully describe Wake Word V1 support state.
+Wake Word V1 post-closeout remediation is closed. All reopened post-closeout findings are implemented, objectively qualified, reconciled in evidence, and merged to `master`.
