@@ -18,6 +18,10 @@ type TestTauriInternals = {
 const tauriInternals = () =>
   (window as unknown as TestTauriInternals).__TAURI_INTERNALS__;
 
+const missingOriginalInvoke = async () => {
+  throw new Error("original Tauri invoke test fixture was not initialized");
+};
+
 const deferred = <T>() => {
   const controls: { resolve?: (value: T) => void } = {};
   const promise = new Promise<T>((resolve) => {
@@ -35,7 +39,8 @@ const deferred = <T>() => {
 };
 
 describe("mooseStore settings persistence rollback", () => {
-  let originalInvoke: TestTauriInternals["__TAURI_INTERNALS__"]["invoke"];
+  let originalInvoke: TestTauriInternals["__TAURI_INTERNALS__"]["invoke"] =
+    missingOriginalInvoke;
 
   beforeEach(() => {
     resetSettingsPersistenceForTests();
@@ -52,6 +57,7 @@ describe("mooseStore settings persistence rollback", () => {
   afterEach(() => {
     resetSettingsPersistenceForTests();
     tauriInternals().invoke = originalInvoke;
+    originalInvoke = missingOriginalInvoke;
   });
 
   it("does not resolve a failed settings update until rollback is reflected", async () => {
