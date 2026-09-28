@@ -242,25 +242,27 @@
 
 ## WPCR-500 — Measure production idle listener performance
 
+**Evidence:** `docs/evidence/WPCR-500_PRODUCTION_LISTENER_PERFORMANCE_2026-09-27.md` records the production-listener acceptance at exact master `5232ecf4fe7f9d20dd8de85f07526f43e8a48f64`; Wake Word real KWS acceptance run `36338240563` passed on Linux x86_64 and macOS arm64 and produced platform-specific `*-production-listener.json` reports. The evidence note is merged at `7ebaf08c3a550801eb497432a7a0bb7f5bf32b86`; exact-master ordinary CI `36357695244` passed. Reports explicitly distinguish production-listener, standalone KWS, and continuous full-ASR comparison scope.
+
 ### Tasks
 
-- [ ] Add a benchmark or acceptance path that starts the production native listener, not just a standalone KWS session.
-- [ ] Measure listener startup duration.
-- [ ] Measure idle CPU while capture is active and frames are routed.
-- [ ] Measure memory overhead after startup.
-- [ ] Measure route or inference latency under representative frames.
-- [ ] Measure wake detection to command-ASR activation latency.
-- [ ] Measure pre-roll handoff startup latency.
-- [ ] Compare against continuous full-ASR idle behavior in the same environment where feasible.
-- [ ] Measure repeated enable/disable and wake/command/resume cycles.
-- [ ] Verify no thread, listener handle, native session, ring buffer, or capture multiplication across cycles.
-- [ ] Write privacy-safe performance reports.
+- [x] Add a benchmark or acceptance path that starts the production native listener, not just a standalone KWS session.
+- [x] Measure listener startup duration.
+- [x] Measure idle CPU while capture is active and frames are routed.
+- [x] Measure memory overhead after startup.
+- [x] Measure route or inference latency under representative frames.
+- [x] Measure wake detection to command-ASR activation latency.
+- [x] Measure pre-roll handoff startup latency.
+- [x] Compare against continuous full-ASR idle behavior in the same environment where feasible.
+- [x] Measure repeated enable/disable and wake/command/resume cycles.
+- [x] Verify no thread, listener handle, native session, ring buffer, or capture multiplication across cycles.
+- [x] Write privacy-safe performance reports.
 
 ### Acceptance
 
-- [ ] Performance evidence covers the production listener path.
-- [ ] Reports distinguish KWS-only measurement from full listener measurement.
-- [ ] Final docs do not overstate performance claims beyond measured evidence.
+- [x] Performance evidence covers the production listener path.
+- [x] Reports distinguish KWS-only measurement from full listener measurement.
+- [x] Final docs do not overstate performance claims beyond measured evidence.
 
 ## WPCR-600 — Fix diagnostics and Settings UI truthfulness
 
