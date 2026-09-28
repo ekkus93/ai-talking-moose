@@ -1,9 +1,10 @@
 use super::state::AppState;
 use super::wake_word_command_lifecycle::{
-    CommandInteractionTerminalOutcome, complete_command_interaction, suspend_for_command_interaction,
+    complete_command_interaction, suspend_for_command_interaction,
+    CommandInteractionTerminalOutcome,
 };
 use super::wake_word_state::{
-    NativeWakeListenerControl, control_native_wake_listener, native_wake_listener_is_active,
+    control_native_wake_listener, native_wake_listener_is_active, NativeWakeListenerControl,
 };
 use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
 
