@@ -1,11 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { frontendDefaultSettings } from "../lib/backendContract";
-import { tauriBridge } from "../lib/tauriBridge";
 import type { AppSettings } from "../types/moose";
 import {
   resetSettingsPersistenceForTests,
   useMooseStore,
 } from "./mooseStore";
+
+type TestTauriInternals = {
+  __TAURI_INTERNALS__: {
+    invoke: (
+      command: string,
+      commandArgs?: Record<string, unknown>,
+    ) => Promise<unknown>;
+  };
+};
+
+const tauriInternals = () =>
+  (window as unknown as TestTauriInternals).__TAURI_INTERNALS__;
 
 const deferred = <T>() => {
   const controls: { resolve?: (value: T) => void } = {};
@@ -24,8 +35,11 @@ const deferred = <T>() => {
 };
 
 describe("mooseStore settings persistence rollback", () => {
+  let originalInvoke: TestTauriInternals["__TAURI_INTERNALS__"]["invoke"];
+
   beforeEach(() => {
     resetSettingsPersistenceForTests();
+    originalInvoke = tauriInternals().invoke;
     useMooseStore.setState({
       settings: {
         ...frontendDefaultSettings(),
@@ -37,7 +51,7 @@ describe("mooseStore settings persistence rollback", () => {
 
   afterEach(() => {
     resetSettingsPersistenceForTests();
-    vi.restoreAllMocks();
+    tauriInternals().invoke = originalInvoke;
   });
 
   it("does not resolve a failed settings update until rollback is reflected", async () => {
@@ -49,12 +63,15 @@ describe("mooseStore settings persistence rollback", () => {
     const authoritativeSettings = deferred<AppSettings>();
     let updateResolved = false;
 
-    vi.spyOn(tauriBridge, "updateSettings").mockRejectedValue(
-      new Error("injected persistence failure"),
-    );
-    vi.spyOn(tauriBridge, "getSettings").mockReturnValue(
-      authoritativeSettings.promise,
-    );
+    tauriInternals().invoke = async (command, commandArgs) => {
+      if (command === "update_settings") {
+        throw new Error("injected persistence failure");
+      }
+      if (command === "get_settings") {
+        return authoritativeSettings.promise;
+      }
+      return originalInvoke(command, commandArgs);
+    };
 
     const update = useMooseStore
       .getState()
