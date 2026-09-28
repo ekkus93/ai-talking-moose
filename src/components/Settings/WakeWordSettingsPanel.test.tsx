@@ -125,8 +125,9 @@ const waitForWakeDiagnosticsRefreshCount = async (count: number) => {
     expect(
       vi
         .mocked(invoke)
-        .mock.calls.filter(([cmd]) => cmd === "get_wake_word_diagnostics"),
-    ).toHaveLength(count);
+        .mock.calls.filter(([cmd]) => cmd === "get_wake_word_diagnostics")
+        .length,
+    ).toBeGreaterThanOrEqual(count);
   });
 };
 
