@@ -93,9 +93,9 @@
 
 ### Acceptance
 
-- [ ] A user can enable Wake from Settings without app restart when prerequisites are satisfied.
-- [ ] A user can disable Wake from Settings and microphone listener ownership stops boundedly.
-- [ ] Manual conversation behavior is preserved immediately after disable.
+- [x] A user can enable Wake from Settings without app restart when prerequisites are satisfied.
+- [x] A user can disable Wake from Settings and microphone listener ownership stops boundedly.
+- [x] Manual conversation behavior is preserved immediately after disable.
 - [x] Existing Settings UI tests are updated to assert real backend state, not just patched frontend settings.
 
 ## WPCR-120 — Handle input-device and ASR-mode settings changes while Wake is enabled
@@ -329,23 +329,25 @@
 
 ## WPCR-900 — Final source/privacy/security audit
 
+**Evidence:** `docs/evidence/WPCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-09-28.md` records the final reopened-finding audit on master `c56e658bd60bbd187296f82c04da06824fb7649c`; ordinary CI `36389559764` passed for that exact audited head. The audit distinguishes deterministic/component closure from real native/product-level acceptance and explicitly leaves WPCR-950/960 exact-head/exact-master qualification mandatory.
+
 ### Tasks
 
-- [ ] Audit listener ownership and Settings transitions.
-- [ ] Audit manual conversation transfer and restart paths.
-- [ ] Audit wake-triggered conversation handoff and selected ASR policy.
-- [ ] Audit clean-install artifact provisioning.
-- [ ] Audit diagnostics and logs for misleading microphone state.
-- [ ] Audit logs/errors/metrics for raw audio, transcripts, credentials, and unnecessary paths.
-- [ ] Audit performance reports for privacy and claim scope.
-- [ ] Audit docs for stale or contradictory closeout/user-ready claims.
-- [ ] Confirm no mandatory review finding remains open.
+- [x] Audit listener ownership and Settings transitions.
+- [x] Audit manual conversation transfer and restart paths.
+- [x] Audit wake-triggered conversation handoff and selected ASR policy.
+- [x] Audit clean-install artifact provisioning.
+- [x] Audit diagnostics and logs for misleading microphone state.
+- [x] Audit logs/errors/metrics for raw audio, transcripts, credentials, and unnecessary paths.
+- [x] Audit performance reports for privacy and claim scope.
+- [x] Audit docs for stale or contradictory closeout/user-ready claims.
+- [x] Confirm no mandatory review finding remains open.
 
 ### Acceptance
 
-- [ ] Audit evidence lists each reopened code-review finding and its closure evidence.
-- [ ] Audit distinguishes implementation closure from evidence-only documentation.
-- [ ] No product-level requirement is closed by component-only evidence unless explicitly scoped as component-only.
+- [x] Audit evidence lists each reopened code-review finding and its closure evidence.
+- [x] Audit distinguishes implementation closure from evidence-only documentation.
+- [x] No product-level requirement is closed by component-only evidence unless explicitly scoped as component-only.
 
 ## WPCR-950 — Exact-head final qualification
 
