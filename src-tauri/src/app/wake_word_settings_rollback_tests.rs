@@ -110,7 +110,7 @@ fn listener_rollback_restores_previous_runtime_and_listener_settings() {
     );
     assert_eq!(
         classify_native_listener_status(&previous, state.wake_word_runtime.phase(), true, false),
-        WakeWordListenerStatus::Listening
+        WakeWordListenerStatus::Active
     );
 }
 
@@ -156,7 +156,7 @@ fn settings_enable_disable_refreshes_backend_status_after_completion() {
     .unwrap();
     assert_eq!(
         classify_native_listener_status(&enabled, state.wake_word_runtime.phase(), true, false),
-        WakeWordListenerStatus::Listening
+        WakeWordListenerStatus::Active
     );
 
     apply_configured_native_wake_listener_settings_change_with_control(
@@ -172,6 +172,6 @@ fn settings_enable_disable_refreshes_backend_status_after_completion() {
     .unwrap();
     assert_eq!(
         classify_native_listener_status(&disabled, state.wake_word_runtime.phase(), false, false),
-        WakeWordListenerStatus::Disabled
+        WakeWordListenerStatus::Stopped
     );
 }
