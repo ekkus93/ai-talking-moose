@@ -53,15 +53,33 @@ const wakeDiagnostics = (
   ...patch,
 });
 
-const mockWakeDiagnosticsResponse = (diagnostics: WakeWordDiagnostics) => {
+const defaultInvokeImplementation = () => {
   const defaultInvoke = vi.mocked(invoke).getMockImplementation();
   if (!defaultInvoke) {
     throw new Error(
       "Tauri invoke test fixture is missing its default implementation",
     );
   }
+  return defaultInvoke;
+};
+
+const mockWakeDiagnosticsResponse = (diagnostics: WakeWordDiagnostics) => {
+  const defaultInvoke = defaultInvokeImplementation();
   vi.mocked(invoke).mockImplementation(async (cmd, args, options) => {
     if (cmd === "get_wake_word_diagnostics") return diagnostics;
+    if (cmd === "update_settings") return undefined;
+    return defaultInvoke(cmd, args, options);
+  });
+};
+
+const mockWakeDiagnosticsSequence = (diagnostics: WakeWordDiagnostics[]) => {
+  const defaultInvoke = defaultInvokeImplementation();
+  const queue = [...diagnostics];
+  const fallback = diagnostics[diagnostics.length - 1];
+  vi.mocked(invoke).mockImplementation(async (cmd, args, options) => {
+    if (cmd === "get_wake_word_diagnostics") {
+      return queue.shift() ?? fallback;
+    }
     if (cmd === "update_settings") return undefined;
     return defaultInvoke(cmd, args, options);
   });
@@ -224,6 +242,34 @@ describe("WakeWordSettingsPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("refreshes diagnostics after enabling Wake Word completes", async () => {
+    mockWakeDiagnosticsSequence([
+      wakeDiagnostics(),
+      wakeDiagnostics({
+        enabled: true,
+        runtime_phase: "listening",
+        listener_status: "active",
+        listener_active: true,
+        listening: true,
+      }),
+    ]);
+    renderPanel(false);
+    await waitForRuntimeDiagnostics();
+
+    fireEvent.click(wakeToggle());
+
+    await expectPersistedWakeSetting(true);
+    expect(
+      await screen.findByText(/runtime: listening locally/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/listener: active locally/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /preference is enabled and listener ownership is active/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("persists the fixed phrase when disabling Wake Word", async () => {
     renderPanel(true);
     await waitForRuntimeDiagnostics();
@@ -234,6 +280,32 @@ describe("WakeWordSettingsPanel", () => {
     expect(wakeToggle()).not.toBeChecked();
     expect(
       screen.getByText("Disabled — manual start remains available."),
+    ).toBeInTheDocument();
+  });
+
+  it("refreshes diagnostics after disabling Wake Word completes", async () => {
+    mockWakeDiagnosticsSequence([
+      wakeDiagnostics({
+        enabled: true,
+        runtime_phase: "listening",
+        listener_status: "active",
+        listener_active: true,
+        listening: true,
+      }),
+      wakeDiagnostics(),
+    ]);
+    renderPanel(true);
+    expect(
+      await screen.findByText(/runtime: listening locally/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(wakeToggle());
+
+    await expectPersistedWakeSetting(false);
+    expect(await screen.findByText(/runtime: disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/listener: stopped/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/listener ownership is stopped/i),
     ).toBeInTheDocument();
   });
 });
