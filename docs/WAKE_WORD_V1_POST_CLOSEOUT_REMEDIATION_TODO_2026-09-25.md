@@ -76,19 +76,19 @@
 
 ## WPCR-110 — Wire Settings enable/disable to real listener ownership
 
-**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records the Settings/listener remediation present at `bf79159fb389bbe1961c83fcad1918aae43233af`; exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passed. The evidence note itself is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba`; exact-master ordinary CI `36349151759` passed. `docs/evidence/WPCR-110_SETTINGS_ROLLBACK_STATUS_2026-09-27.md` records focused listener rollback/status/sanitized-error coverage at exact master `1976d2ad3edb514ce0fea72c6b34dc700ab5e58c`; ordinary CI `36376930414` and source-security audit `36376930415` passed. The evidence file is merged at `82ddabe5c7e672307a492f1a3ede10fb643288d7` with ordinary CI `36377338615` passing, and explicitly leaves persisted Settings rollback and frontend UI assertions open.
+**Incremental evidence:** `docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md` records the Settings/listener remediation present at `bf79159fb389bbe1961c83fcad1918aae43233af`; exact-master ordinary CI `36347933313`, lifecycle stability `36347933318`, and source-security audit `36347933322` passed. The evidence note itself is merged at `4dcecc9c058200f19ccdb6e4098f0f0bd1a226ba`; exact-master ordinary CI `36349151759` passed. `docs/evidence/WPCR-110_SETTINGS_ROLLBACK_STATUS_2026-09-27.md` records focused listener rollback/status/sanitized-error coverage at exact master `1976d2ad3edb514ce0fea72c6b34dc700ab5e58c`; ordinary CI `36376930414` and source-security audit `36376930415` passed. The evidence file is merged at `82ddabe5c7e672307a492f1a3ede10fb643288d7` with ordinary CI `36377338615` passing. Persisted Settings rollback is recorded in `docs/evidence/WPCR-110_PERSISTENCE_ROLLBACK_2026-09-27.md`: exact master `4538ca0f9fb0feca694d98c73cc59954bdb5d472` passed ordinary CI `36381028445`. Frontend diagnostics refresh is recorded in `docs/evidence/WPCR-110_SETTINGS_UI_REFRESH_2026-09-28.md`: exact implementation/test master `a2abb402a618bd281599d76b288d61dd1cb12654` passed ordinary CI `36386721536`, and the evidence-note master `5cc56a598b28697340575a2d4b263a1a9b4d65bb` passed ordinary CI `36387048117`.
 
 ### Tasks
 
 - [x] Update `apply_changed_runtime_preferences` so Wake setting changes call the listener control plane, not only `apply_enabled_setting`.
 - [x] Turning Wake on while idle starts the native listener when artifacts and selected policy are valid.
 - [x] Turning Wake off stops the listener thread, releases capture, clears retained audio, and reports disabled only after the stop boundary is complete or safely in progress.
-- [ ] Settings rollback restores listener state as well as runtime phase and persisted values.
+- [x] Settings rollback restores listener state as well as runtime phase and persisted values.
 - [x] Settings failure surfaces sanitized actionable errors without raw paths, secrets, or audio content.
-- [ ] UI refreshes diagnostics/status after enable/disable completes.
+- [x] UI refreshes diagnostics/status after enable/disable completes.
 - [x] Add tests for enable from disabled.
 - [x] Add tests for disable from active listening.
-- [ ] Add tests for settings persistence failure rollback.
+- [x] Add tests for settings persistence failure rollback.
 - [x] Add tests that diagnostics do not report disabled while a listener handle remains active.
 
 ### Acceptance
@@ -96,7 +96,7 @@
 - [ ] A user can enable Wake from Settings without app restart when prerequisites are satisfied.
 - [ ] A user can disable Wake from Settings and microphone listener ownership stops boundedly.
 - [ ] Manual conversation behavior is preserved immediately after disable.
-- [ ] Existing Settings UI tests are updated to assert real backend state, not just patched frontend settings.
+- [x] Existing Settings UI tests are updated to assert real backend state, not just patched frontend settings.
 
 ## WPCR-120 — Handle input-device and ASR-mode settings changes while Wake is enabled
 
@@ -308,11 +308,11 @@
 
 ## WPCR-800 — Add required CI gates for reopened issues
 
-**Incremental evidence:** Reopened WPCR gate inventory updates merged through PR #479 at `8b0022742288c2183be15e297393d72194a16b32`. Exact PR head `4441973809779a4d92941faa701b08a29ecfe2fd` passed ordinary CI `36266232016`, Wake required-gates audit `36266231835`, and Wake documentation audit `36266231845`. Exact merged master passed ordinary CI `36303647425`, Wake documentation audit `36303647388`, and Wake required-gates audit `36303647268`. Evidence note: `docs/evidence/WPCR-800_REQUIRED_GATES_2026-09-26.md`. The gate manifest now requires the reopened WPCR gates for final closeout. WPCR-200 manual-transfer ordinary-CI coverage is complete at exact `master` `6cbf39b6dcafd545fb9da9365f36e377a701924b` with CI `36375659976`; WPCR-110 still owns the remaining Settings/listener lifecycle implementation and test proof.
+**Incremental evidence:** Reopened WPCR gate inventory updates merged through PR #479 at `8b0022742288c2183be15e297393d72194a16b32`. Exact PR head `4441973809779a4d92941faa701b08a29ecfe2fd` passed ordinary CI `36266232016`, Wake required-gates audit `36266231835`, and Wake documentation audit `36266231845`. Exact merged master passed ordinary CI `36303647425`, Wake documentation audit `36303647388`, and Wake required-gates audit `36303647268`. Evidence note: `docs/evidence/WPCR-800_REQUIRED_GATES_2026-09-26.md`. The gate manifest now requires the reopened WPCR gates for final closeout. WPCR-200 manual-transfer ordinary-CI coverage is complete at exact `master` `6cbf39b6dcafd545fb9da9365f36e377a701924b` with CI `36375659976`; WPCR-110 Settings/listener lifecycle implementation and ordinary-CI proof are now covered by the persistence rollback and Settings UI diagnostics-refresh evidence above.
 
 ### Tasks
 
-- [ ] Add or extend a Settings/listener lifecycle workflow or ordinary CI test coverage. Gate inventory is present, but full acceptance remains coupled to WPCR-110 implementation/tests.
+- [x] Add or extend a Settings/listener lifecycle workflow or ordinary CI test coverage. Ordinary CI now covers backend persistence/listener rollback and frontend post-save diagnostics refresh.
 - [x] Add or extend a shared-capture manual conversation transfer workflow/test suite.
 - [x] Add selected ASR policy acceptance to CI.
 - [x] Add downstream first-command-word acceptance to CI.
