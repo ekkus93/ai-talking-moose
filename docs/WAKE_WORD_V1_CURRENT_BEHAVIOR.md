@@ -40,7 +40,7 @@ V1 disclosure requirements:
 - Raw Wake Word PCM is retained only in bounded in-memory ring/pre-roll buffers.
 - Wake Word diagnostics do not serialize or expose raw PCM.
 
-The one-stream production microphone routing is the authoritative design and deterministic source/tests cover the shared-capture boundary. Documentation and source/privacy audit evidence are merged for the current evidence boundaries. WWR-630 measured KWS-era performance acceptance is recorded, but the post-closeout review requires new WPCR-500 measurements of the production native listener path. The authoritative remaining work is the post-closeout WPCR checklist, including listener/Settings/manual-transfer integration, downstream first-command-word acceptance, production-listener performance, new required gates, audit, and exact final qualification.
+The one-stream production microphone routing is the authoritative design and deterministic source/tests cover the shared-capture boundary. Post-closeout Settings/listener ownership, manual shared-capture transfer, downstream first-command-word receipt, production-listener performance, diagnostics/UI truthfulness, required-gate inventory, and final source/privacy/security audit evidence are merged. The authoritative remaining work is WPCR-950/960 exact final qualification and exact-master verification.
 
 ## Lifecycle policy
 
@@ -55,7 +55,7 @@ The authoritative runtime manager implements these state-machine rules:
 - Disabling Wake Word during a triggered or suspended interaction leaves the runtime disabled and prevents a later completion/resume path from unintentionally restoring listening.
 - Wake Word V1 does **not** implement wake-word barge-in while Moose is talking.
 
-Integrated lifecycle stability evidence now exists for repeated wake→ASR→Thinking→Talking→wake cycles, bounded retained audio, repeated TTS terminal outcomes, repeated disable/enable cycles, shutdown while listening, and shutdown during handoff. Exact-master run `36090294124` on `755d02b738742513419778043b524e8b94f9c340` also records WWR-630 repeated-cycle resource behavior: 100 cycles, zero ring-buffer sample delta, zero handoff pre-roll sample delta, final phase `Listening`, and capacity bounded at 32,000 samples. That historical evidence is not a substitute for the reopened WPCR-500 production-listener measurements or WPCR-950/960 final requalification.
+Integrated lifecycle stability evidence exists for repeated wake→ASR→Thinking→Talking→wake cycles, bounded retained audio, repeated TTS terminal outcomes, repeated disable/enable cycles, shutdown while listening, and shutdown during handoff. Exact-master run `36090294124` on `755d02b738742513419778043b524e8b94f9c340` records the historical 100-cycle resource behavior. Post-closeout WPCR-500 production-listener measurements are recorded separately in `docs/evidence/WPCR-500_PRODUCTION_LISTENER_PERFORMANCE_2026-09-27.md`; final WPCR-950/960 requalification remains pending.
 
 ## Artifacts, model, runtime, and licenses
 
@@ -85,7 +85,7 @@ Current limitations:
 
 - Wake Word V1 is local-Moonshine-only for Wake-triggered command ASR.
 - Wake Word V1 remains developer-prepared rather than clean-install user-ready; empty app data fails closed until artifacts are prepared and verified.
-- WWR-910 original TODO reconciliation has a merged evidence matrix, but final reconciliation cannot close until WWR-630 and WWR-950/960 are complete.
-- The original WWR closeout evidence is historical; WPCR-950/960 exact-head and exact-master post-closeout requalification are pending.
+- The original WWR closeout evidence is historical; the post-closeout implementation/audit queue is reconciled through WPCR-900.
+- WPCR-950/960 exact-head and exact-master post-closeout requalification are pending.
 
 Do not describe Wake Word V1 as fully user-ready or fully accepted until the post-closeout WPCR checklist is fully implemented, audited, reconciled, exact-head qualified, and exact-master verified.
