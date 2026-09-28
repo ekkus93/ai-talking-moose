@@ -48,3 +48,5 @@ mod wake_word_lifecycle_stability_tests;
 mod wake_word_manual_transfer_tests;
 #[cfg(test)]
 mod wake_word_settings_change_tests;
+#[cfg(test)]
+mod wake_word_settings_rollback_tests;
