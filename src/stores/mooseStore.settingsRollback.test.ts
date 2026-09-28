@@ -1,10 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { frontendDefaultSettings } from "../lib/backendContract";
 import { tauriBridge } from "../lib/tauriBridge";
+import { AppSettings } from "../types/moose";
 import {
   resetSettingsPersistenceForTests,
   useMooseStore,
 } from "./mooseStore";
+
+const deferred = <T>() => {
+  const controls: { resolve?: (value: T) => void } = {};
+  const promise = new Promise<T>((resolve) => {
+    controls.resolve = resolve;
+  });
+  return {
+    promise,
+    resolve: (value: T) => {
+      if (!controls.resolve) {
+        throw new Error("deferred resolver was not initialized");
+      }
+      controls.resolve(value);
+    },
+  };
+};
 
 describe("mooseStore settings persistence rollback", () => {
   beforeEach(() => {
@@ -24,22 +41,19 @@ describe("mooseStore settings persistence rollback", () => {
   });
 
   it("does not resolve a failed settings update until rollback is reflected", async () => {
-    const authoritative = {
+    const authoritative: AppSettings = {
       ...frontendDefaultSettings(),
       wake_word_enabled: false,
       wake_word_phrase: "Hey, Moose",
     };
-    let releaseAuthoritativeSettings: (settings: typeof authoritative) => void;
-    const authoritativeSettings = new Promise<typeof authoritative>((resolve) => {
-      releaseAuthoritativeSettings = resolve;
-    });
+    const authoritativeSettings = deferred<AppSettings>();
     let updateResolved = false;
 
     vi.spyOn(tauriBridge, "updateSettings").mockRejectedValue(
       new Error("injected persistence failure"),
     );
     vi.spyOn(tauriBridge, "getSettings").mockReturnValue(
-      authoritativeSettings,
+      authoritativeSettings.promise,
     );
 
     const update = useMooseStore
@@ -58,7 +72,7 @@ describe("mooseStore settings persistence rollback", () => {
       wake_word_phrase: "Hey, Moose",
     });
 
-    releaseAuthoritativeSettings!(authoritative);
+    authoritativeSettings.resolve(authoritative);
     await update;
 
     expect(updateResolved).toBe(true);
