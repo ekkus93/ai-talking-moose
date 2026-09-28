@@ -68,6 +68,9 @@ const mockWakeDiagnosticsResponse = (diagnostics: WakeWordDiagnostics) => {
 };
 
 const mockWakeDiagnosticsSequence = (diagnostics: WakeWordDiagnostics[]) => {
+  if (diagnostics.length === 0) {
+    throw new Error("diagnostic sequence must contain at least one entry");
+  }
   const defaultInvoke = vi.mocked(invoke).getMockImplementation();
   if (!defaultInvoke) {
     throw new Error(
@@ -115,6 +118,16 @@ const expectPersistedWakeSetting = async (enabled: boolean) => {
 
 const waitForRuntimeDiagnostics = async () => {
   expect(await screen.findByText(/runtime: disabled/i)).toBeInTheDocument();
+};
+
+const waitForWakeDiagnosticsRefreshCount = async (count: number) => {
+  await waitFor(() => {
+    expect(
+      vi
+        .mocked(invoke)
+        .mock.calls.filter(([cmd]) => cmd === "get_wake_word_diagnostics"),
+    ).toHaveLength(count);
+  });
 };
 
 describe("WakeWordSettingsPanel", () => {
@@ -262,7 +275,8 @@ describe("WakeWordSettingsPanel", () => {
     fireEvent.click(wakeToggle());
 
     await expectPersistedWakeSetting(true);
-    expect(await screen.findByText(/runtime: listening locally/i)).toBeInTheDocument();
+    await waitForWakeDiagnosticsRefreshCount(2);
+    expect(screen.getByText(/runtime: listening locally/i)).toBeInTheDocument();
     expect(screen.getByText(/listener: active locally/i)).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -302,7 +316,8 @@ describe("WakeWordSettingsPanel", () => {
     fireEvent.click(wakeToggle());
 
     await expectPersistedWakeSetting(false);
-    expect(await screen.findByText(/runtime: disabled/i)).toBeInTheDocument();
+    await waitForWakeDiagnosticsRefreshCount(2);
+    expect(screen.getByText(/runtime: disabled/i)).toBeInTheDocument();
     expect(screen.getByText(/listener: stopped/i)).toBeInTheDocument();
     expect(
       screen.getByText("Disabled — manual start remains available."),
