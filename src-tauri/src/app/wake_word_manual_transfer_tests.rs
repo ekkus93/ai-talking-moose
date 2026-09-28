@@ -1,11 +1,10 @@
 use super::state::AppState;
-use super::wake_word_command_lifecycle::{
-    complete_command_interaction, suspend_for_command_interaction,
-    CommandInteractionTerminalOutcome,
-};
-use super::wake_word_state::{
-    control_native_wake_listener, native_wake_listener_is_active, NativeWakeListenerControl,
-};
+use super::wake_word_command_lifecycle::CommandInteractionTerminalOutcome;
+use super::wake_word_command_lifecycle::complete_command_interaction;
+use super::wake_word_command_lifecycle::suspend_for_command_interaction;
+use super::wake_word_state::NativeWakeListenerControl;
+use super::wake_word_state::control_native_wake_listener;
+use super::wake_word_state::native_wake_listener_is_active;
 use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
 
 fn enabled_listening_state() -> AppState {
@@ -24,9 +23,11 @@ fn enabled_listening_state() -> AppState {
 fn manual_start_failure_after_active_wake_guard_does_not_leave_wake_suspended() {
     let state = enabled_listening_state();
 
-    let listener_was_active =
-        control_native_wake_listener(&state, NativeWakeListenerControl::TransferToCommand)
-            .unwrap();
+    let listener_was_active = control_native_wake_listener(
+        &state,
+        NativeWakeListenerControl::TransferToCommand,
+    )
+    .unwrap();
 
     assert!(!listener_was_active);
     assert!(!native_wake_listener_is_active());
