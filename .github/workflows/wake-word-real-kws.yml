@@ -132,6 +132,28 @@ jobs:
           asset_root="$RUNNER_TEMP/wake-assets"
           mkdir -p target/wake-word-reports
           src-tauri/target/debug/wake_word_acceptance --model-dir "$asset_root/models/wake-word/$model_id" --runtime-dir "$asset_root/${{ matrix.runtime_root }}" --corpus-dir target/wake-word-v1-corpus --index target/wake-word-v1-corpus/corpus-index.json --output "target/wake-word-reports/${{ matrix.label }}.json"
+      - name: Require command fixture detection
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "target/wake-word-reports/${{ matrix.label }}.json" <<'PY'
+          import json
+          import sys
+
+          report_path = sys.argv[1]
+          report = json.load(open(report_path, encoding="utf-8"))
+          fixture = next(
+              (item for item in report.get("fixtures", []) if item.get("id") == "positive-command-sc"),
+              None,
+          )
+          if fixture is None:
+              raise SystemExit("positive-command-sc fixture is missing from real KWS report")
+          if not fixture.get("expected_detection"):
+              raise SystemExit("positive-command-sc is not declared as an expected positive fixture")
+          if not fixture.get("detected"):
+              raise SystemExit("positive-command-sc did not trigger real KWS detection")
+          print("positive-command-sc real KWS detection confirmed")
+          PY
       - name: Extract reusable performance measurement
         run: |
           python3 scripts/extract_wake_word_performance_measurement.py --acceptance-report "target/wake-word-reports/${{ matrix.label }}.json" --output "target/wake-word-reports/${{ matrix.label }}-performance.json" --platform "${{ matrix.label }}" --commit-sha "${{ github.event.pull_request.head.sha || github.sha }}" --runner "${{ runner.name }}"
