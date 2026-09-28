@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# WPCR-950 exact-head trigger: post-closeout final qualification.
 import argparse, json, os, platform, statistics
 from pathlib import Path
 

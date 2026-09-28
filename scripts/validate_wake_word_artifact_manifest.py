@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# WPCR-950 exact-head trigger: post-closeout final qualification.
 """Validate Wake Word V1 production artifact manifest schema and freezer consistency."""
 from __future__ import annotations
 
