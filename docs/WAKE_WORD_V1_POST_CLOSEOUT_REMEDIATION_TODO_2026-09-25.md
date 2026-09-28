@@ -122,7 +122,7 @@
 
 ## WPCR-200 — Fix manual conversation shared-capture transfer
 
-**Incremental evidence:** current `master` routes manual start through `NativeWakeListenerControl::TransferToCommand` before normal ASR capture, uses `complete_native_wake_command_interaction` for start failure and terminal resolution, and routes explicit stop through the same boundary. Deterministic lifecycle tests cover disabled/failed Wake availability, start-failure recovery, latest-setting terminal behavior, and intentional transfer without Wake error. Exact-master ordinary CI `36346852425` passed at `cc593f8d4ae1ac8d399073c6cfb8784c8451bdab`. Active-listener transfer was fixed by PR #494 and recorded in `docs/evidence/WPCR-200_ACTIVE_LISTENER_TRANSFER_2026-09-27.md`: exact PR head `614e0458a4123648681ebcbc4b07b753aa273545` passed ordinary CI `36349867506`, lifecycle stability `36349867516`, and source-security audit `36349867526`; merged `master` `b040fa1cd63917f91963f1b3fd323c153dab0662` passed ordinary CI `36350297078`, lifecycle stability `36350297048`, and source-security audit `36350297103`.
+**Incremental evidence:** current `master` routes manual start through `NativeWakeListenerControl::TransferToCommand` before normal ASR capture, uses `complete_native_wake_command_interaction` for start failure and terminal resolution, and routes explicit stop through the same boundary. Deterministic lifecycle tests cover disabled/failed Wake availability, start-failure recovery, latest-setting terminal behavior, and intentional transfer without Wake error. Exact-master ordinary CI `36346852425` passed at `cc593f8d4ae1ac8d399073c6cfb8784c8451bdab`. Active-listener transfer was fixed by PR #494 and recorded in `docs/evidence/WPCR-200_ACTIVE_LISTENER_TRANSFER_2026-09-27.md`: exact PR head `614e0458a4123648681ebcbc4b07b753aa273545` passed ordinary CI `36349867506`, lifecycle stability `36349867516`, and source-security audit `36349867526`; merged `master` `b040fa1cd63917f91963f1b3fd323c153dab0662` passed ordinary CI `36350297078`, lifecycle stability `36350297048`, and source-security audit `36350297103`. Manual-transfer terminal recovery evidence is recorded in `docs/evidence/WPCR-200_MANUAL_TRANSFER_TERMINAL_RECOVERY_2026-09-27.md`: exact-master `6cbf39b6dcafd545fb9da9365f36e377a701924b` passed ordinary CI `36375659976` and Wake source-security audit `36375659947`; the evidence file is merged at `e6f65757a337d7a5a3c84b2f290ae7e9de4d0c47` with exact-master ordinary CI `36376132191` passing.
 
 ### Tasks
 
@@ -132,18 +132,18 @@
 - [x] On conversation start failure, resume or restart Wake according to latest settings.
 - [x] On conversation terminal success, cancellation, recoverable failure, and stop, restart Wake according to latest settings.
 - [x] Ensure `stop_conversation` uses the same resume/restart boundary as natural lifecycle completion.
-- [ ] Ensure barge-in/cancel paths do not leave Wake permanently suspended.
+- [x] Ensure barge-in/cancel paths do not leave Wake permanently suspended.
 - [x] Add tests for manual start while Wake listener is active.
-- [ ] Add tests for manual start failure while Wake was active.
+- [x] Add tests for manual start failure while Wake was active.
 - [x] Add tests for stop/cancel/recoverable failure restart.
 - [x] Add tests that no capture failure is recorded for intentional manual transfer.
 
 ### Acceptance
 
-- [ ] Manual interaction remains available and reliable regardless of Wake state.
+- [x] Manual interaction remains available and reliable regardless of Wake state.
 - [x] Manual interaction does not strand Wake in `Error` after normal command completion.
 - [x] No duplicate microphone streams are opened.
-- [ ] No path leaves Wake permanently suspended unintentionally.
+- [x] No path leaves Wake permanently suspended unintentionally.
 
 ## WPCR-300 — Resolve Wake command-ASR policy mismatch
 
@@ -308,12 +308,12 @@
 
 ## WPCR-800 — Add required CI gates for reopened issues
 
-**Incremental evidence:** Reopened WPCR gate inventory updates merged through PR #479 at `8b0022742288c2183be15e297393d72194a16b32`. Exact PR head `4441973809779a4d92941faa701b08a29ecfe2fd` passed ordinary CI `36266232016`, Wake required-gates audit `36266231835`, and Wake documentation audit `36266231845`. Exact merged master passed ordinary CI `36303647425`, Wake documentation audit `36303647388`, and Wake required-gates audit `36303647268`. Evidence note: `docs/evidence/WPCR-800_REQUIRED_GATES_2026-09-26.md`. The gate manifest now requires the reopened WPCR gates for final closeout, but WPCR-110 and WPCR-200 still own the remaining implementation/test proof for live Settings/listener lifecycle and manual shared-capture transfer behavior.
+**Incremental evidence:** Reopened WPCR gate inventory updates merged through PR #479 at `8b0022742288c2183be15e297393d72194a16b32`. Exact PR head `4441973809779a4d92941faa701b08a29ecfe2fd` passed ordinary CI `36266232016`, Wake required-gates audit `36266231835`, and Wake documentation audit `36266231845`. Exact merged master passed ordinary CI `36303647425`, Wake documentation audit `36303647388`, and Wake required-gates audit `36303647268`. Evidence note: `docs/evidence/WPCR-800_REQUIRED_GATES_2026-09-26.md`. The gate manifest now requires the reopened WPCR gates for final closeout. WPCR-200 manual-transfer ordinary-CI coverage is complete at exact `master` `6cbf39b6dcafd545fb9da9365f36e377a701924b` with CI `36375659976`; WPCR-110 still owns the remaining Settings/listener lifecycle implementation and test proof.
 
 ### Tasks
 
 - [ ] Add or extend a Settings/listener lifecycle workflow or ordinary CI test coverage. Gate inventory is present, but full acceptance remains coupled to WPCR-110 implementation/tests.
-- [ ] Add or extend a shared-capture manual conversation transfer workflow/test suite. Gate inventory is present, but full acceptance remains coupled to WPCR-200 implementation/tests.
+- [x] Add or extend a shared-capture manual conversation transfer workflow/test suite.
 - [x] Add selected ASR policy acceptance to CI.
 - [x] Add downstream first-command-word acceptance to CI.
 - [x] Add clean-install artifact provisioning acceptance to CI.
