@@ -183,22 +183,24 @@
 
 ## WPCR-310 — Add downstream first-command-word acceptance
 
+**Incremental evidence:** `docs/evidence/WPCR-310_FIRST_COMMAND_WORD_BOUNDARY_2026-09-26.md` records deterministic production-router → `WakeCommandHandoffAudio` → normal Moonshine command-ASR ingress coverage on exact inspected master `ebeb2a118c63df4f8d71b3f41476163df80dfc3a`. The evidence explicitly scopes the result to deterministic downstream boundary receipt rather than real Moonshine transcription. Existing required-gates policy makes downstream first-command-word acceptance mandatory. A real/generated spoken fixture that is itself detected by native KWS remains open, so this section is not falsely closed.
+
 ### Tasks
 
 - [ ] Add a deterministic fixture or generated fixture equivalent to `Hey Moose, tell me the time`.
 - [ ] Ensure KWS detects the wake phrase in that fixture.
-- [ ] Route pre-roll plus live command audio through the production handoff boundary.
-- [ ] Verify downstream command-ASR test boundary receives one continuous utterance.
-- [ ] Verify the first command word after the wake phrase is present at the downstream boundary.
-- [ ] Make the test fail if the first command word is clipped, duplicated, reordered, or omitted.
-- [ ] If real ASR transcription is too nondeterministic for ordinary CI, add a deterministic downstream ASR harness plus a clearly scoped real-ASR/manual/scheduled gate.
-- [ ] Store reports without raw PCM or transcript leakage beyond approved test strings.
+- [x] Route pre-roll plus live command audio through the production handoff boundary.
+- [x] Verify downstream command-ASR test boundary receives one continuous utterance.
+- [x] Verify the first command word after the wake phrase is present at the downstream boundary.
+- [x] Make the test fail if the first command word is clipped, duplicated, reordered, or omitted.
+- [x] If real ASR transcription is too nondeterministic for ordinary CI, add a deterministic downstream ASR harness plus a clearly scoped real-ASR/manual/scheduled gate.
+- [x] Store reports without raw PCM or transcript leakage beyond approved test strings.
 
 ### Acceptance
 
-- [ ] WWR-310 no longer relies only on router unit tests.
-- [ ] Evidence proves the downstream command path receives the first command word.
-- [ ] The acceptance report states exactly whether it proves deterministic boundary receipt, real ASR transcription, or both.
+- [x] WWR-310 no longer relies only on router unit tests.
+- [x] Evidence proves the downstream command path receives the first command word.
+- [x] The acceptance report states exactly whether it proves deterministic boundary receipt, real ASR transcription, or both.
 
 ## WPCR-400 — Add clean-install Wake artifact provisioning
 
@@ -242,25 +244,27 @@
 
 ## WPCR-500 — Measure production idle listener performance
 
+**Evidence:** `docs/evidence/WPCR-500_PRODUCTION_LISTENER_PERFORMANCE_2026-09-27.md` records the production-listener acceptance at exact master `5232ecf4fe7f9d20dd8de85f07526f43e8a48f64`; Wake Word real KWS acceptance run `36338240563` passed on Linux x86_64 and macOS arm64 and produced platform-specific `*-production-listener.json` reports. The evidence note is merged at `7ebaf08c3a550801eb497432a7a0bb7f5bf32b86`; exact-master ordinary CI `36357695244` passed. Reports explicitly distinguish production-listener, standalone KWS, and continuous full-ASR comparison scope.
+
 ### Tasks
 
-- [ ] Add a benchmark or acceptance path that starts the production native listener, not just a standalone KWS session.
-- [ ] Measure listener startup duration.
-- [ ] Measure idle CPU while capture is active and frames are routed.
-- [ ] Measure memory overhead after startup.
-- [ ] Measure route or inference latency under representative frames.
-- [ ] Measure wake detection to command-ASR activation latency.
-- [ ] Measure pre-roll handoff startup latency.
-- [ ] Compare against continuous full-ASR idle behavior in the same environment where feasible.
-- [ ] Measure repeated enable/disable and wake/command/resume cycles.
-- [ ] Verify no thread, listener handle, native session, ring buffer, or capture multiplication across cycles.
-- [ ] Write privacy-safe performance reports.
+- [x] Add a benchmark or acceptance path that starts the production native listener, not just a standalone KWS session.
+- [x] Measure listener startup duration.
+- [x] Measure idle CPU while capture is active and frames are routed.
+- [x] Measure memory overhead after startup.
+- [x] Measure route or inference latency under representative frames.
+- [x] Measure wake detection to command-ASR activation latency.
+- [x] Measure pre-roll handoff startup latency.
+- [x] Compare against continuous full-ASR idle behavior in the same environment where feasible.
+- [x] Measure repeated enable/disable and wake/command/resume cycles.
+- [x] Verify no thread, listener handle, native session, ring buffer, or capture multiplication across cycles.
+- [x] Write privacy-safe performance reports.
 
 ### Acceptance
 
-- [ ] Performance evidence covers the production listener path.
-- [ ] Reports distinguish KWS-only measurement from full listener measurement.
-- [ ] Final docs do not overstate performance claims beyond measured evidence.
+- [x] Performance evidence covers the production listener path.
+- [x] Reports distinguish KWS-only measurement from full listener measurement.
+- [x] Final docs do not overstate performance claims beyond measured evidence.
 
 ## WPCR-600 — Fix diagnostics and Settings UI truthfulness
 
