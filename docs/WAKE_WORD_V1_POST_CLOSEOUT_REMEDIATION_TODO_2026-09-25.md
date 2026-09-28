@@ -183,22 +183,24 @@
 
 ## WPCR-310 — Add downstream first-command-word acceptance
 
+**Incremental evidence:** `docs/evidence/WPCR-310_FIRST_COMMAND_WORD_BOUNDARY_2026-09-26.md` records deterministic production-router → `WakeCommandHandoffAudio` → normal Moonshine command-ASR ingress coverage on exact inspected master `ebeb2a118c63df4f8d71b3f41476163df80dfc3a`. The evidence explicitly scopes the result to deterministic downstream boundary receipt rather than real Moonshine transcription. Existing required-gates policy makes downstream first-command-word acceptance mandatory. A real/generated spoken fixture that is itself detected by native KWS remains open, so this section is not falsely closed.
+
 ### Tasks
 
 - [ ] Add a deterministic fixture or generated fixture equivalent to `Hey Moose, tell me the time`.
 - [ ] Ensure KWS detects the wake phrase in that fixture.
-- [ ] Route pre-roll plus live command audio through the production handoff boundary.
-- [ ] Verify downstream command-ASR test boundary receives one continuous utterance.
-- [ ] Verify the first command word after the wake phrase is present at the downstream boundary.
-- [ ] Make the test fail if the first command word is clipped, duplicated, reordered, or omitted.
-- [ ] If real ASR transcription is too nondeterministic for ordinary CI, add a deterministic downstream ASR harness plus a clearly scoped real-ASR/manual/scheduled gate.
-- [ ] Store reports without raw PCM or transcript leakage beyond approved test strings.
+- [x] Route pre-roll plus live command audio through the production handoff boundary.
+- [x] Verify downstream command-ASR test boundary receives one continuous utterance.
+- [x] Verify the first command word after the wake phrase is present at the downstream boundary.
+- [x] Make the test fail if the first command word is clipped, duplicated, reordered, or omitted.
+- [x] If real ASR transcription is too nondeterministic for ordinary CI, add a deterministic downstream ASR harness plus a clearly scoped real-ASR/manual/scheduled gate.
+- [x] Store reports without raw PCM or transcript leakage beyond approved test strings.
 
 ### Acceptance
 
-- [ ] WWR-310 no longer relies only on router unit tests.
-- [ ] Evidence proves the downstream command path receives the first command word.
-- [ ] The acceptance report states exactly whether it proves deterministic boundary receipt, real ASR transcription, or both.
+- [x] WWR-310 no longer relies only on router unit tests.
+- [x] Evidence proves the downstream command path receives the first command word.
+- [x] The acceptance report states exactly whether it proves deterministic boundary receipt, real ASR transcription, or both.
 
 ## WPCR-400 — Add clean-install Wake artifact provisioning
 
