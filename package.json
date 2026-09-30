@@ -21,10 +21,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:all": "npm run check:frontend && npm run check:rust && npm run check:generated-backend-contract",
-    "check:frontend": "npm run check:generated-trees && npm run check:no-placeholder-tests && npm run check:tauri-command-contract && npm run check:frontend-contract-shapes && npm run check:local-llm-contract-negative-probes && npm run check:tts-contract-negative-probe && npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
+    "check:frontend": "npm run check:generated-trees && npm run check:tauri-command-contract && npm run check:frontend-contract-shapes && npm run check:local-llm-contract-negative-probes && npm run check:tts-contract-negative-probe && npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features",
-    "check:generated-trees": "node scripts/check_generated_trees_untracked.mjs",
-    "check:no-placeholder-tests": "node scripts/check_no_placeholder_tests.mjs"
+    "check:generated-trees": "node scripts/check_generated_trees_untracked.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",

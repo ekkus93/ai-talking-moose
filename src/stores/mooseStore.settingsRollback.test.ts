@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { frontendDefaultSettings } from "../lib/backendContract";
 import { tauriBridge } from "../lib/tauriBridge";
-import {
-  resetSettingsPersistenceForTests,
-  useMooseStore,
-} from "./mooseStore";
+import { resetSettingsPersistenceForTests, useMooseStore } from "./mooseStore";
 
 describe("mooseStore settings persistence rollback", () => {
   beforeEach(() => {
