@@ -539,6 +539,10 @@ impl ConversationManager {
 
         // Local ASR is prepared before opening the cloud Live session. The focused helper
         // fails closed before microphone capture or provider traffic if local prerequisites fail.
+        // Reserve the generation while serialized, then release the lifecycle lock before
+        // potentially expensive local-ASR model/worker preparation. Stop can now acquire the
+        // lock immediately and invalidate this generation instead of waiting for ASR startup.
+        drop(operation_guard);
         let mut local_pipeline = self
             .prepare_local_asr(LocalAsrPreparation {
                 generation,
@@ -580,6 +584,16 @@ impl ConversationManager {
                 state_callback(CharacterState::Error);
                 return Err(error.message);
             }
+        }
+
+        // Re-enter the lifecycle boundary after preparation. A Stop that raced local-ASR
+        // startup has already advanced generation; stale prepared state is disposed before any
+        // provider connection or microphone ownership can be committed.
+        let operation_guard = self.operation_lock.lock().await;
+        if self.generation.load(Ordering::SeqCst) != generation {
+            drop(operation_guard);
+            Self::stop_provisional_local_asr(&mut local_pipeline).await;
+            return Err("Conversation start was cancelled".to_string());
         }
 
         let input_sample_rate = config.sample_rate_in;
