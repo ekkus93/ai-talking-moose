@@ -26,13 +26,40 @@
       "wake_to_command_asr_ms",
       "pre_roll_startup_ms",
       "repeated_cycle_resource_delta"
+    ],
+    "production_listener_required_report_metrics": [
+      "startup_duration_ms",
+      "idle_cpu_percent",
+      "idle_observation_ms",
+      "peak_resident_memory_before_bytes",
+      "peak_resident_memory_after_start_bytes",
+      "startup_peak_memory_delta_bytes",
+      "mean_inference_latency_ms",
+      "p95_inference_latency_ms",
+      "inference_frames",
+      "wake_to_command_asr_ms",
+      "pre_roll_startup_ms",
+      "command_start_ms",
+      "total_activation_ms",
+      "handoff_samples",
+      "repeated_wake_command_resume_cycles",
+      "repeated_enable_disable_cycles",
+      "peak_active_native_sessions",
+      "final_active_native_sessions",
+      "final_capture_active",
+      "final_runtime_phase",
+      "ring_buffer_delta_samples",
+      "handoff_pre_roll_delta_samples",
+      "inference_threads",
+      "passed"
     ]
   },
   "wpcr500_scope": {
     "production_listener_measurement_required": true,
-    "production_listener_status": "pending_measurement",
+    "production_listener_status": "accepted",
     "accepted_wwr630_is_full_wpcr500_closeout": false,
-    "accepted_wwr630_scope": "real KWS session baselines plus deterministic lifecycle and ASR-comparison measurements; not a full production native-listener performance closeout"
+    "accepted_wwr630_scope": "real KWS session baselines plus deterministic lifecycle and ASR-comparison measurements; not a full production native-listener performance closeout",
+    "production_listener_evidence_source": "Wake Word real KWS acceptance run 36338240563 at exact master 5232ecf4fe7f9d20dd8de85f07526f43e8a48f64"
   },
   "partial_measurements": [
     {
@@ -203,6 +230,86 @@
         "continuous_asr_idle_cpu_percent": 4.4,
         "inference_threads": 1
       }
+    }
+  ],
+  "production_listener_evidence": [
+    {
+      "platform": "linux-x86_64",
+      "measurement_path": "production_wake_listener_thread",
+      "commit_sha": "5232ecf4fe7f9d20dd8de85f07526f43e8a48f64",
+      "workflow_name": "Wake Word real KWS acceptance",
+      "workflow_run_id": 36338240563,
+      "job_id": 108673180967,
+      "artifact_id": 10937379691,
+      "artifact_name": "wake-word-real-kws-linux-x86_64",
+      "report_name": "linux-x86_64-production-listener.json",
+      "runner": "ubuntu-latest",
+      "measured_at": "2026-09-27T17:50:10Z",
+      "required_report_metrics": [
+        "startup_duration_ms",
+        "idle_cpu_percent",
+        "idle_observation_ms",
+        "peak_resident_memory_before_bytes",
+        "peak_resident_memory_after_start_bytes",
+        "startup_peak_memory_delta_bytes",
+        "mean_inference_latency_ms",
+        "p95_inference_latency_ms",
+        "inference_frames",
+        "wake_to_command_asr_ms",
+        "pre_roll_startup_ms",
+        "command_start_ms",
+        "total_activation_ms",
+        "handoff_samples",
+        "repeated_wake_command_resume_cycles",
+        "repeated_enable_disable_cycles",
+        "peak_active_native_sessions",
+        "final_active_native_sessions",
+        "final_capture_active",
+        "final_runtime_phase",
+        "ring_buffer_delta_samples",
+        "handoff_pre_roll_delta_samples",
+        "inference_threads",
+        "passed"
+      ]
+    },
+    {
+      "platform": "macos-arm64",
+      "measurement_path": "production_wake_listener_thread",
+      "commit_sha": "5232ecf4fe7f9d20dd8de85f07526f43e8a48f64",
+      "workflow_name": "Wake Word real KWS acceptance",
+      "workflow_run_id": 36338240563,
+      "job_id": 108673180936,
+      "artifact_id": 10937692355,
+      "artifact_name": "wake-word-real-kws-macos-arm64",
+      "report_name": "macos-arm64-production-listener.json",
+      "runner": "macos-15",
+      "measured_at": "2026-09-27T17:50:36Z",
+      "required_report_metrics": [
+        "startup_duration_ms",
+        "idle_cpu_percent",
+        "idle_observation_ms",
+        "peak_resident_memory_before_bytes",
+        "peak_resident_memory_after_start_bytes",
+        "startup_peak_memory_delta_bytes",
+        "mean_inference_latency_ms",
+        "p95_inference_latency_ms",
+        "inference_frames",
+        "wake_to_command_asr_ms",
+        "pre_roll_startup_ms",
+        "command_start_ms",
+        "total_activation_ms",
+        "handoff_samples",
+        "repeated_wake_command_resume_cycles",
+        "repeated_enable_disable_cycles",
+        "peak_active_native_sessions",
+        "final_active_native_sessions",
+        "final_capture_active",
+        "final_runtime_phase",
+        "ring_buffer_delta_samples",
+        "handoff_pre_roll_delta_samples",
+        "inference_threads",
+        "passed"
+      ]
     }
   ]
 }

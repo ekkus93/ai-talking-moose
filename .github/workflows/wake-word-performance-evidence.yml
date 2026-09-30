@@ -1,27 +1,64 @@
 name: Wake Word performance evidence
-# WWR-950 exact-head trigger: final closeout qualification.
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - "docs/wake-word-performance-evidence.json"
-      - "scripts/check_wake_word_performance_evidence.mjs"
-      - ".github/workflows/wake-word-performance-evidence.yml"
+  workflow_dispatch:
   pull_request:
     branches: [master]
     paths:
       - "docs/wake-word-performance-evidence.json"
+      - "docs/wake-word-corpus.json"
+      - "wake-word-artifacts.json"
       - "scripts/check_wake_word_performance_evidence.mjs"
+      - "scripts/test_check_wake_word_performance_evidence.mjs"
+      - "scripts/check_wake_word_production_listener_report.mjs"
+      - "scripts/generate_wake_word_corpus.py"
+      - "scripts/prepare_wake_word_model.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "src-tauri/src/app/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_local_listener_thread.rs"
+      - "src-tauri/src/audio/capture.rs"
+      - "src-tauri/src/bin/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_engine.rs"
+      - "src-tauri/src/asr/wake_word_sherpa_manifest.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
       - ".github/workflows/wake-word-performance-evidence.yml"
-  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "docs/wake-word-performance-evidence.json"
+      - "docs/wake-word-corpus.json"
+      - "wake-word-artifacts.json"
+      - "scripts/check_wake_word_performance_evidence.mjs"
+      - "scripts/test_check_wake_word_performance_evidence.mjs"
+      - "scripts/check_wake_word_production_listener_report.mjs"
+      - "scripts/generate_wake_word_corpus.py"
+      - "scripts/prepare_wake_word_model.py"
+      - "scripts/prepare_wake_word_runtime.py"
+      - "src-tauri/src/app/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_local_listener_thread.rs"
+      - "src-tauri/src/audio/capture.rs"
+      - "src-tauri/src/bin/wake_word_acceptance.rs"
+      - "src-tauri/src/app/wake_word_engine.rs"
+      - "src-tauri/src/asr/wake_word_sherpa_manifest.rs"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - ".github/workflows/wake-word-performance-evidence.yml"
 
 permissions:
   contents: read
 
+concurrency:
+  group: wake-word-performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
 jobs:
   validate-performance-evidence:
-    name: Validate Wake Word performance evidence
+    name: Validate Wake Word performance evidence policy
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -31,3 +68,101 @@ jobs:
           node-version: 22
       - name: Validate performance evidence policy/report
         run: node scripts/check_wake_word_performance_evidence.mjs
+      - name: Run performance evidence negative-policy tests
+        run: node scripts/test_check_wake_word_performance_evidence.mjs
+
+  corpus:
+    name: Generate deterministic Wake corpus for performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install deterministic speech generator
+        run: |
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends espeak-ng
+      - run: node scripts/check_wake_word_corpus_manifest.mjs
+      - run: python3 scripts/generate_wake_word_corpus.py --output-dir target/wake-word-v1-corpus
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wake-word-performance-corpus
+          path: target/wake-word-v1-corpus/
+          if-no-files-found: error
+          retention-days: 7
+
+  production-listener:
+    name: Production listener performance (${{ matrix.label }})
+    needs: [validate-performance-evidence, corpus]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {label: linux-x86_64, runner: ubuntu-latest, platform_key: linux-x86_64, runtime_root: runtime/sherpa-onnx/v1.13.8/linux-x86_64}
+          - {label: macos-arm64, runner: macos-15, platform_key: macos-arm64, runtime_root: runtime/sherpa-onnx/v1.13.8/macos-arm64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Assert acceptance architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.label }}" in
+            linux-x86_64) test "$(uname -s)-$(uname -m)" = "Linux-x86_64" ;;
+            macos-arm64) test "$(uname -s)-$(uname -m)" = "Darwin-arm64" ;;
+          esac
+      - name: Install Linux build dependencies
+        if: matrix.label == 'linux-x86_64'
+        run: |
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends build-essential clang cmake libasound2-dev libayatana-appindicator3-dev libclang-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Prepare pinned Moonshine build prerequisites on macOS
+        if: matrix.label == 'macos-arm64'
+        run: bash scripts/prepare_moonshine_macos.sh arm64
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-${{ matrix.label }}-wake-performance-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.label }}-wake-performance-
+            ${{ runner.os }}-${{ matrix.label }}-wake-kws-
+      - run: python3 scripts/generate_app_icons.py
+      - run: cargo build --manifest-path src-tauri/Cargo.toml --bin wake_word_acceptance
+      - uses: actions/download-artifact@v5
+        with:
+          name: wake-word-performance-corpus
+          path: target/wake-word-v1-corpus
+      - name: Prepare and verify pinned model/runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_root="$RUNNER_TEMP/wake-assets"
+          python3 scripts/prepare_wake_word_model.py --root "$asset_root"
+          python3 scripts/prepare_wake_word_runtime.py --root "$asset_root" --platform "${{ matrix.platform_key }}"
+          python3 scripts/prepare_wake_word_model.py --root "$asset_root" --verify-only
+          python3 scripts/prepare_wake_word_runtime.py --root "$asset_root" --platform "${{ matrix.platform_key }}" --verify-only
+      - name: Run production listener performance acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          model_id="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+          asset_root="$RUNNER_TEMP/wake-assets"
+          mkdir -p target/wake-word-reports
+          src-tauri/target/debug/wake_word_acceptance --production-listener --model-dir "$asset_root/models/wake-word/$model_id" --runtime-dir "$asset_root/${{ matrix.runtime_root }}" --corpus-dir target/wake-word-v1-corpus --index target/wake-word-v1-corpus/corpus-index.json --output "target/wake-word-reports/${{ matrix.label }}-production-listener.json"
+      - name: Validate production listener report
+        run: node scripts/check_wake_word_production_listener_report.mjs --report "target/wake-word-reports/${{ matrix.label }}-production-listener.json" --platform "${{ matrix.label }}"
+      - name: Upload exact-head production listener report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-word-production-listener-${{ matrix.label }}
+          path: target/wake-word-reports/${{ matrix.label }}-production-listener.json
+          if-no-files-found: error
+          retention-days: 30
