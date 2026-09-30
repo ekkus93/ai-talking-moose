@@ -10,6 +10,7 @@ use crate::ai::local_tts::{
 };
 use crate::ai::traits::{RealtimeConversationProvider, SpeechSynthesizer, TextModel};
 use crate::ai::types::{TextProvider, TtsProvider};
+use crate::app::wake_word_state::NativeWakeListenerController;
 use crate::app::wake_word_settings::{
     WakeWordSettings, DEFAULT_WAKE_PHRASE, WAKE_WORD_ENABLED_FIELD, WAKE_WORD_PHRASE_FIELD,
 };
@@ -391,6 +392,7 @@ pub struct AppState {
     pub idle_banter_runtime: Arc<Mutex<IdleBanterRuntime>>,
     pub audio_capture: Arc<Mutex<AudioCapture>>,
     pub wake_word_runtime: WakeWordApplicationRuntime,
+    pub(crate) wake_listener_controller: NativeWakeListenerController,
     pub audio_playback: Arc<AudioPlayback>,
     pub standalone_speech: StandaloneSpeechController,
     pub conversation_mgr: Arc<ConversationManager>,
@@ -537,6 +539,7 @@ impl AppState {
         let audio_capture = Arc::new(Mutex::new(AudioCapture::new()));
         let wake_word_runtime = WakeWordApplicationRuntime::from_settings(&settings.read())
             .map_err(|error| error.to_string())?;
+        let wake_listener_controller = NativeWakeListenerController::default();
         let audio_playback = Arc::new(AudioPlayback::new());
         audio_playback.set_volume(settings.read().volume);
         let standalone_speech = StandaloneSpeechController::new();
@@ -565,6 +568,7 @@ impl AppState {
             idle_banter_runtime,
             audio_capture,
             wake_word_runtime,
+            wake_listener_controller,
             audio_playback,
             standalone_speech,
             conversation_mgr,

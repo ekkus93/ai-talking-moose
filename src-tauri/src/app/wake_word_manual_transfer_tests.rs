@@ -28,7 +28,7 @@ fn manual_start_failure_after_active_wake_guard_does_not_leave_wake_suspended() 
         control_native_wake_listener(&state, NativeWakeListenerControl::TransferToCommand).unwrap();
 
     assert!(!listener_was_active);
-    assert!(!native_wake_listener_is_active());
+    assert!(!native_wake_listener_is_active(&state));
     assert_eq!(
         state.wake_word_runtime.phase(),
         WakeWordRuntimePhase::SuspendedTalking

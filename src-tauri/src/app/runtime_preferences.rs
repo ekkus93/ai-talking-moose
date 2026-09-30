@@ -296,7 +296,7 @@ mod tests {
             state.wake_word_runtime.phase(),
             WakeWordRuntimePhase::Disabled
         );
-        assert!(!crate::app::wake_word_state::native_wake_listener_is_active());
+        assert!(!crate::app::wake_word_state::native_wake_listener_is_active(&state));
     }
 
     #[test]

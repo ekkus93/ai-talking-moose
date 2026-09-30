@@ -1,7 +1,7 @@
 use crate::app::state::AppState;
 use crate::app::wake_word_composition::WakeWordApplicationRuntime;
 use crate::app::wake_word_listener_status::classify_native_listener_status;
-use crate::app::wake_word_state;
+use crate::app::wake_word_state::{self, NativeWakeListenerLifecyclePhase};
 use crate::asr::wake_word_diagnostics::{WakeWordDiagnostics, WakeWordListenerStatus};
 use std::time::Instant;
 use tauri::State;
@@ -15,12 +15,22 @@ fn wake_word_diagnostics_snapshot(
 }
 
 fn classify_state_listener_status(state: &AppState) -> WakeWordListenerStatus {
-    classify_native_listener_status(
-        &state.settings.read().clone(),
-        state.wake_word_runtime.phase(),
-        wake_word_state::native_wake_listener_is_active(),
-        state.conversation_mgr.is_active(),
-    )
+    match wake_word_state::native_wake_listener_lifecycle_phase(state) {
+        NativeWakeListenerLifecyclePhase::Starting => WakeWordListenerStatus::Starting,
+        NativeWakeListenerLifecyclePhase::Stopping => WakeWordListenerStatus::ShuttingDown,
+        NativeWakeListenerLifecyclePhase::Running => classify_native_listener_status(
+            &state.settings.read().clone(),
+            state.wake_word_runtime.phase(),
+            true,
+            state.conversation_mgr.is_active(),
+        ),
+        NativeWakeListenerLifecyclePhase::Stopped => classify_native_listener_status(
+            &state.settings.read().clone(),
+            state.wake_word_runtime.phase(),
+            false,
+            state.conversation_mgr.is_active(),
+        ),
+    }
 }
 
 #[tauri::command]
