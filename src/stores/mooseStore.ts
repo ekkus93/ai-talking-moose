@@ -17,10 +17,19 @@ const lifecycleIsActive = (lifecycle: ConversationLifecycle) =>
 
 const CONTINUOUS_SETTINGS_WRITE_DELAY_MS = 100;
 export type SettingsPatch = Partial<AppSettings>;
+export type SettingsWriteResult =
+  | { status: "persisted" }
+  | { status: "rolled_back"; message: string }
+  | { status: "skipped" };
+
+const SETTINGS_PERSISTENCE_ERROR_MESSAGE =
+  "Settings could not be saved. Your last persisted settings were restored.";
+const EVENT_LISTENER_INIT_ERROR_MESSAGE =
+  "Application event listeners could not be initialized.";
 
 interface QueuedSettingsWrite {
   patch: SettingsPatch;
-  complete: () => void;
+  complete: (result: SettingsWriteResult) => void;
 }
 
 let continuousSettingsWriteTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,7 +91,7 @@ const processSettingsWriteQueue = async () => {
         lastPersistedSettings ?? useMooseStore.getState().settings;
       if (!baseline) {
         settingsWriteQueue.shift();
-        queued.complete();
+        queued.complete({ status: "skipped" });
         continue;
       }
 
@@ -91,11 +100,18 @@ const processSettingsWriteQueue = async () => {
         await tauriBridge.updateSettings(candidate);
         lastPersistedSettings = cloneSettings(candidate);
         settingsWriteQueue.shift();
-        queued.complete();
+        useMooseStore.setState({ settingsPersistenceError: null });
+        queued.complete({ status: "persisted" });
       } catch {
         settingsWriteQueue.shift();
         await reconcileSettingsAfterWriteFailure();
-        queued.complete();
+        useMooseStore.setState({
+          settingsPersistenceError: SETTINGS_PERSISTENCE_ERROR_MESSAGE,
+        });
+        queued.complete({
+          status: "rolled_back",
+          message: SETTINGS_PERSISTENCE_ERROR_MESSAGE,
+        });
       }
     }
   } finally {
@@ -106,8 +122,10 @@ const processSettingsWriteQueue = async () => {
   }
 };
 
-const enqueueSettingsPatch = (patch: SettingsPatch): Promise<void> => {
-  if (patchIsEmpty(patch)) return Promise.resolve();
+const enqueueSettingsPatch = (
+  patch: SettingsPatch,
+): Promise<SettingsWriteResult> => {
+  if (patchIsEmpty(patch)) return Promise.resolve({ status: "skipped" });
   return new Promise((complete) => {
     settingsWriteQueue.push({ patch, complete });
     void processSettingsWriteQueue();
@@ -185,6 +203,7 @@ interface MooseStoreState {
   outputDevices: AudioDeviceInfo[];
   googleTtsVoices: GoogleTtsVoiceDescriptor[];
   settings: AppSettings | null;
+  settingsPersistenceError: string | null;
   hasApiKey: boolean;
 
   setCharacterState: (state: CharacterState) => void;
@@ -208,7 +227,8 @@ interface MooseStoreState {
   triggerCanned: (type: string) => Promise<void>;
 
   loadSettings: () => Promise<void>;
-  updateSettingsPatch: (patch: SettingsPatch) => Promise<void>;
+  updateSettingsPatch: (patch: SettingsPatch) => Promise<SettingsWriteResult>;
+  clearSettingsPersistenceError: () => void;
   updateSettingsContinuousPatch: (patch: SettingsPatch) => void;
   loadDevices: () => Promise<void>;
   loadGoogleTtsVoices: () => Promise<void>;
@@ -247,6 +267,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   outputDevices: [],
   googleTtsVoices: [],
   settings: null,
+  settingsPersistenceError: null,
   hasApiKey: false,
 
   setCharacterState: (characterState) => set({ characterState }),
@@ -374,6 +395,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     lastPersistedSettings = cloneSettings(settings);
     set({
       settings,
+      settingsPersistenceError: null,
       isMuted,
       hasApiKey: hasKey,
       conversationLifecycle,
@@ -384,9 +406,9 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   },
 
   updateSettingsPatch: async (patch) => {
-    if (patchIsEmpty(patch)) return;
+    if (patchIsEmpty(patch)) return { status: "skipped" };
     const current = get().settings;
-    if (!current) return;
+    if (!current) return { status: "skipped" };
     ensurePersistedSettingsBaseline(current);
 
     const combinedPatch = {
@@ -398,9 +420,14 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     // intent to the store's authoritative current view instead of trusting a
     // complete object captured by an older render. Persistence remains
     // serialized and each queued patch rebases on the last successful write.
-    set({ settings: applySettingsPatch(current, patch) });
-    await enqueueSettingsPatch(combinedPatch);
+    set({
+      settings: applySettingsPatch(current, patch),
+      settingsPersistenceError: null,
+    });
+    return enqueueSettingsPatch(combinedPatch);
   },
+
+  clearSettingsPersistenceError: () => set({ settingsPersistenceError: null }),
 
   updateSettingsContinuousPatch: (patch) => {
     if (patchIsEmpty(patch)) return;
@@ -411,7 +438,10 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
     // Continuous controls update immediately but enqueue only field intent.
     // Coalescing and later failure reconciliation therefore cannot reintroduce
     // unrelated values from a stale component render.
-    set({ settings: applySettingsPatch(current, patch) });
+    set({
+      settings: applySettingsPatch(current, patch),
+      settingsPersistenceError: null,
+    });
     scheduleContinuousSettingsWrite(patch);
   },
 
@@ -456,15 +486,42 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   },
 
   initEventListeners: async () => {
-    const unlistenState = await tauriBridge.listenEvent<CharacterState>(
-      "moose://state",
-      (state) => {
-        set({ characterState: state });
-      },
-    );
+    const unlisteners: Array<() => void> = [];
+    let cleanedUp = false;
 
-    const unlistenLifecycle =
-      await tauriBridge.listenEvent<ConversationLifecycle>(
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      for (const unlisten of unlisteners.splice(0).reverse()) {
+        try {
+          unlisten();
+        } catch {
+          // Cleanup is best-effort and backend details remain private.
+        }
+      }
+    };
+
+    const register = async <T,>(
+      eventName: string,
+      handler: (payload: T) => void,
+    ) => {
+      const unlisten = await tauriBridge.listenEvent<T>(eventName, handler);
+      if (cleanedUp) {
+        try {
+          unlisten();
+        } catch {
+          // Late registration after cleanup must not escape as a leaked handler.
+        }
+        return;
+      }
+      unlisteners.push(unlisten);
+    };
+
+    try {
+      await register<CharacterState>("moose://state", (state) => {
+        set({ characterState: state });
+      });
+      await register<ConversationLifecycle>(
         "moose://conversation/lifecycle",
         (conversationLifecycle) => {
           set({
@@ -477,35 +534,17 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           });
         },
       );
-
-    const unlistenProviderError = await tauriBridge.listenEvent<ProviderError>(
-      "moose://conversation/error",
-      (error) => {
+      await register<ProviderError>("moose://conversation/error", (error) => {
         get().showSpeechBubble(error.message, 8000);
-      },
-    );
-
-    const unlistenMouth = await tauriBridge.listenEvent<MouthShape>(
-      "moose://mouth",
-      (mouth) => {
+      });
+      await register<MouthShape>("moose://mouth", (mouth) => {
         set({ mouthShape: mouth });
-      },
-    );
-
-    const unlistenBubble = await tauriBridge.listenEvent<string>(
-      "moose://speech-bubble",
-      (text) => {
-        if (text.trim()) {
-          get().showSpeechBubble(text);
-        } else {
-          get().hideSpeechBubble();
-        }
-      },
-    );
-
-    const unlistenUserInput = await tauriBridge.listenEvent<string>(
-      "moose://transcript/user",
-      (text) => {
+      });
+      await register<string>("moose://speech-bubble", (text) => {
+        if (text.trim()) get().showSpeechBubble(text);
+        else get().hideSpeechBubble();
+      });
+      await register<string>("moose://transcript/user", (text) => {
         const entry: TranscriptRecord = {
           id: allocateLocalTranscriptId(),
           session_id: "active",
@@ -513,21 +552,15 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           text,
           created_at: new Date().toLocaleTimeString(),
         };
-        set((s) => ({
-          transcripts: [...s.transcripts, entry],
+        set((state) => ({
+          transcripts: [...state.transcripts, entry],
           partialUserTranscript: null,
         }));
-      },
-    );
-
-    const unlistenUserPartial = await tauriBridge.listenEvent<string>(
-      "moose://transcript/user_partial",
-      (text) => set({ partialUserTranscript: text || null }),
-    );
-
-    const unlistenMooseOutput = await tauriBridge.listenEvent<string>(
-      "moose://transcript/moose",
-      (text) => {
+      });
+      await register<string>("moose://transcript/user_partial", (text) =>
+        set({ partialUserTranscript: text || null }),
+      );
+      await register<string>("moose://transcript/moose", (text) => {
         const entry: TranscriptRecord = {
           id: allocateLocalTranscriptId(),
           session_id: "active",
@@ -535,42 +568,24 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
           text,
           created_at: new Date().toLocaleTimeString(),
         };
-        set((s) => ({
-          transcripts: [...s.transcripts, entry],
+        set((state) => ({
+          transcripts: [...state.transcripts, entry],
           partialMooseTranscript: null,
         }));
-      },
-    );
-
-    const unlistenMoosePartial = await tauriBridge.listenEvent<string>(
-      "moose://transcript/moose_partial",
-      (text) => set({ partialMooseTranscript: text || null }),
-    );
-
-    const unlistenInLvl = await tauriBridge.listenEvent<number>(
-      "moose://audio/input-level",
-      (level) => {
+      });
+      await register<string>("moose://transcript/moose_partial", (text) =>
+        set({ partialMooseTranscript: text || null }),
+      );
+      await register<number>("moose://audio/input-level", (level) => {
         set({ inputLevel: level });
-      },
-    );
-
-    const unlistenOutLvl = await tauriBridge.listenEvent<number>(
-      "moose://audio/output-level",
-      (level) => {
+      });
+      await register<number>("moose://audio/output-level", (level) => {
         set({ outputLevel: level });
-      },
-    );
-
-    const unlistenOpenSettings = await tauriBridge.listenEvent<void>(
-      "moose://ui/open-settings",
-      () => {
+      });
+      await register<void>("moose://ui/open-settings", () => {
         get().toggleSettings(true);
-      },
-    );
-
-    const unlistenTrayAction = await tauriBridge.listenEvent<string>(
-      "moose://tray/action",
-      (action) => {
+      });
+      await register<string>("moose://tray/action", (action) => {
         if (action === "start_conversation" && !get().isConversationActive) {
           void get().startConversation();
         } else if (
@@ -583,23 +598,12 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
         } else if (action === "unmute" && get().isMuted) {
           void get().toggleMute();
         }
-      },
-    );
+      });
+    } catch {
+      cleanup();
+      throw new Error(EVENT_LISTENER_INIT_ERROR_MESSAGE);
+    }
 
-    return () => {
-      unlistenState();
-      unlistenLifecycle();
-      unlistenProviderError();
-      unlistenMouth();
-      unlistenBubble();
-      unlistenUserInput();
-      unlistenUserPartial();
-      unlistenMooseOutput();
-      unlistenMoosePartial();
-      unlistenInLvl();
-      unlistenOutLvl();
-      unlistenOpenSettings();
-      unlistenTrayAction();
-    };
+    return cleanup;
   },
 }));

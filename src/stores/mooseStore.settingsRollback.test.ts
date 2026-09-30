@@ -30,11 +30,15 @@ describe("mooseStore settings persistence rollback", () => {
       .spyOn(tauriBridge, "getSettings")
       .mockResolvedValueOnce(persisted);
 
-    await useMooseStore
+    const result = await useMooseStore
       .getState()
-      .updateSettingsPatch({ volume: 0.25 })
-      .catch(() => undefined);
+      .updateSettingsPatch({ volume: 0.25 });
 
+    expect(result).toEqual({
+      status: "rolled_back",
+      message:
+        "Settings could not be saved. Your last persisted settings were restored.",
+    });
     expect(write).toHaveBeenCalledTimes(1);
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({

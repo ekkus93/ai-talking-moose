@@ -32,6 +32,8 @@ export const SettingsModal: React.FC = () => {
     isSettingsOpen,
     toggleSettings,
     settings,
+    settingsPersistenceError,
+    clearSettingsPersistenceError,
     loadMemories,
     loadDevices,
     loadGoogleTtsVoices,
@@ -124,6 +126,22 @@ export const SettingsModal: React.FC = () => {
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {settingsPersistenceError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 border-b-2 border-black bg-amber-100 px-3 py-2 text-[11px] text-amber-950"
+        >
+          <span>{settingsPersistenceError}</span>
+          <button
+            type="button"
+            onClick={clearSettingsPersistenceError}
+            className="shrink-0 border border-black bg-white px-2 py-0.5 font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Tabs */}

@@ -18,6 +18,7 @@ describe("mooseStore State Management", () => {
       outputLevel: 0,
       isOnboardingOpen: false,
       settings: null,
+      settingsPersistenceError: null,
       hasApiKey: false,
       transcripts: [],
       partialUserTranscript: null,
@@ -214,7 +215,7 @@ describe("mooseStore State Management", () => {
     );
   });
 
-  it("reconciles a rejected discrete settings write to persisted state", async () => {
+  it("reconciles a rejected discrete settings write and reports rollback", async () => {
     const initial = frontendDefaultSettings();
     useMooseStore.setState({ settings: initial });
     vi.spyOn(tauriBridge, "updateSettings").mockRejectedValueOnce(
@@ -222,11 +223,79 @@ describe("mooseStore State Management", () => {
     );
     vi.spyOn(tauriBridge, "getSettings").mockResolvedValue(initial);
 
-    await useMooseStore.getState().updateSettingsPatch({
+    const result = await useMooseStore.getState().updateSettingsPatch({
       volume: 0.25,
     });
 
+    expect(result).toEqual({
+      status: "rolled_back",
+      message:
+        "Settings could not be saved. Your last persisted settings were restored.",
+    });
     expect(useMooseStore.getState().settings).toEqual(initial);
+    expect(useMooseStore.getState().settingsPersistenceError).toBe(
+      "Settings could not be saved. Your last persisted settings were restored.",
+    );
+    expect(JSON.stringify(result)).not.toContain("private persistence detail");
+  });
+
+  it("reports persisted success and clears an earlier persistence error", async () => {
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({
+      settings: initial,
+      settingsPersistenceError: "previous failure",
+    });
+    vi.spyOn(tauriBridge, "updateSettings").mockResolvedValueOnce(undefined);
+
+    const result = await useMooseStore.getState().updateSettingsPatch({
+      volume: 0.42,
+    });
+
+    expect(result).toEqual({ status: "persisted" });
+    expect(useMooseStore.getState().settingsPersistenceError).toBeNull();
+  });
+
+  it.each([
+    "moose://state",
+    "moose://transcript/moose",
+    "moose://tray/action",
+  ])("cleans up partial event registration when %s fails", async (failureEvent) => {
+    const disposers: Array<ReturnType<typeof vi.fn>> = [];
+    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
+      async (eventName: string) => {
+        if (eventName === failureEvent) {
+          throw new Error("private listener registration detail");
+        }
+        const dispose = vi.fn();
+        disposers.push(dispose);
+        return dispose;
+      },
+    );
+
+    await expect(useMooseStore.getState().initEventListeners()).rejects.toThrow(
+      "Application event listeners could not be initialized.",
+    );
+    for (const dispose of disposers) {
+      expect(dispose).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("makes successful event-listener cleanup idempotent", async () => {
+    const disposers: Array<ReturnType<typeof vi.fn>> = [];
+    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(async () => {
+      const dispose = vi.fn();
+      disposers.push(dispose);
+      return dispose;
+    });
+
+    const cleanup = await useMooseStore.getState().initEventListeners();
+    cleanup();
+    cleanup();
+
+    expect(disposers.length).toBeGreaterThan(0);
+    for (const dispose of disposers) {
+      expect(dispose).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("marks the API key present immediately after a successful secure save", async () => {

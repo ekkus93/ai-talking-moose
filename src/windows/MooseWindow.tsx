@@ -36,15 +36,38 @@ export const MooseWindow: React.FC = () => {
     stopConversation,
     loadSettings,
     initEventListeners,
+    showSpeechBubble,
   } = useMooseStore();
 
   useEffect(() => {
-    loadSettings();
-    const unlistenPromise = initEventListeners();
+    let disposed = false;
+    let cleanup: (() => void) | null = null;
+
+    void loadSettings().catch(() => {
+      if (!disposed) {
+        showSpeechBubble("Application settings could not be loaded.", 8000);
+      }
+    });
+
+    void initEventListeners()
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else cleanup = unlisten;
+      })
+      .catch(() => {
+        if (!disposed) {
+          showSpeechBubble(
+            "Application event listeners could not be initialized.",
+            8000,
+          );
+        }
+      });
+
     return () => {
-      unlistenPromise.then((unlisten: () => void) => unlisten());
+      disposed = true;
+      cleanup?.();
     };
-  }, [loadSettings, initEventListeners]);
+  }, [loadSettings, initEventListeners, showSpeechBubble]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

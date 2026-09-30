@@ -57,6 +57,51 @@ describe("MooseWindow focused keyboard shortcuts", () => {
     });
   });
 
+  it("disposes listeners that finish registering after unmount", async () => {
+    let resolveRegistration!: (cleanup: () => void) => void;
+    const cleanup = vi.fn();
+    const initEventListeners = vi.fn(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveRegistration = resolve;
+        }),
+    );
+    useMooseStore.setState({ initEventListeners });
+
+    const { unmount } = render(<MooseWindow />);
+    expect(initEventListeners).toHaveBeenCalledTimes(1);
+    unmount();
+
+    await act(async () => {
+      resolveRegistration(cleanup);
+      await Promise.resolve();
+    });
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows only a sanitized message when event listener setup fails", async () => {
+    const showSpeechBubble = vi.fn();
+    useMooseStore.setState({
+      initEventListeners: vi.fn(async () => {
+        throw new Error("private listener setup detail");
+      }),
+      showSpeechBubble,
+    });
+
+    render(<MooseWindow />);
+
+    await waitFor(() =>
+      expect(showSpeechBubble).toHaveBeenCalledWith(
+        "Application event listeners could not be initialized.",
+        8000,
+      ),
+    );
+    expect(JSON.stringify(showSpeechBubble.mock.calls)).not.toContain(
+      "private listener setup detail",
+    );
+  });
+
   it("starts, mutes, and opens settings with focused-window shortcuts", () => {
     render(<MooseWindow />);
 

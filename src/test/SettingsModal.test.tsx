@@ -40,6 +40,7 @@ describe("SettingsModal Component", () => {
     useMooseStore.setState({
       isSettingsOpen: true,
       settings: frontendDefaultSettings(),
+      settingsPersistenceError: null,
       hasApiKey: false,
       inputDevices: [],
       outputDevices: [],
@@ -52,6 +53,22 @@ describe("SettingsModal Component", () => {
     Object.assign(tauriBridge, originalBridgeMethods);
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it("shows and dismisses a sanitized settings persistence failure", () => {
+    useMooseStore.setState({
+      settingsPersistenceError:
+        "Settings could not be saved. Your last persisted settings were restored.",
+    });
+
+    render(<SettingsModal />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Settings could not be saved. Your last persisted settings were restored.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(useMooseStore.getState().settingsPersistenceError).toBeNull();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("does not mount the P6 acceptance harness in production Settings", () => {
