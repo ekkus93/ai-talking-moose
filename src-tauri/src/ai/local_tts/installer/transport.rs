@@ -7,8 +7,6 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
 
-const MAX_MODEL_REDIRECTS: usize = 5;
-
 pub(super) type ArtifactProgressCallback = Arc<dyn Fn(u64) + Send + Sync>;
 
 #[async_trait]
@@ -26,37 +24,9 @@ pub(super) struct ReqwestLocalTtsDownloadTransport {
     client: reqwest::Client,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RedirectDecision {
-    Follow,
-    RejectInsecureScheme,
-    RejectLimit,
-}
-
-fn redirect_decision(url: &reqwest::Url, previous_count: usize) -> RedirectDecision {
-    if url.scheme() != "https" {
-        RedirectDecision::RejectInsecureScheme
-    } else if previous_count > MAX_MODEL_REDIRECTS {
-        RedirectDecision::RejectLimit
-    } else {
-        RedirectDecision::Follow
-    }
-}
-
 impl ReqwestLocalTtsDownloadTransport {
     pub(super) fn new() -> Result<Self, LocalTtsInstallError> {
-        let redirect = reqwest::redirect::Policy::custom(|attempt| {
-            match redirect_decision(attempt.url(), attempt.previous().len()) {
-                RedirectDecision::Follow => attempt.follow(),
-                RedirectDecision::RejectInsecureScheme => {
-                    attempt.error("Local TTS redirect target must use HTTPS")
-                }
-                RedirectDecision::RejectLimit => attempt.error("Local TTS redirect limit exceeded"),
-            }
-        });
-        let client = reqwest::Client::builder()
-            .redirect(redirect)
-            .build()
+        let client = crate::installer_http::build_secure_installer_http_client()
             .map_err(|_| LocalTtsInstallError::network())?;
         Ok(Self { client })
     }
@@ -132,22 +102,3 @@ impl LocalTtsDownloadTransport for ReqwestLocalTtsDownloadTransport {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn redirect_policy_rejects_insecure_targets_and_excess_hops() {
-        let https = reqwest::Url::parse("https://example.com/model").unwrap();
-        let http = reqwest::Url::parse("http://example.com/model").unwrap();
-        assert_eq!(redirect_decision(&https, 0), RedirectDecision::Follow);
-        assert_eq!(
-            redirect_decision(&http, 0),
-            RedirectDecision::RejectInsecureScheme
-        );
-        assert_eq!(
-            redirect_decision(&https, MAX_MODEL_REDIRECTS + 1),
-            RedirectDecision::RejectLimit
-        );
-    }
-}

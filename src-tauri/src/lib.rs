@@ -2,6 +2,7 @@ pub mod ai;
 pub mod app;
 pub mod asr;
 pub mod audio;
+pub(crate) mod installer_http;
 pub mod character;
 pub mod commands;
 pub mod conversation;

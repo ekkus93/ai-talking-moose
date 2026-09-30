@@ -1,11 +1,6 @@
 use super::{MoonshineModelInstallCancellation, MoonshineModelInstallError};
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use std::time::Duration;
-
-const MAX_REDIRECTS: usize = 3;
-const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct DownloadMetadata {
@@ -32,19 +27,7 @@ pub(super) struct ReqwestModelDownloadTransport {
 
 impl ReqwestModelDownloadTransport {
     pub(super) fn new() -> Result<Self, MoonshineModelInstallError> {
-        let redirect_policy = reqwest::redirect::Policy::custom(|attempt| {
-            if attempt.previous().len() >= MAX_REDIRECTS || attempt.url().scheme() != "https" {
-                attempt.stop()
-            } else {
-                attempt.follow()
-            }
-        });
-        let client = reqwest::Client::builder()
-            .connect_timeout(HTTP_CONNECT_TIMEOUT)
-            .timeout(HTTP_REQUEST_TIMEOUT)
-            .redirect(redirect_policy)
-            .user_agent(concat!("talking-moose-ai/", env!("CARGO_PKG_VERSION")))
-            .build()
+        let client = crate::installer_http::build_secure_installer_http_client()
             .map_err(|_| MoonshineModelInstallError::network())?;
         Ok(Self { client })
     }

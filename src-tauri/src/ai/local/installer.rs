@@ -18,7 +18,6 @@ const STAGING_DIR: &str = ".staging";
 const INSTALL_MARKER: &str = ".talking-moose-local-llm.json";
 const INSTALL_MARKER_VERSION: u32 = 1;
 const VERIFY_BUFFER_BYTES: usize = 1024 * 1024;
-const MAX_MODEL_REDIRECTS: usize = 5;
 
 static GLOBAL_LOCAL_MODEL_INSTALLER: OnceLock<Arc<LocalModelInstaller>> = OnceLock::new();
 
@@ -229,39 +228,9 @@ struct ReqwestLocalModelDownloadTransport {
     client: reqwest::Client,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ModelRedirectDecision {
-    Follow,
-    RejectInsecureScheme,
-    RejectLimit,
-}
-
-fn model_redirect_decision(url: &reqwest::Url, previous_count: usize) -> ModelRedirectDecision {
-    if url.scheme() != "https" {
-        ModelRedirectDecision::RejectInsecureScheme
-    } else if previous_count > MAX_MODEL_REDIRECTS {
-        ModelRedirectDecision::RejectLimit
-    } else {
-        ModelRedirectDecision::Follow
-    }
-}
-
 impl ReqwestLocalModelDownloadTransport {
     fn new() -> Result<Self, LocalModelInstallError> {
-        let redirect = reqwest::redirect::Policy::custom(|attempt| {
-            match model_redirect_decision(attempt.url(), attempt.previous().len()) {
-                ModelRedirectDecision::Follow => attempt.follow(),
-                ModelRedirectDecision::RejectInsecureScheme => {
-                    attempt.error("local model redirect target must use HTTPS")
-                }
-                ModelRedirectDecision::RejectLimit => {
-                    attempt.error("local model redirect limit exceeded")
-                }
-            }
-        });
-        let client = reqwest::Client::builder()
-            .redirect(redirect)
-            .build()
+        let client = crate::installer_http::build_secure_installer_http_client()
             .map_err(|_| LocalModelInstallError::network())?;
         Ok(Self { client })
     }
