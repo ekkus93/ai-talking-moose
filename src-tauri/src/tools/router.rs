@@ -7,7 +7,6 @@ use chrono::{SecondsFormat, Utc};
 use parking_lot::Mutex;
 use serde_json::Value;
 use std::collections::VecDeque;
-use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
@@ -131,10 +130,12 @@ impl ToolRouter {
             .execution
             .timeout_ms
             .clamp(1, HARD_MAX_TOOL_TIMEOUT_MS);
-        let execution = run_with_timeout(
-            Duration::from_millis(timeout_ms),
-            self.builtin.execute(&declaration.name, arguments),
-        )
+        let builtin = self.builtin.clone();
+        let tool_name = declaration.name.clone();
+        let arguments = arguments.clone();
+        let execution = run_blocking_with_timeout(Duration::from_millis(timeout_ms), move || {
+            builtin.execute_blocking(&tool_name, &arguments)
+        })
         .await;
 
         let result = match execution {
@@ -274,13 +275,14 @@ fn enforce_output_size(output: Value, limit: usize) -> Result<Value, ToolError> 
     }
 }
 
-async fn run_with_timeout<F>(timeout: Duration, future: F) -> Result<Value, ToolError>
+async fn run_blocking_with_timeout<F>(timeout: Duration, operation: F) -> Result<Value, ToolError>
 where
-    F: Future<Output = Result<Value, String>>,
+    F: FnOnce() -> Result<Value, String> + Send + 'static,
 {
-    match tokio::time::timeout(timeout, future).await {
-        Ok(Ok(value)) => Ok(value),
-        Ok(Err(_)) => Err(ToolError::from_kind(ToolErrorKind::ExecutionFailed)),
+    let worker = tokio::task::spawn_blocking(operation);
+    match tokio::time::timeout(timeout, worker).await {
+        Ok(Ok(Ok(value))) => Ok(value),
+        Ok(Ok(Err(_))) | Ok(Err(_)) => Err(ToolError::from_kind(ToolErrorKind::ExecutionFailed)),
         Err(_) => Err(ToolError::from_kind(ToolErrorKind::Timeout)),
     }
 }

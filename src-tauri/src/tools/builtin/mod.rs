@@ -98,7 +98,12 @@ impl BuiltinTools {
         }
     }
 
-    pub async fn execute(
+    /// Execute a built-in tool body synchronously.
+    ///
+    /// The router always invokes this method behind `spawn_blocking` so desktop APIs,
+    /// SQLite-backed memory work, and future synchronous built-ins cannot stall the
+    /// async/Tauri worker that enforces the per-tool timeout.
+    pub fn execute_blocking(
         &self,
         name: &str,
         args: &serde_json::Value,
