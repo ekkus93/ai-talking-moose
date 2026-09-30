@@ -48,7 +48,11 @@ impl ModelDownloadTransport for ReqwestModelDownloadTransport {
 
         let response = tokio::select! {
             () = cancellation.cancelled() => return Err(MoonshineModelInstallError::cancelled()),
-            response = self.client.get(url).header(reqwest::header::ACCEPT_ENCODING, "identity").send() => response.map_err(|_| MoonshineModelInstallError::network())?,
+            response = self
+                .client
+                .get(url)
+                .header(reqwest::header::ACCEPT_ENCODING, "identity")
+                .send() => response.map_err(|_| MoonshineModelInstallError::network())?,
         };
 
         let status = response.status();

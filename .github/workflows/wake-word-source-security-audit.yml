@@ -11,7 +11,12 @@ on:
       - "src-tauri/src/conversation/session.rs"
       - "src-tauri/src/conversation/session/**"
       - "src-tauri/src/commands/conversation/**"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/capabilities/**"
+      - "src/components/Moose/MooseSprite.tsx"
+      - "src/lib/sprites.ts"
       - "scripts/check_wake_word_source_security_audit.mjs"
+      - "scripts/check_tauri_security_policy.mjs"
       - ".github/workflows/wake-word-source-security-audit.yml"
   push:
     branches: [master]
@@ -22,7 +27,12 @@ on:
       - "src-tauri/src/conversation/session.rs"
       - "src-tauri/src/conversation/session/**"
       - "src-tauri/src/commands/conversation/**"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/capabilities/**"
+      - "src/components/Moose/MooseSprite.tsx"
+      - "src/lib/sprites.ts"
       - "scripts/check_wake_word_source_security_audit.mjs"
+      - "scripts/check_tauri_security_policy.mjs"
       - ".github/workflows/wake-word-source-security-audit.yml"
   workflow_dispatch:
 
@@ -47,3 +57,5 @@ jobs:
           node-version: 22
       - name: Audit Wake Word source invariants
         run: node scripts/check_wake_word_source_security_audit.mjs
+      - name: Audit Tauri security policy
+        run: node scripts/check_tauri_security_policy.mjs
