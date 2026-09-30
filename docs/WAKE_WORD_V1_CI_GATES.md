@@ -278,40 +278,59 @@ Policy:
 
 Workflow: `.github/workflows/wake-word-performance-evidence.yml`
 
-Current check: `node scripts/check_wake_word_performance_evidence.mjs`.
+Current checks:
+
+- `node scripts/check_wake_word_performance_evidence.mjs`
+- `node scripts/test_check_wake_word_performance_evidence.mjs`
+- canonical immutable WPCR-500 evidence identities in `docs/wake-word-performance-evidence.json`
 
 Purpose:
 
 - version the performance-report schema and measurement policy
-- require Linux x86_64 and macOS arm64 measurements before the report can move out of its pending state
-- define required metrics for idle CPU, memory, inference latency, wake-to-ASR latency, pre-roll startup, repeated-cycle resource behavior, and continuous-ASR comparison
+- preserve WWR-630 standalone/composite baselines as a distinct evidence class
+- bind the accepted WPCR-500 production-listener closeout to exact source SHA, workflow run, native job, artifact, platform, and canonical report name
+- reject stale `pending_measurement` status once the report is accepted
+- reject missing production report metrics, invalid exact SHAs, missing required platforms, and standalone-KWS evidence mislabeled as production-listener evidence
 - preserve the one-thread inference policy
 
 Current status:
 
-- `docs/wake-word-performance-evidence.json` is `accepted` with Linux x86_64 and macOS arm64 platform baselines.
-- Platform baselines record idle KWS CPU, runtime memory, inference latency, continuous-ASR idle CPU comparison, and the one-thread policy.
-- Cross-cutting exact-run evidence records wake→command-ASR latency, pre-roll startup timing, and repeated-cycle resource behavior.
+- `docs/wake-word-performance-evidence.json` is `accepted`.
+- WWR-630 platform baselines remain distinct from full production-listener evidence.
+- WPCR-500 production-listener evidence is bound to exact master `5232ecf4fe7f9d20dd8de85f07526f43e8a48f64`, run `36338240563`, Linux artifact `10937379691`, and macOS artifact `10937692355`.
+- Negative policy tests fail closed on stale pending state, missing production metrics, invalid source SHA, wrong measurement path, or a missing native platform.
 
 ### Production listener performance evidence
 
 Workflow: `.github/workflows/wake-word-performance-evidence.yml`
 
+Native matrix:
+
+- Linux x86_64 on `ubuntu-latest`
+- macOS arm64 on `macos-15`
+
 Current checks:
 
-- `node scripts/check_wake_word_performance_evidence.mjs`
-- `docs/wake-word-performance-evidence.json`
+- generate the deterministic Wake corpus
+- build the exact-head `wake_word_acceptance` binary
+- prepare and verify the pinned Wake model/runtime
+- execute `wake_word_acceptance --production-listener`
+- validate each generated `*-production-listener.json` report with `scripts/check_wake_word_production_listener_report.mjs`
+- upload the exact-head per-platform production-listener report
 
 Purpose:
 
-- require performance evidence for the production native listener path, not only a standalone KWS session
-- cover startup duration, idle CPU while capture is active, memory overhead, route/inference latency, wake-to-command-ASR activation latency, pre-roll startup latency, repeated enable/disable and wake/command/resume cycles, and continuous full-ASR comparison where feasible
-- keep performance reports privacy-safe and scoped to measured claims
+- measure the production native listener path rather than only a standalone KWS session
+- cover listener startup, active-capture idle CPU, memory before/after startup, native KWS inference latency, wake-to-command activation, pre-roll startup, repeated wake/command/resume cycles, repeated enable/disable cycles, native-session multiplicity, final capture ownership, final runtime phase, and retained-buffer deltas
+- require one-thread inference, one peak native session, zero final native sessions, released capture, Disabled final runtime state, zero retained ring/handoff deltas, and an acceptance report whose `passed` field is true
+- keep reports privacy-safe: aggregate timing/resource/sample-count state only, without raw PCM or transcripts
 
 Policy:
 
-- Hosted policy validation cannot manufacture representative measurements.
-- Final WPCR-950/960 must cite exact-head and exact-master reports for the production listener performance claim.
+- The hosted schema job is not a substitute for native production-listener acceptance.
+- The required performance workflow contains both policy validation and native Linux/macOS jobs.
+- Final qualification must cite the exact-head and exact-master performance workflow runs selected for the final source.
+- A skipped native platform is not passing performance evidence.
 
 ### Privacy/security source audit gate
 

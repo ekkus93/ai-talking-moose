@@ -113,6 +113,44 @@ for (const id of requiredIds) {
 if (implemented < 20) fail("expected at least twenty implemented policy/source/post-closeout gates");
 if (pending !== 0) fail("all required post-closeout acceptance gates must be implemented before final closeout");
 
+
+const performanceWorkflowPath = ".github/workflows/wake-word-performance-evidence.yml";
+const performanceWorkflow = read(performanceWorkflowPath);
+for (const id of [
+  "performance_evidence_policy",
+  "production_listener_performance_evidence",
+  "measured_performance_acceptance",
+]) {
+  const gate = manifest.gates.find((entry) => entry.id === id);
+  if (!gate) fail(`missing performance gate ${id}`);
+  if (gate.workflow !== performanceWorkflowPath) {
+    fail(`${id} must use the authoritative Wake performance workflow`);
+  }
+  if (/pending/u.test(gate.acceptance_scope)) {
+    fail(`${id} acceptance scope must not describe accepted production evidence as pending`);
+  }
+}
+if (manifest.gates.find((entry) => entry.id === "performance_evidence_policy")?.specialized_runner_required !== false) {
+  fail("performance evidence policy gate itself must remain a hosted policy check");
+}
+for (const id of ["production_listener_performance_evidence", "measured_performance_acceptance"]) {
+  if (manifest.gates.find((entry) => entry.id === id)?.specialized_runner_required !== true) {
+    fail(`${id} must require specialized native runners`);
+  }
+}
+for (const [needle, label] of [
+  ["production-listener:", "native production-listener job"],
+  ["ubuntu-latest", "Linux native performance runner"],
+  ["macos-15", "macOS arm64 performance runner"],
+  ["--production-listener", "production listener acceptance invocation"],
+  ["check_wake_word_production_listener_report.mjs", "production listener report validator"],
+  ["test_check_wake_word_performance_evidence.mjs", "performance policy negative tests"],
+  ["actions/upload-artifact@v4", "production report artifact upload"],
+  ["wake-word-production-listener-", "platform-specific production report artifact name"],
+]) {
+  requireText(performanceWorkflow, needle, label);
+}
+
 for (const sentence of [
   "ordinary CI alone is not final Wake Word V1 qualification",
   "A workflow with conclusion `skipped` is evidence only that its path filter or condition did not select that workflow",

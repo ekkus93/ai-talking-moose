@@ -134,7 +134,7 @@
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": false,
-      "acceptance_scope": "performance-report schema and pending-measurement policy"
+      "acceptance_scope": "canonical performance schema, immutable WPCR-500 production-listener evidence identity, negative policy tests, and exact native report metric policy"
     },
     {
       "id": "production_listener_performance_evidence",
@@ -145,7 +145,7 @@
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": true,
-      "acceptance_scope": "representative production native listener startup, idle capture CPU, memory, routing latency, wake-to-command, pre-roll, repeated-cycle, and continuous-ASR comparison measurements"
+      "acceptance_scope": "exact-head Linux x86_64 and macOS arm64 jobs execute the production native listener path, validate the production-listener report schema, and upload per-platform reports"
     },
     {
       "id": "privacy_audit",
@@ -167,7 +167,7 @@
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": false,
-      "acceptance_scope": "truthful behavior/gate documentation while real acceptance remains pending"
+      "acceptance_scope": "truthful behavior and gate documentation, including accepted production-listener performance evidence and exact-head qualification requirements"
     },
     {
       "id": "source_security_audit",
@@ -222,7 +222,7 @@
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": true,
-      "acceptance_scope": "representative Linux and macOS CPU, memory, latency, repeated-cycle, and continuous-ASR comparison measurements"
+      "acceptance_scope": "exact-head Linux and macOS production-listener CPU, memory, inference, activation, repeated-cycle, ownership, and cleanup measurements plus preserved continuous-ASR comparison evidence"
     }
   ]
 }
