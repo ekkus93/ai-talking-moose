@@ -195,6 +195,10 @@ const validateCrossCuttingMeasurements = () => {
 const validateProductionListenerEvidence = () => {
   const entries = report.production_listener_evidence ?? [];
   if (!Array.isArray(entries)) fail("production_listener_evidence must be an array");
+  const sourceShas = new Set(entries.map((entry) => entry.commit_sha));
+  if (sourceShas.size !== 1) {
+    fail("accepted production listener evidence must share one exact source SHA across platforms");
+  }
   for (const platform of platforms) {
     const matching = entries.filter((entry) => entry.platform === platform);
     if (matching.length !== 1) {
