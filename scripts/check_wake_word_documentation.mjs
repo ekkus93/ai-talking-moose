@@ -113,7 +113,7 @@ const gateRequirements = [
   "Passing schema/contract gates do not mean the repository contains real audio fixtures",
   "production Wake Word Rust error/log surfaces",
   "does not by itself prove real KWS inference",
-  "`accepted` with Linux x86_64 and macOS arm64 platform baselines",
+  "WPCR-500 production-listener evidence is bound to exact master",
   "A workflow with conclusion `skipped`",
   "Cross-cutting exact-run evidence records wake→command-ASR latency, pre-roll startup timing, and repeated-cycle resource behavior",
 ];
@@ -164,6 +164,18 @@ if (performance.status !== "accepted") {
 }
 if (!Array.isArray(performance.measurements) || performance.measurements.length !== 2) {
   fail("accepted performance report must contain both platform baselines");
+}
+if (performance.wpcr500_scope?.production_listener_status !== "accepted") {
+  fail("accepted performance report must mark production-listener evidence accepted");
+}
+if (!Array.isArray(performance.production_listener_evidence) || performance.production_listener_evidence.length !== 2) {
+  fail("accepted performance report must contain both native production-listener evidence entries");
+}
+for (const platform of ["linux-x86_64", "macos-arm64"]) {
+  const entry = performance.production_listener_evidence.find((item) => item.platform === platform);
+  if (!entry || entry.measurement_path !== "production_wake_listener_thread") {
+    fail(`accepted performance report lacks native production-listener evidence for ${platform}`);
+  }
 }
 
 const postCloseoutRequirements = [

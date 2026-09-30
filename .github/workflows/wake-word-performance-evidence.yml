@@ -6,6 +6,9 @@ on:
     branches: [master]
     paths:
       - "docs/wake-word-performance-evidence.json"
+      - "docs/wake-word-required-gates.json"
+      - "docs/WAKE_WORD_V1_CI_GATES.md"
+      - "scripts/check_wake_word_required_gates.mjs"
       - "docs/wake-word-corpus.json"
       - "wake-word-artifacts.json"
       - "scripts/check_wake_word_performance_evidence.mjs"
@@ -27,6 +30,9 @@ on:
     branches: [master]
     paths:
       - "docs/wake-word-performance-evidence.json"
+      - "docs/wake-word-required-gates.json"
+      - "docs/WAKE_WORD_V1_CI_GATES.md"
+      - "scripts/check_wake_word_required_gates.mjs"
       - "docs/wake-word-corpus.json"
       - "wake-word-artifacts.json"
       - "scripts/check_wake_word_performance_evidence.mjs"
