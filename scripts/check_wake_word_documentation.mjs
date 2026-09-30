@@ -115,7 +115,7 @@ const gateRequirements = [
   "does not by itself prove real KWS inference",
   "WPCR-500 production-listener evidence is bound to exact master",
   "A workflow with conclusion `skipped`",
-  "Cross-cutting exact-run evidence records wake→command-ASR latency, pre-roll startup timing, and repeated-cycle resource behavior",
+  "cover listener startup, active-capture idle CPU, memory before/after startup",
 ];
 for (const sentence of gateRequirements) {
   if (!gates.includes(sentence)) {
