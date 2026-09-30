@@ -12,18 +12,18 @@ This is the canonical checklist for the 2026-09-30 comprehensive master code-rev
 
 ### Tasks
 
-- [ ] Record exact remediation baseline SHA 9fc10b488c47ad52bb9960bc9181dfe7763a6d9c.
-- [ ] Record the review findings and affected source/workflow paths in one baseline evidence document.
-- [ ] Confirm ordinary CI state for the baseline.
-- [ ] Confirm the existing Wake closeout TODO remains historically closed and is not being rewritten as the new canonical checklist.
-- [ ] Confirm the new remediation does not weaken artifact hash verification, runtime identity verification, privacy rules, or generated Tauri command contracts.
-- [ ] Identify focused tests/gates required by each MCR section before implementation begins.
+- [x] Record exact remediation baseline SHA `9fc10b488c47ad52bb9960bc9181dfe7763a6d9c` — `docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md`.
+- [x] Record the review findings and affected source/workflow paths in one baseline evidence document — `docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md`.
+- [x] Confirm ordinary CI state for the baseline — CI `36392672193` passed on exact baseline `9fc10b488c47ad52bb9960bc9181dfe7763a6d9c`.
+- [x] Confirm the existing Wake closeout TODO remains historically closed and is not being rewritten as the new canonical checklist — both prior Wake remediation TODOs remain `Closed on master`.
+- [x] Confirm the new remediation does not weaken artifact hash verification, runtime identity verification, privacy rules, or generated Tauri command contracts — preserved as explicit baseline invariants in MCR-000 evidence.
+- [x] Identify focused tests/gates required by each MCR section before implementation begins — test/gate map recorded in MCR-000 evidence.
 
 ### Acceptance
 
-- [ ] Baseline evidence is committed.
-- [ ] Existing known-good invariants are explicitly listed.
-- [ ] No unrelated cleanup is mixed into the first implementation slice.
+- [x] Baseline evidence is committed — `docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md`.
+- [x] Existing known-good invariants are explicitly listed in MCR-000 evidence.
+- [x] No unrelated cleanup is mixed into the first implementation slice; MCR-000 is documentation/evidence only.
 
 ## MCR-100 — Repair Wake performance evidence and required-gate truthfulness
 
