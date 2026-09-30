@@ -1,9 +1,9 @@
 # AI Talking Moose Master Code Review Remediation TODO
 
-**Date:** 2026-09-30  
-**Status:** Open  
-**Authoritative specification:** docs/MASTER_CODE_REVIEW_REMEDIATION_SPEC_2026-09-30.md  
-**Review baseline:** master at 9fc10b488c47ad52bb9960bc9181dfe7763a6d9c  
+**Date:** 2026-09-30
+**Status:** Open
+**Authoritative specification:** docs/MASTER_CODE_REVIEW_REMEDIATION_SPEC_2026-09-30.md
+**Review baseline:** master at 9fc10b488c47ad52bb9960bc9181dfe7763a6d9c
 **Execution model:** work directly on master when explicitly instructed; preserve exact-head compare-and-swap discipline
 
 This is the canonical checklist for the 2026-09-30 comprehensive master code-review remediation. A checkbox may be marked complete only when its stated implementation and acceptance evidence exist. Supporting infrastructure alone is not completion.

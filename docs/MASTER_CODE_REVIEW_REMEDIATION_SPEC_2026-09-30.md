@@ -1,9 +1,9 @@
 # AI Talking Moose Master Code Review Remediation Spec
 
-**Date:** 2026-09-30  
-**Status:** Draft remediation specification  
-**Review baseline:** master at 9fc10b488c47ad52bb9960bc9181dfe7763a6d9c  
-**Review source:** comprehensive static and executable review of the 2026-09-30 master snapshot  
+**Date:** 2026-09-30
+**Status:** Draft remediation specification
+**Review baseline:** master at 9fc10b488c47ad52bb9960bc9181dfe7763a6d9c
+**Review source:** comprehensive static and executable review of the 2026-09-30 master snapshot
 **Companion TODO:** docs/MASTER_CODE_REVIEW_REMEDIATION_TODO_2026-09-30.md
 
 ## 1. Purpose
