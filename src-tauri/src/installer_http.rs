@@ -49,10 +49,7 @@ mod tests {
     #[test]
     fn shared_installer_http_policy_freezes_timeouts_and_redirect_limit() {
         assert_eq!(INSTALLER_HTTP_CONNECT_TIMEOUT, Duration::from_secs(15));
-        assert_eq!(
-            INSTALLER_HTTP_REQUEST_TIMEOUT,
-            Duration::from_secs(10 * 60)
-        );
+        assert_eq!(INSTALLER_HTTP_REQUEST_TIMEOUT, Duration::from_secs(10 * 60));
         assert_eq!(INSTALLER_HTTP_MAX_REDIRECTS, 3);
         build_secure_installer_http_client().expect("shared installer client must build");
     }
