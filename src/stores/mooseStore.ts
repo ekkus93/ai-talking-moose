@@ -501,7 +501,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       }
     };
 
-    const register = async <T,>(
+    const register = async <T>(
       eventName: string,
       handler: (payload: T) => void,
     ) => {

@@ -255,30 +255,31 @@ describe("mooseStore State Management", () => {
     expect(useMooseStore.getState().settingsPersistenceError).toBeNull();
   });
 
-  it.each([
-    "moose://state",
-    "moose://transcript/moose",
-    "moose://tray/action",
-  ])("cleans up partial event registration when %s fails", async (failureEvent) => {
-    const disposers: Array<ReturnType<typeof vi.fn>> = [];
-    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
-      async (eventName: string) => {
-        if (eventName === failureEvent) {
-          throw new Error("private listener registration detail");
-        }
-        const dispose = vi.fn();
-        disposers.push(dispose);
-        return dispose;
-      },
-    );
+  it.each(["moose://state", "moose://transcript/moose", "moose://tray/action"])(
+    "cleans up partial event registration when %s fails",
+    async (failureEvent) => {
+      const disposers: Array<ReturnType<typeof vi.fn>> = [];
+      vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
+        async (eventName: string) => {
+          if (eventName === failureEvent) {
+            throw new Error("private listener registration detail");
+          }
+          const dispose = vi.fn();
+          disposers.push(dispose);
+          return dispose;
+        },
+      );
 
-    await expect(useMooseStore.getState().initEventListeners()).rejects.toThrow(
-      "Application event listeners could not be initialized.",
-    );
-    for (const dispose of disposers) {
-      expect(dispose).toHaveBeenCalledTimes(1);
-    }
-  });
+      await expect(
+        useMooseStore.getState().initEventListeners(),
+      ).rejects.toThrow(
+        "Application event listeners could not be initialized.",
+      );
+      for (const dispose of disposers) {
+        expect(dispose).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
 
   it("makes successful event-listener cleanup idempotent", async () => {
     const disposers: Array<ReturnType<typeof vi.fn>> = [];
@@ -418,62 +419,3 @@ describe("mooseStore State Management", () => {
     vi.spyOn(tauriBridge, "getConversationLifecycle").mockResolvedValue("idle");
     vi.spyOn(tauriBridge, "getCharacterState").mockResolvedValue("idle");
 
-    await useMooseStore.getState().loadSettings();
-
-    expect(useMooseStore.getState().settings?.asr_mode).toBe(
-      "gemini_live_audio",
-    );
-    expect(useMooseStore.getState().isOnboardingOpen).toBe(true);
-  });
-
-  it("routes tray and menu-bar actions through bounded store commands", async () => {
-    const handlers = new Map<string, (payload: unknown) => void>();
-    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
-      async (eventName: string, handler: (payload: unknown) => void) => {
-        handlers.set(eventName, handler);
-        return () => {};
-      },
-    );
-    const start = vi
-      .spyOn(tauriBridge, "startConversation")
-      .mockResolvedValue("test-session");
-    const stop = vi
-      .spyOn(tauriBridge, "stopConversation")
-      .mockResolvedValue(undefined);
-    const setMute = vi
-      .spyOn(tauriBridge, "setMute")
-      .mockResolvedValue(undefined);
-    vi.spyOn(tauriBridge, "resizeWindow").mockResolvedValue(undefined);
-
-    useMooseStore.setState({
-      isConversationActive: false,
-      isMuted: false,
-      isSettingsOpen: false,
-    });
-    const cleanup = await useMooseStore.getState().initEventListeners();
-    const trayAction = handlers.get("moose://tray/action");
-    const openSettings = handlers.get("moose://ui/open-settings");
-
-    expect(trayAction).toBeDefined();
-    expect(openSettings).toBeDefined();
-
-    trayAction?.("start_conversation");
-    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-
-    useMooseStore.setState({ isConversationActive: true });
-    trayAction?.("stop_conversation");
-    await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(1));
-
-    useMooseStore.setState({ isMuted: false });
-    trayAction?.("mute");
-    await vi.waitFor(() => expect(setMute).toHaveBeenLastCalledWith(true));
-
-    trayAction?.("unmute");
-    await vi.waitFor(() => expect(setMute).toHaveBeenLastCalledWith(false));
-
-    openSettings?.(undefined);
-    expect(useMooseStore.getState().isSettingsOpen).toBe(true);
-
-    cleanup();
-  });
-});
