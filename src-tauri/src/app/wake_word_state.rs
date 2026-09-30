@@ -34,12 +34,16 @@ pub(crate) enum NativeWakeListenerLifecyclePhase {
 
 enum NativeWakeListenerLifecycle {
     Stopped,
-    Starting { generation: u64 },
+    Starting {
+        generation: u64,
+    },
     Running {
         generation: u64,
         handle: WakeLocalListenerHandle,
     },
-    Stopping { generation: u64 },
+    Stopping {
+        generation: u64,
+    },
 }
 
 struct NativeWakeListenerControllerInner {
@@ -487,7 +491,9 @@ pub(crate) fn control_native_wake_listener(
             app_data_dir,
             event_tx,
         } => {
-            state.wake_listener_controller.configure(&app_data_dir, &event_tx);
+            state
+                .wake_listener_controller
+                .configure(&app_data_dir, &event_tx);
             let settings = state.settings.read().clone();
             if !settings.wake_word_enabled {
                 state
@@ -651,7 +657,10 @@ mod tests {
             NativeWakeListenerLifecyclePhase::Stopping
         );
         controller.finish_stop(stop_generation);
-        assert_eq!(controller.phase(), NativeWakeListenerLifecyclePhase::Stopped);
+        assert_eq!(
+            controller.phase(),
+            NativeWakeListenerLifecyclePhase::Stopped
+        );
     }
 
     #[test]
@@ -666,7 +675,10 @@ mod tests {
         assert_ne!(first_generation, second_generation);
         assert!(second_generation > first_generation);
         controller.cancel_start(second_generation);
-        assert_eq!(controller.phase(), NativeWakeListenerLifecyclePhase::Stopped);
+        assert_eq!(
+            controller.phase(),
+            NativeWakeListenerLifecyclePhase::Stopped
+        );
     }
 
     #[tokio::test]

@@ -140,11 +140,9 @@ async fn blocking_worker_panic_becomes_sanitized_execution_failure() {
 
 #[tokio::test]
 async fn successful_blocking_worker_returns_normally() {
-    let value = run_blocking_with_timeout(Duration::from_secs(1), || {
-        Ok(json!({ "ok": true }))
-    })
-    .await
-    .unwrap();
+    let value = run_blocking_with_timeout(Duration::from_secs(1), || Ok(json!({ "ok": true })))
+        .await
+        .unwrap();
     assert_eq!(value["ok"], true);
 }
 
