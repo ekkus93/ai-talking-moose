@@ -45,6 +45,10 @@ try {
   badSha.production_listener_evidence[0].commit_sha = "not-an-exact-sha";
   expectFail(badSha, "bad-production-evidence-sha");
 
+  const mixedSourceSha = clone();
+  mixedSourceSha.production_listener_evidence[1].commit_sha = "9".repeat(40);
+  expectFail(mixedSourceSha, "mixed-production-evidence-source-sha");
+
   const wrongPath = clone();
   wrongPath.production_listener_evidence[0].measurement_path = "standalone_real_kws_session";
   expectFail(wrongPath, "standalone-masquerades-as-production");
