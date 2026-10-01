@@ -31,6 +31,54 @@ impl RealtimeConversationProvider for StallingProvider {
     }
 }
 
+struct ReadyProvider {
+    connect_count: Arc<AtomicUsize>,
+}
+
+struct ReadySession {
+    _event_sender: mpsc::Sender<LiveServerEvent>,
+}
+
+#[async_trait]
+impl LiveSession for ReadySession {
+    async fn send_audio_chunk(&mut self, _pcm_bytes: &[u8]) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn send_text_turn(&mut self, _text: &str) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn send_tool_response(
+        &mut self,
+        _response: ToolCallResponse,
+    ) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn interrupt(&mut self) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<(), ProviderError> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl RealtimeConversationProvider for ReadyProvider {
+    async fn connect(
+        &self,
+        _config: LiveSessionConfig,
+        event_sender: mpsc::Sender<LiveServerEvent>,
+    ) -> Result<Box<dyn LiveSession>, ProviderError> {
+        self.connect_count.fetch_add(1, AtomicOrdering::SeqCst);
+        Ok(Box::new(ReadySession {
+            _event_sender: event_sender,
+        }))
+    }
+}
+
 struct ConnectCountingProvider {
     connect_count: Arc<AtomicUsize>,
 }
@@ -976,6 +1024,84 @@ async fn blocked_local_asr_preparation_does_not_hold_operation_lock_against_stop
     assert_eq!(start_error, "Conversation start was cancelled");
     assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
     assert!(!manager.local_asr_lifecycle().is_active().await);
+}
+
+#[tokio::test]
+async fn cancelled_wake_local_asr_start_cannot_mutate_newer_committed_session() {
+    let manager = ConversationManager::new();
+    let gate = Arc::new(LocalAsrPreparationTestGate::default());
+    manager.set_local_asr_preparation_test_gate(Some(gate.clone()));
+
+    let mut stale_request = test_request(false);
+    stale_request.asr_mode = AsrMode::MoonshineTinyStreaming;
+    let stale_capture = stale_request.capture.clone();
+    let stale_playback = stale_request.playback.clone();
+    let stale_handoff =
+        WakeCommandHandoffAudio::new(16_000, vec![101, 202, 303, 404]).unwrap();
+
+    let manager_for_stale = manager.clone();
+    let stale_task = tokio::spawn(async move {
+        manager_for_stale
+            .start_session_with_wake_handoff(stale_request, Some(stale_handoff))
+            .await
+    });
+
+    tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        gate.entered.notified(),
+    )
+    .await
+    .expect("stale local ASR preparation barrier was not entered");
+
+    tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        manager.stop_session(stale_capture, stale_playback),
+    )
+    .await
+    .expect("Stop must invalidate the blocked Wake start promptly");
+
+    // A fresh non-Wake conversation must be able to commit while the old local-ASR preparation
+    // remains blocked. The old Wake handoff belongs only to its stale generation.
+    manager.set_local_asr_preparation_test_gate(None);
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let mut fresh_request = test_request(false);
+    fresh_request.provider = Arc::new(ReadyProvider {
+        connect_count: connect_count.clone(),
+    });
+    fresh_request.playback = Arc::new(AudioPlayback::new_mock());
+    let fresh_capture = fresh_request.capture.clone();
+    let fresh_playback = fresh_request.playback.clone();
+
+    let fresh_session_id = manager
+        .start_session(fresh_request)
+        .await
+        .expect("fresh generation must commit independently of the stale preparation");
+    assert!(manager.is_active());
+    assert_eq!(
+        manager.current_session_id().as_deref(),
+        Some(fresh_session_id.as_str())
+    );
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Listening);
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 1);
+
+    gate.release.notify_one();
+    let stale_error = tokio::time::timeout(std::time::Duration::from_millis(500), stale_task)
+        .await
+        .expect("released stale preparation must finish")
+        .unwrap()
+        .expect_err("stale Wake start must not commit");
+    assert_eq!(stale_error, "Conversation start was cancelled");
+
+    assert!(manager.is_active());
+    assert_eq!(
+        manager.current_session_id().as_deref(),
+        Some(fresh_session_id.as_str()),
+        "stale completion must not replace or fail the newer committed session"
+    );
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Listening);
+    assert!(fresh_capture.lock().is_active());
+
+    manager.stop_session(fresh_capture, fresh_playback).await;
 }
 
 #[tokio::test]

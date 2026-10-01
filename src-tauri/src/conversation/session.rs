@@ -568,6 +568,16 @@ impl ConversationManager {
             })
             .await?;
 
+        // Re-enter the lifecycle boundary immediately after preparation. A Stop that raced
+        // local-ASR startup has already advanced generation; stale prepared state is disposed
+        // before Wake handoff audio, provider connection, or microphone ownership can be touched.
+        let operation_guard = self.operation_lock.lock().await;
+        if self.generation.load(Ordering::SeqCst) != generation {
+            drop(operation_guard);
+            Self::stop_provisional_local_asr(&mut local_pipeline).await;
+            return Err("Conversation start was cancelled".to_string());
+        }
+
         if let Some(handoff_audio) = wake_handoff_audio {
             let Some(pipeline) = local_pipeline.as_ref() else {
                 let message = concat!(
@@ -586,25 +596,16 @@ impl ConversationManager {
             if let Err(error) = pipeline.prime_wake_handoff(handoff_audio) {
                 self.local_asr_diagnostics
                     .remember_error(asr_mode, error.clone());
-                Self::stop_provisional_local_asr(&mut local_pipeline).await;
                 Self::set_lifecycle(
                     &self.lifecycle,
                     ConversationLifecycle::Failed,
                     Some(&lifecycle_callback),
                 );
                 state_callback(CharacterState::Error);
+                drop(operation_guard);
+                Self::stop_provisional_local_asr(&mut local_pipeline).await;
                 return Err(error.message);
             }
-        }
-
-        // Re-enter the lifecycle boundary after preparation. A Stop that raced local-ASR
-        // startup has already advanced generation; stale prepared state is disposed before any
-        // provider connection or microphone ownership can be committed.
-        let operation_guard = self.operation_lock.lock().await;
-        if self.generation.load(Ordering::SeqCst) != generation {
-            drop(operation_guard);
-            Self::stop_provisional_local_asr(&mut local_pipeline).await;
-            return Err("Conversation start was cancelled".to_string());
         }
 
         let input_sample_rate = config.sample_rate_in;
