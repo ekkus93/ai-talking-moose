@@ -89,7 +89,7 @@ mod tests {
         })
         .await;
 
-        assert!(matches!(outcome, ToolExecutionOutcome::Timeout));
+        assert!(matches!(&outcome, ToolExecutionOutcome::Timeout));
         assert_eq!(
             outcome.into_sanitized_result().unwrap_err().kind,
             ToolErrorKind::Timeout
@@ -106,7 +106,7 @@ mod tests {
         let body_error =
             run_blocking_with_timeout(Duration::from_secs(1), || Err("private body error".into()))
                 .await;
-        assert!(matches!(body_error, ToolExecutionOutcome::ToolError));
+        assert!(matches!(&body_error, ToolExecutionOutcome::ToolError));
         assert_eq!(
             body_error.into_sanitized_result().unwrap_err().kind,
             ToolErrorKind::ExecutionFailed
@@ -118,7 +118,7 @@ mod tests {
             Ok(json!({}))
         })
         .await;
-        assert!(matches!(panic, ToolExecutionOutcome::WorkerPanic));
+        assert!(matches!(&panic, ToolExecutionOutcome::WorkerPanic));
         assert_eq!(
             panic.into_sanitized_result().unwrap_err().kind,
             ToolErrorKind::ExecutionFailed
@@ -139,7 +139,7 @@ mod tests {
             std::future::pending::<Result<Value, String>>().await
         })
         .await;
-        assert!(matches!(outcome, ToolExecutionOutcome::Timeout));
+        assert!(matches!(&outcome, ToolExecutionOutcome::Timeout));
         assert_eq!(
             outcome.into_sanitized_result().unwrap_err().kind,
             ToolErrorKind::Timeout
