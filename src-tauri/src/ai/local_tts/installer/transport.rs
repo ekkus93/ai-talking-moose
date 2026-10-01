@@ -1,8 +1,8 @@
 use super::{LocalTtsInstallError, LocalTtsInstallErrorKind};
+use crate::ai::local_tts::manifest::LocalTtsArtifact;
 use crate::installer_http::{
     classify_installer_http_failure, InstallerHttpFailure, INSTALLER_HTTP_TIMEOUT_MESSAGE,
 };
-use crate::ai::local_tts::manifest::LocalTtsArtifact;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use std::path::Path;

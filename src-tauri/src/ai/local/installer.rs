@@ -1,4 +1,7 @@
 use super::catalog::{local_model_entry, validate_local_model_catalog, LocalModelCatalogEntry};
+use crate::installer_http::{
+    classify_installer_http_failure, InstallerHttpFailure, INSTALLER_HTTP_TIMEOUT_MESSAGE,
+};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use parking_lot::Mutex;
@@ -12,9 +15,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
-use crate::installer_http::{
-    classify_installer_http_failure, InstallerHttpFailure, INSTALLER_HTTP_TIMEOUT_MESSAGE,
-};
 use uuid::Uuid;
 
 const STAGING_DIR: &str = ".staging";
@@ -1397,3 +1397,50 @@ mod tests {
             installer.delete(entry.id).unwrap();
             assert!(sentinel.exists());
             assert!(!dir.path().join(entry.id).exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn duplicate_install_is_rejected_without_silent_parallel_work() {
+        let dir = tempdir().unwrap();
+        let transport = Arc::new(BytesTransport {
+            bytes: vec![],
+            calls: AtomicUsize::new(0),
+        });
+        let installer =
+            LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
+        let model_id = super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID;
+        installer.in_flight.lock().insert(
+            model_id.to_string(),
+            InFlightInstall {
+                cancellation: CancellationToken::new(),
+                phase: LocalModelInstallPhase::Downloading,
+            },
+        );
+        let error = installer.install(model_id, None).await.unwrap_err();
+        assert_eq!(error.kind, LocalModelInstallErrorKind::Busy);
+    }
+
+    #[tokio::test]
+    async fn cancellation_handle_targets_only_the_requested_model() {
+        let dir = tempdir().unwrap();
+        let transport = Arc::new(BytesTransport {
+            bytes: vec![1, 2, 3],
+            calls: AtomicUsize::new(0),
+        });
+        let installer =
+            LocalModelInstaller::with_transport(dir.path().to_path_buf(), transport).unwrap();
+        let model_id = super::super::catalog::DEFAULT_LOCAL_TEXT_MODEL_ID;
+        let token = CancellationToken::new();
+        installer.in_flight.lock().insert(
+            model_id.to_string(),
+            InFlightInstall {
+                cancellation: token.clone(),
+                phase: LocalModelInstallPhase::Downloading,
+            },
+        );
+        assert!(installer.cancel(model_id));
+        assert!(token.is_cancelled());
+        assert!(!installer.cancel("qwen3-0-6b-instruct-q4-k-m"));
+    }
+}
