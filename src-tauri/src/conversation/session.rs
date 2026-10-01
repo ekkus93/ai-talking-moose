@@ -3,6 +3,7 @@ use crate::ai::types::*;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrLifecycle;
 use crate::asr::moonshine::MoonshineModelInstaller;
+use crate::asr::pipeline::LocalAsrPipeline;
 use crate::asr::{AsrEvent, AsrMode};
 use crate::audio::capture::AudioCapture;
 use crate::audio::playback::AudioPlayback;
@@ -140,6 +141,12 @@ struct ConversationEventLoopContext {
     speech_bubble_callback: SpeechBubbleCallback,
 }
 
+#[derive(Debug, Clone)]
+struct ConversationStartReservation {
+    generation: u64,
+    session_id: String,
+}
+
 #[derive(Clone)]
 pub struct ConversationManager {
     active_session_id: Arc<SyncMutex<Option<String>>>,
@@ -271,6 +278,47 @@ impl ConversationManager {
                 "Failed to close provisional conversation session"
             );
         }
+    }
+
+    fn reserve_start_locked(
+        &self,
+        teardown_generation: u64,
+        muted: &RwLock<bool>,
+        lifecycle_callback: &LifecycleCallback,
+    ) -> Result<ConversationStartReservation, String> {
+        if self.generation.load(Ordering::SeqCst) != teardown_generation {
+            return Err("Conversation start was cancelled".to_string());
+        }
+        if *muted.read() {
+            return Err("Moose is currently muted".to_string());
+        }
+
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let reservation = ConversationStartReservation {
+            generation,
+            session_id: Uuid::new_v4().to_string(),
+        };
+        self.output_suppressed.store(false, Ordering::SeqCst);
+        Self::set_lifecycle(
+            &self.lifecycle,
+            ConversationLifecycle::Connecting,
+            Some(lifecycle_callback),
+        );
+        Ok(reservation)
+    }
+
+    fn start_reservation_is_current(&self, reservation: &ConversationStartReservation) -> bool {
+        self.generation.load(Ordering::SeqCst) == reservation.generation
+    }
+
+    async fn dispose_cancelled_start(
+        local_pipeline: &mut Option<LocalAsrPipeline>,
+        mut session: Option<Box<dyn LiveSession>>,
+    ) {
+        if let Some(ref mut session) = session {
+            Self::close_provisional_session(session).await;
+        }
+        Self::stop_provisional_local_asr(local_pipeline).await;
     }
 
     async fn begin_shutdown_locked(
@@ -532,21 +580,10 @@ impl ConversationManager {
         Self::close_detached_session(previous_session).await;
 
         let operation_guard = self.operation_lock.lock().await;
-        if self.generation.load(Ordering::SeqCst) != teardown_generation {
-            return Err("Conversation start was cancelled".to_string());
-        }
-        if *muted.read() {
-            return Err("Moose is currently muted".to_string());
-        }
-
-        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let session_id = Uuid::new_v4().to_string();
-        self.output_suppressed.store(false, Ordering::SeqCst);
-        Self::set_lifecycle(
-            &self.lifecycle,
-            ConversationLifecycle::Connecting,
-            Some(&lifecycle_callback),
-        );
+        let reservation =
+            self.reserve_start_locked(teardown_generation, muted.as_ref(), &lifecycle_callback)?;
+        let generation = reservation.generation;
+        let session_id = reservation.session_id.clone();
 
         // Local ASR is prepared before opening the cloud Live session. The focused helper
         // fails closed before microphone capture or provider traffic if local prerequisites fail.
@@ -554,7 +591,7 @@ impl ConversationManager {
         // potentially expensive local-ASR model/worker preparation. Stop can now acquire the
         // lock immediately and invalidate this generation instead of waiting for ASR startup.
         drop(operation_guard);
-        let mut local_pipeline = self
+        let preparation_result = self
             .prepare_local_asr(LocalAsrPreparation {
                 generation,
                 asr_mode,
@@ -563,18 +600,32 @@ impl ConversationManager {
                 capture: capture.clone(),
                 playback: playback.clone(),
                 state_callback: state_callback.clone(),
-                lifecycle_callback: lifecycle_callback.clone(),
                 provider_error_callback: provider_error_callback.clone(),
             })
-            .await?;
+            .await;
 
         // Re-enter the lifecycle boundary immediately after preparation. A Stop that raced
-        // local-ASR startup has already advanced generation; stale prepared state is disposed
-        // before Wake handoff audio, provider connection, or microphone ownership can be touched.
+        // local-ASR startup has already advanced generation; stale prepared state (including a
+        // stale preparation failure) is disposed before it can mutate lifecycle/UI state.
         let operation_guard = self.operation_lock.lock().await;
-        if self.generation.load(Ordering::SeqCst) != generation {
+        let mut local_pipeline = match preparation_result {
+            Ok(pipeline) => pipeline,
+            Err(error) if self.start_reservation_is_current(&reservation) => {
+                Self::set_lifecycle(
+                    &self.lifecycle,
+                    ConversationLifecycle::Failed,
+                    Some(&lifecycle_callback),
+                );
+                state_callback(CharacterState::Error);
+                return Err(error);
+            }
+            Err(_) => {
+                return Err("Conversation start was cancelled".to_string());
+            }
+        };
+        if !self.start_reservation_is_current(&reservation) {
             drop(operation_guard);
-            Self::stop_provisional_local_asr(&mut local_pipeline).await;
+            Self::dispose_cancelled_start(&mut local_pipeline, None).await;
             return Err("Conversation start was cancelled".to_string());
         }
 
@@ -619,12 +670,9 @@ impl ConversationManager {
             Self::bounded_provider_operation(provider.connect(config, server_ev_tx)).await;
 
         let operation_guard = self.operation_lock.lock().await;
-        if self.generation.load(Ordering::SeqCst) != generation {
+        if !self.start_reservation_is_current(&reservation) {
             drop(operation_guard);
-            if let Ok(mut session) = connect_result {
-                Self::close_provisional_session(&mut session).await;
-            }
-            Self::stop_provisional_local_asr(&mut local_pipeline).await;
+            Self::dispose_cancelled_start(&mut local_pipeline, connect_result.ok()).await;
             return Err("Conversation start was cancelled".to_string());
         }
 

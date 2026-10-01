@@ -82,7 +82,6 @@ pub(super) struct LocalAsrPreparation {
     pub(super) capture: Arc<SyncMutex<AudioCapture>>,
     pub(super) playback: Arc<AudioPlayback>,
     pub(super) state_callback: StateCallback,
-    pub(super) lifecycle_callback: LifecycleCallback,
     pub(super) provider_error_callback: ProviderErrorCallback,
 }
 
@@ -145,7 +144,6 @@ impl ConversationManager {
             capture,
             playback,
             state_callback,
-            lifecycle_callback,
             provider_error_callback,
         } = preparation;
 
@@ -182,12 +180,6 @@ impl ConversationManager {
                         retryable: false,
                     },
                 );
-                Self::set_lifecycle(
-                    &self.lifecycle,
-                    ConversationLifecycle::Failed,
-                    Some(&lifecycle_callback),
-                );
-                state_callback(CharacterState::Error);
                 return Err(message);
             }
         };
@@ -259,12 +251,6 @@ impl ConversationManager {
             Err(error) => {
                 self.local_asr_diagnostics
                     .remember_error(asr_mode, error.clone());
-                Self::set_lifecycle(
-                    &self.lifecycle,
-                    ConversationLifecycle::Failed,
-                    Some(&lifecycle_callback),
-                );
-                state_callback(CharacterState::Error);
                 Err(error.message)
             }
         }
