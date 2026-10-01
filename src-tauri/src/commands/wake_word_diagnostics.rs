@@ -186,12 +186,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            classify_native_listener_status(
-                &settings,
-                WakeWordRuntimePhase::Error,
-                false,
-                false,
-            ),
+            classify_native_listener_status(&settings, WakeWordRuntimePhase::Error, false, false),
             WakeWordListenerStatus::FailedClosed
         );
     }
