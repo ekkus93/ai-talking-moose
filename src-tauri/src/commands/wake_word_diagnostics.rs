@@ -178,4 +178,21 @@ mod tests {
             Some("The Wake Word runtime encountered an internal error.")
         );
     }
+
+    #[test]
+    fn classify_native_listener_status_reports_failed_closed_runtime() {
+        let settings = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            classify_native_listener_status(
+                &settings,
+                WakeWordRuntimePhase::Error,
+                false,
+                false,
+            ),
+            WakeWordListenerStatus::FailedClosed
+        );
+    }
 }
