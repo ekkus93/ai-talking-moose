@@ -19,6 +19,13 @@ pub const V1_TOOL_NAMES: &[&str] = &[
     "remember_fact",
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BuiltinExecutionKind {
+    /// The body may call OS APIs, SQLite, or other synchronous code and must never run on the
+    /// async/Tauri worker that enforces its timeout.
+    Blocking,
+}
+
 pub struct BuiltinTools {
     pub memory_manager: Arc<MemoryManager>,
     pub character_config: CharacterConfig,
@@ -37,6 +44,15 @@ fn observer_unavailable<T>(kind: ObserverKind, result: &ObserverResult<T>) -> se
 }
 
 impl BuiltinTools {
+    /// V1 intentionally classifies every registered built-in as blocking. Battery/frontmost-app
+    /// observation uses platform APIs, memory uses SQLite, and the lightweight time lookup shares
+    /// the same bounded isolation path so future synchronous changes cannot bypass the policy.
+    pub(crate) fn execution_kind(&self, name: &str) -> Option<BuiltinExecutionKind> {
+        V1_TOOL_NAMES
+            .contains(&name)
+            .then_some(BuiltinExecutionKind::Blocking)
+    }
+
     pub fn get_declarations(&self) -> Vec<ToolDeclaration> {
         vec![
             ToolDeclaration {
@@ -220,6 +236,19 @@ mod tests {
                 "prohibited generic capability appeared in the V1 tool surface: {forbidden}"
             );
         }
+    }
+
+    #[test]
+    fn every_v1_builtin_is_explicitly_classified_as_blocking() {
+        let tools = tools();
+        for name in V1_TOOL_NAMES {
+            assert_eq!(
+                tools.execution_kind(name),
+                Some(BuiltinExecutionKind::Blocking),
+                "{name} must stay behind bounded blocking isolation"
+            );
+        }
+        assert_eq!(tools.execution_kind("unregistered"), None);
     }
 
     #[test]

@@ -102,50 +102,6 @@ async fn concurrent_execution_limit_fails_closed_and_recovers() {
         .is_ok());
 }
 
-#[tokio::test]
-async fn blocking_timeout_returns_before_body_finishes_and_late_completion_is_ignored() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    let finished = Arc::new(AtomicBool::new(false));
-    let worker_finished = finished.clone();
-    let started = Instant::now();
-    let error = run_blocking_with_timeout(Duration::from_millis(10), move || {
-        std::thread::sleep(Duration::from_millis(100));
-        worker_finished.store(true, Ordering::SeqCst);
-        Ok(json!({ "late": true }))
-    })
-    .await
-    .unwrap_err();
-
-    assert_eq!(error.kind, ToolErrorKind::Timeout);
-    assert!(started.elapsed() < Duration::from_millis(80));
-    assert!(!finished.load(Ordering::SeqCst));
-
-    tokio::time::sleep(Duration::from_millis(120)).await;
-    assert!(finished.load(Ordering::SeqCst));
-}
-
-#[tokio::test]
-async fn blocking_worker_panic_becomes_sanitized_execution_failure() {
-    let error = run_blocking_with_timeout(Duration::from_secs(1), || {
-        panic!("private worker panic payload must not escape");
-        #[allow(unreachable_code)]
-        Ok(json!({}))
-    })
-    .await
-    .unwrap_err();
-
-    assert_eq!(error.kind, ToolErrorKind::ExecutionFailed);
-}
-
-#[tokio::test]
-async fn successful_blocking_worker_returns_normally() {
-    let value = run_blocking_with_timeout(Duration::from_secs(1), || Ok(json!({ "ok": true })))
-        .await
-        .unwrap();
-    assert_eq!(value["ok"], true);
-}
-
 #[test]
 fn output_size_guard_rejects_oversized_results() {
     let oversized = json!({ "value": "x".repeat(256) });

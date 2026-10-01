@@ -1,4 +1,5 @@
-use crate::tools::builtin::BuiltinTools;
+use crate::tools::builtin::{BuiltinExecutionKind, BuiltinTools};
+use crate::tools::execution::{run_blocking_with_timeout, ToolExecutionOutcome};
 use crate::tools::policy::{
     ToolAuditRecord, ToolConfirmationPolicy, ToolDeclaration, ToolError, ToolErrorKind,
     ToolPermissionLevel, ToolPermissionOutcome, ToolResultCategory,
@@ -133,12 +134,17 @@ impl ToolRouter {
         let builtin = self.builtin.clone();
         let tool_name = declaration.name.clone();
         let arguments = arguments.clone();
-        let execution = run_blocking_with_timeout(Duration::from_millis(timeout_ms), move || {
-            builtin.execute_blocking(&tool_name, &arguments)
-        })
-        .await;
+        let execution = match builtin.execution_kind(&tool_name) {
+            Some(BuiltinExecutionKind::Blocking) => {
+                run_blocking_with_timeout(Duration::from_millis(timeout_ms), move || {
+                    builtin.execute_blocking(&tool_name, &arguments)
+                })
+                .await
+            }
+            None => ToolExecutionOutcome::ToolError,
+        };
 
-        let result = match execution {
+        let result = match execution.into_sanitized_result() {
             Ok(output) => {
                 let output_limit = declaration
                     .execution
@@ -272,18 +278,6 @@ fn enforce_output_size(output: Value, limit: usize) -> Result<Value, ToolError> 
         Err(ToolError::from_kind(ToolErrorKind::OutputTooLarge))
     } else {
         Ok(output)
-    }
-}
-
-async fn run_blocking_with_timeout<F>(timeout: Duration, operation: F) -> Result<Value, ToolError>
-where
-    F: FnOnce() -> Result<Value, String> + Send + 'static,
-{
-    let worker = tokio::task::spawn_blocking(operation);
-    match tokio::time::timeout(timeout, worker).await {
-        Ok(Ok(Ok(value))) => Ok(value),
-        Ok(Ok(Err(_))) | Ok(Err(_)) => Err(ToolError::from_kind(ToolErrorKind::ExecutionFailed)),
-        Err(_) => Err(ToolError::from_kind(ToolErrorKind::Timeout)),
     }
 }
 
