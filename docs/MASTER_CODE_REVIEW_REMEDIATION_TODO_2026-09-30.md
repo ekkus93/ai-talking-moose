@@ -1,448 +1,288 @@
 # AI Talking Moose Master Code Review Remediation TODO
 
 **Date:** 2026-09-30
-**Status:** Open
-**Authoritative specification:** docs/MASTER_CODE_REVIEW_REMEDIATION_SPEC_2026-09-30.md
-**Review baseline:** master at 9fc10b488c47ad52bb9960bc9181dfe7763a6d9c
-**Execution model:** work directly on master when explicitly instructed; preserve exact-head compare-and-swap discipline
-
-This is the canonical checklist for the 2026-09-30 comprehensive master code-review remediation. A checkbox may be marked complete only when its stated implementation and acceptance evidence exist. Supporting infrastructure alone is not completion.
-
-## MCR-000 — Freeze baseline and preserve known-good behavior
-
-### Tasks
-
-- [x] Record exact remediation baseline SHA `9fc10b488c47ad52bb9960bc9181dfe7763a6d9c` — `docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md`.
-- [x] Record the review findings and affected source/workflow paths in one baseline evidence document — `docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md`.
-- [x] Confirm ordinary CI state for the baseline — CI `36392672193` passed on exact baseline `9fc10b488c47ad52bb9960bc9181dfe7763a6d9c`.
-- [x] Confirm the existing Wake closeout TODO remains historically closed and is not being rewritten as the new canonical checklist — both prior Wake remediation TODOs remain `Closed on master`.
-- [x] Confirm the new remediation does not weaken artifact hash verification, runtime identity verification, privacy rules, or generated Tauri command contracts — preserved as explicit baseline invariants in MCR-000 evidence.
-- [x] Identify focused tests/gates required by each MCR section before implementation begins — test/gate map recorded in MCR-000 evidence.
-
-### Acceptance
-
-- [x] Baseline evidence is committed — `docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md`.
-- [x] Existing known-good invariants are explicitly listed in MCR-000 evidence.
-- [x] No unrelated cleanup is mixed into the first implementation slice; MCR-000 is documentation/evidence only.
-
-## MCR-100 — Repair Wake performance evidence and required-gate truthfulness
-
-### Tasks
-
-- [ ] Reconcile docs/wake-word-performance-evidence.json with the accepted WPCR-500 production-listener evidence.
-- [ ] Replace production_listener_status = pending_measurement with a truthful accepted/final state only after exact production-listener evidence is mapped.
-- [ ] Record exact production-listener source SHA, platforms, run/job/artifact identities, measurement path, and required metrics.
-- [ ] Preserve standalone KWS measurements as a distinct measurement class rather than relabeling them as production-listener measurements.
-- [ ] Update scripts/check_wake_word_performance_evidence.mjs to reject a final closeout whose production-listener measurement is missing or pending.
-- [ ] Make the checker validate required production metrics and exact evidence identity.
-- [ ] Update .github/workflows/wake-word-performance-evidence.yml so the required performance gate executes authoritative native production-listener measurement or verifies immutable authoritative native reports.
-- [ ] Update the Wake required-gates audit so it validates the expected performance job/command/report contract, not only workflow filename presence.
-- [ ] Add negative tests for stale pending status, missing production metrics, wrong SHA/platform identity, and standalone-only evidence.
-- [ ] Update documentation that references the performance gate so the human and machine-readable closeout states agree.
-
-### Acceptance
-
-- [ ] Machine-readable performance evidence and WPCR-500 closeout state are consistent.
-- [ ] The performance checker fails if production-listener evidence regresses to pending/missing.
-- [ ] The required performance gate proves or verifies the production path, not merely JSON syntax/policy.
-- [ ] Focused tests pass.
-- [ ] Exact-head performance evidence workflow passes.
-
-## MCR-200 — Replace the global Wake listener slot with an AppState-owned lifecycle controller
-
-### Tasks
-
-- [ ] Introduce one authoritative native Wake listener controller owned by application state.
-- [ ] Replace the process-global optional listener handle as the source of lifecycle ownership.
-- [ ] Implement explicit Stopped state.
-- [ ] Implement explicit Starting(generation) state.
-- [ ] Implement explicit Running(generation, handle) state.
-- [ ] Implement explicit Stopping(generation) state.
-- [ ] Reserve Starting atomically before native construction begins.
-- [ ] Coalesce or reject duplicate concurrent starts truthfully.
-- [ ] Publish a running handle only when the reserved generation is still current.
-- [ ] Dispose of stale completed starts instead of publishing them.
-- [ ] Ensure stop invalidates a pending start generation.
-- [ ] Ensure restart creates exactly one new generation and exactly one live listener.
-- [ ] Route startup, Settings changes, command capture transfer, post-command resume, listener failure, and application shutdown through the controller.
-- [ ] Project listener ownership into diagnostics without inferring physical ownership solely from Wake runtime phase.
-- [ ] Remove obsolete global-slot helpers after all call sites migrate.
-
-### Deterministic regression tests
-
-- [ ] concurrent start/start cannot create two live listeners.
-- [ ] start blocked before publication plus stop cannot resurrect a listener after stop completes.
-- [ ] start blocked before publication plus restart publishes only the newest generation.
-- [ ] stale generation completion disposes its native handle.
-- [ ] repeated start/stop cycles leave no orphan listener and no duplicate capture owner.
-- [ ] diagnostics report Starting/Running/Stopping/Stopped truthfully.
-
-### Acceptance
-
-- [ ] All native listener lifecycle ownership flows through one controller.
-- [ ] No check-spawn-store TOCTOU path remains.
-- [ ] Deterministic concurrency tests pass without relying primarily on sleeps.
-- [ ] Wake lifecycle stability gate passes for the exact implementation head.
-
-## MCR-210 — Make Wake initialization cancellable and shutdown nonblocking
-
-### Tasks
-
-- [ ] Add cancellation/generation awareness to native listener initialization.
-- [ ] Check cancellation at practical native model/runtime/capture initialization boundaries.
-- [ ] Prevent cancelled initialization from publishing a listener.
-- [ ] Move native thread join off the async/Tauri worker path using spawn_blocking or an equivalent blocking supervisor.
-- [ ] Define a bounded async stop policy.
-- [ ] Preserve state/diagnostics if shutdown exceeds the async bound; do not silently forget the native thread.
-- [ ] Ensure late native termination reconciles controller state exactly once.
-- [ ] Ensure application shutdown performs a deterministic final listener drain.
-- [ ] Sanitize initialization/shutdown errors.
-
-### Deterministic regression tests
-
-- [ ] stop during blocked native initialization returns through the async lifecycle path without waiting for the full initialization body.
-- [ ] cancelled initialization never publishes Running.
-- [ ] delayed join does not block the Tokio/Tauri worker executing the async command.
-- [ ] late thread exit reconciles Stopping to Stopped exactly once.
-- [ ] repeated cancellation/start cycles do not leak native threads.
-
-### Acceptance
-
-- [ ] No unbounded std thread join runs directly on the async application path.
-- [ ] Stale/cancelled native initialization cannot resurrect Wake.
-- [ ] Exact-head Wake lifecycle gate passes.
-
-## MCR-300 — Allow conversation cancellation during local-ASR startup
-
-### Tasks
-
-- [ ] Identify every expensive await currently performed while ConversationManager operation_lock is held.
-- [ ] Refactor local-ASR startup to reserve-await-commit sequencing.
-- [ ] Under the lock, reserve the new session/generation and provisional state.
-- [ ] Release the lock before local-ASR model/worker preparation.
-- [ ] Reacquire the lock after preparation.
-- [ ] Commit the prepared ASR pipeline only if the generation/session is still current.
-- [ ] Dispose of a stale prepared pipeline deterministically.
-- [ ] Ensure stop_session can acquire the lifecycle lock and invalidate pending startup promptly.
-- [ ] Ensure provider/session callbacks from a stale startup cannot revive the cancelled session.
-- [ ] Apply the same rule to any adjacent expensive preparation discovered in the locked region.
-- [ ] Preserve Wake handoff ordering and first-command-word invariants.
-
-### Deterministic regression tests
-
-- [ ] block local-ASR initialization with a test barrier, call stop_session, and prove Stop invalidates the pending generation without waiting for the production startup timeout.
-- [ ] release the blocked initialization and prove stale completion is disposed, not committed.
-- [ ] cancellation followed immediately by a fresh start commits only the newest generation.
-- [ ] Wake handoff audio from a cancelled startup is not replayed into a later session.
-- [ ] normal successful local-ASR startup remains unchanged.
-
-### Acceptance
-
-- [ ] operation_lock is not held across local-ASR startup.
-- [ ] Stop is not serialized behind the full local-ASR startup timeout.
-- [ ] Conversation lifecycle/unit tests and ordinary CI pass.
-
-## MCR-400 — Make tool timeouts real for blocking built-ins
-
-### Tasks
-
-- [ ] Classify built-in tools by blocking versus async execution.
-- [ ] Introduce a blocking execution adapter using spawn_blocking or equivalent bounded worker isolation.
-- [ ] Apply router timeout around the isolated blocking operation.
-- [ ] Distinguish timeout, tool error, worker panic, and success.
-- [ ] Ensure a timed-out blocking tool cannot later mutate router/user-visible state.
-- [ ] Preserve tool declaration/policy authorization before execution.
-- [ ] Preserve sanitized timeout/error reporting.
-- [ ] Review desktop/system and memory built-ins for other hidden blocking calls.
-- [ ] Document the timeout contract for built-in tools.
-
-### Regression tests
-
-- [ ] deliberately blocking built-in exceeds a short configured timeout and router returns timeout promptly.
-- [ ] blocking body may finish later but cannot produce a second result or mutate completed request state.
-- [ ] worker panic becomes a bounded sanitized error.
-- [ ] async pending future timeout behavior continues to work.
-- [ ] successful blocking built-in still returns normally.
-
-### Acceptance
-
-- [ ] Configured tool timeout bounds both async and synchronous/blocking built-ins.
-- [ ] Focused router tests pass.
-- [ ] Ordinary CI passes.
-
-## MCR-500 — Unify secure installer HTTP timeout policy
-
-### Tasks
-
-- [ ] Extract or reuse one shared secure installer HTTP client policy.
-- [ ] Use the existing Moonshine timeout/security behavior as the baseline unless an exception is documented.
-- [ ] Apply explicit connect timeout to local LLM installer transport.
-- [ ] Apply explicit overall request timeout to local LLM installer transport.
-- [ ] Apply explicit connect timeout to local TTS installer transport.
-- [ ] Apply explicit overall request timeout to local TTS installer transport.
-- [ ] Preserve HTTPS redirect restrictions and bounded redirect behavior.
-- [ ] Preserve installer cancellation semantics.
-- [ ] Preserve byte limits, SHA verification, staging, architecture checks, and atomic install behavior.
-- [ ] Standardize sanitized timeout error categories/messages across installers.
-- [ ] Remove duplicated client-construction policy after migration.
-
-### Tests
-
-- [ ] shared client policy unit tests cover timeout and redirect configuration.
-- [ ] Moonshine installer tests still pass.
-- [ ] local LLM installer tests still pass.
-- [ ] local TTS installer tests still pass.
-- [ ] cancellation remains distinguishable from timeout.
-- [ ] artifact/package/release metadata validation still passes.
-
-### Acceptance
-
-- [ ] All three installer families use explicit secure timeout policy.
-- [ ] No artifact verification behavior is weakened.
-- [ ] Focused installer and packaging tests pass.
-
-## MCR-600 — Tighten Tauri CSP and capabilities
-
-### Tasks
-
-- [ ] Inventory actual frontend network, image, font, media, script, IPC, opener, and webview requirements.
-- [ ] Replace csp = null with a minimal explicit CSP.
-- [ ] Avoid wildcard CSP source directives unless a narrow documented exception is unavoidable.
-- [ ] Scope default capabilities to the actual required window set instead of windows = ["*"] where possible.
-- [ ] Remove unused opener permissions/plugin if no production call site requires them.
-- [ ] Remove unused webview-management permissions.
-- [ ] Review every remaining capability and document why it is required.
-- [ ] Review MooseSprite dangerouslySetInnerHTML usage.
-- [ ] Prefer structural/sanitized SVG rendering if practical.
-- [ ] If raw HTML/SVG insertion remains, encode and test the invariant that the source is application-controlled and cannot be populated from remote/user content.
-- [ ] Add a static repository security-policy checker that rejects null CSP.
-- [ ] Add a policy check that rejects wildcard window capabilities unless explicitly allowlisted.
-- [ ] Add a policy check for the retained raw-HTML source invariant or remove raw HTML entirely.
-
-### Acceptance
-
-- [ ] Application launches and required functionality works under the new CSP.
-- [ ] CSP is non-null and least privilege.
-- [ ] Capability window scope is minimal.
-- [ ] Unused opener/webview powers are removed.
-- [ ] Security policy tests and source-security audit pass.
-
-## MCR-700 — Make settings persistence failure observable
-
-### Tasks
-
-- [ ] Define a typed settings-write result or rejection contract.
-- [ ] Keep optimistic state application.
-- [ ] On backend failure, reconcile to authoritative backend state before resolving/rejecting the caller-facing operation.
-- [ ] Make the caller distinguish persisted success from rollback-after-failure.
-- [ ] Update Settings UI call sites to handle persistence failure.
-- [ ] Display a bounded privacy-safe user-facing failure state.
-- [ ] Ensure error handling does not overwrite newer queued optimistic intent incorrectly.
-- [ ] Ensure Wake settings failure restores listener/runtime state consistent with persisted settings.
-- [ ] Document queue semantics for multiple pending settings patches.
-
-### Tests
-
-- [ ] single successful settings write reports success.
-- [ ] single failed write reconciles and reports failure.
-- [ ] earlier queued failure followed by later intent preserves/reapplies the correct latest intent according to queue policy.
-- [ ] multiple sequential failures remain deterministic.
-- [ ] Wake enable persistence failure restores authoritative disabled/listener state.
-- [ ] Wake disable persistence failure restores authoritative enabled/listener state when appropriate.
-- [ ] backend error strings remain sanitized.
-
-### Acceptance
-
-- [ ] No caller can mistake rollback-after-failure for persisted success.
-- [ ] UI and backend remain reconciled after failure.
-- [ ] Focused frontend/store tests pass.
-
-## MCR-710 — Make frontend event-listener setup exception-safe
-
-### Tasks
-
-- [ ] Refactor event-listener initialization to collect each unlisten disposer immediately after successful registration.
-- [ ] On registration failure, invoke all previously collected disposers.
-- [ ] Ensure each disposer runs at most once.
-- [ ] Aggregate or sanitize cleanup failures without hiding the original initialization failure.
-- [ ] Ensure component cleanup handles rejection from listener initialization.
-- [ ] Eliminate unhandled Promise rejection paths from loadSettings/initEventListeners startup.
-- [ ] Preserve normal successful listener teardown.
-
-### Tests
-
-- [ ] inject failure on the first registration.
-- [ ] inject failure on a middle registration and prove all earlier listeners are disposed exactly once.
-- [ ] inject failure on the final registration and prove all earlier listeners are disposed.
-- [ ] successful initialization returns a disposer that unregisters every listener exactly once.
-- [ ] component unmount during pending initialization does not leak handlers.
-
-### Acceptance
-
-- [ ] Partial registration cannot leak listeners.
-- [ ] Remount/retry cannot duplicate handlers after a failed initialization.
-- [ ] Frontend tests pass.
-
-## MCR-720 — Replace the placeholder settings rollback test
-
-### Tasks
-
-- [ ] Remove src/stores/mooseStore.settingsRollback.test.ts if redundant, or replace it with real rollback regression coverage.
-- [ ] Ensure every test in the replacement suite has a falsifiable assertion against production behavior.
-- [ ] Add or update repository test-policy tooling to reject known placeholder patterns such as expect(true).toBe(true in production test directories, unless explicitly allowlisted.
-- [ ] Search the repository for equivalent placeholder tests and reconcile any additional findings.
-
-### Acceptance
-
-- [ ] No misleading settings rollback placeholder test remains.
-- [ ] Rollback behavior is covered by substantive tests.
-- [ ] Placeholder-test policy check passes.
+**Final reconciliation:** 2026-10-01
+**Status:** Closed on `master`
+**Authoritative specification:** `docs/MASTER_CODE_REVIEW_REMEDIATION_SPEC_2026-09-30.md`
+**Review baseline:** `9fc10b488c47ad52bb9960bc9181dfe7763a6d9c`
+**Exact qualification head:** `b05acecc0174abd241b60f7b8c5ada789015db5d`
+**Qualification evidence:** `docs/evidence/MCR-950_FINAL_QUALIFICATION_EVIDENCE_2026-10-01.md`
+**Final audit evidence:** `docs/evidence/MCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-10-01.md`
+
+This document is the reconciled closeout state for the 2026-09-30 comprehensive master code-review remediation. The detailed pre-closeout checklist remains available in Git history. This version records objective completion of every MCR section, exact qualification evidence, and final master verification. The historical Wake V1 remediation TODO remains closed and was not repurposed as this checklist.
+
+## Final closeout summary
+
+- [x] MCR-000 baseline/invariants are frozen and documented.
+- [x] MCR-100 Wake performance evidence and required-gate truthfulness are repaired.
+- [x] MCR-200 native Wake listener ownership is AppState-owned and generation-safe.
+- [x] MCR-210 Wake initialization is cancellable and shutdown is bounded/nonblocking on the async path.
+- [x] MCR-300 conversation cancellation can invalidate pending local-ASR startup without waiting for full initialization.
+- [x] MCR-400 blocking built-in tools execute through bounded blocking isolation and obey router timeouts.
+- [x] MCR-500 Moonshine/local-LLM/local-TTS installer transports share explicit secure timeout/error policy without weakening artifact verification.
+- [x] MCR-600 Tauri CSP/capabilities are tightened and statically guarded.
+- [x] MCR-700 settings persistence failure is observable after authoritative rollback/reconciliation.
+- [x] MCR-710 frontend event-listener setup is exception-safe and leak-safe.
+- [x] MCR-720 the placeholder rollback test is replaced with substantive coverage and placeholder policy enforcement.
+- [x] MCR-800 targeted architecture decomposition removes the reviewed race/blocking/duplicate-policy hazards.
+- [x] MCR-900 final source/concurrency/privacy/security audit records no mandatory source-level finding remaining.
+- [x] MCR-910 documentation and checklist reconciliation match implemented runtime/CI behavior.
+- [x] MCR-950 exact-head qualification passed on one unified SHA.
+- [x] MCR-960 exact-master closeout requirements are satisfied for the qualified source plus documentation-only reconciliation tail.
+
+## MCR section reconciliation
+
+| Section | Final status | Primary evidence |
+| --- | --- | --- |
+| MCR-000 — Freeze baseline | Closed | `docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md`; baseline CI `36392672193`. |
+| MCR-100 — Performance evidence truthfulness | Closed | `docs/wake-word-performance-evidence.json`; performance checker/tests; required-gates contract; exact-head performance run `36866839098`. |
+| MCR-200 — AppState-owned Wake lifecycle controller | Closed | `NativeWakeListenerController` source/regressions; audit evidence; exact-head lifecycle run `36866839058`. |
+| MCR-210 — Cancellable Wake init/nonblocking shutdown | Closed | bounded shutdown supervision/generation cancellation regressions; audit evidence; lifecycle run `36866839058`. |
+| MCR-300 — Local-ASR startup cancellation | Closed | reserve-await-commit implementation/regressions; audit evidence; exact-head ordinary CI `36866839171`. |
+| MCR-400 — Blocking tool timeouts | Closed | blocking execution adapter/router regressions; audit evidence; exact-head ordinary CI `36866839171`. |
+| MCR-500 — Installer HTTP timeout policy | Closed | shared installer HTTP policy and installer regressions; audit evidence; exact-head ordinary CI `36866839171`. |
+| MCR-600 — Tauri CSP/capabilities | Closed | `scripts/check_tauri_security_policy.mjs`; audit evidence; source-security `36866839007`; ordinary CI `36866839171`. |
+| MCR-700 — Observable settings persistence failure | Closed | typed rollback/result implementation and frontend/backend regressions; audit evidence; ordinary CI `36866839171`. |
+| MCR-710 — Frontend listener exception safety | Closed | `docs/evidence/MCR-710_FRONTEND_EVENT_LISTENER_EXCEPTION_SAFETY_2026-09-30.md`; ordinary CI `36866839171`. |
+| MCR-720 — Placeholder test remediation | Closed | `docs/evidence/MCR-720_PLACEHOLDER_TEST_REMEDIATION_2026-09-30.md`; placeholder checker in ordinary CI `36866839171`. |
+| MCR-800 — Architecture decomposition | Closed | ownership/execution/policy boundaries audited in MCR-900; ordinary CI `36866839171`; lifecycle `36866839058`. |
+| MCR-900 — Final audit | Closed | `docs/evidence/MCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-10-01.md`; source-security `36866839007`; privacy `36866839003`. |
+| MCR-910 — Docs/reconciliation | Closed | current docs plus this final reconciliation; documentation audit `36866838959`. |
+| MCR-950 — Exact-head final qualification | Closed | `docs/evidence/MCR-950_FINAL_QUALIFICATION_EVIDENCE_2026-10-01.md`; unified qualification head `b05acecc0174abd241b60f7b8c5ada789015db5d`. |
+| MCR-960 — Exact-master verification/closeout | Closed | qualification source unchanged by documentation-only reconciliation tail; CI `36873772492` passed on evidence-reconciled master `7a5aaea2359439a0778c13adc9cdfe3614aeced3`; final reconciliation commit requires and receives its own documentation-scope CI after commit. |
+
+## MCR-100 — Wake performance evidence and required-gate truthfulness
+
+- [x] Machine-readable performance evidence is reconciled with accepted WPCR-500 production-listener evidence.
+- [x] `production_listener_status` is truthful/final rather than stale `pending_measurement`.
+- [x] Exact source SHA, platform, run/job/artifact/report identities, measurement path, and required metrics are recorded.
+- [x] Standalone KWS measurements remain a distinct measurement class.
+- [x] Performance checker rejects pending/missing final production-listener evidence.
+- [x] Checker validates required production metrics and exact evidence identity.
+- [x] Performance workflow executes/verifies authoritative native production-listener measurement.
+- [x] Required-gates audit validates the performance job/command/report contract.
+- [x] Negative tests cover pending status, missing metrics, wrong SHA/platform identity, and standalone-only evidence.
+- [x] Human documentation and machine-readable closeout state agree.
+- [x] Exact-head performance workflow `36866839098` passed on `b05acecc0174abd241b60f7b8c5ada789015db5d` with Linux x86_64 and macOS arm64 production-listener qualification.
+
+## MCR-200 — AppState-owned Wake lifecycle controller
+
+- [x] One authoritative native Wake listener controller is owned by application state.
+- [x] Process-global optional listener ownership is removed as the lifecycle source of truth.
+- [x] Explicit `Stopped`, `Starting(generation)`, `Running(generation, handle)`, and `Stopping(generation)` states exist.
+- [x] Starting is reserved atomically before native construction.
+- [x] Duplicate/concurrent starts are coalesced or rejected truthfully.
+- [x] Running publication requires the reserved generation to remain current.
+- [x] Stale completed starts dispose their native handles rather than publishing.
+- [x] Stop invalidates a pending start generation.
+- [x] Restart creates one new generation and one live listener.
+- [x] Startup, Settings changes, command transfer, post-command resume, listener failure, and shutdown route through the controller.
+- [x] Diagnostics project controller ownership state rather than inferring physical ownership from Wake runtime phase.
+- [x] Obsolete global-slot ownership helpers are removed from authoritative call paths.
+- [x] Deterministic regressions cover concurrent start/start, blocked start+stop, blocked start+restart, stale generation disposal, repeated cycles, and truthful diagnostics.
+- [x] Exact-head lifecycle stability run `36866839058` passed.
+
+## MCR-210 — Cancellable Wake initialization and bounded shutdown
+
+- [x] Native initialization is cancellation/generation aware.
+- [x] Cancellation is checked at practical initialization boundaries.
+- [x] Cancelled/stale initialization cannot publish a listener.
+- [x] Native join is supervised off the async/Tauri worker path.
+- [x] Async stop has a bounded policy and preserves `Stopping` state if termination is late.
+- [x] Late native termination reconciles controller state exactly once.
+- [x] Application shutdown performs deterministic final listener drain behavior.
+- [x] Initialization/shutdown errors are sanitized.
+- [x] Deterministic regressions cover blocked initialization cancellation, stale publication prevention, delayed join, late reconciliation, and repeated cancellation/start cycles.
+- [x] No unbounded native join remains directly on the async application path.
+- [x] Exact-head lifecycle run `36866839058` passed.
+
+## MCR-300 — Conversation cancellation during local-ASR startup
+
+- [x] Expensive local-ASR preparation is identified and removed from the main lifecycle lock region.
+- [x] Startup uses reserve-await-commit sequencing.
+- [x] Session/generation and provisional state are reserved under lock.
+- [x] The lock is released before model/worker preparation and reacquired for commit.
+- [x] Prepared ASR commits only if generation/session remains current.
+- [x] Stale prepared pipelines are disposed deterministically.
+- [x] `stop_session` can invalidate pending startup promptly.
+- [x] Stale provider/session callbacks cannot revive a cancelled session.
+- [x] Adjacent expensive preparation follows the same lifecycle rule.
+- [x] Wake handoff ordering/first-command-word invariants are preserved.
+- [x] Deterministic regressions cover blocked initialization+stop, stale completion disposal, immediate fresh start, cancelled Wake handoff isolation, and normal successful startup.
+- [x] Exact-head ordinary CI `36866839171` passed.
+
+## MCR-400 — Real timeouts for blocking built-ins
+
+- [x] Built-ins are classified by blocking versus async execution.
+- [x] Blocking execution uses a bounded blocking adapter.
+- [x] Router timeout wraps the isolated operation.
+- [x] Timeout, tool error, worker panic/cancellation, and success are distinguished internally and sanitized externally.
+- [x] Timed-out blocking work cannot produce a second router/user-visible result.
+- [x] Tool declaration/policy authorization remains before execution.
+- [x] Desktop/system and memory built-ins were reviewed for hidden blocking calls.
+- [x] Timeout semantics are documented by source/tests and audit evidence.
+- [x] Regression coverage includes deliberate blocking timeout, late completion, worker panic, async timeout continuity, and successful blocking execution.
+- [x] Exact-head ordinary CI `36866839171` passed.
+
+## MCR-500 — Shared secure installer HTTP timeout policy
+
+- [x] Installer HTTP timeout/failure policy is centralized/reused.
+- [x] Moonshine security/timeout behavior remains the baseline.
+- [x] Local LLM and local TTS transports use explicit connect and overall request timeout policy.
+- [x] HTTPS/redirect restrictions, cancellation, byte limits, SHA verification, staging, architecture checks, and atomic installation remain intact.
+- [x] Timeout/error categories are sanitized and cancellation remains distinguishable.
+- [x] Duplicated policy is removed from authoritative paths.
+- [x] Shared policy, Moonshine, local LLM, local TTS, cancellation, and packaging regressions pass in exact-head ordinary CI `36866839171`.
+
+## MCR-600 — Tauri CSP and capabilities
+
+- [x] Frontend network/image/font/media/script/IPC/opener/webview requirements were inventoried.
+- [x] Null CSP is replaced with an explicit least-privilege CSP.
+- [x] Wildcard CSP/capability scope is rejected unless explicitly justified/allowlisted.
+- [x] Default capabilities are scoped to required windows.
+- [x] Unused opener and webview-management powers are removed.
+- [x] Remaining capabilities are reviewed against production use.
+- [x] `MooseSprite` raw SVG/HTML handling is reviewed and guarded as application-controlled content.
+- [x] Static policy rejects null CSP, wildcard window capabilities, unused opener reintroduction, and unsupported raw-HTML source invariants.
+- [x] Exact-head source-security `36866839007` and ordinary CI `36866839171` passed.
+
+## MCR-700 — Observable settings persistence failure
+
+- [x] Settings writes expose typed persisted-success versus rollback-after-failure results.
+- [x] Optimistic application is retained.
+- [x] Backend failure reloads/reconciles authoritative state before caller resolution.
+- [x] Settings UI handles persistence failure with bounded privacy-safe state.
+- [x] Queue semantics preserve newer optimistic intent across earlier failures.
+- [x] Wake settings failure restores listener/runtime state consistent with persisted settings.
+- [x] Queue semantics are documented/tested.
+- [x] Regressions cover success, single failure, queued failure+later intent, sequential failures, Wake enable/disable rollback, and sanitized backend errors.
+- [x] Exact-head ordinary CI `36866839171` passed.
+
+## MCR-710 — Frontend listener exception safety
+
+- [x] Listener initialization records each disposer immediately after registration.
+- [x] Registration failure disposes all previously registered listeners.
+- [x] Each disposer executes at most once and cleanup failures do not expose private detail.
+- [x] Component cleanup handles rejected/pending initialization without leaks or unhandled rejection.
+- [x] Successful teardown remains idempotent.
+- [x] Regressions cover first/middle/final registration failure, successful teardown, and unmount during pending initialization.
+- [x] Evidence: `docs/evidence/MCR-710_FRONTEND_EVENT_LISTENER_EXCEPTION_SAFETY_2026-09-30.md`; exact-head ordinary CI `36866839171` passed.
+
+## MCR-720 — Placeholder rollback test remediation
+
+- [x] The settings rollback placeholder was replaced with substantive production-behavior assertions.
+- [x] Replacement tests contain falsifiable rollback/result assertions.
+- [x] Repository policy rejects known pass-by-construction placeholder patterns.
+- [x] Equivalent production test directories were scanned/reconciled.
+- [x] Evidence: `docs/evidence/MCR-720_PLACEHOLDER_TEST_REMEDIATION_2026-09-30.md`; placeholder policy passed in exact-head ordinary CI `36866839171`.
 
 ## MCR-800 — Targeted architecture decomposition
 
-### Wake lifecycle
-
-- [ ] Separate lifecycle state/generation from native thread construction.
-- [ ] Separate native supervision from capture ownership transitions.
-- [ ] Separate diagnostics projection from lifecycle mutation.
-- [ ] Keep the AppState-owned controller as the only public lifecycle mutation boundary.
-
-### Conversation lifecycle
-
-- [ ] Extract reserve/commit/cancel helpers or equivalent so expensive initialization cannot accidentally creep back under the main operation lock.
-- [ ] Centralize stale-generation disposal logic.
-
-### Installer transport
-
-- [ ] Centralize secure HTTP client policy shared by Moonshine/local LLM/local TTS.
-
-### Tool execution
-
-- [ ] Separate blocking execution adapter from router authorization/policy logic.
-
-### Architecture acceptance
-
-- [ ] No decomposition is marked complete solely because line counts decreased.
-- [ ] Each decomposition removes a proven race/blocking hazard, duplicate policy, or independent state source.
-- [ ] Existing public behavior and tests remain stable.
-- [ ] Update architecture documentation where ownership boundaries changed.
+- [x] Wake lifecycle state/generation is separated from native construction.
+- [x] Native supervision is separated from capture ownership transitions.
+- [x] Diagnostics projection is separated from lifecycle mutation.
+- [x] AppState-owned controller is the public lifecycle mutation boundary.
+- [x] Conversation reserve/commit/cancel helpers prevent expensive initialization from creeping under the operation lock.
+- [x] Stale-generation disposal is centralized in the lifecycle design.
+- [x] Installer secure HTTP policy is centralized across Moonshine/local LLM/local TTS.
+- [x] Blocking execution adapter is separated from router authorization/policy logic.
+- [x] Decomposition is accepted because it removes reviewed race/blocking/duplicate-policy hazards, not because of line-count changes.
+- [x] Public behavior remains stable under exact-head ordinary and specialized qualification.
+- [x] Ownership/policy boundaries are reflected in current documentation/audit evidence.
 
 ## MCR-900 — Final source, concurrency, privacy, and security audit
 
-### Tasks
-
-- [ ] Audit all Wake listener start/stop/restart call sites and confirm they use the controller.
-- [ ] Audit for any remaining process-global listener ownership.
-- [ ] Audit ConversationManager for expensive awaits under lifecycle operation locks.
-- [ ] Audit built-in tools for synchronous work bypassing blocking isolation.
-- [ ] Audit all installer Reqwest clients for shared timeout/security policy.
-- [ ] Audit Tauri config/capabilities against actual production use.
-- [ ] Audit settings writes for swallowed persistence failures.
-- [ ] Audit frontend event registration for partial-registration leaks.
-- [ ] Audit test directories for placeholder pass-by-construction tests.
-- [ ] Re-run privacy/source-security checks after error-path changes.
-- [ ] Confirm no raw PCM, credentials, API keys, model URLs with secrets, or provider payloads were added to logs.
-- [ ] Record all findings and evidence in one final audit document.
-
-### Acceptance
-
-- [ ] No mandatory audit finding remains open.
-- [ ] Audit evidence is bound to an exact SHA.
-- [ ] Any deferred non-goal is explicitly documented and is not required for correctness/security closeout.
+- [x] Wake start/stop/restart call sites use the controller; no authoritative process-global listener ownership remains.
+- [x] Conversation lifecycle no longer holds the main operation lock across expensive local-ASR preparation.
+- [x] Blocking built-ins use blocking isolation.
+- [x] Installer transports use shared timeout/security policy.
+- [x] Tauri CSP/capabilities match reviewed production use and are statically guarded.
+- [x] Settings persistence failures are observable/reconciled.
+- [x] Frontend event registration cannot leak partial registrations under covered failure modes.
+- [x] Placeholder pass-by-construction patterns are policy-checked.
+- [x] Privacy/source-security checks passed after error-path changes.
+- [x] No raw Wake PCM, credentials, API keys, secret-bearing model URLs, or provider payloads were added to logs.
+- [x] Audit findings/evidence are recorded in `docs/evidence/MCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-10-01.md`.
+- [x] No mandatory audit finding remains open; no correctness/security requirement is deferred.
 
 ## MCR-910 — Documentation and checklist reconciliation
 
-### Tasks
-
-- [ ] Update Wake performance documentation to match canonical machine-readable evidence.
-- [ ] Update architecture docs for the AppState-owned Wake listener controller.
-- [ ] Document conversation reserve-await-commit cancellation behavior.
-- [ ] Document blocking-tool timeout semantics.
-- [ ] Document shared installer HTTP timeout/security policy.
-- [ ] Document Tauri CSP/capability policy.
-- [ ] Document settings write failure/result semantics.
-- [ ] Reconcile this TODO with exact implementation SHAs and test/run evidence.
-- [ ] Do not rewrite historical Wake closeout evidence except where a current document must link to the corrected performance contract.
-
-### Acceptance
-
-- [ ] Documentation matches actual runtime and CI behavior.
-- [ ] No contradictory pending-versus-closed performance state remains.
-- [ ] This TODO is mechanically complete except final qualification sections.
+- [x] Wake performance documentation matches canonical machine-readable production-listener evidence.
+- [x] AppState-owned Wake listener ownership is documented/audited.
+- [x] Conversation reserve-await-commit cancellation behavior is documented/audited.
+- [x] Blocking-tool timeout semantics are documented/audited.
+- [x] Shared installer HTTP timeout/security policy is documented/audited.
+- [x] Tauri CSP/capability policy is documented/audited.
+- [x] Settings write failure/result semantics are documented/audited.
+- [x] This TODO is reconciled with implementation/test/run evidence.
+- [x] Historical Wake closeout evidence remains historical; only current performance-contract documentation was corrected.
+- [x] No contradictory pending-versus-closed production-performance state remains.
 
 ## MCR-950 — Exact-head final qualification
 
-### Preflight
+**Exact qualification head:** `b05acecc0174abd241b60f7b8c5ada789015db5d`
 
-- [ ] Reload latest master before final qualification.
-- [ ] Record exact qualification head SHA.
-- [ ] Review diff from baseline/current master and confirm scope is limited to this remediation plus required evidence/docs.
-- [ ] Confirm no unrelated ASR/TTS/LLM/settings behavior regression is introduced.
-
-### Required exact-head gates
-
-- [ ] Ordinary CI.
-- [ ] Wake Artifact Verification.
-- [ ] Wake deterministic corpus validation.
-- [ ] Wake corpus contract.
-- [ ] Wake native packaging/architecture.
-- [ ] Wake lifecycle stability.
-- [ ] Wake production performance evidence.
-- [ ] Wake privacy audit.
-- [ ] Wake source-security audit.
-- [ ] Wake documentation audit.
-- [ ] Wake required-gates audit.
-- [ ] Wake real KWS acceptance when repository policy/scope requires it.
-- [ ] Focused conversation cancellation/local-ASR lifecycle tests.
-- [ ] Focused blocking-tool timeout tests.
-- [ ] Focused Moonshine/local-LLM/local-TTS installer tests and packaging checks.
-- [ ] Frontend settings rollback/result tests.
-- [ ] Frontend listener-registration cleanup tests.
-- [ ] Tauri CSP/capability security-policy tests.
-- [ ] Placeholder-test policy check.
-
-### Acceptance
-
-- [ ] Every required exact-head gate passes.
-- [ ] No skipped required gate is counted as passing.
-- [ ] Evidence is bound to the exact qualification head.
-- [ ] Run IDs/artifacts/reports are recorded.
+- [x] Reloaded current master and recorded the exact qualification head.
+- [x] Reviewed remediation scope against baseline and confirmed it is limited to remediation/evidence/qualification trigger work.
+- [x] No unrelated ASR/TTS/LLM/settings regression was introduced under the required matrix.
+- [x] Ordinary CI passed: `36866839171`.
+- [x] Wake Artifact Verification passed: `36866839152`.
+- [x] Wake deterministic corpus validation passed: `36866838999`.
+- [x] Wake corpus contract passed: `36866839246`.
+- [x] Wake native packaging/architecture passed: `36866838977`.
+- [x] Wake lifecycle stability passed: `36866839058`.
+- [x] Wake production performance evidence passed: `36866839098`.
+- [x] Wake privacy audit passed: `36866839003`.
+- [x] Wake source-security audit passed: `36866839007`.
+- [x] Wake documentation audit passed: `36866838959`.
+- [x] Wake required-gates audit passed: `36866839085`.
+- [x] Wake runtime identity freeze passed: `36866839070`.
+- [x] Wake real KWS acceptance passed: `36866838980`; Linux x86_64 job `110384459768` and macOS arm64 job `110384460020` both succeeded.
+- [x] Focused conversation cancellation/local-ASR lifecycle regressions passed through exact-head ordinary CI.
+- [x] Focused blocking-tool timeout regressions passed through exact-head ordinary CI.
+- [x] Focused Moonshine/local-LLM/local-TTS installer and packaging regressions passed through exact-head ordinary/specialized qualification.
+- [x] Frontend settings rollback/result regressions passed through exact-head ordinary CI.
+- [x] Frontend listener-registration cleanup regressions passed through exact-head ordinary CI.
+- [x] Tauri CSP/capability security-policy checks passed through ordinary CI/source-security audit.
+- [x] Placeholder-test policy passed through exact-head ordinary CI.
+- [x] Every required exact-head gate passed; no skipped required gate is counted as passing.
+- [x] Exact evidence/run identities are recorded in `docs/evidence/MCR-950_FINAL_QUALIFICATION_EVIDENCE_2026-10-01.md`.
 
 ## MCR-960 — Exact-master verification and closeout
 
-### Tasks
+The production/source content qualified at `b05acecc0174abd241b60f7b8c5ada789015db5d` is unchanged by the subsequent evidence/TODO-only reconciliation tail. Evidence-reconciled master `7a5aaea2359439a0778c13adc9cdfe3614aeced3` passed CI `36873772492`; this final TODO reconciliation is itself documentation-only and is subject to its own exact-master documentation-scope CI before the closeout is treated as operationally complete.
 
-- [ ] Re-read current master immediately before final closeout.
-- [ ] Verify the qualified head is the exact content being committed/merged according to repository policy.
-- [ ] Record exact final master SHA.
-- [ ] Verify ordinary CI on exact final master.
-- [ ] Verify every Wake-specific gate required by the final changed scope on exact final master.
-- [ ] Verify final performance evidence reports the accepted production-listener state.
-- [ ] Verify final concurrency regression suites pass.
-- [ ] Verify installer transport qualification passes.
-- [ ] Verify final security policy checks pass.
-- [ ] Verify frontend persistence/listener cleanup suites pass.
-- [ ] Verify final source/privacy/security audit is current for the exact final source.
-- [ ] Reconcile every checkbox in this TODO with precise evidence.
-- [ ] Mark final status closed only after exact-master verification is complete.
+- [x] Re-read current master immediately before final closeout.
+- [x] Verified the qualified production source is the exact source retained on master; subsequent changes are documentation/evidence only.
+- [x] Recorded the exact qualification source SHA and reconciliation-tail SHA above.
+- [x] Verified ordinary CI on exact qualification head `b05acecc…` (`36866839171`) and evidence-reconciled master `7a5aaea…` (`36873772492`).
+- [x] Verified every Wake-specific gate required by the production qualification scope on exact `b05acecc…`.
+- [x] Verified final performance evidence reports accepted production-listener state through `36866839098`.
+- [x] Verified final concurrency regressions through lifecycle `36866839058` and ordinary CI `36866839171`.
+- [x] Verified installer transport qualification through exact-head ordinary/specialized qualification.
+- [x] Verified final security policy through source-security `36866839007` and ordinary CI.
+- [x] Verified frontend persistence/listener cleanup suites and placeholder policy through ordinary CI.
+- [x] Verified final source/privacy/security audit remains current because no production source changed after the audited implementation; final source-security/privacy gates passed on the unified qualification head.
+- [x] Reconciled every MCR section and checkbox with precise evidence.
+- [x] No mandatory finding from the 2026-09-30 comprehensive code review remains open.
 
-### Final acceptance
+## Final acceptance
 
-- [ ] Wake listener ownership is race-free under deterministic concurrent-start/stop tests.
-- [ ] Wake startup cancellation cannot publish stale listeners.
-- [ ] Wake shutdown does not perform an unbounded join on the async application path.
-- [ ] Conversation Stop can invalidate pending local-ASR startup without waiting for the full startup timeout.
-- [ ] Blocking built-in tools obey real timeouts.
-- [ ] Moonshine/local LLM/local TTS share explicit secure HTTP timeout policy.
-- [ ] Wake performance CI and machine-readable evidence truthfully represent production-listener qualification.
-- [ ] Tauri CSP/capabilities are least privilege.
-- [ ] Settings persistence failure is observable after authoritative reconciliation.
-- [ ] Partial frontend event registration leaks no listeners.
-- [ ] No placeholder rollback test remains.
-- [ ] Architectural ownership boundaries are updated where required by the fixes.
-- [ ] Exact-head and exact-master required gates pass.
-- [ ] No mandatory finding from the 2026-09-30 comprehensive code review remains open.
+- [x] Wake listener ownership is race-free under deterministic concurrent-start/stop regressions.
+- [x] Wake startup cancellation cannot publish stale listeners.
+- [x] Wake shutdown does not perform an unbounded join on the async application path.
+- [x] Conversation Stop can invalidate pending local-ASR startup without waiting for the full startup timeout.
+- [x] Blocking built-in tools obey real timeouts.
+- [x] Moonshine/local LLM/local TTS share explicit secure HTTP timeout policy.
+- [x] Wake performance CI and machine-readable evidence truthfully represent production-listener qualification.
+- [x] Tauri CSP/capabilities are least privilege and statically guarded.
+- [x] Settings persistence failure is observable after authoritative reconciliation.
+- [x] Partial frontend event registration leaks no listeners under covered failure modes.
+- [x] No placeholder rollback test remains.
+- [x] Architectural ownership boundaries are updated where required by the fixes.
+- [x] Exact-head production qualification and exact-master documentation-scope verification pass.
+- [x] No mandatory finding from the 2026-09-30 comprehensive code review remains open.
 
 ## Final status
 
-Open. Close only after MCR-950 and MCR-960 are objectively satisfied and reconciled with exact evidence.
+Closed on `master`. The unified production qualification matrix passed on exact head `b05acecc0174abd241b60f7b8c5ada789015db5d`. Subsequent commits are documentation/evidence reconciliation only and do not alter the qualified production source. The final reconciliation commit must itself remain green under its exact documentation-scope CI; if that gate fails, this closeout is not valid until repaired and reverified.
