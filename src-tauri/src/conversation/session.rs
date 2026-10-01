@@ -27,6 +27,8 @@ mod event_loop;
 mod local_asr;
 
 use local_asr::{LocalAsrDiagnosticsStore, LocalAsrPreparation};
+#[cfg(test)]
+use local_asr::LocalAsrPreparationTestGate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -153,6 +155,8 @@ pub struct ConversationManager {
     local_asr: Arc<LocalAsrLifecycle>,
     local_asr_diagnostics: Arc<LocalAsrDiagnosticsStore>,
     operation_lock: Arc<AsyncMutex<()>>,
+    #[cfg(test)]
+    local_asr_preparation_test_gate: Arc<SyncMutex<Option<Arc<LocalAsrPreparationTestGate>>>>,
 }
 
 impl ConversationManager {
@@ -171,6 +175,8 @@ impl ConversationManager {
             local_asr: Arc::new(LocalAsrLifecycle::default()),
             local_asr_diagnostics: Arc::new(LocalAsrDiagnosticsStore::default()),
             operation_lock: Arc::new(AsyncMutex::new(())),
+            #[cfg(test)]
+            local_asr_preparation_test_gate: Arc::new(SyncMutex::new(None)),
         }
     }
 
@@ -196,6 +202,11 @@ impl ConversationManager {
 
     pub fn local_asr_lifecycle(&self) -> Arc<LocalAsrLifecycle> {
         self.local_asr.clone()
+    }
+
+    #[cfg(test)]
+    fn set_local_asr_preparation_test_gate(&self, gate: Option<Arc<LocalAsrPreparationTestGate>>) {
+        *self.local_asr_preparation_test_gate.lock() = gate;
     }
 
     pub async fn live_outbound_diagnostics(&self) -> Option<LiveOutboundDiagnostics> {

@@ -67,6 +67,13 @@ impl LocalAsrDiagnosticsStore {
     }
 }
 
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct LocalAsrPreparationTestGate {
+    pub(super) entered: tokio::sync::Notify,
+    pub(super) release: tokio::sync::Notify,
+}
+
 pub(super) struct LocalAsrPreparation {
     pub(super) generation: u64,
     pub(super) asr_mode: AsrMode,
@@ -143,6 +150,15 @@ impl ConversationManager {
         } = preparation;
 
         if !is_local_mode(asr_mode) {
+            return Ok(None);
+        }
+
+        #[cfg(test)]
+        if let Some(gate) = self.local_asr_preparation_test_gate.lock().clone() {
+            gate.entered.notify_one();
+            gate.release.notified().await;
+            // The test seam deliberately returns a provisional no-op. The caller must
+            // reacquire operation_lock and reject a stale generation before it can commit.
             return Ok(None);
         }
 

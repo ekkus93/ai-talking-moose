@@ -931,6 +931,54 @@ async fn stalled_provider_interrupt_is_bounded() {
     assert!(error.contains("operation timeout"));
 }
 #[tokio::test]
+async fn blocked_local_asr_preparation_does_not_hold_operation_lock_against_stop() {
+    let manager = ConversationManager::new();
+    let gate = Arc::new(LocalAsrPreparationTestGate::default());
+    manager.set_local_asr_preparation_test_gate(Some(gate.clone()));
+
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let mut request = test_request(false);
+    request.asr_mode = AsrMode::MoonshineTinyStreaming;
+    request.provider = Arc::new(ConnectCountingProvider {
+        connect_count: connect_count.clone(),
+    });
+    let capture = request.capture.clone();
+    let playback = request.playback.clone();
+
+    let manager_for_start = manager.clone();
+    let start_task = tokio::spawn(async move { manager_for_start.start_session(request).await });
+
+    tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        gate.entered.notified(),
+    )
+    .await
+    .expect("local ASR preparation barrier was not entered");
+
+    tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        manager.stop_session(capture.clone(), playback),
+    )
+    .await
+    .expect("Stop must invalidate pending local ASR preparation without waiting for startup");
+
+    assert!(!capture.lock().is_active());
+    assert!(!manager.is_active());
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Idle);
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+
+    gate.release.notify_one();
+    let start_error = tokio::time::timeout(std::time::Duration::from_millis(500), start_task)
+        .await
+        .expect("released local ASR preparation must finish")
+        .unwrap()
+        .expect_err("stale local ASR preparation must not activate");
+    assert_eq!(start_error, "Conversation start was cancelled");
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(!manager.local_asr_lifecycle().is_active().await);
+}
+
+#[tokio::test]
 async fn stalled_provider_connect_does_not_hold_operation_lock_against_stop() {
     let manager = ConversationManager::new();
     let entered = Arc::new(AtomicBool::new(false));
