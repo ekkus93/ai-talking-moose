@@ -154,12 +154,15 @@ impl ConversationManager {
         }
 
         #[cfg(test)]
-        if let Some(gate) = self.local_asr_preparation_test_gate.lock().clone() {
-            gate.entered.notify_one();
-            gate.release.notified().await;
-            // The test seam deliberately returns a provisional no-op. The caller must
-            // reacquire operation_lock and reject a stale generation before it can commit.
-            return Ok(None);
+        {
+            let gate = { self.local_asr_preparation_test_gate.lock().clone() };
+            if let Some(gate) = gate {
+                gate.entered.notify_one();
+                gate.release.notified().await;
+                // The test seam deliberately returns a provisional no-op. The caller must
+                // reacquire operation_lock and reject a stale generation before it can commit.
+                return Ok(None);
+            }
         }
 
         self.local_asr_diagnostics.clear(asr_mode);
