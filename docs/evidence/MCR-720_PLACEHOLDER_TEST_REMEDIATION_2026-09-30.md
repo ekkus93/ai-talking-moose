@@ -1,7 +1,9 @@
 # MCR-720 Placeholder settings rollback test remediation evidence
 
-**Evidence source SHA:** `3da82eace72e45613918bba1b029e4f408e2e28e`
+**Implementation source SHA:** `5be626f0c4581301d73a8c8e148638c29d34e603`
+**Latest qualified master SHA:** `4296c35823c8a094632aa7bba7f12dfcfa7b5844`
 **Recorded:** 2026-09-30
+**Revalidated:** 2026-10-01
 
 ## Substantive rollback regression
 
@@ -21,8 +23,10 @@ Additional rollback/result and queue-rebase coverage exists in `src/test/mooseSt
 
 ## Qualification
 
-Ordinary CI passed on implementation source SHA `5be626f0c4581301d73a8c8e148638c29d34e603` as run `36803769184`. The documentation-only MCR-710 evidence commit advanced master to `3da82eace72e45613918bba1b029e4f408e2e28e`; exact-head CI run `36804762038` was in progress when this evidence was prepared. Final MCR-950/MCR-960 qualification remains bound to the eventual final exact head/master.
+Initial ordinary CI passed on implementation source SHA `5be626f0c4581301d73a8c8e148638c29d34e603` as run `36803769184`. The documentation-only MCR-710 evidence commit advanced master to `3da82eace72e45613918bba1b029e4f408e2e28e`; the latest direct-to-master head `4296c35823c8a094632aa7bba7f12dfcfa7b5844` revalidated the accumulated remediation through ordinary CI run `36826031723` and Wake source-security audit run `36826031739`; both passed.
+
+The current `master` still contains the substantive rollback test replacement and the placeholder-test policy checker. Later commits between the implementation source SHA and latest qualified master did not reintroduce the placeholder test.
 
 ## MCR-720 conclusion
 
-The MCR-720 implementation and substantive rollback regression requirements are satisfied at the evidence source SHA. Final closeout still requires the final exact-head placeholder policy gate and exact-master verification.
+The MCR-720 implementation and substantive rollback regression requirements are satisfied. Final MCR-950/MCR-960 qualification remains bound to the eventual final exact head/master.
