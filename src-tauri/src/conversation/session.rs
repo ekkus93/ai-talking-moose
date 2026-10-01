@@ -26,9 +26,9 @@ const PROVIDER_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);
 mod event_loop;
 mod local_asr;
 
-use local_asr::{LocalAsrDiagnosticsStore, LocalAsrPreparation};
 #[cfg(test)]
 use local_asr::LocalAsrPreparationTestGate;
+use local_asr::{LocalAsrDiagnosticsStore, LocalAsrPreparation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
