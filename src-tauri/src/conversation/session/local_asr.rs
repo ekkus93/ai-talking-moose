@@ -72,6 +72,17 @@ impl LocalAsrDiagnosticsStore {
 pub(super) struct LocalAsrPreparationTestGate {
     pub(super) entered: tokio::sync::Notify,
     pub(super) release: tokio::sync::Notify,
+    fail_after_release: AtomicBool,
+}
+
+#[cfg(test)]
+impl LocalAsrPreparationTestGate {
+    pub(super) fn failing() -> Self {
+        Self {
+            fail_after_release: AtomicBool::new(true),
+            ..Self::default()
+        }
+    }
 }
 
 pub(super) struct LocalAsrPreparation {
@@ -157,6 +168,9 @@ impl ConversationManager {
             if let Some(gate) = gate {
                 gate.entered.notify_one();
                 gate.release.notified().await;
+                if gate.fail_after_release.load(Ordering::SeqCst) {
+                    return Err("injected local ASR preparation failure".to_string());
+                }
                 // The test seam deliberately returns a provisional no-op. The caller must
                 // reacquire operation_lock and reject a stale generation before it can commit.
                 return Ok(None);

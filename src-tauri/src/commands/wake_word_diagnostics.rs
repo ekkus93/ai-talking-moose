@@ -14,23 +14,31 @@ fn wake_word_diagnostics_snapshot(
     WakeWordDiagnostics::from_runtime_and_listener(&runtime.snapshot(now), listener_status)
 }
 
-fn classify_state_listener_status(state: &AppState) -> WakeWordListenerStatus {
-    match wake_word_state::native_wake_listener_lifecycle_phase(state) {
+fn project_listener_lifecycle_phase(
+    lifecycle_phase: NativeWakeListenerLifecyclePhase,
+    settings: &crate::app::state::AppSettings,
+    runtime_phase: crate::asr::wake_word_runtime::WakeWordRuntimePhase,
+    conversation_active: bool,
+) -> WakeWordListenerStatus {
+    match lifecycle_phase {
         NativeWakeListenerLifecyclePhase::Starting => WakeWordListenerStatus::Starting,
         NativeWakeListenerLifecyclePhase::Stopping => WakeWordListenerStatus::ShuttingDown,
-        NativeWakeListenerLifecyclePhase::Running => classify_native_listener_status(
-            &state.settings.read().clone(),
-            state.wake_word_runtime.phase(),
-            true,
-            state.conversation_mgr.is_active(),
-        ),
-        NativeWakeListenerLifecyclePhase::Stopped => classify_native_listener_status(
-            &state.settings.read().clone(),
-            state.wake_word_runtime.phase(),
-            false,
-            state.conversation_mgr.is_active(),
-        ),
+        NativeWakeListenerLifecyclePhase::Running => {
+            classify_native_listener_status(settings, runtime_phase, true, conversation_active)
+        }
+        NativeWakeListenerLifecyclePhase::Stopped => {
+            classify_native_listener_status(settings, runtime_phase, false, conversation_active)
+        }
     }
+}
+
+fn classify_state_listener_status(state: &AppState) -> WakeWordListenerStatus {
+    project_listener_lifecycle_phase(
+        wake_word_state::native_wake_listener_lifecycle_phase(state),
+        &state.settings.read().clone(),
+        state.wake_word_runtime.phase(),
+        state.conversation_mgr.is_active(),
+    )
 }
 
 #[tauri::command]
@@ -51,6 +59,51 @@ mod tests {
     use super::*;
     use crate::app::state::AppSettings;
     use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
+
+    #[test]
+    fn controller_lifecycle_phases_project_truthfully_into_diagnostics_status() {
+        let enabled = AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            project_listener_lifecycle_phase(
+                NativeWakeListenerLifecyclePhase::Starting,
+                &enabled,
+                WakeWordRuntimePhase::Loading,
+                false,
+            ),
+            WakeWordListenerStatus::Starting
+        );
+        assert_eq!(
+            project_listener_lifecycle_phase(
+                NativeWakeListenerLifecyclePhase::Running,
+                &enabled,
+                WakeWordRuntimePhase::Listening,
+                false,
+            ),
+            WakeWordListenerStatus::Active
+        );
+        assert_eq!(
+            project_listener_lifecycle_phase(
+                NativeWakeListenerLifecyclePhase::Stopping,
+                &enabled,
+                WakeWordRuntimePhase::Listening,
+                false,
+            ),
+            WakeWordListenerStatus::ShuttingDown
+        );
+        assert_eq!(
+            project_listener_lifecycle_phase(
+                NativeWakeListenerLifecyclePhase::Stopped,
+                &AppSettings::default(),
+                WakeWordRuntimePhase::Disabled,
+                false,
+            ),
+            WakeWordListenerStatus::Stopped
+        );
+    }
 
     #[test]
     fn snapshot_reports_disabled_runtime_without_audio_content() {

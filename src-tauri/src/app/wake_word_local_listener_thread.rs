@@ -399,6 +399,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn repeated_listener_start_stop_cycles_leave_no_capture_owner() {
+        let capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+
+        for cycle in 0..8 {
+            let runtime = enabled_runtime();
+            let runtime_for_consumer = runtime.clone();
+            let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+            let handle = spawn_wake_local_listener_thread::<NonSendTestEngine, _>(
+                capture.clone(),
+                runtime,
+                None,
+                move |_| {
+                    Ok(WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(
+                        runtime_for_consumer.manager().clone(),
+                        NonSendTestEngine::default(),
+                    )))
+                },
+                event_tx,
+            )
+            .unwrap();
+
+            let started = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(started, WakeLocalListenerEvent::Started, "cycle {cycle}");
+            assert!(capture.lock().is_active(), "cycle {cycle}");
+
+            handle.shutdown().unwrap();
+            let stopped = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(stopped, WakeLocalListenerEvent::Stopped, "cycle {cycle}");
+            assert!(!capture.lock().is_active(), "cycle {cycle}");
+        }
+    }
+
+    #[tokio::test]
     async fn listener_thread_keeps_non_send_engine_local_and_terminates_capture() {
         let capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
         let runtime = enabled_runtime();
