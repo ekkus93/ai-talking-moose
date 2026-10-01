@@ -136,7 +136,10 @@ fn persistence_failure_after_wake_enable_restores_authoritative_disabled_listene
         },
     )
     .unwrap();
-    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Listening);
+    assert_eq!(
+        state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Listening
+    );
 
     apply_configured_native_wake_listener_settings_change_with_control(
         &state,
@@ -150,14 +153,12 @@ fn persistence_failure_after_wake_enable_restores_authoritative_disabled_listene
     )
     .unwrap();
 
-    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
     assert_eq!(
-        classify_native_listener_status(
-            &previous,
-            state.wake_word_runtime.phase(),
-            false,
-            false
-        ),
+        state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Disabled
+    );
+    assert_eq!(
+        classify_native_listener_status(&previous, state.wake_word_runtime.phase(), false, false),
         WakeWordListenerStatus::Stopped
     );
 }
@@ -183,7 +184,10 @@ fn persistence_failure_after_wake_disable_restores_authoritative_enabled_listene
         },
     )
     .unwrap();
-    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+    assert_eq!(
+        state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Disabled
+    );
 
     apply_configured_native_wake_listener_settings_change_with_control(
         &state,
@@ -197,14 +201,12 @@ fn persistence_failure_after_wake_disable_restores_authoritative_enabled_listene
     )
     .unwrap();
 
-    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Listening);
     assert_eq!(
-        classify_native_listener_status(
-            &previous,
-            state.wake_word_runtime.phase(),
-            true,
-            false
-        ),
+        state.wake_word_runtime.phase(),
+        WakeWordRuntimePhase::Listening
+    );
+    assert_eq!(
+        classify_native_listener_status(&previous, state.wake_word_runtime.phase(), true, false),
         WakeWordListenerStatus::Active
     );
 }
