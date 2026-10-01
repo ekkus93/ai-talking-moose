@@ -3,6 +3,26 @@ use std::time::Duration;
 pub(crate) const INSTALLER_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) const INSTALLER_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub(crate) const INSTALLER_HTTP_MAX_REDIRECTS: usize = 3;
+pub(crate) const INSTALLER_HTTP_TIMEOUT_MESSAGE: &str =
+    "The model download timed out. Please try again.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InstallerHttpFailure {
+    Timeout,
+    Network,
+}
+
+pub(crate) fn classify_installer_http_failure(error: &reqwest::Error) -> InstallerHttpFailure {
+    classify_installer_http_failure_flags(error.is_timeout())
+}
+
+fn classify_installer_http_failure_flags(is_timeout: bool) -> InstallerHttpFailure {
+    if is_timeout {
+        InstallerHttpFailure::Timeout
+    } else {
+        InstallerHttpFailure::Network
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InstallerRedirectDecision {
@@ -52,6 +72,22 @@ mod tests {
         assert_eq!(INSTALLER_HTTP_REQUEST_TIMEOUT, Duration::from_secs(10 * 60));
         assert_eq!(INSTALLER_HTTP_MAX_REDIRECTS, 3);
         build_secure_installer_http_client().expect("shared installer client must build");
+    }
+
+    #[test]
+    fn shared_installer_error_policy_distinguishes_timeout_from_network() {
+        assert_eq!(
+            classify_installer_http_failure_flags(true),
+            InstallerHttpFailure::Timeout
+        );
+        assert_eq!(
+            classify_installer_http_failure_flags(false),
+            InstallerHttpFailure::Network
+        );
+        assert_eq!(
+            INSTALLER_HTTP_TIMEOUT_MESSAGE,
+            "The model download timed out. Please try again."
+        );
     }
 
     #[test]

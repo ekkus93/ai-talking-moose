@@ -1,4 +1,7 @@
-use super::LocalTtsInstallError;
+use super::{LocalTtsInstallError, LocalTtsInstallErrorKind};
+use crate::installer_http::{
+    classify_installer_http_failure, InstallerHttpFailure, INSTALLER_HTTP_TIMEOUT_MESSAGE,
+};
 use crate::ai::local_tts::manifest::LocalTtsArtifact;
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -24,6 +27,17 @@ pub(super) struct ReqwestLocalTtsDownloadTransport {
     client: reqwest::Client,
 }
 
+fn reqwest_install_error(error: reqwest::Error) -> LocalTtsInstallError {
+    match classify_installer_http_failure(&error) {
+        InstallerHttpFailure::Timeout => LocalTtsInstallError {
+            kind: LocalTtsInstallErrorKind::Network,
+            message: INSTALLER_HTTP_TIMEOUT_MESSAGE.to_string(),
+            retryable: true,
+        },
+        InstallerHttpFailure::Network => LocalTtsInstallError::network(),
+    }
+}
+
 impl ReqwestLocalTtsDownloadTransport {
     pub(super) fn new() -> Result<Self, LocalTtsInstallError> {
         let client = crate::installer_http::build_secure_installer_http_client()
@@ -44,7 +58,7 @@ impl LocalTtsDownloadTransport for ReqwestLocalTtsDownloadTransport {
         let response = tokio::select! {
             _ = cancellation.cancelled() => return Err(LocalTtsInstallError::cancelled()),
             response = self.client.get(artifact.source_url).send() => {
-                response.map_err(|_| LocalTtsInstallError::network())?
+                response.map_err(reqwest_install_error)?
             }
         };
         if !response.status().is_success() {
@@ -72,7 +86,7 @@ impl LocalTtsDownloadTransport for ReqwestLocalTtsDownloadTransport {
             let Some(chunk) = next else {
                 break;
             };
-            let chunk = chunk.map_err(|_| LocalTtsInstallError::network())?;
+            let chunk = chunk.map_err(reqwest_install_error)?;
             downloaded = downloaded
                 .checked_add(chunk.len() as u64)
                 .ok_or_else(LocalTtsInstallError::size_mismatch)?;

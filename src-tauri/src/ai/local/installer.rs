@@ -12,6 +12,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
+use crate::installer_http::{
+    classify_installer_http_failure, InstallerHttpFailure, INSTALLER_HTTP_TIMEOUT_MESSAGE,
+};
 use uuid::Uuid;
 
 const STAGING_DIR: &str = ".staging";
@@ -228,6 +231,17 @@ struct ReqwestLocalModelDownloadTransport {
     client: reqwest::Client,
 }
 
+fn reqwest_install_error(error: reqwest::Error) -> LocalModelInstallError {
+    match classify_installer_http_failure(&error) {
+        InstallerHttpFailure::Timeout => LocalModelInstallError {
+            kind: LocalModelInstallErrorKind::Network,
+            message: INSTALLER_HTTP_TIMEOUT_MESSAGE.to_string(),
+            retryable: true,
+        },
+        InstallerHttpFailure::Network => LocalModelInstallError::network(),
+    }
+}
+
 impl ReqwestLocalModelDownloadTransport {
     fn new() -> Result<Self, LocalModelInstallError> {
         let client = crate::installer_http::build_secure_installer_http_client()
@@ -248,7 +262,7 @@ impl LocalModelDownloadTransport for ReqwestLocalModelDownloadTransport {
         let response = tokio::select! {
             _ = cancellation.cancelled() => return Err(LocalModelInstallError::cancelled()),
             response = self.client.get(entry.source_url).send() => {
-                response.map_err(|_| LocalModelInstallError::network())?
+                response.map_err(reqwest_install_error)?
             }
         };
         if !response.status().is_success() {
@@ -276,7 +290,7 @@ impl LocalModelDownloadTransport for ReqwestLocalModelDownloadTransport {
             let Some(chunk) = next else {
                 break;
             };
-            let chunk = chunk.map_err(|_| LocalModelInstallError::network())?;
+            let chunk = chunk.map_err(reqwest_install_error)?;
             downloaded = downloaded
                 .checked_add(chunk.len() as u64)
                 .ok_or_else(LocalModelInstallError::size_mismatch)?;
@@ -848,6 +862,7 @@ impl LocalModelInstaller {
                 self.clear_runtime_verification(entry.id);
                 return Err(error);
             }
+
         };
         if self
             .runtime_verifications

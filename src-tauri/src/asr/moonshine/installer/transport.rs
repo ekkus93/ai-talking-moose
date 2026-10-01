@@ -1,4 +1,9 @@
-use super::{MoonshineModelInstallCancellation, MoonshineModelInstallError};
+use super::{
+    MoonshineModelInstallCancellation, MoonshineModelInstallError, MoonshineModelInstallErrorKind,
+};
+use crate::installer_http::{
+    classify_installer_http_failure, InstallerHttpFailure, INSTALLER_HTTP_TIMEOUT_MESSAGE,
+};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 
@@ -23,6 +28,17 @@ pub(super) trait ModelDownloadTransport: Send + Sync {
 
 pub(super) struct ReqwestModelDownloadTransport {
     client: reqwest::Client,
+}
+
+fn reqwest_install_error(error: reqwest::Error) -> MoonshineModelInstallError {
+    match classify_installer_http_failure(&error) {
+        InstallerHttpFailure::Timeout => MoonshineModelInstallError {
+            kind: MoonshineModelInstallErrorKind::Network,
+            message: INSTALLER_HTTP_TIMEOUT_MESSAGE.to_string(),
+            retryable: true,
+        },
+        InstallerHttpFailure::Network => MoonshineModelInstallError::network(),
+    }
 }
 
 impl ReqwestModelDownloadTransport {
@@ -52,7 +68,7 @@ impl ModelDownloadTransport for ReqwestModelDownloadTransport {
                 .client
                 .get(url)
                 .header(reqwest::header::ACCEPT_ENCODING, "identity")
-                .send() => response.map_err(|_| MoonshineModelInstallError::network())?,
+                .send() => response.map_err(reqwest_install_error)?,
         };
 
         let status = response.status();
@@ -73,7 +89,7 @@ impl ModelDownloadTransport for ReqwestModelDownloadTransport {
             let Some(chunk_result) = next else {
                 break;
             };
-            let chunk = chunk_result.map_err(|_| MoonshineModelInstallError::network())?;
+            let chunk = chunk_result.map_err(reqwest_install_error)?;
             cancellation.check()?;
             sink.write_chunk(&chunk)?;
         }
