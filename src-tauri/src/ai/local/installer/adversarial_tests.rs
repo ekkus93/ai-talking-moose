@@ -126,16 +126,15 @@ fn runtime_verification_caches_unchanged_bytes_and_rejects_same_size_mutation() 
     installer
         .verified_runtime_artifact_path(&TEST_ENTRY)
         .unwrap();
-    installer.verified_runtime_artifact_path(&TEST_ENTRY).unwrap();
+    installer
+        .verified_runtime_artifact_path(&TEST_ENTRY)
+        .unwrap();
     assert_eq!(hash_runs.load(Ordering::SeqCst), 1);
     fs::write(test_artifact_path(dir.path()), b"abd").unwrap();
     let error = installer
         .verified_runtime_artifact_path(&TEST_ENTRY)
         .unwrap_err();
-    assert_eq!(
-        error.kind,
-        LocalModelInstallErrorKind::Sha256Mismatch
-    );
+    assert_eq!(error.kind, LocalModelInstallErrorKind::Sha256Mismatch);
     assert_eq!(hash_runs.load(Ordering::SeqCst), 2);
 }
 
@@ -169,7 +168,10 @@ async fn same_size_wrong_hash_is_rejected_without_installing_artifact() {
         }),
     )
     .unwrap();
-    let error = installer.install_inner(&TEST_ENTRY, &CancellationToken::new(), None).await.unwrap_err();
+    let error = installer
+        .install_inner(&TEST_ENTRY, &CancellationToken::new(), None)
+        .await
+        .unwrap_err();
     assert_eq!(error.kind, LocalModelInstallErrorKind::Sha256Mismatch);
     assert!(staging_is_empty(dir.path()));
     assert!(!test_artifact_path(dir.path()).exists());
