@@ -1,51 +1,51 @@
 # MCR-950 Final Qualification Evidence — 2026-10-01
 
-**Qualification preparation master:** `06864bfae7656a6ee26cf3c783838563df89f874`
-**Status:** Qualification prepared; final exact-head specialized gates pending.
+**Qualification head:** `b05acecc0174abd241b60f7b8c5ada789015db5d`
+**Baseline:** `9fc10b488c47ad52bb9960bc9181dfe7763a6d9c`
+**Status:** Exact-head qualification complete.
 
 ## Scope review
 
-The remediation diff from review baseline `9fc10b488c47ad52bb9960bc9181dfe7763a6d9c` through qualification-preparation master contains the MCR implementation, deterministic regressions, security/policy checkers, machine-readable Wake performance correction, documentation/evidence, and formatting-only follow-up fixes required to restore ordinary CI. The historical Wake V1 closeout remains unchanged.
+The remediation diff from the review baseline through qualification head `b05acecc0174abd241b60f7b8c5ada789015db5d` contains the MCR implementation, deterministic regressions, security/policy checkers, machine-readable Wake performance correction, documentation/evidence, formatting-only follow-up fixes, and behavior-neutral workflow-comment triggers used to select the complete qualification matrix. The historical Wake V1 closeout remains unchanged.
 
-The final qualification trigger strategy intentionally follows the repository's established WWR-950 precedent: behavior-neutral workflow-comment changes select mandatory Wake workflows through their normal path filters. A skipped workflow is not counted as passing.
+The final qualification trigger strategy follows the repository's established WWR-950 precedent: behavior-neutral workflow-comment changes select mandatory Wake workflows through their normal path filters. No skipped workflow is counted as passing.
 
-## Already qualified implementation evidence
+## Unified exact-head final matrix
 
-Implementation source `5be626f0c4581301d73a8c8e148638c29d34e603` passed:
+Every specialized workflow below completed successfully on the same exact qualification SHA `b05acecc0174abd241b60f7b8c5ada789015db5d`:
 
-- ordinary CI `36803769184`;
-- Wake production performance evidence `36803769106`;
-- Wake real KWS acceptance `36803769150`; and
-- Wake source-security audit `36803769116`.
+- [x] Ordinary CI — `36866839171`.
+- [x] Wake Artifact Verification — `36866839152`.
+- [x] Wake deterministic corpus validation — `36866838999`.
+- [x] Wake corpus contract — `36866839246`.
+- [x] Wake native packaging/architecture — `36866838977`.
+- [x] Wake lifecycle stability — `36866839058`.
+- [x] Wake production performance evidence — `36866839098`.
+- [x] Wake privacy audit — `36866839003`.
+- [x] Wake source-security audit — `36866839007`.
+- [x] Wake documentation audit — `36866838959`.
+- [x] Wake required-gates audit — `36866839085`.
+- [x] Wake runtime identity freeze — `36866839070`.
+- [x] Wake real KWS acceptance — `36866838980`.
 
-Accumulated remediation master `4296c35823c8a094632aa7bba7f12dfcfa7b5844` subsequently passed ordinary CI `36826031723` and Wake source-security audit `36826031739` after the formatting follow-ups. Evidence-only master `8cdec484daf01073e5df2f66446564eded8aa860` passed CI `36828260999`. Audit-evidence master `06864bfae7656a6ee26cf3c783838563df89f874` passed docs-only CI `36828885375`.
+Real-KWS acceptance `36866838980` passed both required native jobs: Linux x86_64 job `110384459768` and macOS arm64 job `110384460020`. Both built the exact-head acceptance binary, prepared and verified pinned model/runtime inputs, ran real pinned sherpa KWS inference, required command-fixture detection, extracted reusable performance measurements, ran production-listener performance acceptance, and uploaded exact-head reports.
 
-These earlier runs establish implementation correctness evidence but do not substitute for the final exact-head MCR-950 matrix below.
+## Focused MCR qualification inside ordinary CI
 
-## Required exact-head final matrix
+Ordinary CI `36866839171` passed on the same exact head and exercises the accumulated deterministic regression suites and repository policy checks added by this remediation. In conjunction with the source/test audit in `docs/evidence/MCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-10-01.md`, this qualifies the focused MCR requirements for:
 
-Record only terminal successful runs on one exact qualification SHA:
+- conversation cancellation/local-ASR reserve-await-commit behavior;
+- blocking built-in timeout isolation and bounded error handling;
+- Moonshine/local-LLM/local-TTS installer timeout/security policy and packaging invariants;
+- frontend settings persistence rollback/result behavior;
+- frontend listener-registration cleanup and exception safety;
+- Tauri CSP/capability security policy; and
+- placeholder-test rejection policy.
 
-- [ ] Ordinary CI
-- [ ] Wake Artifact Verification
-- [ ] Wake deterministic corpus validation
-- [ ] Wake corpus contract
-- [ ] Wake native packaging/architecture
-- [ ] Wake lifecycle stability
-- [ ] Wake production performance evidence
-- [ ] Wake privacy audit
-- [ ] Wake source-security audit
-- [ ] Wake documentation audit
-- [ ] Wake required-gates audit
-- [ ] Wake real KWS acceptance
-- [ ] Focused conversation cancellation/local-ASR lifecycle tests
-- [ ] Focused blocking-tool timeout tests
-- [ ] Focused Moonshine/local-LLM/local-TTS installer tests and packaging checks
-- [ ] Frontend settings rollback/result tests
-- [ ] Frontend listener-registration cleanup tests
-- [ ] Tauri CSP/capability security-policy tests
-- [ ] Placeholder-test policy check
+The Wake lifecycle workflow `36866839058` additionally qualifies the exact-head native Wake lifecycle/concurrency path. The production performance workflow `36866839098` additionally qualifies authoritative Linux x86_64 and macOS arm64 production-listener measurements rather than standalone-only evidence.
 
-## Closeout discipline
+## Exact-head conclusion
 
-MCR-950 remains open until every required exact-head gate above is terminal-successful and bound to the same qualification SHA. MCR-960 then requires a fresh read of exact `master`, exact-master ordinary/Wake-specific verification, final audit currency, and mechanical reconciliation of the canonical TODO. No skipped required gate is evidence of success.
+MCR-950 is objectively satisfied on exact qualification head `b05acecc0174abd241b60f7b8c5ada789015db5d`: every required specialized workflow selected for final qualification completed successfully on one SHA, ordinary CI passed, both native real-KWS platforms passed, and no skipped required gate was treated as success.
+
+MCR-960 remains a separate exact-master closeout step. Documentation-only reconciliation commits after this qualification do not change the qualified production source; they must still receive the exact-master ordinary/documentation gates required by their changed scope before final closeout.
