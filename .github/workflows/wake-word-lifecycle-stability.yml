@@ -1,5 +1,5 @@
 name: Wake Word lifecycle stability
-# MCR-950 exact-head trigger: final master-review qualification.
+# MCR-950 unified exact-head trigger: final master-review qualification.
 
 on:
   push:

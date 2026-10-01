@@ -1,5 +1,5 @@
 name: Wake Word corpus validation
-# WWR-950 exact-head trigger: final closeout qualification.
+# MCR-950 unified exact-head trigger: final master-review qualification.
 
 on:
   push:
