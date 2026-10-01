@@ -1098,8 +1098,7 @@ async fn cancelled_wake_local_asr_start_cannot_mutate_newer_committed_session() 
     stale_request.asr_mode = AsrMode::MoonshineTinyStreaming;
     let stale_capture = stale_request.capture.clone();
     let stale_playback = stale_request.playback.clone();
-    let stale_handoff =
-        WakeCommandHandoffAudio::new(16_000, vec![101, 202, 303, 404]).unwrap();
+    let stale_handoff = WakeCommandHandoffAudio::new(16_000, vec![101, 202, 303, 404]).unwrap();
 
     let manager_for_stale = manager.clone();
     let stale_task = tokio::spawn(async move {
