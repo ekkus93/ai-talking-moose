@@ -41,13 +41,21 @@ pub(crate) struct WakeLocalListenerHandle {
 }
 
 impl WakeLocalListenerHandle {
-    pub(crate) fn shutdown(mut self) -> thread::Result<()> {
+    pub(crate) fn request_shutdown(&self) {
         let _ = self.command_tx.send(WakeLocalListenerCommand::Shutdown);
+    }
+
+    pub(crate) fn join(mut self) -> thread::Result<()> {
         if let Some(join_handle) = self.join_handle.take() {
             join_handle.join()
         } else {
             Ok(())
         }
+    }
+
+    pub(crate) fn shutdown(self) -> thread::Result<()> {
+        self.request_shutdown();
+        self.join()
     }
 }
 
@@ -137,7 +145,18 @@ fn run_listener_thread<E, Build>(
     };
 
     tokio_runtime.block_on(async move {
-        let consumer = match build_consumer(runtime.clone()) {
+        if shutdown_command_ready(&mut command_rx) {
+            let _ = event_tx.send(WakeLocalListenerEvent::Stopped);
+            return;
+        }
+
+        let consumer_result = build_consumer(runtime.clone());
+        if shutdown_command_ready(&mut command_rx) {
+            drop(consumer_result);
+            let _ = event_tx.send(WakeLocalListenerEvent::Stopped);
+            return;
+        }
+        let consumer = match consumer_result {
             Ok(consumer) => consumer,
             Err(error) => {
                 runtime.record_runtime_error();
@@ -147,7 +166,13 @@ fn run_listener_thread<E, Build>(
         };
 
         let owner = AuthoritativeWakeCaptureOwner::from_shared_capture(capture);
-        if let Err(error) = owner.start_wake(device_name, consumer).await {
+        let start_result = owner.start_wake(device_name, consumer).await;
+        if shutdown_command_ready(&mut command_rx) {
+            owner.disable().await;
+            let _ = event_tx.send(WakeLocalListenerEvent::Stopped);
+            return;
+        }
+        if let Err(error) = start_result {
             runtime.record_capture_error();
             let _ = event_tx.send(WakeLocalListenerEvent::StartupFailed(format!("{error:?}")));
             return;
@@ -321,6 +346,56 @@ mod tests {
         assert!(capture.lock().is_active());
 
         handle.shutdown().unwrap();
+    }
+
+    #[test]
+    fn shutdown_request_during_blocked_initialization_is_prompt_and_prevents_started() {
+        let capture = Arc::new(CaptureMutex::new(AudioCapture::new_mock()));
+        let settings = super::super::state::AppSettings {
+            wake_word_enabled: true,
+            ..Default::default()
+        };
+        let runtime = WakeWordApplicationRuntime::from_settings(&settings).unwrap();
+        let runtime_for_consumer = runtime.clone();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+
+        let handle = spawn_wake_local_listener_thread::<NonSendTestEngine, _>(
+            capture.clone(),
+            runtime,
+            None,
+            move |_| {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(
+                    runtime_for_consumer.manager().clone(),
+                    NonSendTestEngine::default(),
+                )))
+            },
+            event_tx,
+        )
+        .unwrap();
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("native Wake initialization did not reach the deterministic barrier");
+        let shutdown_started = Instant::now();
+        handle.request_shutdown();
+        assert!(
+            shutdown_started.elapsed() < Duration::from_millis(100),
+            "shutdown signalling must not wait for native initialization"
+        );
+
+        release_tx.send(()).unwrap();
+        handle.join().unwrap();
+
+        let mut events = Vec::new();
+        while let Ok(event) = event_rx.try_recv() {
+            events.push(event);
+        }
+        assert_eq!(events, vec![WakeLocalListenerEvent::Stopped]);
+        assert!(!capture.lock().is_active());
     }
 
     #[tokio::test]
