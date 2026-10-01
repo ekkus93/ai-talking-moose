@@ -10,6 +10,9 @@ const config = readJson("src-tauri/tauri.conf.json");
 const capabilities = readJson("src-tauri/capabilities/default.json");
 const mooseSprite = read("src/components/Moose/MooseSprite.tsx");
 const sprites = read("src/lib/sprites.ts");
+const cargoManifest = read("src-tauri/Cargo.toml");
+const backendLib = read("src-tauri/src/lib.rs");
+const packageManifest = readJson("package.json");
 
 const csp = config.app?.security?.csp;
 if (typeof csp !== "string" || csp.trim().length === 0) {
@@ -62,6 +65,16 @@ for (const permission of [
   }
 }
 
+if (cargoManifest.includes("tauri-plugin-opener")) {
+  fail("unused tauri-plugin-opener Rust dependency must remain removed");
+}
+if (backendLib.includes("tauri_plugin_opener")) {
+  fail("unused tauri opener plugin must not be initialized");
+}
+if (packageManifest.dependencies?.["@tauri-apps/plugin-opener"]) {
+  fail("unused @tauri-apps/plugin-opener frontend dependency must remain removed");
+}
+
 if (!mooseSprite.includes("dangerouslySetInnerHTML={{ __html: svgContent }}")) {
   fail("MooseSprite raw SVG insertion invariant changed without policy update");
 }
@@ -75,4 +88,4 @@ if (!sprites.includes("renderMooseSvg")) {
   fail("sprite source must render from application-controlled structured state");
 }
 
-console.log("Tauri security policy passed: CSP is explicit, default capability is main-window scoped, unused opener/webview powers are absent, and MooseSprite raw SVG remains application-controlled.");
+console.log("Tauri security policy passed: CSP is explicit, default capability is main-window scoped, unused opener plugin/permissions and webview powers are absent, and MooseSprite raw SVG remains application-controlled.");

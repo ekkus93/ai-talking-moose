@@ -65,7 +65,6 @@ pub fn run() {
     info!("Starting Talking Moose AI Application");
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
