@@ -115,6 +115,101 @@ fn listener_rollback_restores_previous_runtime_and_listener_settings() {
 }
 
 #[test]
+fn persistence_failure_after_wake_enable_restores_authoritative_disabled_listener_state() {
+    let state = AppState::new_for_tests().unwrap();
+    let previous = AppSettings::default();
+    let next = AppSettings {
+        wake_word_enabled: true,
+        ..previous.clone()
+    };
+
+    // This is the same forward/reverse runtime sequence used by update_settings when persistence
+    // rejects after runtime preferences were applied.
+    apply_configured_native_wake_listener_settings_change_with_control(
+        &state,
+        &previous,
+        &next,
+        false,
+        |state, action| match action {
+            NativeWakeListenerControl::RestartForSettings { .. } => start_fake_listener(state),
+            other => panic!("unexpected forward enable action: {other:?}"),
+        },
+    )
+    .unwrap();
+    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Listening);
+
+    apply_configured_native_wake_listener_settings_change_with_control(
+        &state,
+        &next,
+        &previous,
+        false,
+        |state, action| match action {
+            NativeWakeListenerControl::Stop => stop_runtime_for_fake_listener(state),
+            other => panic!("unexpected persistence rollback action: {other:?}"),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+    assert_eq!(
+        classify_native_listener_status(
+            &previous,
+            state.wake_word_runtime.phase(),
+            false,
+            false
+        ),
+        WakeWordListenerStatus::Stopped
+    );
+}
+
+#[test]
+fn persistence_failure_after_wake_disable_restores_authoritative_enabled_listener_state() {
+    let state = AppState::new_for_tests().unwrap();
+    begin_listening(&state);
+    let previous = AppSettings {
+        wake_word_enabled: true,
+        ..Default::default()
+    };
+    let next = AppSettings::default();
+
+    apply_configured_native_wake_listener_settings_change_with_control(
+        &state,
+        &previous,
+        &next,
+        false,
+        |state, action| match action {
+            NativeWakeListenerControl::Stop => stop_runtime_for_fake_listener(state),
+            other => panic!("unexpected forward disable action: {other:?}"),
+        },
+    )
+    .unwrap();
+    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Disabled);
+
+    apply_configured_native_wake_listener_settings_change_with_control(
+        &state,
+        &next,
+        &previous,
+        false,
+        |state, action| match action {
+            NativeWakeListenerControl::RestartForSettings { .. } => start_fake_listener(state),
+            other => panic!("unexpected persistence rollback action: {other:?}"),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(state.wake_word_runtime.phase(), WakeWordRuntimePhase::Listening);
+    assert_eq!(
+        classify_native_listener_status(
+            &previous,
+            state.wake_word_runtime.phase(),
+            true,
+            false
+        ),
+        WakeWordListenerStatus::Active
+    );
+}
+
+#[test]
 fn unsupported_asr_settings_failure_is_sanitized_and_actionable() {
     let state = AppState::new_for_tests().unwrap();
     let previous = AppSettings::default();

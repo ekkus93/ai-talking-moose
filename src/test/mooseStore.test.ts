@@ -239,6 +239,39 @@ describe("mooseStore State Management", () => {
     expect(JSON.stringify(result)).not.toContain("private persistence detail");
   });
 
+  it("handles multiple sequential persistence failures deterministically", async () => {
+    const initial = frontendDefaultSettings();
+    useMooseStore.setState({ settings: initial });
+    const persist = vi
+      .spyOn(tauriBridge, "updateSettings")
+      .mockRejectedValueOnce(new Error("private failure one"))
+      .mockRejectedValueOnce(new Error("private failure two"));
+    const reload = vi
+      .spyOn(tauriBridge, "getSettings")
+      .mockResolvedValue(initial);
+
+    const first = await useMooseStore.getState().updateSettingsPatch({
+      volume: 0.31,
+    });
+    const second = await useMooseStore.getState().updateSettingsPatch({
+      volume: 0.62,
+    });
+
+    expect(first).toEqual({
+      status: "rolled_back",
+      message:
+        "Settings could not be saved. Your last persisted settings were restored.",
+    });
+    expect(second).toEqual(first);
+    expect(persist).toHaveBeenCalledTimes(2);
+    expect(reload).toHaveBeenCalledTimes(2);
+    expect(useMooseStore.getState().settings).toEqual(initial);
+    expect(useMooseStore.getState().settingsPersistenceError).toBe(
+      "Settings could not be saved. Your last persisted settings were restored.",
+    );
+    expect(JSON.stringify({ first, second })).not.toContain("private failure");
+  });
+
   it("reports persisted success and clears an earlier persistence error", async () => {
     const initial = frontendDefaultSettings();
     useMooseStore.setState({
