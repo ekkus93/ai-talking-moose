@@ -1,7 +1,6 @@
 use super::*;
 use crate::ai::local::catalog::LocalModelTemplateHint;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Mutex as StdMutex;
 use tempfile::tempdir;
 
 static TEST_ENTRY: LocalModelCatalogEntry = LocalModelCatalogEntry {
@@ -101,9 +100,15 @@ fn installer_diagnostics_report_the_latest_unresolved_error_chronologically() {
     let installer = LocalModelInstaller::new(dir.path().to_path_buf()).unwrap();
     installer.record_install_error("first-model", LocalModelInstallError::network());
     installer.record_install_error("second-model", LocalModelInstallError::sha256_mismatch());
-    assert_eq!(installer.diagnostics().last_error.unwrap().kind, LocalModelInstallErrorKind::Sha256Mismatch);
+    assert_eq!(
+        installer.diagnostics().last_error.unwrap().kind,
+        LocalModelInstallErrorKind::Sha256Mismatch
+    );
     installer.clear_install_error("second-model");
-    assert_eq!(installer.diagnostics().last_error.unwrap().kind, LocalModelInstallErrorKind::Network);
+    assert_eq!(
+        installer.diagnostics().last_error.unwrap().kind,
+        LocalModelInstallErrorKind::Network
+    );
 }
 
 #[cfg(unix)]
@@ -118,20 +123,37 @@ fn runtime_verification_caches_unchanged_bytes_and_rejects_same_size_mutation() 
     installer.set_runtime_verification_observer(Some(Arc::new(move || {
         observed.fetch_add(1, Ordering::SeqCst);
     })));
-    installer.verified_runtime_artifact_path(&TEST_ENTRY).unwrap();
+    installer
+        .verified_runtime_artifact_path(&TEST_ENTRY)
+        .unwrap();
     installer.verified_runtime_artifact_path(&TEST_ENTRY).unwrap();
     assert_eq!(hash_runs.load(Ordering::SeqCst), 1);
     fs::write(test_artifact_path(dir.path()), b"abd").unwrap();
-    let error = installer.verified_runtime_artifact_path(&TEST_ENTRY).unwrap_err();
-    assert_eq!(error.kind, LocalModelInstallErrorKind::Sha256Mismatch);
+    let error = installer
+        .verified_runtime_artifact_path(&TEST_ENTRY)
+        .unwrap_err();
+    assert_eq!(
+        error.kind,
+        LocalModelInstallErrorKind::Sha256Mismatch
+    );
     assert_eq!(hash_runs.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
 async fn truncated_artifact_is_rejected_and_staging_is_cleaned() {
     let dir = tempdir().unwrap();
-    let installer = LocalModelInstaller::with_transport(dir.path().to_path_buf(), Arc::new(StaticBytesTransport { bytes: b"ab", wait_for_cancel_after_write: false })).unwrap();
-    let error = installer.install_inner(&TEST_ENTRY, &CancellationToken::new(), None).await.unwrap_err();
+    let installer = LocalModelInstaller::with_transport(
+        dir.path().to_path_buf(),
+        Arc::new(StaticBytesTransport {
+            bytes: b"ab",
+            wait_for_cancel_after_write: false,
+        }),
+    )
+    .unwrap();
+    let error = installer
+        .install_inner(&TEST_ENTRY, &CancellationToken::new(), None)
+        .await
+        .unwrap_err();
     assert_eq!(error.kind, LocalModelInstallErrorKind::SizeMismatch);
     assert!(staging_is_empty(dir.path()));
 }
@@ -139,7 +161,14 @@ async fn truncated_artifact_is_rejected_and_staging_is_cleaned() {
 #[tokio::test]
 async fn same_size_wrong_hash_is_rejected_without_installing_artifact() {
     let dir = tempdir().unwrap();
-    let installer = LocalModelInstaller::with_transport(dir.path().to_path_buf(), Arc::new(StaticBytesTransport { bytes: b"abd", wait_for_cancel_after_write: false })).unwrap();
+    let installer = LocalModelInstaller::with_transport(
+        dir.path().to_path_buf(),
+        Arc::new(StaticBytesTransport {
+            bytes: b"abd",
+            wait_for_cancel_after_write: false,
+        }),
+    )
+    .unwrap();
     let error = installer.install_inner(&TEST_ENTRY, &CancellationToken::new(), None).await.unwrap_err();
     assert_eq!(error.kind, LocalModelInstallErrorKind::Sha256Mismatch);
     assert!(staging_is_empty(dir.path()));
@@ -150,7 +179,16 @@ async fn same_size_wrong_hash_is_rejected_without_installing_artifact() {
 #[tokio::test]
 async fn cancellation_during_download_never_installs() {
     let dir = tempdir().unwrap();
-    let installer = Arc::new(LocalModelInstaller::with_transport(dir.path().to_path_buf(), Arc::new(StaticBytesTransport { bytes: b"abc", wait_for_cancel_after_write: true })).unwrap());
+    let installer = Arc::new(
+        LocalModelInstaller::with_transport(
+            dir.path().to_path_buf(),
+            Arc::new(StaticBytesTransport {
+                bytes: b"abc",
+                wait_for_cancel_after_write: true,
+            }),
+        )
+        .unwrap(),
+    );
     let accepted = Arc::new(AtomicBool::new(false));
     let callback_installer = installer.clone();
     let callback_accepted = accepted.clone();
@@ -159,7 +197,10 @@ async fn cancellation_during_download_never_installs() {
             callback_accepted.store(callback_installer.cancel(TEST_ENTRY.id), Ordering::SeqCst);
         }
     });
-    let error = installer.install_entry(&TEST_ENTRY, Some(progress)).await.unwrap_err();
+    let error = installer
+        .install_entry(&TEST_ENTRY, Some(progress))
+        .await
+        .unwrap_err();
     assert!(accepted.load(Ordering::SeqCst));
     assert_eq!(error.kind, LocalModelInstallErrorKind::Cancelled);
     assert!(!installer.marker_shape_is_valid(&TEST_ENTRY));
@@ -186,7 +227,9 @@ fn model_root_symlink_is_rejected_without_touching_target() {
     fs::write(&sentinel, b"keep").unwrap();
     let root = parent.path().join("llm-root");
     symlink(outside.path(), &root).unwrap();
-    let error = LocalModelInstaller::new(root).err().expect("model-root symlink must fail closed");
+    let error = LocalModelInstaller::new(root)
+        .err()
+        .expect("model-root symlink must fail closed");
     assert_eq!(error.kind, LocalModelInstallErrorKind::CorruptInstall);
     assert_eq!(fs::read(&sentinel).unwrap(), b"keep");
 }
