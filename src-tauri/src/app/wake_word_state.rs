@@ -53,6 +53,7 @@ struct NativeWakeListenerControllerInner {
     next_generation: u64,
     lifecycle: NativeWakeListenerLifecycle,
     pending_start_generation: Option<u64>,
+    pending_restart_generation: Option<u64>,
     config: Option<NativeWakeListenerConfig>,
 }
 
@@ -72,6 +73,7 @@ impl Default for NativeWakeListenerControllerInner {
             next_generation: 0,
             lifecycle: NativeWakeListenerLifecycle::Stopped,
             pending_start_generation: None,
+            pending_restart_generation: None,
             config: None,
         }
     }
@@ -98,6 +100,43 @@ impl NativeWakeListenerController {
         self.inner.lock().config.clone()
     }
 
+    fn schedule_restart(&self) -> u64 {
+        let mut inner = self.inner.lock();
+        inner.next_generation = inner.next_generation.wrapping_add(1).max(1);
+        let generation = inner.next_generation;
+        inner.pending_restart_generation = Some(generation);
+        generation
+    }
+
+    fn restart_request_is_current(&self, generation: u64) -> bool {
+        self.inner.lock().pending_restart_generation == Some(generation)
+    }
+
+    fn cancel_restart_request(&self, generation: u64) {
+        let mut inner = self.inner.lock();
+        if inner.pending_restart_generation == Some(generation) {
+            inner.pending_restart_generation = None;
+        }
+    }
+
+    fn cancel_all_restart_requests(&self) {
+        self.inner.lock().pending_restart_generation = None;
+    }
+
+    fn claim_scheduled_restart(&self, generation: u64) -> Option<u64> {
+        let mut inner = self.inner.lock();
+        if inner.pending_restart_generation != Some(generation)
+            || !matches!(inner.lifecycle, NativeWakeListenerLifecycle::Stopped)
+        {
+            return None;
+        }
+
+        inner.pending_restart_generation = None;
+        inner.pending_start_generation = Some(generation);
+        inner.lifecycle = NativeWakeListenerLifecycle::Starting { generation };
+        Some(generation)
+    }
+
     fn reserve_start(&self) -> Option<u64> {
         let mut inner = self.inner.lock();
         if !matches!(inner.lifecycle, NativeWakeListenerLifecycle::Stopped) {
@@ -105,6 +144,9 @@ impl NativeWakeListenerController {
         }
         inner.next_generation = inner.next_generation.wrapping_add(1).max(1);
         let generation = inner.next_generation;
+        // An explicit start supersedes any deferred restart request that has not claimed the
+        // lifecycle yet.
+        inner.pending_restart_generation = None;
         inner.pending_start_generation = Some(generation);
         inner.lifecycle = NativeWakeListenerLifecycle::Starting { generation };
         Some(generation)
@@ -354,6 +396,23 @@ fn start_native_wake_listener_thread_with_config(
     let Some(generation) = state.wake_listener_controller.reserve_start() else {
         return Ok(false);
     };
+    start_native_wake_listener_thread_reserved(
+        state,
+        settings,
+        app_data_dir,
+        event_tx,
+        generation,
+    )
+}
+
+fn start_native_wake_listener_thread_reserved(
+    state: &AppState,
+    settings: &AppSettings,
+    app_data_dir: &Path,
+    event_tx: mpsc::UnboundedSender<WakeLocalListenerEvent>,
+    generation: u64,
+) -> Result<bool, String> {
+    ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
 
     if let Err(error) = state.wake_word_runtime.apply_enabled_setting(true) {
         state.wake_listener_controller.cancel_start(generation);
@@ -404,21 +463,86 @@ fn restart_native_wake_listener_thread_with_settings(
 ) -> Result<bool, String> {
     stop_native_wake_listener_thread(state)?;
     if !settings.wake_word_enabled {
+        state.wake_listener_controller.cancel_all_restart_requests();
         return Ok(false);
     }
 
     let Some(config) = state.wake_listener_controller.config() else {
+        state.wake_listener_controller.cancel_all_restart_requests();
         return Ok(false);
     };
     if config.event_tx.is_closed() {
+        state.wake_listener_controller.cancel_all_restart_requests();
         return Ok(false);
     }
-    start_native_wake_listener_thread_with_config(
-        state,
-        settings,
-        &config.app_data_dir,
-        config.event_tx,
-    )
+
+    // Preserve restart intent across a bounded Stop. Each request receives a unique generation;
+    // a later restart overwrites the pending token, so at most the newest request can claim the
+    // lifecycle once the previous native thread actually reaches Stopped.
+    let restart_generation = state.wake_listener_controller.schedule_restart();
+    if let Some(generation) = state
+        .wake_listener_controller
+        .claim_scheduled_restart(restart_generation)
+    {
+        return start_native_wake_listener_thread_reserved(
+            state,
+            settings,
+            &config.app_data_dir,
+            config.event_tx,
+            generation,
+        );
+    }
+
+    let deferred_state = state.clone();
+    let deferred_settings = settings.clone();
+    tauri::async_runtime::spawn(async move {
+        if !wait_for_native_wake_listener_stopped(&deferred_state, Duration::from_secs(5)).await {
+            deferred_state
+                .wake_listener_controller
+                .cancel_restart_request(restart_generation);
+            deferred_state.wake_word_runtime.record_runtime_error();
+            return;
+        }
+        if !deferred_state
+            .wake_listener_controller
+            .restart_request_is_current(restart_generation)
+        {
+            return;
+        }
+        let Some(generation) = deferred_state
+            .wake_listener_controller
+            .claim_scheduled_restart(restart_generation)
+        else {
+            return;
+        };
+        let Some(config) = deferred_state.wake_listener_controller.config() else {
+            deferred_state
+                .wake_listener_controller
+                .cancel_start(generation);
+            deferred_state.wake_word_runtime.record_runtime_error();
+            return;
+        };
+        if config.event_tx.is_closed() {
+            deferred_state
+                .wake_listener_controller
+                .cancel_start(generation);
+            deferred_state.wake_word_runtime.record_runtime_error();
+            return;
+        }
+        if start_native_wake_listener_thread_reserved(
+            &deferred_state,
+            &deferred_settings,
+            &config.app_data_dir,
+            config.event_tx,
+            generation,
+        )
+        .is_err()
+        {
+            deferred_state.wake_word_runtime.record_runtime_error();
+        }
+    });
+
+    Ok(true)
 }
 
 pub(crate) fn native_wake_listener_is_active(state: &AppState) -> bool {
@@ -556,6 +680,7 @@ pub(crate) fn control_native_wake_listener(
                     .wake_word_runtime
                     .apply_enabled_setting(false)
                     .map_err(|error| error.to_string())?;
+                state.wake_listener_controller.cancel_all_restart_requests();
                 stop_native_wake_listener_thread(state)?;
                 return Ok(false);
             }
@@ -570,10 +695,12 @@ pub(crate) fn control_native_wake_listener(
             restart_native_wake_listener_thread_with_settings(state, settings.as_ref())
         }
         NativeWakeListenerControl::Stop => {
+            state.wake_listener_controller.cancel_all_restart_requests();
             stop_native_wake_listener_thread(state)?;
             Ok(false)
         }
         NativeWakeListenerControl::TransferToCommand => {
+            state.wake_listener_controller.cancel_all_restart_requests();
             let was_active = native_wake_listener_is_active(state);
             stop_native_wake_listener_thread(state)?;
             if native_wake_listener_lifecycle_phase(state)
@@ -796,6 +923,49 @@ mod tests {
             controller.phase(),
             NativeWakeListenerLifecyclePhase::Stopped
         );
+    }
+
+    #[test]
+    fn newest_deferred_restart_generation_is_the_only_one_that_can_claim_stopped() {
+        let controller = NativeWakeListenerController::default();
+        let stale_start = controller.reserve_start().unwrap();
+        assert!(matches!(
+            controller.begin_stop(),
+            NativeWakeListenerStopPlan::AwaitingStart
+        ));
+
+        let older_restart = controller.schedule_restart();
+        let newest_restart = controller.schedule_restart();
+        assert_ne!(older_restart, newest_restart);
+        assert!(newest_restart > older_restart);
+
+        controller.cancel_start(stale_start);
+        assert_eq!(controller.phase(), NativeWakeListenerLifecyclePhase::Stopped);
+        assert_eq!(controller.claim_scheduled_restart(older_restart), None);
+        assert_eq!(
+            controller.claim_scheduled_restart(newest_restart),
+            Some(newest_restart)
+        );
+        assert_eq!(
+            controller.phase(),
+            NativeWakeListenerLifecyclePhase::Starting
+        );
+        controller.cancel_start(newest_restart);
+        assert_eq!(controller.phase(), NativeWakeListenerLifecyclePhase::Stopped);
+    }
+
+    #[test]
+    fn explicit_start_or_stop_cancels_deferred_restart_intent() {
+        let controller = NativeWakeListenerController::default();
+        let pending = controller.schedule_restart();
+        let direct = controller.reserve_start().unwrap();
+        assert!(!controller.restart_request_is_current(pending));
+        controller.cancel_start(direct);
+
+        let pending = controller.schedule_restart();
+        assert!(controller.restart_request_is_current(pending));
+        controller.cancel_all_restart_requests();
+        assert!(!controller.restart_request_is_current(pending));
     }
 
     #[tokio::test]
