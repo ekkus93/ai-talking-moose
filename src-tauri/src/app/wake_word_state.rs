@@ -15,8 +15,11 @@ use super::wake_word_local_listener_thread::{
 use crate::asr::AsrMode;
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{mpsc as std_mpsc, Arc};
+use std::time::Duration;
 use tokio::sync::mpsc;
+
+const NATIVE_WAKE_LISTENER_STOP_WAIT: Duration = Duration::from_millis(100);
 
 #[derive(Clone)]
 struct NativeWakeListenerConfig {
@@ -49,7 +52,18 @@ enum NativeWakeListenerLifecycle {
 struct NativeWakeListenerControllerInner {
     next_generation: u64,
     lifecycle: NativeWakeListenerLifecycle,
+    pending_start_generation: Option<u64>,
     config: Option<NativeWakeListenerConfig>,
+}
+
+enum NativeWakeListenerStopPlan {
+    AlreadyStopped,
+    AlreadyStopping,
+    AwaitingStart,
+    Supervise {
+        generation: u64,
+        handle: WakeLocalListenerHandle,
+    },
 }
 
 impl Default for NativeWakeListenerControllerInner {
@@ -57,6 +71,7 @@ impl Default for NativeWakeListenerControllerInner {
         Self {
             next_generation: 0,
             lifecycle: NativeWakeListenerLifecycle::Stopped,
+            pending_start_generation: None,
             config: None,
         }
     }
@@ -90,16 +105,23 @@ impl NativeWakeListenerController {
         }
         inner.next_generation = inner.next_generation.wrapping_add(1).max(1);
         let generation = inner.next_generation;
+        inner.pending_start_generation = Some(generation);
         inner.lifecycle = NativeWakeListenerLifecycle::Starting { generation };
         Some(generation)
     }
 
     fn cancel_start(&self, generation: u64) {
         let mut inner = self.inner.lock();
+        if inner.pending_start_generation != Some(generation) {
+            return;
+        }
+
+        inner.pending_start_generation = None;
         if matches!(
             inner.lifecycle,
             NativeWakeListenerLifecycle::Starting { generation: current } if current == generation
-        ) {
+        ) || matches!(inner.lifecycle, NativeWakeListenerLifecycle::Stopping { .. })
+        {
             inner.lifecycle = NativeWakeListenerLifecycle::Stopped;
         }
     }
@@ -108,21 +130,42 @@ impl NativeWakeListenerController {
         &self,
         generation: u64,
         handle: WakeLocalListenerHandle,
-    ) -> Result<(), WakeLocalListenerHandle> {
+    ) -> Result<(), (WakeLocalListenerHandle, Option<u64>)> {
         let mut inner = self.inner.lock();
         if matches!(
             inner.lifecycle,
             NativeWakeListenerLifecycle::Starting { generation: current } if current == generation
         ) {
+            inner.pending_start_generation = None;
             inner.lifecycle = NativeWakeListenerLifecycle::Running { generation, handle };
-            Ok(())
-        } else {
-            Err(handle)
+            return Ok(());
         }
+
+        let stopping_generation = if inner.pending_start_generation == Some(generation) {
+            inner.pending_start_generation = None;
+            match inner.lifecycle {
+                NativeWakeListenerLifecycle::Stopping { generation } => Some(generation),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        Err((handle, stopping_generation))
     }
 
-    fn begin_stop(&self) -> (u64, Option<WakeLocalListenerHandle>) {
+    fn begin_stop(&self) -> NativeWakeListenerStopPlan {
         let mut inner = self.inner.lock();
+        match inner.lifecycle {
+            NativeWakeListenerLifecycle::Stopped => {
+                return NativeWakeListenerStopPlan::AlreadyStopped;
+            }
+            NativeWakeListenerLifecycle::Stopping { .. } => {
+                return NativeWakeListenerStopPlan::AlreadyStopping;
+            }
+            NativeWakeListenerLifecycle::Starting { .. }
+            | NativeWakeListenerLifecycle::Running { .. } => {}
+        }
+
         inner.next_generation = inner.next_generation.wrapping_add(1).max(1);
         let stop_generation = inner.next_generation;
         let previous = std::mem::replace(
@@ -131,13 +174,20 @@ impl NativeWakeListenerController {
                 generation: stop_generation,
             },
         );
-        let handle = match previous {
-            NativeWakeListenerLifecycle::Running { handle, .. } => Some(handle),
+        match previous {
+            NativeWakeListenerLifecycle::Running { handle, .. } => {
+                inner.pending_start_generation = None;
+                NativeWakeListenerStopPlan::Supervise {
+                    generation: stop_generation,
+                    handle,
+                }
+            }
+            NativeWakeListenerLifecycle::Starting { .. } => {
+                NativeWakeListenerStopPlan::AwaitingStart
+            }
             NativeWakeListenerLifecycle::Stopped
-            | NativeWakeListenerLifecycle::Starting { .. }
-            | NativeWakeListenerLifecycle::Stopping { .. } => None,
-        };
-        (stop_generation, handle)
+            | NativeWakeListenerLifecycle::Stopping { .. } => unreachable!(),
+        }
     }
 
     fn finish_stop(&self, generation: u64) {
@@ -146,6 +196,7 @@ impl NativeWakeListenerController {
             inner.lifecycle,
             NativeWakeListenerLifecycle::Stopping { generation: current } if current == generation
         ) {
+            inner.pending_start_generation = None;
             inner.lifecycle = NativeWakeListenerLifecycle::Stopped;
         }
     }
@@ -177,6 +228,7 @@ impl NativeWakeListenerController {
     fn install_running_for_test(&self, generation: u64, handle: WakeLocalListenerHandle) {
         let mut inner = self.inner.lock();
         inner.next_generation = inner.next_generation.max(generation);
+        inner.pending_start_generation = None;
         inner.lifecycle = NativeWakeListenerLifecycle::Running { generation, handle };
     }
 }
@@ -335,8 +387,12 @@ fn start_native_wake_listener_thread_with_config(
         .publish_start(generation, handle)
     {
         Ok(()) => Ok(true),
-        Err(stale_handle) => {
-            let _ = stale_handle.shutdown();
+        Err((stale_handle, stopping_generation)) => {
+            let _ = supervise_native_wake_listener_shutdown(
+                state.wake_listener_controller.clone(),
+                stopping_generation,
+                stale_handle,
+            )?;
             Ok(false)
         }
     }
@@ -346,7 +402,7 @@ fn restart_native_wake_listener_thread_with_settings(
     state: &AppState,
     settings: &AppSettings,
 ) -> Result<bool, String> {
-    stop_native_wake_listener_thread(state);
+    stop_native_wake_listener_thread(state)?;
     if !settings.wake_word_enabled {
         return Ok(false);
     }
@@ -500,7 +556,7 @@ pub(crate) fn control_native_wake_listener(
                     .wake_word_runtime
                     .apply_enabled_setting(false)
                     .map_err(|error| error.to_string())?;
-                stop_native_wake_listener_thread(state);
+                stop_native_wake_listener_thread(state)?;
                 return Ok(false);
             }
             ensure_wake_word_asr_mode_supported(settings.asr_mode)?;
@@ -514,12 +570,17 @@ pub(crate) fn control_native_wake_listener(
             restart_native_wake_listener_thread_with_settings(state, settings.as_ref())
         }
         NativeWakeListenerControl::Stop => {
-            stop_native_wake_listener_thread(state);
+            stop_native_wake_listener_thread(state)?;
             Ok(false)
         }
         NativeWakeListenerControl::TransferToCommand => {
             let was_active = native_wake_listener_is_active(state);
-            stop_native_wake_listener_thread(state);
+            stop_native_wake_listener_thread(state)?;
+            if native_wake_listener_lifecycle_phase(state)
+                == NativeWakeListenerLifecyclePhase::Stopping
+            {
+                return Err("Wake listener shutdown is still in progress".to_string());
+            }
             if was_active {
                 state
                     .wake_word_runtime
@@ -560,12 +621,63 @@ pub(crate) fn complete_native_wake_command_interaction(
     }
 }
 
-fn stop_native_wake_listener_thread(state: &AppState) {
-    let (generation, handle) = state.wake_listener_controller.begin_stop();
-    if let Some(handle) = handle {
-        let _ = handle.shutdown();
+fn supervise_native_wake_listener_shutdown(
+    controller: NativeWakeListenerController,
+    finish_generation: Option<u64>,
+    handle: WakeLocalListenerHandle,
+) -> Result<std_mpsc::Receiver<()>, String> {
+    handle.request_shutdown();
+    let (done_tx, done_rx) = std_mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("wake-word-listener-join".to_string())
+        .spawn(move || {
+            let _ = handle.join();
+            if let Some(generation) = finish_generation {
+                controller.finish_stop(generation);
+            }
+            let _ = done_tx.send(());
+        })
+        .map_err(|_| "Wake listener shutdown supervisor could not start".to_string())?;
+    Ok(done_rx)
+}
+
+fn stop_native_wake_listener_thread(state: &AppState) -> Result<(), String> {
+    match state.wake_listener_controller.begin_stop() {
+        NativeWakeListenerStopPlan::AlreadyStopped
+        | NativeWakeListenerStopPlan::AlreadyStopping
+        | NativeWakeListenerStopPlan::AwaitingStart => Ok(()),
+        NativeWakeListenerStopPlan::Supervise { generation, handle } => {
+            let done = supervise_native_wake_listener_shutdown(
+                state.wake_listener_controller.clone(),
+                Some(generation),
+                handle,
+            )?;
+            match done.recv_timeout(NATIVE_WAKE_LISTENER_STOP_WAIT) {
+                Ok(()) | Err(std_mpsc::RecvTimeoutError::Timeout) => Ok(()),
+                Err(std_mpsc::RecvTimeoutError::Disconnected) => {
+                    Err("Wake listener shutdown supervisor ended unexpectedly".to_string())
+                }
+            }
+        }
     }
-    state.wake_listener_controller.finish_stop(generation);
+}
+
+pub(crate) async fn wait_for_native_wake_listener_stopped(
+    state: &AppState,
+    timeout: Duration,
+) -> bool {
+    tokio::time::timeout(timeout, async {
+        loop {
+            if native_wake_listener_lifecycle_phase(state)
+                == NativeWakeListenerLifecyclePhase::Stopped
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .is_ok()
 }
 
 #[cfg(test)]
@@ -581,7 +693,7 @@ mod tests {
     use crate::wake_word_policy::V1_KWS_SAMPLE_RATE_HZ;
     use std::sync::Barrier;
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     #[derive(Default)]
     struct TestWakeEngine {
@@ -650,13 +762,16 @@ mod tests {
             controller.phase(),
             NativeWakeListenerLifecyclePhase::Starting
         );
-        let (stop_generation, handle) = controller.begin_stop();
-        assert!(handle.is_none());
+        assert!(matches!(
+            controller.begin_stop(),
+            NativeWakeListenerStopPlan::AwaitingStart
+        ));
         assert_eq!(
             controller.phase(),
             NativeWakeListenerLifecyclePhase::Stopping
         );
-        controller.finish_stop(stop_generation);
+        let start_generation = results.into_iter().flatten().next().unwrap();
+        controller.cancel_start(start_generation);
         assert_eq!(
             controller.phase(),
             NativeWakeListenerLifecyclePhase::Stopped
@@ -667,9 +782,11 @@ mod tests {
     fn controller_stop_invalidates_pending_start_generation() {
         let controller = NativeWakeListenerController::default();
         let first_generation = controller.reserve_start().unwrap();
-        let (stop_generation, handle) = controller.begin_stop();
-        assert!(handle.is_none());
-        controller.finish_stop(stop_generation);
+        assert!(matches!(
+            controller.begin_stop(),
+            NativeWakeListenerStopPlan::AwaitingStart
+        ));
+        controller.cancel_start(first_generation);
 
         let second_generation = controller.reserve_start().unwrap();
         assert_ne!(first_generation, second_generation);
@@ -704,17 +821,88 @@ mod tests {
         )
         .unwrap();
 
-        let (stop_generation, owned_handle) = state.wake_listener_controller.begin_stop();
-        assert!(owned_handle.is_none());
-        state.wake_listener_controller.finish_stop(stop_generation);
-        let stale = state
+        assert!(matches!(
+            state.wake_listener_controller.begin_stop(),
+            NativeWakeListenerStopPlan::AwaitingStart
+        ));
+        let (stale, finish_generation) = state
             .wake_listener_controller
             .publish_start(generation, handle)
             .expect_err("stale start generation must never publish Running");
-        stale.shutdown().unwrap();
+        let done = supervise_native_wake_listener_shutdown(
+            state.wake_listener_controller.clone(),
+            finish_generation,
+            stale,
+        )
+        .unwrap();
+        done.recv_timeout(Duration::from_secs(2)).unwrap();
 
         assert_eq!(
             state.wake_listener_controller.phase(),
+            NativeWakeListenerLifecyclePhase::Stopped
+        );
+        assert!(!state.audio_capture.lock().is_active());
+    }
+
+    #[tokio::test]
+    async fn delayed_listener_join_is_bounded_and_reconciles_once_after_late_exit() {
+        let state = AppState::new_for_tests().unwrap();
+        *state.audio_capture.lock() = AudioCapture::new_mock();
+        state.wake_word_runtime.apply_enabled_setting(true).unwrap();
+        let runtime_for_consumer = state.wake_word_runtime.clone();
+        let (event_tx, _event_rx) = mpsc::unbounded_channel();
+        let (entered_tx, entered_rx) = std_mpsc::channel();
+        let (release_tx, release_rx) = std_mpsc::channel();
+
+        let handle = spawn_wake_local_listener_thread::<TestWakeEngine, _>(
+            state.audio_capture.clone(),
+            state.wake_word_runtime.clone(),
+            None,
+            move |_| {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(WakeCapturePcmConsumer::new(CanonicalWakePcmRouter::new(
+                    runtime_for_consumer.manager().clone(),
+                    TestWakeEngine::default(),
+                )))
+            },
+            event_tx,
+        )
+        .unwrap();
+        state
+            .wake_listener_controller
+            .install_running_for_test(1, handle);
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("listener initialization did not reach deterministic barrier");
+
+        let stop_started = Instant::now();
+        stop_native_wake_listener_thread(&state).unwrap();
+        assert!(
+            stop_started.elapsed() < Duration::from_millis(500),
+            "stop must not wait for the full native initialization body"
+        );
+        assert_eq!(
+            native_wake_listener_lifecycle_phase(&state),
+            NativeWakeListenerLifecyclePhase::Stopping
+        );
+
+        // A repeated stop while the join supervisor owns shutdown must be idempotent and must not
+        // report Stopped before the native thread actually exits.
+        stop_native_wake_listener_thread(&state).unwrap();
+        assert_eq!(
+            native_wake_listener_lifecycle_phase(&state),
+            NativeWakeListenerLifecyclePhase::Stopping
+        );
+
+        release_tx.send(()).unwrap();
+        assert!(
+            wait_for_native_wake_listener_stopped(&state, Duration::from_secs(2)).await,
+            "late native termination must reconcile Stopping to Stopped"
+        );
+        assert_eq!(
+            native_wake_listener_lifecycle_phase(&state),
             NativeWakeListenerLifecyclePhase::Stopped
         );
         assert!(!state.audio_capture.lock().is_active());

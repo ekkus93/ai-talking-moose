@@ -33,6 +33,7 @@ use tracing::{info, warn};
 
 const LOCAL_LLM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_TTS_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+const WAKE_LISTENER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn moonshine_native_smoke_check() -> Result<i32, String> {
     asr::moonshine::native_runtime_smoke_check().map_err(|error| error.message)
@@ -415,6 +416,20 @@ pub fn run() {
                         .stop_session(audio_capture.clone(), audio_playback.clone())
                         .await;
                     audio_playback.stop();
+                }
+
+                let wake_state = handle
+                    .try_state::<AppState>()
+                    .map(|state| state.inner().clone());
+                if let Some(state) = wake_state {
+                    if !app::wake_word_state::wait_for_native_wake_listener_stopped(
+                        &state,
+                        WAKE_LISTENER_SHUTDOWN_TIMEOUT,
+                    )
+                    .await
+                    {
+                        warn!("Timed out waiting for Wake listener shutdown");
+                    }
                 }
 
                 handle.exit(exit_code);
