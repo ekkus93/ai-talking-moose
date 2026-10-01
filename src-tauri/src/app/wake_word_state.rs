@@ -162,8 +162,10 @@ impl NativeWakeListenerController {
         if matches!(
             inner.lifecycle,
             NativeWakeListenerLifecycle::Starting { generation: current } if current == generation
-        ) || matches!(inner.lifecycle, NativeWakeListenerLifecycle::Stopping { .. })
-        {
+        ) || matches!(
+            inner.lifecycle,
+            NativeWakeListenerLifecycle::Stopping { .. }
+        ) {
             inner.lifecycle = NativeWakeListenerLifecycle::Stopped;
         }
     }
@@ -227,8 +229,9 @@ impl NativeWakeListenerController {
             NativeWakeListenerLifecycle::Starting { .. } => {
                 NativeWakeListenerStopPlan::AwaitingStart
             }
-            NativeWakeListenerLifecycle::Stopped
-            | NativeWakeListenerLifecycle::Stopping { .. } => unreachable!(),
+            NativeWakeListenerLifecycle::Stopped | NativeWakeListenerLifecycle::Stopping { .. } => {
+                unreachable!()
+            }
         }
     }
 
@@ -396,13 +399,7 @@ fn start_native_wake_listener_thread_with_config(
     let Some(generation) = state.wake_listener_controller.reserve_start() else {
         return Ok(false);
     };
-    start_native_wake_listener_thread_reserved(
-        state,
-        settings,
-        app_data_dir,
-        event_tx,
-        generation,
-    )
+    start_native_wake_listener_thread_reserved(state, settings, app_data_dir, event_tx, generation)
 }
 
 fn start_native_wake_listener_thread_reserved(
@@ -940,7 +937,10 @@ mod tests {
         assert!(newest_restart > older_restart);
 
         controller.cancel_start(stale_start);
-        assert_eq!(controller.phase(), NativeWakeListenerLifecyclePhase::Stopped);
+        assert_eq!(
+            controller.phase(),
+            NativeWakeListenerLifecyclePhase::Stopped
+        );
         assert_eq!(controller.claim_scheduled_restart(older_restart), None);
         assert_eq!(
             controller.claim_scheduled_restart(newest_restart),
@@ -951,7 +951,10 @@ mod tests {
             NativeWakeListenerLifecyclePhase::Starting
         );
         controller.cancel_start(newest_restart);
-        assert_eq!(controller.phase(), NativeWakeListenerLifecyclePhase::Stopped);
+        assert_eq!(
+            controller.phase(),
+            NativeWakeListenerLifecyclePhase::Stopped
+        );
     }
 
     #[test]
