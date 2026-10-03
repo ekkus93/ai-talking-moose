@@ -17,10 +17,7 @@ impl MicrophonePermissionState {
 
 #[cfg(target_os = "macos")]
 fn macos_microphone_permission_state() -> MicrophonePermissionState {
-    use av_foundation::capture_device::{
-        AVAuthorizationStatusAuthorized, AVAuthorizationStatusDenied,
-        AVAuthorizationStatusNotDetermined, AVAuthorizationStatusRestricted, AVCaptureDevice,
-    };
+    use av_foundation::capture_device::AVCaptureDevice;
     use av_foundation::media_format::AVMediaTypeAudio;
 
     // SAFETY: AVMediaTypeAudio is an immutable AVFoundation framework constant with
@@ -29,15 +26,7 @@ fn macos_microphone_permission_state() -> MicrophonePermissionState {
     let audio_media_type = unsafe { AVMediaTypeAudio };
     let status = AVCaptureDevice::authorization_status_for_media_type(audio_media_type);
 
-    if status == AVAuthorizationStatusNotDetermined {
-        MicrophonePermissionState::NotRequested
-    } else if status == AVAuthorizationStatusAuthorized {
-        MicrophonePermissionState::Granted
-    } else if status == AVAuthorizationStatusDenied || status == AVAuthorizationStatusRestricted {
-        MicrophonePermissionState::Denied
-    } else {
-        MicrophonePermissionState::Unavailable
-    }
+    map_av_authorization_status(status)
 }
 
 pub fn microphone_permission_state() -> MicrophonePermissionState {
@@ -49,6 +38,19 @@ pub fn microphone_permission_state() -> MicrophonePermissionState {
     #[cfg(not(target_os = "macos"))]
     {
         MicrophonePermissionState::Unavailable
+    }
+}
+
+// Apple AVAuthorizationStatus raw values: 0 NotDetermined, 1 Denied, 2
+// DeniedForever, 3 Restricted, 4 Authorized. av-foundation 0.8.1's named
+// constants are misaligned with these, so raw values are mapped here.
+#[allow(dead_code)]
+fn map_av_authorization_status(status: i64) -> MicrophonePermissionState {
+    match status {
+        0 => MicrophonePermissionState::NotRequested,
+        1..=3 => MicrophonePermissionState::Denied,
+        4 => MicrophonePermissionState::Granted,
+        _ => MicrophonePermissionState::Unavailable,
     }
 }
 
@@ -129,5 +131,37 @@ mod tests {
         assert!(!MicrophonePermissionState::NotRequested.is_granted());
         assert!(!MicrophonePermissionState::Denied.is_granted());
         assert!(!MicrophonePermissionState::Unavailable.is_granted());
+    }
+
+    #[test]
+    fn apple_av_status_raw_values_map_correctly() {
+        assert_eq!(
+            map_av_authorization_status(0),
+            MicrophonePermissionState::NotRequested
+        );
+        assert_eq!(
+            map_av_authorization_status(1),
+            MicrophonePermissionState::Denied
+        );
+        assert_eq!(
+            map_av_authorization_status(2),
+            MicrophonePermissionState::Denied
+        );
+        assert_eq!(
+            map_av_authorization_status(3),
+            MicrophonePermissionState::Denied
+        );
+        assert_eq!(
+            map_av_authorization_status(4),
+            MicrophonePermissionState::Granted
+        );
+        assert_eq!(
+            map_av_authorization_status(-1),
+            MicrophonePermissionState::Unavailable
+        );
+        assert_eq!(
+            map_av_authorization_status(5),
+            MicrophonePermissionState::Unavailable
+        );
     }
 }
