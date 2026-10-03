@@ -19,6 +19,9 @@ use tauri::{Emitter, Runtime, State};
 
 pub const LOCAL_TTS_MODEL_PROGRESS_EVENT: &str = "moose://local-tts/model-progress";
 
+pub(crate) const LOCAL_VOICE_AUDITION_SCRIPT: &str =
+    "Hello, I'm Moose. Oh good, another button. It works.";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LocalTtsModelError {
     pub kind: LocalTtsInstallErrorKind,
@@ -253,16 +256,22 @@ pub async fn audition_tts_voice<R: Runtime>(
         }
     }
 
+    let script = if provider == TtsProvider::Local {
+        LOCAL_VOICE_AUDITION_SCRIPT
+    } else {
+        VOICE_AUDITION_SCRIPT
+    };
+
     let playback = invoke_standalone_speech_for_provider(
         state.inner(),
         &app,
-        VOICE_AUDITION_SCRIPT,
+        script,
         provider,
         Some(voice_name),
     )
     .await?;
     schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
-    Ok(VOICE_AUDITION_SCRIPT.to_string())
+    Ok(script.to_string())
 }
 
 #[cfg(test)]
@@ -471,5 +480,13 @@ mod tests {
         assert!(!json.contains("pcm"));
         assert!(!json.contains("credential"));
         assert!(!json.contains("path"));
+    }
+
+    #[test]
+    fn local_voice_audition_script_stays_within_bounded_playback_queue() {
+        let script = LOCAL_VOICE_AUDITION_SCRIPT;
+        assert!(script.contains("Hello, I'm Moose"));
+        assert_eq!(script.split_whitespace().count(), 9);
+        assert!(script.len() < VOICE_AUDITION_SCRIPT.len());
     }
 }

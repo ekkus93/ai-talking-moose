@@ -63,12 +63,15 @@ Audition exactly the eight Local KittenTTS V1 voices if a future subjective list
 - [ ] Do not change `google_tts_voice` or `live_voice` during this audition unless intentionally testing settings separation.
 - [ ] Use the same playback device and volume for every voice.
 - [ ] Audition every voice against the same corpus before choosing a replacement default.
+- [ ] Audition at the default 0.95× speaking rate; reduced rates tail-drop the longer corpus lines (4, 8, 10) via the bounded 10-second standalone playback queue.
 
 ---
 
 ## Audition corpus
 
 Use these lines for each voice. The goal is not only ASR intelligibility; it is whether the voice sounds like a good original Talking Moose voice over repeated use.
+
+Queue bound: the lines above are sized to fit the bounded 10-second standalone playback queue at the default 0.95× speaking rate (longest line is 117 chars, ≈ 8.4 s). At reduced speaking rates the queue tail-drops the longer lines (4, 8, 10); if an audition is deliberately run at a reduced rate, treat the dropped tail as an artifact in the artifacts/noise column rather than as a voice defect, or re-run the affected lines at the default rate.
 
 1. `Local speech synthesis is running on this machine.`
 2. `I have reviewed the evidence and, regrettably, the computer is haunted.`
