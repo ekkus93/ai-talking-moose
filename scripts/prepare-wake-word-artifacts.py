@@ -56,7 +56,7 @@ def extract_archive(archive: pathlib.Path, destination: pathlib.Path, archive_ty
             members = bundle.getmembers()
             for member in members:
                 safe_destination(destination, member.name)
-            bundle.extractall(destination, members=members, filter="data")
+            bundle.extractall(destination, members=members)
     elif archive_type == "zip":
         with zipfile.ZipFile(archive) as bundle:
             for name in bundle.namelist():

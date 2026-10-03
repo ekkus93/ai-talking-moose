@@ -26,11 +26,12 @@ fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     let model_dir = value_after(&args, "--model-dir")?;
     let runtime_dir = value_after(&args, "--runtime-dir")?;
+    let output = value_after(&args, "--output")?;
+    let production_listener_flag = args.iter().any(|arg| arg == "--production-listener");
     let corpus_dir = value_after(&args, "--corpus-dir")?;
     let index = value_after(&args, "--index")?;
-    let output = value_after(&args, "--output")?;
 
-    if args.iter().any(|arg| arg == "--production-listener") {
+    if production_listener_flag {
         let report = run_production_listener_performance_acceptance(
             &model_dir,
             &runtime_dir,
@@ -50,16 +51,17 @@ fn run() -> Result<(), String> {
         if !report.passed {
             return Err("production Wake listener performance acceptance failed".to_string());
         }
-    } else {
-        let report = run_real_kws_acceptance(&model_dir, &runtime_dir, &corpus_dir, &index)?;
-        let json = serde_json::to_string_pretty(&report)
-            .map_err(|_| "failed to serialize Wake Word acceptance report".to_string())?;
-        fs::write(&output, format!("{json}\n"))
-            .map_err(|_| "failed to write Wake Word acceptance report".to_string())?;
-        println!("{json}");
-        if !report.passed {
-            return Err("real KWS corpus acceptance criteria were not met".to_string());
-        }
+        return Ok(());
+    }
+
+    let report = run_real_kws_acceptance(&model_dir, &runtime_dir, &corpus_dir, &index)?;
+    let json = serde_json::to_string_pretty(&report)
+        .map_err(|_| "failed to serialize Wake Word acceptance report".to_string())?;
+    fs::write(&output, format!("{json}\n"))
+        .map_err(|_| "failed to write Wake Word acceptance report".to_string())?;
+    println!("{json}");
+    if !report.passed {
+        return Err("real KWS corpus acceptance criteria were not met".to_string());
     }
     Ok(())
 }

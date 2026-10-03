@@ -176,6 +176,15 @@ export const MooseWindow: React.FC = () => {
     }
   };
 
+  const handleCloseWindow = async () => {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().close();
+    } catch (err) {
+      console.error("Window close error:", err);
+    }
+  };
+
   return (
     <div
       data-testid="moose-window"
@@ -193,10 +202,10 @@ export const MooseWindow: React.FC = () => {
         {/* Close box */}
         <div className="flex items-center gap-1.5 z-10">
           <button
-            onClick={() => toggleMute()}
+            onClick={() => void handleCloseWindow()}
             className="w-3.5 h-3.5 bg-white border border-black rounded-[2px] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 flex items-center justify-center"
-            title={isMuted ? "Unmute Moose" : "Mute Moose"}
-            aria-label={isMuted ? "Unmute Moose" : "Mute Moose"}
+            title="Close Talking Moose"
+            aria-label="Close Talking Moose"
           >
             <Square className="w-2 h-2 fill-current" />
           </button>
