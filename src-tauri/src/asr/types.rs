@@ -10,7 +10,16 @@ pub enum AsrMode {
     #[default]
     MoonshineTinyStreaming,
     MoonshineSmallStreaming,
+    WhisperSmall,
     GeminiLiveAudio,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalAsrArchitecture {
+    MoonshineTinyStreaming,
+    MoonshineSmallStreaming,
+    WhisperSmall,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,7 +80,22 @@ pub struct AsrModelDescriptor {
     pub error_message: Option<String>,
 }
 
-/// Live metrics owned by one active local-ASR pipeline.
+impl Default for AsrModelDescriptor {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            display_name: String::new(),
+            mode: AsrMode::default(),
+            install_state: AsrModelInstallState::NotInstalled,
+            revision: String::new(),
+            runtime_release: String::new(),
+            installed_bytes: None,
+            expected_bytes: 0,
+            active: false,
+            error_message: None,
+        }
+    }
+}
 ///
 /// Memory values are process RSS snapshots because the native Moonshine/ONNX
 /// allocator is process-global and does not expose a reliable per-model RSS.
@@ -137,6 +161,22 @@ mod tests {
     }
 
     #[test]
+    fn local_asr_architecture_has_stable_serialized_names() {
+        assert_eq!(
+            serde_json::to_string(&LocalAsrArchitecture::MoonshineTinyStreaming).unwrap(),
+            r#""moonshine_tiny_streaming""#
+        );
+        assert_eq!(
+            serde_json::to_string(&LocalAsrArchitecture::MoonshineSmallStreaming).unwrap(),
+            r#""moonshine_small_streaming""#
+        );
+        assert_eq!(
+            serde_json::to_string(&LocalAsrArchitecture::WhisperSmall).unwrap(),
+            r#""whisper_small""#
+        );
+    }
+
+    #[test]
     fn asr_mode_has_stable_serialized_names() {
         assert_eq!(
             serde_json::to_string(&AsrMode::MoonshineTinyStreaming).unwrap(),
@@ -145,6 +185,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&AsrMode::MoonshineSmallStreaming).unwrap(),
             r#""moonshine_small_streaming""#
+        );
+        assert_eq!(
+            serde_json::to_string(&AsrMode::WhisperSmall).unwrap(),
+            r#""whisper_small""#
         );
         assert_eq!(
             serde_json::to_string(&AsrMode::GeminiLiveAudio).unwrap(),

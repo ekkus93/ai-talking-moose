@@ -4,10 +4,7 @@ mod installer;
 mod manifest;
 mod runtime;
 
-pub use engine::{
-    MoonshineSmallEngine, MoonshineTinyEngine, MoonshineTinyTranscriptUpdate,
-    MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
-};
+pub use engine::{MoonshineSmallEngine, MoonshineTinyEngine};
 pub use installer::{
     MoonshineModelInstallCancellation, MoonshineModelInstallErrorKind, MoonshineModelInstallPhase,
     MoonshineModelInstallProgress, MoonshineModelInstallProgressCallback, MoonshineModelInstaller,

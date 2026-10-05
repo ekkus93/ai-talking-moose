@@ -12,7 +12,7 @@ The project currently has:
 - A local ASR pipeline that currently supports Moonshine Tiny/Small streaming on macOS.
 - A cloud-based `GeminiLiveAudio` path, which is not private and is not a suitable Linux local ASR replacement.
 - A Tauri desktop shell with a newly added close-window control.
-- No implemented whisper.cpp local ASR backend yet.
+- A whisper.cpp `WhisperSmall` local ASR backend is implemented for final transcription; streaming partials, weight-license verification, and real-CPU acceptance remain open.
 
 The goal is to add a whisper.cpp-backed local ASR engine that can be selected as a Linux local ASR mode, while preserving the existing Moonshine implementation for macOS.
 
@@ -216,17 +216,10 @@ Current `AsrMode` values:
 
 - `MoonshineTinyStreaming`
 - `MoonshineSmallStreaming`
+- `WhisperSmall`
 - `GeminiLiveAudio`
 
-There is currently no Whisper value.
-
-A likely future value is:
-
-```rust
-AsrMode::WhisperSmallStreaming
-```
-
-or a similar engine-specific name.
+The Whisper mode is implemented as `AsrMode::WhisperSmall` with serialized form `"whisper_small"`.
 
 ---
 
@@ -460,21 +453,21 @@ The download script `models/download-ggml-model.sh` downloads the small model as
 models/ggml-small.bin
 ```
 
-Likely actual file URL:
+Pinned model URL:
 
 ```text
-https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin?download=true
+https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true
 ```
 
-An earlier URL:
+Earlier wrong-path URL:
 
 ```text
 https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml/small.bin?download=true
 ```
 
-returned 404.
+returned 404; superseded by the pinned URL above and not used.
 
-The file appears to be flat, not nested under `ggml/`.
+The file is flat at the repo root, not nested under `ggml/`.
 
 ### 7.2 Known metadata
 
@@ -482,7 +475,7 @@ HEAD metadata for `ggml-small.bin`:
 
 - HTTP status: `302` to a CDN
 - `x-linked-size`: `487601967` bytes
-- `x-repo-commit`: `5359861c739e955e79d9a303bcbc70fb988958b1`
+- `x-repo-commit`: `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`
 
 Approximate size:
 
@@ -495,15 +488,20 @@ about 466 MiB
 
 Still needed:
 
-- exact SHA256 of `ggml-small.bin`
-- exact license statement for the file/model weights
-- exact file name and URL to pin in the app manifest
-- whether the preferred file should be:
-  - `ggml-small.bin`
-  - `ggml-small-q5_1.bin`
-  - `ggml-small-q8_0.bin`
-  - `ggml-small.en.bin`
-  - another variant
+- authoritative license statement for the `ggml-small.bin` weights
+- independent live download verification of bytes and SHA-256
+
+Pinned in `src-tauri/src/asr/whisper/manifest.rs`:
+
+- file name: `ggml-small.bin`
+- model URL:
+
+```text
+https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true
+```
+
+- bytes: `487601967`
+- SHA-256: `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`
 
 Observed sibling files in the HF repo include:
 
@@ -514,7 +512,7 @@ Observed sibling files in the HF repo include:
 - `ggml-small.en-q5_1.bin`
 - related model files
 
-The model file should be pinned by exact URL and SHA256 in a manifest.
+The model file is pinned by exact URL and SHA-256 in a manifest.
 
 ---
 
@@ -842,27 +840,25 @@ But only proceed after confirming:
 Check:
 
 ```bash
-curl -sI "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin?download=true"
+curl -sI "https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true"
 ```
 
-Known current values:
+Expected values:
 
 - size: `487601967`
-- repo commit: `5359861c739e955e79d9a303bcbc70fb988958b1`
+- repo commit: `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`
 
 Still need:
 
-- SHA256
 - license
-- exact pinned URL
-- exact file name
+- live SHA-256 verification against the pinned bytes
 
 If downloading locally for verification only, use a temporary location outside the repo:
 
 ```bash
 mkdir -p /tmp/whisper-check
 cd /tmp/whisper-check
-curl -fL "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin?download=true" -o ggml-small.bin
+curl -fL "https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true" -o ggml-small.bin
 sha256sum ggml-small.bin
 ```
 
@@ -1181,23 +1177,25 @@ The first is currently local-LLM/llama.cpp specific and may need ASR extension.
 - Desktop shell close-window behavior.
 - Existing local LLM architecture.
 - Existing frontend/backend IPC contract gates.
+- Whisper.cpp `WhisperSmall` local ASR core: manifest, installer, Linux build integration, final transcript dispatch, diagnostics, and frontend selection.
 
 ### Partial
 
-- Local ASR pipeline exists but is Moonshine-shaped.
-- Whisper.cpp is researched but not implemented.
-- whisper-small model metadata is partially known.
-- Rust integration approach is not yet confirmed.
+- Local ASR pipeline still has Moonshine-shaped components.
+- Whisper.cpp engine emits only final transcript updates after the 300 ms batch threshold; partials/windowing are not complete.
+- Pinned `ggml-small.bin` URL, source commit, size, and SHA-256 are in `src-tauri/src/asr/whisper/manifest.rs`, but live download verification is still pending.
+- `ggml-small.bin` weight license is pending.
+- `src-tauri/src/asr/whisper/runtime.rs` is not created; lease/worker logic is still distributed across installer/engine/pipeline.
+- P5 real-CPU acceptance has not been run.
 
 ### Not Working
 
-- Private local Linux ASR using whisper.cpp is not yet implemented.
-- Linux voice conversation using local ASR is not yet available.
-- Whisper-specific installer, engine, diagnostics, and UI selection are not yet implemented.
+- Fully streamed Whisper.cpp partial transcription.
+- Release-complete local Linux ASR until weight-license verification, live download verification, P2 partial/windowing, and real-CPU acceptance are finished.
 
 ### Next Major Milestone
 
-Add a whisper.cpp `WhisperSmallStreaming` local ASR mode that can be selected, downloaded/verified, loaded, streamed over 16 kHz PCM, and reported through the existing local ASR event path.
+Finish P0/P2/P5 for Whisper.cpp: verify the `ggml-small.bin` weight license and live download bytes/SHA-256, add partial/windowing support in `src-tauri/src/asr/whisper/engine.rs`, and run P5 real-CPU acceptance.
 
 ---
 
@@ -1247,12 +1245,12 @@ Do not mix unrelated UI or wake-word changes into the whisper implementation com
 
 ## 19. Final Handoff Note
 
-The most important current gap is that whisper.cpp has been researched but not yet integrated. The codebase already has a strong local ASR and installer pattern based on Moonshine, but the current pipeline is still Moonshine-specific.
+The most important current gap is finishing Whisper.cpp V1 acceptance: verify the `ggml-small.bin` weight license and live download bytes/SHA-256, complete P2 partial/windowing in `src-tauri/src/asr/whisper/engine.rs`, and run P5 real-CPU acceptance. The codebase already has a strong local ASR and installer pattern based on Moonshine, and the Whisper `WhisperSmall` path is now wired end-to-end for final transcription.
 
 The preferred path forward is:
 
 1. Confirm whisper.cpp build/integration approach.
-2. Confirm `ggml-small.bin` SHA256 and license.
+2. Confirm live `ggml-small.bin` SHA-256 verification and license.
 3. Introduce an engine-agnostic `TranscriptUpdate` type.
 4. Add a whisper.cpp module under `src-tauri/src/asr/whisper/`.
 5. Wire it into `LocalAsrPipeline` and `AsrMode`.

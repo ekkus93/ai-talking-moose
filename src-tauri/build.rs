@@ -5,6 +5,9 @@ const MOONSHINE_DYLIB: &str = "libmoonshine.dylib";
 const ONNXRUNTIME_DYLIB: &str = "libonnxruntime.1.23.2.dylib";
 const UNKNOWN_BUILD_COMMIT: &str = "unknown";
 
+const WHISPER_LIB_DIR: &str = "TALKING_MOOSE_WHISPER_LIB_DIR";
+const WHISPER_STATIC_LIBS: [&str; 4] = ["whisper", "ggml", "ggml-cpu", "ggml-base"];
+
 fn explicit_library_dir() -> Option<PathBuf> {
     let lib_dir = std::env::var("TALKING_MOOSE_MOONSHINE_LIB_DIR").ok()?;
     let lib_dir = lib_dir.trim();
@@ -107,9 +110,146 @@ fn build_commit() -> String {
         .unwrap_or_else(|| UNKNOWN_BUILD_COMMIT.to_string())
 }
 
+// Whisper source build (Linux only). Builds whisper.cpp and ggml into
+// <root>/build/whisper and links the resulting static libraries. macOS and
+// non-Linux targets fail closed for Whisper until proven.
+fn explicit_whisper_lib_dir() -> Option<PathBuf> {
+    let lib_dir = std::env::var(WHISPER_LIB_DIR).ok()?;
+    let lib_dir = lib_dir.trim();
+    if lib_dir.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(lib_dir))
+    }
+}
+
+fn target_is_linux() -> bool {
+    match std::env::var_os("TARGET") {
+        Some(target) => target.to_string_lossy().contains("linux"),
+        None => false,
+    }
+}
+
+fn has_whisper_runtime(build_dir: &Path) -> bool {
+    build_dir.join("src").join("libwhisper.a").is_file()
+        && build_dir
+            .join("ggml")
+            .join("src")
+            .join("libggml.a")
+            .is_file()
+        && build_dir
+            .join("ggml")
+            .join("src")
+            .join("libggml-base.a")
+            .is_file()
+        && build_dir
+            .join("ggml")
+            .join("src")
+            .join("libggml-cpu.a")
+            .is_file()
+}
+
+fn emit_whisper_link(build_dir: &Path) {
+    println!("cargo:rustc-link-search=native={}/src", build_dir.display());
+    println!(
+        "cargo:rustc-link-search=native={}/ggml/src",
+        build_dir.display()
+    );
+    for lib in WHISPER_STATIC_LIBS {
+        println!("cargo:rustc-link-lib=static={lib}");
+    }
+    println!("cargo:rustc-cfg=whisper_native_linked");
+}
+
+fn cpu_count() -> usize {
+    std::fs::read_to_string("/proc/nproc")
+        .ok()
+        .and_then(|content| content.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(4)
+}
+
+fn build_whisper_from_source() {
+    if !target_is_linux() {
+        return;
+    }
+
+    let Some(root) = repository_root() else {
+        return;
+    };
+
+    let whisper_src = root.join("third_party").join("whisper.cpp");
+    if !whisper_src.join("CMakeLists.txt").is_file() {
+        return;
+    }
+
+    let build_dir = root.join("build").join("whisper");
+    if std::fs::create_dir_all(&build_dir).is_err() {
+        return;
+    }
+
+    println!(
+        "cargo:rerun-if-changed={}",
+        whisper_src.join("CMakeLists.txt").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        whisper_src.join("src").join("CMakeLists.txt").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        whisper_src.join("ggml").join("CMakeLists.txt").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        whisper_src.join("src").join("whisper.cpp").display()
+    );
+
+    let configure = Command::new("cmake")
+        .current_dir(&build_dir)
+        .arg("-S")
+        .arg(&whisper_src)
+        .args([
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DBUILD_SHARED_LIBS=OFF",
+            "-DWHISPER_BUILD_IS_DEV=OFF",
+            "-DWHISPER_BUILD_TESTS=OFF",
+            "-DWHISPER_BUILD_EXAMPLES=OFF",
+            "-DWHISPER_BUILD_SERVER=OFF",
+            "-DWHISPER_ALL_WARNINGS=OFF",
+            "-DCMAKE_C_FLAGS=-fPIC",
+            "-DCMAKE_CXX_FLAGS=-fPIC",
+        ])
+        .output();
+    if let Ok(configure) = configure {
+        if !configure.status.success() {
+            return;
+        }
+    }
+
+    let threads = cpu_count().to_string();
+    let make = Command::new("make")
+        .current_dir(&build_dir)
+        .arg("-j")
+        .arg(&threads)
+        .arg("whisper")
+        .status();
+    if let Ok(make) = make {
+        if !make.success() {
+            return;
+        }
+    }
+
+    if has_whisper_runtime(&build_dir) {
+        emit_whisper_link(&build_dir);
+    }
+}
+
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(moonshine_native_linked)");
+    println!("cargo:rustc-check-cfg=cfg(whisper_native_linked)");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_MOONSHINE_LIB_DIR");
+    println!("cargo:rerun-if-env-changed={WHISPER_LIB_DIR}");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-changed=native/macos/{MOONSHINE_DYLIB}");
@@ -128,6 +268,16 @@ fn main() {
         if has_packaged_macos_runtime(&lib_dir) {
             emit_moonshine_link(&lib_dir);
         }
+    }
+
+    // Whisper source build (Linux) and escape hatch. Fails closed when the
+    // native runtime is absent or on an unsupported target.
+    if let Some(build_dir) = explicit_whisper_lib_dir() {
+        if has_whisper_runtime(&build_dir) {
+            emit_whisper_link(&build_dir);
+        }
+    } else {
+        build_whisper_from_source();
     }
 
     tauri_build::build()

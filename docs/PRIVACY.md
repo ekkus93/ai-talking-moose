@@ -12,15 +12,20 @@
 
 ## 2. Speech-recognition privacy
 
-Talking Moose supports three ASR choices:
+Talking Moose supports four ASR choices:
 
 | ASR choice | Microphone audio | Transcript text |
 | --- | --- | --- |
 | Moonshine Tiny Streaming | Processed locally | Finalized user text may be sent to Gemini Live for the Moose's conversational response |
 | Moonshine Small Streaming | Processed locally | Finalized user text may be sent to Gemini Live for the Moose's conversational response |
+| Local Whisper.cpp Small | Processed locally on the host | Finalized user text may be sent to Gemini Live for the Moose's conversational response |
 | Google Gemini Live Audio | Streamed to Google during the active conversation | Google processes the corresponding conversation content |
 
-Moonshine therefore makes **speech recognition local**; it does not make the realtime conversation LLM or Google-generated voice response local. The application must communicate that distinction clearly anywhere the ASR mode is selected.
+Moonshine and local Whisper.cpp make **speech recognition local**; they do not make the realtime conversation LLM or Google-generated voice response local. The application must communicate that distinction clearly anywhere the ASR mode is selected.
+
+Local Whisper.cpp uses a pinned whisper.cpp source commit and a user-downloaded, SHA-verified `ggml-small` model file. Whisper microphone audio remains local. Whisper installation is explicit and separate from conversation start.
+
+If the selected Whisper model is absent, corrupt, unsupported, or fails at runtime, local ASR fails explicitly. It does not fall back to Gemini Live, Moonshine, Fake, or any other cloud provider.
 
 Moonshine Tiny Streaming is the default for a new profile. The model is downloaded only after an explicit user action; selecting a missing model is not permission to download it or switch to cloud ASR automatically.
 

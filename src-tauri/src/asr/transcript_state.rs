@@ -7,8 +7,16 @@ use std::collections::HashSet;
 /// machine never infers utterance identity from transcript text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum StreamingTranscriptUpdate {
-    Partial { segment_id: u64, text: String },
-    Final { segment_id: u64, text: String },
+    Partial {
+        segment_id: u64,
+        text: String,
+        latency_ms: u32,
+    },
+    Final {
+        segment_id: u64,
+        text: String,
+        latency_ms: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,8 +40,12 @@ pub(crate) struct TranscriptStateMachine {
 impl TranscriptStateMachine {
     pub(crate) fn apply(&mut self, update: StreamingTranscriptUpdate) -> Vec<AsrEvent> {
         let (segment_id, text, is_final) = match update {
-            StreamingTranscriptUpdate::Partial { segment_id, text } => (segment_id, text, false),
-            StreamingTranscriptUpdate::Final { segment_id, text } => (segment_id, text, true),
+            StreamingTranscriptUpdate::Partial {
+                segment_id, text, ..
+            } => (segment_id, text, false),
+            StreamingTranscriptUpdate::Final {
+                segment_id, text, ..
+            } => (segment_id, text, true),
         };
 
         if self.closed_segments.contains(&segment_id) {
@@ -101,6 +113,7 @@ mod tests {
         StreamingTranscriptUpdate::Partial {
             segment_id,
             text: text.to_string(),
+            latency_ms: 1,
         }
     }
 
@@ -108,6 +121,7 @@ mod tests {
         StreamingTranscriptUpdate::Final {
             segment_id,
             text: text.to_string(),
+            latency_ms: 1,
         }
     }
 

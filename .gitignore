@@ -48,4 +48,7 @@ __pycache__/
 *.gguf
 *.GGUF
 
+# Source-built whisper.cpp native runtime (Linux).
+build/whisper/
+
 

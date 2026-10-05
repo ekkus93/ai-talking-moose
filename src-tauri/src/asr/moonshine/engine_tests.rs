@@ -1,6 +1,7 @@
 use super::super::manifest::MOONSHINE_MODEL_REVISION;
 use super::super::runtime::MoonshineLine;
 use super::*;
+use crate::asr::transcript_state::StreamingTranscriptUpdate;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -405,16 +406,16 @@ fn partial_changes_replace_by_line_id_without_duplicate_emission() {
 
     assert_eq!(
         engine.push_pcm(&[0.1]).unwrap(),
-        vec![MoonshineTinyTranscriptUpdate::Partial {
-            line_id: 7,
+        vec![StreamingTranscriptUpdate::Partial {
+            segment_id: 7,
             text: "hel".to_string(),
             latency_ms: 8,
         }]
     );
     assert_eq!(
         engine.push_pcm(&[0.1]).unwrap(),
-        vec![MoonshineTinyTranscriptUpdate::Partial {
-            line_id: 7,
+        vec![StreamingTranscriptUpdate::Partial {
+            segment_id: 7,
             text: "hello".to_string(),
             latency_ms: 9,
         }]
@@ -442,8 +443,8 @@ fn complete_line_emits_final_once_until_content_changes() {
     let _ = engine.push_pcm(&[0.1]).unwrap();
     assert_eq!(
         engine.push_pcm(&[0.1]).unwrap(),
-        vec![MoonshineTinyTranscriptUpdate::Final {
-            line_id: 42,
+        vec![StreamingTranscriptUpdate::Final {
+            segment_id: 42,
             text: "hello".to_string(),
             latency_ms: 12,
         }]
@@ -465,8 +466,8 @@ fn flush_forces_transcription_without_appending_audio() {
 
     assert_eq!(
         engine.flush().unwrap(),
-        vec![MoonshineTinyTranscriptUpdate::Final {
-            line_id: 5,
+        vec![StreamingTranscriptUpdate::Final {
+            segment_id: 5,
             text: "done".to_string(),
             latency_ms: 14,
         }]

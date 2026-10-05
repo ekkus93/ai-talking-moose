@@ -1,6 +1,7 @@
-use crate::asr::moonshine::MoonshineTinyTranscriptUpdate;
-use crate::asr::types::LocalAsrRuntimeDiagnostics;
-use crate::asr::{AsrError, AsrEvent};
+use crate::asr::{
+    transcript_state::StreamingTranscriptUpdate, types::LocalAsrRuntimeDiagnostics, AsrError,
+    AsrEvent,
+};
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]
@@ -58,24 +59,20 @@ impl RuntimeMetrics {
 
     pub(crate) fn record_transcript_events(
         &mut self,
-        native_update: &MoonshineTinyTranscriptUpdate,
+        update: &StreamingTranscriptUpdate,
         emitted_events: &[AsrEvent],
+        transcription_latency_ms: u32,
     ) {
-        let (native_latency_ms, emitted_useful_transcript) = match native_update {
-            MoonshineTinyTranscriptUpdate::Partial { latency_ms, .. } => (
-                *latency_ms,
-                emitted_events
-                    .iter()
-                    .any(|event| matches!(event, AsrEvent::PartialTranscript { .. })),
-            ),
-            MoonshineTinyTranscriptUpdate::Final { latency_ms, .. } => (
-                *latency_ms,
-                emitted_events
-                    .iter()
-                    .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })),
-            ),
+        self.last_transcription_latency_ms = Some(transcription_latency_ms);
+
+        let emitted_useful_transcript = match update {
+            StreamingTranscriptUpdate::Partial { .. } => emitted_events
+                .iter()
+                .any(|event| matches!(event, AsrEvent::PartialTranscript { .. })),
+            StreamingTranscriptUpdate::Final { .. } => emitted_events
+                .iter()
+                .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })),
         };
-        self.last_transcription_latency_ms = Some(native_latency_ms);
 
         if !emitted_useful_transcript {
             return;
@@ -84,11 +81,11 @@ impl RuntimeMetrics {
             return;
         };
         let elapsed_ms = duration_millis_u64(first_audio_at.elapsed());
-        match native_update {
-            MoonshineTinyTranscriptUpdate::Partial { .. } => {
+        match update {
+            StreamingTranscriptUpdate::Partial { .. } => {
                 self.first_partial_latency_ms.get_or_insert(elapsed_ms);
             }
-            MoonshineTinyTranscriptUpdate::Final { .. } => {
+            StreamingTranscriptUpdate::Final { .. } => {
                 self.first_final_latency_ms.get_or_insert(elapsed_ms);
             }
         }
@@ -184,7 +181,7 @@ fn samples_to_millis(samples: u64, sample_rate_hz: u32) -> u64 {
 }
 
 #[cfg(unix)]
-fn process_cpu_time_micros() -> Option<u64> {
+pub(crate) fn process_cpu_time_micros() -> Option<u64> {
     let mut usage = std::mem::MaybeUninit::<libc::rusage>::zeroed();
     // SAFETY: `usage` points to writable storage for exactly one `libc::rusage`.
     if unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) } != 0 {
@@ -203,12 +200,12 @@ fn timeval_micros(value: libc::timeval) -> Option<u64> {
 }
 
 #[cfg(not(unix))]
-fn process_cpu_time_micros() -> Option<u64> {
+pub(crate) fn process_cpu_time_micros() -> Option<u64> {
     None
 }
 
 #[cfg(target_os = "linux")]
-fn current_resident_memory_bytes() -> Option<u64> {
+pub(crate) fn current_resident_memory_bytes() -> Option<u64> {
     let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
     let resident_pages = statm.split_whitespace().nth(1)?.parse::<u64>().ok()?;
     // SAFETY: `sysconf` has no pointer arguments and `_SC_PAGESIZE` is a valid query.
@@ -251,7 +248,7 @@ extern "C" {
 }
 
 #[cfg(target_os = "macos")]
-fn current_resident_memory_bytes() -> Option<u64> {
+pub(crate) fn current_resident_memory_bytes() -> Option<u64> {
     let mut info = std::mem::MaybeUninit::<MachTaskBasicInfo>::zeroed();
     let mut count =
         u32::try_from(std::mem::size_of::<MachTaskBasicInfo>() / std::mem::size_of::<u32>())
@@ -275,7 +272,7 @@ fn current_resident_memory_bytes() -> Option<u64> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn current_resident_memory_bytes() -> Option<u64> {
+pub(crate) fn current_resident_memory_bytes() -> Option<u64> {
     None
 }
 
@@ -294,12 +291,13 @@ mod tests {
         let mut metrics = RuntimeMetrics::new();
         metrics.record_audio_start_if_needed();
         metrics.record_transcript_events(
-            &MoonshineTinyTranscriptUpdate::Partial {
-                line_id: 1,
+            &StreamingTranscriptUpdate::Partial {
+                segment_id: 1,
                 text: " ".to_string(),
                 latency_ms: 7,
             },
             &[],
+            7,
         );
         let diagnostics = metrics.runtime_diagnostics(16_000, 0, 8, true);
         assert_eq!(diagnostics.first_partial_latency_ms, None);

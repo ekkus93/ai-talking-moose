@@ -291,7 +291,10 @@ mod tests {
         let error =
             apply_wake_listener_change_transactionally(&state, &previous, &next).unwrap_err();
 
-        assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
+        assert_eq!(
+            error,
+            crate::app::wake_word_state::WAKE_WORD_UNSUPPORTED_ASR_MESSAGE
+        );
         assert_eq!(
             state.wake_word_runtime.phase(),
             WakeWordRuntimePhase::Disabled

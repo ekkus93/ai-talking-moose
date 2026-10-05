@@ -475,6 +475,12 @@ mod tests {
                 .join(MANIFEST.id)
                 .join(MANIFEST.model_source_revision);
             fs::write(revision_dir.join(filename), replacement).unwrap();
+            let target_time = std::time::SystemTime::now()
+                .checked_sub(std::time::Duration::from_secs(3600))
+                .unwrap();
+            let file = std::fs::File::open(revision_dir.join(filename)).unwrap();
+            file.set_times(std::fs::FileTimes::new().set_modified(target_time))
+                .unwrap();
             assert!(storage.marker_shape_is_valid(&MANIFEST, LocalTtsPlatform::LinuxX86_64));
 
             let error = verifier

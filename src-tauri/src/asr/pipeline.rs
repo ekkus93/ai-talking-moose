@@ -1,12 +1,11 @@
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrResource;
-use crate::asr::moonshine::{
-    MoonshineModelArchitecture, MoonshineModelInstaller, MoonshineSmallEngine, MoonshineTinyEngine,
-    MoonshineTinyTranscriptUpdate, MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
-};
+use crate::asr::moonshine::{MoonshineModelInstaller, MoonshineSmallEngine, MoonshineTinyEngine};
 use crate::asr::runtime_metrics::RuntimeMetrics;
 use crate::asr::transcript_state::{StreamingTranscriptUpdate, TranscriptStateMachine};
+use crate::asr::types::LocalAsrArchitecture;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
+use crate::asr::whisper::WhisperModelInstaller;
 use crate::asr::{AsrError, AsrErrorKind, AsrEvent};
 use crate::audio::capture::AudioCapture;
 use crate::audio::resample::AudioResampler;
@@ -28,6 +27,8 @@ use tracing::debug;
 /// dropped by `AudioCapture`, which owns the authoritative overload counter.
 pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 8;
 
+pub(crate) const LOCAL_ASR_INPUT_SAMPLE_RATE_HZ: u32 = 16_000;
+
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 const PRODUCTION_WORKER_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -40,7 +41,7 @@ pub type LocalAsrPipelineEvent = AsrEvent;
 /// Bounded-worker diagnostics exposed to the ASR diagnostics command and tests.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalAsrPipelineDiagnostics {
-    pub architecture: MoonshineModelArchitecture,
+    pub architecture: LocalAsrArchitecture,
     pub input_sample_rate_hz: u32,
     pub queue_depth: usize,
     pub queue_capacity: usize,
@@ -61,9 +62,9 @@ pub struct LocalAsrPipelineDiagnostics {
 
 pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(LocalAsrPipelineEvent) + Send + Sync>;
 
-trait PipelineEngine: Send {
+pub trait PipelineEngine: Send {
     fn input_sample_rate_hz(&self) -> u32;
-    fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<MoonshineTinyTranscriptUpdate>, AsrError>;
+    fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError>;
     fn stop(&mut self) -> Result<(), AsrError>;
 }
 
@@ -72,7 +73,7 @@ impl PipelineEngine for MoonshineTinyEngine {
         MoonshineTinyEngine::input_sample_rate_hz(self)
     }
 
-    fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<MoonshineTinyTranscriptUpdate>, AsrError> {
+    fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
         MoonshineTinyEngine::push_pcm(self, pcm)
     }
 
@@ -90,7 +91,7 @@ impl PipelineEngine for MoonshineTinyEngine {
 /// The dedicated OS worker converts those bounded chunks to `f32` and performs
 /// all native Moonshine inference off Tokio and off the CPAL callback thread.
 pub struct LocalAsrPipeline {
-    architecture: MoonshineModelArchitecture,
+    architecture: LocalAsrArchitecture,
     input_sample_rate_hz: u32,
     pcm_sender: Option<mpsc::Sender<Vec<u8>>>,
     running: Arc<AtomicBool>,
@@ -107,7 +108,7 @@ impl LocalAsrPipeline {
         event_callback: LocalAsrPipelineEventCallback,
     ) -> Result<Self, AsrError> {
         Self::start_architecture(
-            MoonshineModelArchitecture::TinyStreaming,
+            LocalAsrArchitecture::MoonshineTinyStreaming,
             move || {
                 MoonshineTinyEngine::open(&installer)
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
@@ -126,9 +127,29 @@ impl LocalAsrPipeline {
         event_callback: LocalAsrPipelineEventCallback,
     ) -> Result<Self, AsrError> {
         Self::start_architecture(
-            MoonshineModelArchitecture::SmallStreaming,
+            LocalAsrArchitecture::MoonshineSmallStreaming,
             move || {
                 MoonshineSmallEngine::open_small(&installer)
+                    .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
+            },
+            event_callback,
+            PRODUCTION_WORKER_STARTUP_TIMEOUT,
+            None,
+        )
+        .await
+    }
+
+    /// Start the production Whisper.cpp `whisper-small` worker with the same
+    /// bounded queue, transcript state machine, lifecycle, and local-only
+    /// microphone contract.
+    pub async fn start_whisper(
+        installer: Arc<WhisperModelInstaller>,
+        event_callback: LocalAsrPipelineEventCallback,
+    ) -> Result<Self, AsrError> {
+        Self::start_architecture(
+            LocalAsrArchitecture::WhisperSmall,
+            move || {
+                crate::asr::whisper::engine::open(installer)
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
             },
             event_callback,
@@ -273,7 +294,7 @@ impl LocalAsrPipeline {
         F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
     {
         Self::start_architecture(
-            MoonshineModelArchitecture::TinyStreaming,
+            LocalAsrArchitecture::MoonshineTinyStreaming,
             factory,
             event_callback,
             WORKER_STARTUP_TIMEOUT,
@@ -292,7 +313,7 @@ impl LocalAsrPipeline {
         F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
     {
         Self::start_architecture(
-            MoonshineModelArchitecture::TinyStreaming,
+            LocalAsrArchitecture::MoonshineTinyStreaming,
             factory,
             event_callback,
             WORKER_STARTUP_TIMEOUT,
@@ -302,7 +323,7 @@ impl LocalAsrPipeline {
     }
 
     async fn start_architecture<F>(
-        architecture: MoonshineModelArchitecture,
+        architecture: LocalAsrArchitecture,
         factory: F,
         event_callback: LocalAsrPipelineEventCallback,
         startup_timeout: Duration,
@@ -323,8 +344,9 @@ impl LocalAsrPipeline {
         let worker_callback = event_callback.clone();
         let worker = thread::Builder::new()
             .name(match architecture {
-                MoonshineModelArchitecture::TinyStreaming => "moonshine-tiny-asr".to_string(),
-                MoonshineModelArchitecture::SmallStreaming => "moonshine-small-asr".to_string(),
+                LocalAsrArchitecture::MoonshineTinyStreaming => "moonshine-tiny-asr".to_string(),
+                LocalAsrArchitecture::MoonshineSmallStreaming => "moonshine-small-asr".to_string(),
+                LocalAsrArchitecture::WhisperSmall => "whisper-small-asr".to_string(),
             })
             .spawn(move || {
                 let mut engine = match factory() {
@@ -339,11 +361,11 @@ impl LocalAsrPipeline {
                 }
                 worker_metrics.lock().mark_engine_ready();
 
-                if engine.input_sample_rate_hz() != MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ {
+                if engine.input_sample_rate_hz() != LOCAL_ASR_INPUT_SAMPLE_RATE_HZ {
                     let error = AsrError {
                         kind: AsrErrorKind::Internal,
                         message:
-                            "Moonshine streaming engine reported an unexpected input sample rate."
+                            "Local ASR streaming engine reported an unexpected input sample rate."
                                 .to_string(),
                         retryable: false,
                     };
@@ -380,7 +402,7 @@ impl LocalAsrPipeline {
             Ok(Ok(Ok(()))) => {
                 let pipeline = Self {
                     architecture,
-                    input_sample_rate_hz: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                    input_sample_rate_hz: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
                     pcm_sender: Some(pcm_tx),
                     running,
                     stop_requested,
@@ -518,6 +540,7 @@ fn run_worker(
     event_callback: &LocalAsrPipelineEventCallback,
 ) -> Result<(), AsrError> {
     let mut terminal_error = None;
+    let mut audio_started: Option<Instant> = None;
     let mut transcript_state = TranscriptStateMachine::default();
     while !stop_requested.load(Ordering::SeqCst) {
         let bytes = match pcm_rx.try_recv() {
@@ -536,6 +559,9 @@ fn run_worker(
         }
 
         metrics.lock().record_audio_start_if_needed();
+        if audio_started.is_none() {
+            audio_started = Some(Instant::now());
+        }
         let pcm = match decode_mono_i16_le(&bytes) {
             Ok(pcm) => pcm,
             Err(error) => {
@@ -554,10 +580,14 @@ fn run_worker(
         match inference_result {
             Ok(updates) => {
                 for update in updates {
-                    let emitted_events = transcript_state.apply(map_transcript_update(&update));
+                    let latency_ms = match &update {
+                        StreamingTranscriptUpdate::Partial { latency_ms, .. } => *latency_ms,
+                        StreamingTranscriptUpdate::Final { latency_ms, .. } => *latency_ms,
+                    };
+                    let emitted_events = transcript_state.apply(update.clone());
                     metrics
                         .lock()
-                        .record_transcript_events(&update, &emitted_events);
+                        .record_transcript_events(&update, &emitted_events, latency_ms);
                     for event in emitted_events {
                         event_callback(event);
                     }
@@ -606,23 +636,6 @@ fn record_terminal_error(
     event_callback(AsrEvent::Error {
         error: error.clone(),
     });
-}
-
-fn map_transcript_update(update: &MoonshineTinyTranscriptUpdate) -> StreamingTranscriptUpdate {
-    match update {
-        MoonshineTinyTranscriptUpdate::Partial { line_id, text, .. } => {
-            StreamingTranscriptUpdate::Partial {
-                segment_id: *line_id,
-                text: text.clone(),
-            }
-        }
-        MoonshineTinyTranscriptUpdate::Final { line_id, text, .. } => {
-            StreamingTranscriptUpdate::Final {
-                segment_id: *line_id,
-                text: text.clone(),
-            }
-        }
-    }
 }
 
 fn invalid_state_error(message: &str) -> AsrError {

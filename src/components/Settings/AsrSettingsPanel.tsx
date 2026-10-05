@@ -340,6 +340,11 @@ export const AsrSettingsPanel: React.FC = () => {
           "Moonshine Small Streaming",
           "Higher-capacity local English speech recognition with a larger model and CPU footprint.",
         )}
+        {renderLocalModel(
+          "whisper_small",
+          "Whisper Small",
+          "Local batch English speech recognition with a compact model; supports wake-word activation.",
+        )}
 
         <div
           className={`border rounded p-3 ${settings.asr_mode === "gemini_live_audio" ? "border-black border-2" : "border-gray-400"}`}

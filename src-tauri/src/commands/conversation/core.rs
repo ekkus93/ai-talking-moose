@@ -192,6 +192,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
         config,
         asr_mode: settings.asr_mode,
         moonshine_installer: Some(state.moonshine_installer.clone()),
+        whisper_installer: Some(state.whisper_installer.clone()),
         capture: state.audio_capture.clone(),
         input_device: settings.input_device.clone(),
         playback: state.audio_playback.clone(),

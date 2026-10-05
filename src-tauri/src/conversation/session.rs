@@ -118,6 +118,7 @@ pub struct ConversationStartRequest {
     pub config: LiveSessionConfig,
     pub asr_mode: AsrMode,
     pub moonshine_installer: Option<Arc<MoonshineModelInstaller>>,
+    pub whisper_installer: Option<Arc<crate::asr::whisper::WhisperModelInstaller>>,
     pub capture: Arc<SyncMutex<AudioCapture>>,
     pub input_device: Option<String>,
     pub playback: Arc<AudioPlayback>,
@@ -480,7 +481,11 @@ impl ConversationManager {
             || self.active_session_id.lock().as_deref() != Some(expected_session_id)
             || !matches!(
                 *self.active_asr_mode.lock(),
-                Some(AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming)
+                Some(
+                    AsrMode::MoonshineTinyStreaming
+                        | AsrMode::MoonshineSmallStreaming
+                        | AsrMode::WhisperSmall
+                )
             )
         {
             return Ok(false);
@@ -511,7 +516,11 @@ impl ConversationManager {
             || self.active_session_id.lock().as_deref() != Some(expected_session_id)
             || !matches!(
                 *self.active_asr_mode.lock(),
-                Some(AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming)
+                Some(
+                    AsrMode::MoonshineTinyStreaming
+                        | AsrMode::MoonshineSmallStreaming
+                        | AsrMode::WhisperSmall
+                )
             )
         {
             return Ok(false);
@@ -547,6 +556,7 @@ impl ConversationManager {
             config,
             asr_mode,
             moonshine_installer,
+            whisper_installer,
             capture,
             input_device,
             playback,
@@ -596,6 +606,7 @@ impl ConversationManager {
                 generation,
                 asr_mode,
                 installer: moonshine_installer,
+                whisper_installer,
                 session_id: session_id.clone(),
                 capture: capture.clone(),
                 playback: playback.clone(),
@@ -708,9 +719,11 @@ impl ConversationManager {
         let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
         let mut cloud_pcm_rx = None;
         let capture_result = match asr_mode {
-            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => local_pipeline
+            AsrMode::MoonshineTinyStreaming
+            | AsrMode::MoonshineSmallStreaming
+            | AsrMode::WhisperSmall => local_pipeline
                 .as_ref()
-                .expect("local Moonshine mode must have a provisional ASR pipeline")
+                .expect("local ASR mode must have a provisional ASR pipeline")
                 .start_capture(&mut capture.lock(), input_device, Some(level_tx))
                 .map_err(|error| {
                     self.local_asr_diagnostics

@@ -68,6 +68,7 @@ async fn conversation_stays_connecting_until_provider_setup_finishes() {
         },
         asr_mode: AsrMode::GeminiLiveAudio,
         moonshine_installer: None,
+        whisper_installer: None,
         capture: capture.clone(),
         input_device: None,
         playback: Arc::new(AudioPlayback::new()),

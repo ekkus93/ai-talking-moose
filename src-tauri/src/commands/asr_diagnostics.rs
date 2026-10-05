@@ -1,4 +1,4 @@
-use super::asr_models::{architecture_for_mode, load_descriptor, model_in_use};
+use super::asr_models::{architecture_for_mode, load_descriptor, model_in_use, whisper_descriptor};
 use crate::app::state::AppState;
 use crate::asr::pipeline::LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
@@ -83,6 +83,35 @@ fn compose_asr_diagnostics(
                 peak_resident_memory_bytes: runtime.peak_resident_memory_bytes,
             }
         }
+        AsrMode::WhisperSmall => AsrDiagnostics {
+            selected_mode,
+            engine_name: descriptor.map_or_else(
+                || "Whisper.cpp local ASR".to_string(),
+                |model| model.display_name.clone(),
+            ),
+            model_id: descriptor.map(|model| model.id.clone()),
+            model_revision: descriptor.map(|model| model.revision.clone()),
+            install_state: descriptor.map(|model| model.install_state),
+            input_sample_rate_hz: capture_sample_rate_hz.unwrap_or(0),
+            streaming: false,
+            metrics_snapshot: false,
+            cpu_threads: None,
+            queue_depth: 0,
+            queue_capacity: LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            dropped_chunks,
+            last_error: None,
+            first_partial_latency_ms: None,
+            first_final_latency_ms: None,
+            last_transcription_latency_ms: None,
+            processed_audio_ms: 0,
+            inference_wall_time_ms: 0,
+            real_time_factor: None,
+            process_cpu_time_ms: None,
+            average_cpu_utilization_percent: None,
+            baseline_resident_memory_bytes: None,
+            resident_memory_bytes: None,
+            peak_resident_memory_bytes: None,
+        },
     }
 }
 
@@ -101,7 +130,16 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
             capture_diagnostics.sample_rate_hz,
         ));
     }
-
+    if selected_mode == AsrMode::WhisperSmall {
+        let active = model_in_use(state.inner(), selected_mode);
+        return Ok(compose_asr_diagnostics(
+            selected_mode,
+            Some(&whisper_descriptor(state.inner(), active)),
+            None,
+            dropped_chunks,
+            capture_diagnostics.sample_rate_hz,
+        ));
+    }
     let architecture = architecture_for_mode(selected_mode)?;
     let active = model_in_use(state.inner(), selected_mode);
     let descriptor =
@@ -137,6 +175,7 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::asr::whisper::manifest;
     use crate::asr::AsrModelInstallState;
 
     fn descriptor(mode: AsrMode) -> AsrModelDescriptor {
@@ -144,6 +183,7 @@ mod tests {
             id: match mode {
                 AsrMode::MoonshineTinyStreaming => "moonshine-tiny-streaming-en",
                 AsrMode::MoonshineSmallStreaming => "moonshine-small-streaming-en",
+                AsrMode::WhisperSmall => "whisper-small-ggml",
                 AsrMode::GeminiLiveAudio => unreachable!("cloud mode has no local descriptor"),
             }
             .to_string(),
@@ -241,5 +281,26 @@ mod tests {
         assert_eq!(diagnostics.real_time_factor, None);
         assert_eq!(diagnostics.resident_memory_bytes, None);
         assert_eq!(diagnostics.dropped_chunks, 4);
+    }
+
+    #[test]
+    fn whisper_diagnostics_fail_closed_without_a_local_runtime() {
+        let diagnostics = compose_asr_diagnostics(
+            AsrMode::WhisperSmall,
+            Some(&manifest::model_descriptor(true)),
+            None,
+            0,
+            Some(16_000),
+        );
+
+        assert_eq!(diagnostics.selected_mode, AsrMode::WhisperSmall);
+        assert_eq!(diagnostics.model_id, Some("whisper-small-ggml".to_string()));
+        assert_eq!(
+            diagnostics.install_state,
+            Some(AsrModelInstallState::NotInstalled)
+        );
+        assert!(!diagnostics.streaming);
+        assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+        assert_eq!(diagnostics.first_partial_latency_ms, None);
     }
 }

@@ -438,7 +438,7 @@ fn moonshine_transcribe_generated_audio(engine: &mut MoonshineTinyEngine, pcm: &
     updates
         .iter()
         .filter_map(|update| match update {
-            crate::asr::moonshine::MoonshineTinyTranscriptUpdate::Final { text, .. }
+            crate::asr::StreamingTranscriptUpdate::Final { text, .. }
                 if !text.trim().is_empty() =>
             {
                 Some(text.trim())

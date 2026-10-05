@@ -5,6 +5,14 @@ use crate::asr::moonshine::{
     MoonshineModelInstallErrorKind, MoonshineModelInstallPhase, MoonshineModelInstallProgress,
     MoonshineModelInstallProgressCallback, MoonshineModelInstaller,
 };
+use crate::asr::whisper::{
+    installer::{
+        WhisperModelInstallCancellation, WhisperModelInstallPhase, WhisperModelInstallProgress,
+        WhisperModelInstallProgressCallback,
+    },
+    manifest,
+    manifest::{WHISPER_RUNTIME_UNBUILT_MESSAGE, WHISPER_SMALL_DISPLAY_NAME},
+};
 use crate::asr::{AsrMode, AsrModelDescriptor, AsrModelInstallState};
 use crate::conversation::session::ConversationLifecycle;
 use serde::Serialize;
@@ -26,6 +34,9 @@ pub(super) fn architecture_for_mode(mode: AsrMode) -> Result<MoonshineModelArchi
     match mode {
         AsrMode::MoonshineTinyStreaming => Ok(MoonshineModelArchitecture::TinyStreaming),
         AsrMode::MoonshineSmallStreaming => Ok(MoonshineModelArchitecture::SmallStreaming),
+        AsrMode::WhisperSmall => {
+            Err("Whisper Small local ASR does not use a local Moonshine model.".to_string())
+        }
         AsrMode::GeminiLiveAudio => {
             Err("Gemini Live cloud ASR does not use a local Moonshine model.".to_string())
         }
@@ -107,6 +118,26 @@ pub(super) async fn load_descriptor(
     .map_err(|_| "Moonshine model verification worker terminated unexpectedly.".to_string())
 }
 
+/// Build a Whisper Small descriptor that reflects the real local install state
+/// by querying the Whisper installer rather than assuming `NotInstalled`.
+pub(super) fn whisper_descriptor(state: &AppState, active: bool) -> AsrModelDescriptor {
+    let mut descriptor = manifest::model_descriptor(active);
+    match state.whisper_installer.verify_installed() {
+        Ok(Some(outcome)) => {
+            descriptor.install_state = AsrModelInstallState::Installed;
+            descriptor.installed_bytes = Some(outcome.installed_bytes);
+            descriptor.revision = outcome.revision;
+        }
+        Ok(None) => {
+            descriptor.install_state = AsrModelInstallState::NotInstalled;
+        }
+        Err(_) => {
+            descriptor.install_state = AsrModelInstallState::Corrupt;
+        }
+    }
+    descriptor
+}
+
 fn model_is_in_use(
     active_mode: Option<AsrMode>,
     lifecycle_busy: bool,
@@ -131,11 +162,15 @@ pub(super) fn model_in_use(state: &AppState, mode: AsrMode) -> bool {
 
 fn ensure_model_mutation_allowed(state: &AppState, mode: AsrMode) -> Result<(), String> {
     if model_in_use(state, mode) {
-        let architecture = architecture_for_mode(mode)?;
-        let info = model_manifest_info(architecture);
+        let display_name = if mode == AsrMode::WhisperSmall {
+            WHISPER_SMALL_DISPLAY_NAME.to_string()
+        } else {
+            let architecture = architecture_for_mode(mode)?;
+            model_manifest_info(architecture).display_name.to_string()
+        };
         return Err(format!(
             "{} is currently active. Stop the conversation before changing this model.",
-            info.display_name
+            display_name
         ));
     }
     Ok(())
@@ -157,6 +192,7 @@ async fn acquire_model_mutation_guard(
 pub async fn get_asr_models(state: State<'_, AppState>) -> Result<Vec<AsrModelDescriptor>, String> {
     let tiny_active = model_in_use(state.inner(), AsrMode::MoonshineTinyStreaming);
     let small_active = model_in_use(state.inner(), AsrMode::MoonshineSmallStreaming);
+    let whisper_active = model_in_use(state.inner(), AsrMode::WhisperSmall);
     let tiny = load_descriptor(
         state.moonshine_installer.clone(),
         MoonshineModelArchitecture::TinyStreaming,
@@ -167,8 +203,9 @@ pub async fn get_asr_models(state: State<'_, AppState>) -> Result<Vec<AsrModelDe
         MoonshineModelArchitecture::SmallStreaming,
         small_active,
     );
+    let whisper = whisper_descriptor(state.inner(), whisper_active);
     let (tiny, small) = tokio::try_join!(tiny, small)?;
-    Ok(vec![tiny, small])
+    Ok(vec![tiny, small, whisper])
 }
 
 #[tauri::command]
@@ -177,8 +214,13 @@ pub async fn install_asr_model<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<AsrModelDescriptor, String> {
-    let architecture = architecture_for_mode(mode)?;
     let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
+
+    if mode == AsrMode::WhisperSmall {
+        return install_whisper(state.inner(), app).await;
+    }
+
+    let architecture = architecture_for_mode(mode)?;
 
     let progress_app = app.clone();
     let progress: MoonshineModelInstallProgressCallback =
@@ -213,13 +255,68 @@ pub async fn install_asr_model<R: Runtime>(
     load_descriptor(state.moonshine_installer.clone(), architecture, active).await
 }
 
+/// Installs the Whisper Small `ggml-small.bin` weight through the local Whisper
+/// installer and streams `moose://asr/model-progress` events, mirroring the
+/// Moonshine install UX. Fails closed when the Whisper runtime is unbuilt.
+async fn install_whisper<R: Runtime>(
+    state: &AppState,
+    app: tauri::AppHandle<R>,
+) -> Result<AsrModelDescriptor, String> {
+    if !cfg!(whisper_native_linked) {
+        return Err(WHISPER_RUNTIME_UNBUILT_MESSAGE.to_string());
+    }
+
+    let progress_app = app.clone();
+    let progress: WhisperModelInstallProgressCallback =
+        Arc::new(move |progress: WhisperModelInstallProgress| {
+            let install_state = match progress.phase {
+                WhisperModelInstallPhase::Downloading => AsrModelInstallState::Downloading,
+                WhisperModelInstallPhase::Verifying => AsrModelInstallState::Verifying,
+            };
+            let _ = progress_app.emit(
+                MODEL_PROGRESS_EVENT,
+                AsrModelProgressEvent {
+                    mode: AsrMode::WhisperSmall,
+                    install_state,
+                    downloaded_bytes: progress.downloaded_bytes,
+                    total_bytes: progress.total_bytes,
+                    current_file: Some("ggml-small.bin".to_string()),
+                },
+            );
+        });
+
+    let mut cancellation = WhisperModelInstallCancellation::default();
+    let outcome = state
+        .whisper_installer
+        .install(&mut cancellation, &Some(progress))
+        .await
+        .map_err(|error| error.message)?;
+
+    let active = model_in_use(state, AsrMode::WhisperSmall);
+    let mut descriptor = whisper_descriptor(state, active);
+    descriptor.installed_bytes = Some(outcome.installed_bytes);
+    descriptor.revision = outcome.revision;
+    Ok(descriptor)
+}
+
 #[tauri::command]
 pub async fn delete_asr_model(
     mode: AsrMode,
     state: State<'_, AppState>,
 ) -> Result<AsrModelDescriptor, String> {
-    let architecture = architecture_for_mode(mode)?;
     let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
+
+    if mode == AsrMode::WhisperSmall {
+        state
+            .whisper_installer
+            .delete()
+            .await
+            .map_err(|error| error.message)?;
+        let active = model_in_use(state.inner(), mode);
+        return Ok(whisper_descriptor(state.inner(), active));
+    }
+
+    let architecture = architecture_for_mode(mode)?;
     state
         .moonshine_installer
         .delete_installed(architecture)
@@ -328,5 +425,31 @@ mod tests {
                 .await
                 .expect("conversation start should proceed after model mutation releases");
         drop(conversation_guard);
+    }
+
+    #[test]
+    fn whisper_mode_has_no_moonshine_model_architecture() {
+        let error = architecture_for_mode(AsrMode::WhisperSmall).unwrap_err();
+        assert!(error.contains("does not use a local Moonshine model"));
+    }
+
+    #[test]
+    fn whisper_descriptor_uses_pinned_manifest_metadata_and_configured_error() {
+        let descriptor = manifest::model_descriptor(false);
+
+        assert_eq!(descriptor.mode, AsrMode::WhisperSmall);
+        assert_eq!(descriptor.install_state, AsrModelInstallState::NotInstalled);
+        assert_eq!(descriptor.id, "whisper-small-ggml");
+        assert_eq!(descriptor.expected_bytes, 487_601_967);
+        assert!(!descriptor.active);
+        if cfg!(whisper_native_linked) {
+            assert!(descriptor.error_message.is_none());
+        } else {
+            assert!(descriptor
+                .error_message
+                .as_deref()
+                .unwrap_or("")
+                .contains("not yet built"));
+        }
     }
 }

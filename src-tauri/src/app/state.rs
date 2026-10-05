@@ -15,6 +15,7 @@ use crate::app::wake_word_settings::{
     WakeWordSettings, DEFAULT_WAKE_PHRASE, WAKE_WORD_ENABLED_FIELD, WAKE_WORD_PHRASE_FIELD,
 };
 use crate::asr::moonshine::MoonshineModelInstaller;
+use crate::asr::whisper::WhisperModelInstaller;
 use crate::app::wake_word_composition::WakeWordApplicationRuntime;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
@@ -397,6 +398,7 @@ pub struct AppState {
     pub standalone_speech: StandaloneSpeechController,
     pub conversation_mgr: Arc<ConversationManager>,
     pub moonshine_installer: Arc<MoonshineModelInstaller>,
+    pub whisper_installer: Arc<crate::asr::whisper::WhisperModelInstaller>,
     pub(crate) local_llm_runtime: Arc<LocalRuntimeManager>,
     pub(crate) local_tts_runtime: Arc<LocalTtsRuntimeManager>,
     pub tool_router: Arc<ToolRouter>,
@@ -405,6 +407,21 @@ pub struct AppState {
 }
 
 const LEGACY_GOOGLE_API_KEY_SETTING: &str = "google_api_key";
+
+fn whisper_model_root(db_path: Option<&str>) -> PathBuf {
+    let Some(db_path) = db_path else {
+        return std::env::temp_dir()
+            .join("talking-moose-ai-tests")
+            .join("models")
+            .join("whisper");
+    };
+
+    Path::new(db_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("models")
+        .join("whisper")
+}
 
 fn moonshine_model_root(db_path: Option<&str>) -> PathBuf {
     let Some(db_path) = db_path else {
@@ -548,6 +565,10 @@ impl AppState {
             MoonshineModelInstaller::new(moonshine_model_root(db_path))
                 .map_err(|error| error.to_string())?,
         );
+        let whisper_installer = Arc::new(
+            WhisperModelInstaller::new(whisper_model_root(db_path))
+                .map_err(|error| error.to_string())?,
+        );
         let local_llm_runtime = Arc::new(LocalRuntimeManager::new());
         let local_tts_runtime = Arc::new(LocalTtsRuntimeManager::new());
 
@@ -573,6 +594,7 @@ impl AppState {
             standalone_speech,
             conversation_mgr,
             moonshine_installer,
+            whisper_installer,
             local_llm_runtime,
             local_tts_runtime,
             tool_router,

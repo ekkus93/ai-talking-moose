@@ -3,6 +3,7 @@ use super::wake_word_listener_status::classify_native_listener_status;
 use super::wake_word_state::{
     apply_configured_native_wake_listener_settings_change,
     apply_configured_native_wake_listener_settings_change_with_control, NativeWakeListenerControl,
+    WAKE_WORD_UNSUPPORTED_ASR_MESSAGE,
 };
 use crate::asr::wake_word_diagnostics::WakeWordListenerStatus;
 use crate::asr::wake_word_runtime::WakeWordRuntimePhase;
@@ -224,7 +225,7 @@ fn unsupported_asr_settings_failure_is_sanitized_and_actionable() {
     let error = apply_configured_native_wake_listener_settings_change(&state, &previous, &next)
         .unwrap_err();
 
-    assert_eq!(error, "Wake Word V1 requires local Moonshine command ASR");
+    assert_eq!(error, WAKE_WORD_UNSUPPORTED_ASR_MESSAGE);
     assert!(!error.contains('/'));
     assert!(!error.to_lowercase().contains("secret"));
     assert!(!error.to_lowercase().contains("audio"));

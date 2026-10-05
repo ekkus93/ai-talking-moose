@@ -11,7 +11,7 @@ struct FakeState {
     stops: AtomicUsize,
     received_pcm: StdMutex<Vec<Vec<f32>>>,
     fail_push: StdMutex<Option<AsrError>>,
-    updates: StdMutex<Vec<MoonshineTinyTranscriptUpdate>>,
+    updates: StdMutex<Vec<StreamingTranscriptUpdate>>,
     block_push: AtomicBool,
     worker_thread: StdMutex<Option<thread::ThreadId>>,
 }
@@ -26,7 +26,7 @@ impl PipelineEngine for FakeEngine {
         self.sample_rate
     }
 
-    fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<MoonshineTinyTranscriptUpdate>, AsrError> {
+    fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
         *self.state.worker_thread.lock().unwrap() = Some(thread::current().id());
         self.state.pushes.fetch_add(1, Ordering::SeqCst);
         self.state.received_pcm.lock().unwrap().push(pcm.to_vec());
@@ -58,11 +58,11 @@ fn callback_events() -> (
 }
 
 async fn fake_pipeline(state: Arc<FakeState>) -> LocalAsrPipeline {
-    fake_pipeline_for_architecture(MoonshineModelArchitecture::TinyStreaming, state).await
+    fake_pipeline_for_architecture(LocalAsrArchitecture::MoonshineTinyStreaming, state).await
 }
 
 async fn fake_pipeline_for_architecture(
-    architecture: MoonshineModelArchitecture,
+    architecture: LocalAsrArchitecture,
     state: Arc<FakeState>,
 ) -> LocalAsrPipeline {
     let (callback, _) = callback_events();
@@ -71,7 +71,7 @@ async fn fake_pipeline_for_architecture(
         move || {
             Ok(Box::new(FakeEngine {
                 state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }))
         },
         callback,
@@ -119,7 +119,7 @@ async fn cancel_during_readiness_cooperatively_stops_and_reaps_worker() {
                 }
                 Ok(Box::new(FakeEngine {
                     state: worker_state,
-                    sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                    sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
                 }) as Box<dyn PipelineEngine>)
             },
             callback,
@@ -155,7 +155,7 @@ async fn readiness_timeout_returns_without_detaching_worker() {
             thread::sleep(WORKER_STARTUP_TIMEOUT + Duration::from_millis(75));
             Ok(Box::new(FakeEngine {
                 state: worker_state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }) as Box<dyn PipelineEngine>)
         },
         callback,
@@ -218,7 +218,7 @@ async fn wake_handoff_primes_existing_ingress_in_exact_sample_order() {
     let mut pipeline = fake_pipeline(state.clone()).await;
     let samples = vec![i16::MIN, -1234, 0, 2345, i16::MAX];
     let handoff =
-        WakeCommandHandoffAudio::new(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ, samples.clone()).unwrap();
+        WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, samples.clone()).unwrap();
 
     pipeline.prime_wake_handoff(handoff).unwrap();
     wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
@@ -241,7 +241,7 @@ async fn wake_handoff_queue_full_fails_without_dropping_or_reordering_payload() 
     }
 
     let handoff =
-        WakeCommandHandoffAudio::new(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ, vec![7, 8, 9]).unwrap();
+        WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, vec![7, 8, 9]).unwrap();
     let error = pipeline.prime_wake_handoff(handoff).unwrap_err();
     assert_eq!(error.kind, AsrErrorKind::AudioInput);
 
@@ -276,7 +276,7 @@ async fn malformed_pcm_is_typed_terminal_audio_error() {
         move || {
             Ok(Box::new(FakeEngine {
                 state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }))
         },
         callback,
@@ -318,7 +318,7 @@ async fn inference_error_is_preserved_and_emitted() {
         move || {
             Ok(Box::new(FakeEngine {
                 state: worker_state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }))
         },
         callback,
@@ -354,10 +354,10 @@ async fn transcript_updates_cross_worker_boundary() {
         .updates
         .lock()
         .unwrap()
-        .push(MoonshineTinyTranscriptUpdate::Partial {
-            line_id: 7,
+        .push(StreamingTranscriptUpdate::Partial {
+            segment_id: 7,
             text: "hello".to_string(),
-            latency_ms: 9,
+            latency_ms: 1,
         });
     let (callback, events) = callback_events();
     let worker_state = state.clone();
@@ -365,7 +365,7 @@ async fn transcript_updates_cross_worker_boundary() {
         move || {
             Ok(Box::new(FakeEngine {
                 state: worker_state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }))
         },
         callback,
@@ -397,8 +397,8 @@ async fn diagnostics_measure_audio_latency_rtf_cpu_and_memory_without_fabricatio
         .updates
         .lock()
         .unwrap()
-        .push(MoonshineTinyTranscriptUpdate::Partial {
-            line_id: 11,
+        .push(StreamingTranscriptUpdate::Partial {
+            segment_id: 11,
             text: "measured".to_string(),
             latency_ms: 17,
         });
@@ -408,7 +408,7 @@ async fn diagnostics_measure_audio_latency_rtf_cpu_and_memory_without_fabricatio
         move || {
             Ok(Box::new(FakeEngine {
                 state: worker_state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }))
         },
         callback,
@@ -451,8 +451,8 @@ async fn blank_native_update_does_not_count_as_first_useful_transcript() {
         .updates
         .lock()
         .unwrap()
-        .push(MoonshineTinyTranscriptUpdate::Partial {
-            line_id: 12,
+        .push(StreamingTranscriptUpdate::Partial {
+            segment_id: 12,
             text: "   ".to_string(),
             latency_ms: 13,
         });
@@ -462,7 +462,7 @@ async fn blank_native_update_does_not_count_as_first_useful_transcript() {
         move || {
             Ok(Box::new(FakeEngine {
                 state: worker_state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }))
         },
         callback,
@@ -490,10 +490,10 @@ async fn final_transcript_crosses_worker_as_provider_neutral_lifecycle() {
         .updates
         .lock()
         .unwrap()
-        .push(MoonshineTinyTranscriptUpdate::Final {
-            line_id: 8,
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 8,
             text: "complete".to_string(),
-            latency_ms: 10,
+            latency_ms: 1,
         });
     let (callback, events) = callback_events();
     let worker_state = state.clone();
@@ -501,7 +501,7 @@ async fn final_transcript_crosses_worker_as_provider_neutral_lifecycle() {
         move || {
             Ok(Box::new(FakeEngine {
                 state: worker_state,
-                sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
             }))
         },
         callback,
@@ -537,10 +537,10 @@ fn sensitive_asr_payloads_are_processed_without_entering_tracing() {
         .updates
         .lock()
         .unwrap()
-        .push(MoonshineTinyTranscriptUpdate::Final {
-            line_id: 181,
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 181,
             text: TRANSCRIPT.to_string(),
-            latency_ms: 7,
+            latency_ms: 1,
         });
     let (callback, events) = callback_events();
     let worker_state = state.clone();
@@ -555,7 +555,7 @@ fn sensitive_asr_payloads_are_processed_without_entering_tracing() {
                 move || {
                     Ok(Box::new(FakeEngine {
                         state: worker_state,
-                        sample_rate: MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+                        sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
                     }))
                 },
                 callback,
@@ -670,7 +670,7 @@ async fn mock_capture_uses_same_authoritative_capture_at_16khz() {
     assert!(diagnostics.active);
     assert_eq!(
         diagnostics.sample_rate_hz,
-        Some(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ)
+        Some(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ)
     );
     assert_eq!(diagnostics.channels, Some(1));
     capture.stop();
@@ -713,14 +713,16 @@ async fn drop_stops_and_joins_worker_as_safety_net() {
 #[tokio::test]
 async fn small_pipeline_uses_same_bounded_worker_and_reports_small_architecture() {
     let state = Arc::new(FakeState::default());
-    let mut pipeline =
-        fake_pipeline_for_architecture(MoonshineModelArchitecture::SmallStreaming, state.clone())
-            .await;
+    let mut pipeline = fake_pipeline_for_architecture(
+        LocalAsrArchitecture::MoonshineSmallStreaming,
+        state.clone(),
+    )
+    .await;
 
     let diagnostics = pipeline.diagnostics();
     assert_eq!(
         diagnostics.architecture,
-        MoonshineModelArchitecture::SmallStreaming
+        LocalAsrArchitecture::MoonshineSmallStreaming
     );
     assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
     assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
@@ -738,7 +740,7 @@ async fn pipeline_diagnostics_report_bound_and_running_state() {
     let diagnostics = pipeline.diagnostics();
     assert_eq!(
         diagnostics.architecture,
-        MoonshineModelArchitecture::TinyStreaming
+        LocalAsrArchitecture::MoonshineTinyStreaming
     );
     assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
     assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);

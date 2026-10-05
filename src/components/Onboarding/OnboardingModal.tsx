@@ -50,11 +50,13 @@ export const OnboardingModal: React.FC = () => {
 
   const asrMode = settings?.asr_mode ?? TINY_MODE;
   const selectedAsrName =
-    asrMode === "moonshine_small_streaming"
-      ? "Moonshine Small Streaming"
-      : asrMode === "gemini_live_audio"
-        ? "Gemini Live Cloud Audio"
-        : "Moonshine Tiny Streaming";
+    asrMode === "whisper_small"
+      ? "Whisper Small"
+      : asrMode === "moonshine_small_streaming"
+        ? "Moonshine Small Streaming"
+        : asrMode === "gemini_live_audio"
+          ? "Gemini Live Cloud Audio"
+          : "Moonshine Tiny Streaming";
 
   if (!isOnboardingOpen) {
     return null;

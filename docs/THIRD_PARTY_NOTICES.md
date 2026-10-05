@@ -16,6 +16,13 @@ This file records licenses and immutable source identities for native components
 
 Exact model component URLs, sizes, and checksums are recorded in `docs/MOONSHINE_NATIVE.md`.
 
+## Local Whisper.cpp runtime and model
+
+| Component | Pin / identity | License | Notes |
+| --- | --- | --- | --- |
+| whisper.cpp source | `ggml-org/whisper.cpp`; vendored commit `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` | MIT | Built through `src-tauri/build.rs` on supported local ASR targets; exact upstream MIT notice must be included in release notices when redistributed. |
+| `ggml-small.bin` weights | Hugging Face asset `ggml-small.bin` in `ggerganov/whisper.cpp`, source commit `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`: `https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true`; 487601967 bytes; SHA-256 `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b` | **Pending verification** | Downloaded only after explicit user action; not bundled. The authoritative `ggml-small.bin` license must be recorded before release distribution. |
+
 ## Moonshine vendored native dependencies
 
 These identities refer to the subtrees included by the pinned Moonshine runtime. Only components that actually reach the Talking Moose release artifact need to be reproduced in the final bundled-notices payload, but the build/release audit must begin from this complete native-tree inventory.

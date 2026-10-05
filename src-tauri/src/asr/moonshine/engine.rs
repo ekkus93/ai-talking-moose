@@ -5,7 +5,7 @@ use super::installer::{
 use super::runtime::{
     MoonshineModelArchitecture, MoonshineStream, MoonshineTranscriber, MoonshineTranscript,
 };
-use crate::asr::{AsrError, AsrErrorKind};
+use crate::asr::{transcript_state::StreamingTranscriptUpdate, AsrError, AsrErrorKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::debug;
@@ -19,24 +19,6 @@ pub const MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ: u32 = 16_000;
 /// Moonshine Small uses the same 16 kHz mono PCM input contract as Tiny.
 #[cfg(test)]
 pub const MOONSHINE_SMALL_INPUT_SAMPLE_RATE_HZ: u32 = MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ;
-
-/// One meaningful transcript change emitted by the Tiny streaming engine.
-///
-/// Native line IDs are preserved so V1R-ASR-010 can build the higher-level
-/// utterance accumulator without inferring identity from text.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MoonshineTinyTranscriptUpdate {
-    Partial {
-        line_id: u64,
-        text: String,
-        latency_ms: u32,
-    },
-    Final {
-        line_id: u64,
-        text: String,
-        latency_ms: u32,
-    },
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct EmittedLineState {
@@ -284,10 +266,7 @@ impl MoonshineStreamingEngine {
 
     /// Append one increment of 16 kHz mono `f32` PCM and return only
     /// transcript lines whose text/finality changed since the previous call.
-    pub fn push_pcm(
-        &mut self,
-        pcm: &[f32],
-    ) -> Result<Vec<MoonshineTinyTranscriptUpdate>, AsrError> {
+    pub fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
         self.ensure_active()?;
         if pcm.is_empty() {
             return Ok(Vec::new());
@@ -304,7 +283,7 @@ impl MoonshineStreamingEngine {
     /// Force the native streaming decoder to expose its latest transcript
     /// state without appending synthetic audio.
     #[cfg(test)]
-    pub fn flush(&mut self) -> Result<Vec<MoonshineTinyTranscriptUpdate>, AsrError> {
+    pub fn flush(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
         self.ensure_active()?;
         let transcript = self.active_stream()?.transcribe(true)?;
         Ok(self.collect_updates(transcript))
@@ -367,7 +346,7 @@ impl MoonshineStreamingEngine {
     fn collect_updates(
         &mut self,
         transcript: MoonshineTranscript,
-    ) -> Vec<MoonshineTinyTranscriptUpdate> {
+    ) -> Vec<StreamingTranscriptUpdate> {
         let mut updates = Vec::new();
         for line in transcript.lines {
             if line.text.is_empty() {
@@ -382,14 +361,14 @@ impl MoonshineStreamingEngine {
             }
 
             let update = if line.is_complete {
-                MoonshineTinyTranscriptUpdate::Final {
-                    line_id: line.id,
+                StreamingTranscriptUpdate::Final {
+                    segment_id: line.id,
                     text: line.text.clone(),
                     latency_ms: line.last_transcription_latency_ms,
                 }
             } else {
-                MoonshineTinyTranscriptUpdate::Partial {
-                    line_id: line.id,
+                StreamingTranscriptUpdate::Partial {
+                    segment_id: line.id,
                     text: line.text.clone(),
                     latency_ms: line.last_transcription_latency_ms,
                 }
