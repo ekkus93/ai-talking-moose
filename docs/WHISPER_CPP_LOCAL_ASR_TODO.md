@@ -23,52 +23,52 @@ Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 
 ## P1: Types, manifest, and build
 
-- [ ] Add `AsrMode::WhisperSmall` to `src-tauri/src/asr/types.rs`.
-- [ ] Add serialized form `"whisper_small"`.
-- [ ] Add a Whisper architecture or model identity type:
-  - [ ] e.g. `WhisperModelArchitecture::Small`;
-  - [ ] or a broader local ASR engine identity if a cleaner abstraction is needed.
-- [ ] Create `src-tauri/src/asr/whisper/mod.rs`.
-- [ ] Create `src-tauri/src/asr/whisper/manifest.rs`:
-  - [ ] model id `whisper-small-ggml`;
-  - [ ] display name;
-  - [ ] upstream repository;
-  - [ ] pinned source commit;
-  - [ ] Hugging Face asset URL;
-  - [ ] expected byte size;
-  - [ ] SHA256;
-  - [ ] license;
-  - [ ] runtime compatibility.
-- [ ] Add manifest validation:
-  - [ ] non-empty id;
-  - [ ] non-empty display name;
-  - [ ] pinned revision in URL;
-  - [ ] HTTPS only;
-  - [ ] valid SHA256;
-  - [ ] valid byte size;
-  - [ ] no path traversal in model file names.
-- [ ] Create `src-tauri/src/asr/whisper/installer.rs`:
-  - [ ] explicit download only;
-  - [ ] bounded staging directory;
-  - [ ] exact size verification;
-  - [ ] SHA256 verification;
-  - [ ] atomic promotion;
-  - [ ] cancellation;
-  - [ ] disk-space check;
-  - [ ] install-state progress.
-- [ ] Store models under:
-  - [ ] `<app-data>/models/whisper/whisper-small/`.
-- [ ] Extend `src-tauri/build.rs`:
-  - [ ] whisper.cpp source/CMake build;
-  - [ ] `whisper_native_linked` cfg;
-  - [ ] rerun on native source changes;
-  - [ ] optional `TALKING_MOOSE_WHISPER_LIB_DIR`;
-  - [ ] Linux link target for `libwhisper`.
-- [ ] Create `src-tauri/src/asr/whisper/ffi.rs`:
-  - [ ] safe wrappers;
-  - [ ] no public whisper.cpp types;
-  - [ ] stable C API only;
-  - [ ] 16 kHz mono int16 input.
+- [x] Add `AsrMode::WhisperSmall` to `src-tauri/src/asr/types.rs`.
+- [x] Add serialized form `"whisper_small"`.
+- [x] Add a Whisper architecture or model identity type:
+  - [x] e.g. `WhisperModelArchitecture::Small`;
+  - [x] or a broader local ASR engine identity if a cleaner abstraction is needed.
+- [x] Create `src-tauri/src/asr/whisper/mod.rs`.
+- [x] Create `src-tauri/src/asr/whisper/manifest.rs`:
+  - [x] model id `whisper-small-ggml`;
+  - [x] display name;
+  - [x] upstream repository;
+  - [x] pinned source commit;
+  - [x] Hugging Face asset URL;
+  - [x] expected byte size;
+  - [x] SHA256;
+  - [x] license;
+  - [x] runtime compatibility.
+- [x] Add manifest validation:
+  - [x] non-empty id;
+  - [x] non-empty display name;
+  - [x] pinned revision in URL;
+  - [x] HTTPS only;
+  - [x] valid SHA256;
+  - [x] valid byte size;
+  - [x] no path traversal in model file names.
+- [x] Create `src-tauri/src/asr/whisper/installer.rs`:
+  - [x] explicit download only;
+  - [x] bounded staging directory;
+  - [x] exact size verification;
+  - [x] SHA256 verification;
+  - [x] atomic promotion;
+  - [x] cancellation;
+  - [x] disk-space check;
+  - [x] install-state progress.
+- [x] Store models under:
+  - [x] `<app-data>/models/whisper/whisper-small/`.
+- [x] Extend `src-tauri/build.rs`:
+  - [x] whisper.cpp source/CMake build;
+  - [x] `whisper_native_linked` cfg;
+  - [x] rerun on native source changes;
+  - [x] optional `TALKING_MOOSE_WHISPER_LIB_DIR`;
+  - [x] Linux link target for `libwhisper`.
+- [x] Create `src-tauri/src/asr/whisper/ffi.rs`:
+  - [x] safe wrappers;
+  - [x] no public whisper.cpp types;
+  - [x] stable C API only;
+  - [x] 16 kHz mono int16 input.
 
 ## P2: Engine and pipeline
 
