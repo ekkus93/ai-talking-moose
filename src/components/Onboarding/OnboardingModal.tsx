@@ -195,6 +195,15 @@ export const OnboardingModal: React.FC = () => {
                 at greater disk/CPU cost.
               </p>
               <p>
+                <strong>Whisper Small:</strong> local English recognition that
+                batches microphone PCM into short transcription windows —
+                microphone PCM stays on this computer. Partial transcripts may
+                be updated in batched intervals; only finalized transcript text
+                is sent to Gemini for the Moose&apos;s reply. The whisper-small
+                model is downloaded only when you explicitly choose it in AI
+                &amp; Models Settings.
+              </p>
+              <p>
                 <strong>Gemini Live Cloud Audio:</strong> sends microphone audio
                 to Google during the active conversation so Gemini performs
                 speech recognition and dialogue in the cloud.

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml/badge.svg)](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml)
 
-> A modern reimagining of the classic 1986 Macintosh desktop character, built with Tauri 2, React, TypeScript, Rust, local Moonshine ASR, local llama.cpp text generation, Local KittenTTS standalone speech, and Google Gemini.
+> A modern reimagining of the classic 1986 Macintosh desktop character, built with Tauri 2, React, TypeScript, Rust, local Moonshine and Whisper ASR, local llama.cpp text generation, Local KittenTTS standalone speech, and Google Gemini.
 
 ---
 
@@ -11,7 +11,7 @@
 **Talking Moose AI** lives directly on your desktop inside a deliberately retro-styled Macintosh window. Rather than being a corporate support chatbot, the Moose is a dry-witted, humorous desktop character.
 
 - **Real-time spoken conversation:** Click the Moose to start a voice conversation.
-- **Local or cloud speech recognition:** Moonshine Tiny/Small provide local ASR; Gemini Live provides an explicitly selected cloud-audio mode.
+- **Local or cloud speech recognition:** Moonshine Tiny/Small and Whisper Small provide local ASR; Gemini Live provides an explicitly selected cloud-audio mode.
 - **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
 - **Local-first text generation:** New profiles use the Local text provider by default. SmolLM2 360M is selected but is never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains an optional text provider.
 - **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS or Local KittenTTS. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification.
@@ -25,7 +25,7 @@
 
 - **Frontend:** React 18, TypeScript, Tailwind CSS, Lucide icons, Zustand
 - **Desktop shell/backend:** Tauri 2, Rust, Tokio, CPAL, Rusqlite, Tokio-Tungstenite
-- **Speech recognition:** Local Moonshine streaming ASR plus optional Gemini Live cloud audio
+- **Speech recognition:** Local Moonshine streaming ASR and local Whisper Small batch ASR, plus optional Gemini Live cloud audio
 - **Text generation:** Provider-neutral `TextModel` routing; Local uses pinned llama.cpp/ggml through Rust, while Google Gemini remains selectable through the REST API
 - **Voice conversation:** Google Gemini Live over WebSockets; Local text and Local standalone TTS selection do not replace the V1 live conversation provider
 - **Standalone speech output:** Provider-neutral Google Gemini TTS or Local KittenTTS routing for typed replies, ambient remarks, canned reactions, and auditions. Local KittenTTS uses the Rust-owned CPU runtime and adapts 24 kHz PCM into the existing audio playback/mouth-animation path.
@@ -161,7 +161,7 @@ Supported V1 Local text models:
 
 Those measurements came from the canonical Linux x86_64 real-CPU acceptance run on an AMD EPYC host and are **not performance guarantees** for another computer. They are runtime/usability measurements, not a semantic-quality benchmark. SmolLM2 remains the recommended Local default because it had materially lower disk/RAM/CPU cost in that acceptance run. See `docs/LOCAL_LLM_CPU_ACCEPTANCE_20260902.md`.
 
-A Google AI Studio API key is **not required for Local text generation**. It is still required when you select Google text generation, for the V1 Gemini Live spoken-conversation provider, and for Google TTS. Local Moonshine ASR only makes speech recognition local; finalized Moonshine transcripts still go to Gemini Live for spoken conversation in this phase.
+A Google AI Studio API key is **not required for Local text generation**. It is still required when you select Google text generation, for the V1 Gemini Live spoken-conversation provider, and for Google TTS. Local Moonshine and Whisper ASR only make speech recognition local; finalized local ASR transcripts still go to Gemini Live for spoken conversation in this phase.
 
 Local generation does not silently fall back to Google or Fake. A missing, corrupt, incompatible, or failed Local model produces an explicit failure.
 

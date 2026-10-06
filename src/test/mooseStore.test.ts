@@ -12,6 +12,7 @@ describe("mooseStore State Management", () => {
     useMooseStore.setState({
       characterState: "idle",
       conversationLifecycle: "idle",
+      conversationError: null,
       mouthShape: "closed",
       isMuted: false,
       inputLevel: 0,
@@ -510,5 +511,107 @@ describe("mooseStore State Management", () => {
     expect(useMooseStore.getState().isSettingsOpen).toBe(true);
 
     cleanup();
+  });
+
+  it("surfaces a rejected local ASR startup error in conversationError", async () => {
+    const userFacingError =
+      "Local Moonshine ASR is selected, but the model installer is unavailable. No microphone audio was sent.";
+
+    // The Rust side sends a user-facing message and owns the connecting/listening
+    // lifecycle; it emits the failed lifecycle event before the command rejects,
+    // so seed the lifecycle to pass the idle guard.
+    vi.spyOn(tauriBridge, "startConversation").mockRejectedValueOnce(
+      new Error(userFacingError),
+    );
+    useMooseStore.setState({ conversationLifecycle: "failed" });
+
+    await useMooseStore.getState().startConversation();
+
+    expect(useMooseStore.getState().conversationError).toBe(userFacingError);
+  });
+
+  it("normalizes a raw string rejection into conversationError", async () => {
+    const rawString = "Local Moonshine ASR could not start";
+
+    // Tauri commands return Result<(), String>, so a plain string rejection is
+    // the real-world path; the typeof-e===string branch is what runs.
+    vi.spyOn(tauriBridge, "startConversation").mockRejectedValueOnce(rawString);
+    useMooseStore.setState({ conversationLifecycle: "failed" });
+
+    await useMooseStore.getState().startConversation();
+
+    expect(useMooseStore.getState().conversationError).toBe(rawString);
+  });
+
+  it("preserves the startup error on a failed lifecycle and clears it on every other lifecycle transition", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
+      async (eventName: string, handler: (payload: unknown) => void) => {
+        handlers.set(eventName, handler);
+        return () => {};
+      },
+    );
+
+    const cleanup = await useMooseStore.getState().initEventListeners();
+
+    useMooseStore.setState({
+      conversationLifecycle: "failed",
+      conversationError: "Local Moonshine ASR could not start",
+    });
+
+    // A "failed" transition must not wipe the startup error.
+    handlers.get("moose://conversation/lifecycle")?.("failed");
+    expect(useMooseStore.getState().conversationError).toBe(
+      "Local Moonshine ASR could not start",
+    );
+
+    // Every other lifecycle transition clears it.
+    for (const lifecycle of [
+      "idle",
+      "connecting",
+      "listening",
+      "responding",
+      "stopping",
+    ]) {
+      handlers.get("moose://conversation/lifecycle")?.(lifecycle);
+      expect(useMooseStore.getState().conversationError).toBeNull();
+    }
+
+    cleanup();
+  });
+
+  it("does not set conversationError when the lifecycle is already idle (stale banner guard)", async () => {
+    vi.spyOn(tauriBridge, "startConversation").mockRejectedValueOnce(
+      new Error("Local Moonshine ASR could not start"),
+    );
+    useMooseStore.setState({ conversationLifecycle: "idle" });
+
+    await useMooseStore.getState().startConversation();
+
+    expect(useMooseStore.getState().conversationError).toBeNull();
+  });
+
+  it("never logs a rejected startConversation rejection to the console", async () => {
+    const privateFailure =
+      "SECRET backend failure https://private.invalid/?key=AIzaSyDoNotLog";
+
+    vi.spyOn(tauriBridge, "startConversation").mockRejectedValueOnce(
+      new Error(privateFailure),
+    );
+
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    useMooseStore.setState({ conversationLifecycle: "failed" });
+    await useMooseStore.getState().startConversation();
+
+    // Backend detail stays out of the frontend console; the user-facing string is
+    // carried in state (the display channel), not logged.
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleLog).not.toHaveBeenCalled();
   });
 });

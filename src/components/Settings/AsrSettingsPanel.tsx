@@ -42,7 +42,8 @@ const replaceModel = (
   );
 
 export const AsrSettingsPanel: React.FC = () => {
-  const { settings, updateSettingsPatch } = useMooseStore();
+  const { settings, updateSettingsPatch, isConversationActive } =
+    useMooseStore();
   const [models, setModels] = useState<AsrModelDescriptor[]>([]);
   const [progress, setProgress] = useState<
     Partial<Record<LocalAsrMode, AsrModelProgressEvent>>
@@ -166,6 +167,7 @@ export const AsrSettingsPanel: React.FC = () => {
     const selected = settings.asr_mode === mode;
     const busy =
       operationMode === mode ||
+      isConversationActive ||
       model?.install_state === "downloading" ||
       model?.install_state === "verifying";
     const percent =
@@ -205,7 +207,10 @@ export const AsrSettingsPanel: React.FC = () => {
                 {STATUS_LABELS[model.install_state]}
               </span>
               {model.active && <span className="font-bold">In use now</span>}
-              <span>{formatBytes(model.expected_bytes)}</span>
+              <span>Expected {formatBytes(model.expected_bytes)}</span>
+              {model.installed_bytes != null ? (
+                <span>Installed {formatBytes(model.installed_bytes)}</span>
+              ) : null}
               <span>Revision {model.revision}</span>
               <span>Runtime {model.runtime_release}</span>
             </div>
@@ -343,7 +348,7 @@ export const AsrSettingsPanel: React.FC = () => {
         {renderLocalModel(
           "whisper_small",
           "Whisper Small",
-          "Local batch English speech recognition with a compact model; supports wake-word activation.",
+          "Local English recognition that batches microphone PCM into short windows; supports wake-word activation. The model is downloaded only when you explicitly press Download, and partial transcripts are updated in batched intervals.",
         )}
 
         <div

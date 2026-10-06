@@ -25,6 +25,7 @@ export const MooseWindow: React.FC = () => {
     isMuted,
     isConversationActive,
     hasApiKey,
+    conversationError,
     isSettingsOpen,
     isOnboardingOpen,
     isTranscriptOpen,
@@ -310,6 +311,31 @@ export const MooseWindow: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Local ASR Startup Error Banner */}
+        {conversationError && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="flex items-center gap-2 px-2 py-1.5 bg-red-100 border-b-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] font-mono text-[11px] text-red-900"
+          >
+            <span
+              className="flex-1 overflow-hidden whitespace-nowrap text-overflow-ellipsis"
+              aria-hidden="true"
+            >
+              {conversationError}
+            </span>
+            <span className="sr-only">{conversationError}</span>
+            <button
+              onClick={() => toggleSettings(true)}
+              title="Open Settings"
+              aria-label="Open Settings to fix the error"
+              className="shrink-0 px-2 py-0.5 bg-white border border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 text-[10px] font-bold"
+            >
+              Open Settings
+            </button>
+          </div>
+        )}
 
         {/* Speech Bubble overlay */}
         <SpeechBubble />

@@ -127,6 +127,12 @@ export const PrivacyTab: React.FC = () => {
             - Gemini Live Cloud Audio is selected: microphone audio is sent to
             Google only during an active conversation.
           </p>
+        ) : settings.asr_mode === "whisper_small" ? (
+          <p>
+            - Whisper Small local ASR is selected: microphone PCM stays on this
+            computer; only finalized transcript text is sent to Gemini for a
+            reply.
+          </p>
         ) : (
           <p>
             - Moonshine local ASR is selected: microphone PCM stays on this

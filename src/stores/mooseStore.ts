@@ -204,6 +204,7 @@ interface MooseStoreState {
   googleTtsVoices: GoogleTtsVoiceDescriptor[];
   settings: AppSettings | null;
   settingsPersistenceError: string | null;
+  conversationError: string | null;
   hasApiKey: boolean;
 
   setCharacterState: (state: CharacterState) => void;
@@ -268,6 +269,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
   googleTtsVoices: [],
   settings: null,
   settingsPersistenceError: null,
+  conversationError: null,
   hasApiKey: false,
 
   setCharacterState: (characterState) => set({ characterState }),
@@ -341,7 +343,15 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       // Rust owns Connecting/Listening and emits both lifecycle and character state.
       await tauriBridge.startConversation();
     } catch (e) {
-      console.error("Failed to start conversation:", e);
+      // Backend details stay out of the frontend console; the Rust side sends a
+      // user-facing message that we surface via the conversationError state. The
+      // idle guard avoids a stale banner when the failed conversation has already
+      // been stopped before this rejection is processed.
+      const message =
+        typeof e === "string" ? e : e instanceof Error ? e.message : "";
+      if (message && get().conversationLifecycle !== "idle") {
+        set({ conversationError: message });
+      }
     }
   },
 
@@ -531,6 +541,12 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
             conversationLifecycle === "failed"
               ? { partialUserTranscript: null, partialMooseTranscript: null }
               : {}),
+            // A non-failed lifecycle transition clears any startup error; the
+            // failed transition preserves the conversationError set by the
+            // rejected startConversation call.
+            ...(conversationLifecycle === "failed"
+              ? {}
+              : { conversationError: null }),
           });
         },
       );
