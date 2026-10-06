@@ -115,13 +115,16 @@ impl PipelineEngine for WhisperEngine {
             sample_count = samples.len(),
         );
 
+        // Transcribe-call failure is a Whisper inference failure (the model
+        // loaded fine; only the run itself failed), matching Moonshine's
+        // transcribe-stream mapping (Inference, retryable).
         let transcript = self
             .api
             .transcribe(&self.model, &samples)
             .map_err(|e| AsrError {
-                kind: AsrErrorKind::RuntimeUnavailable,
+                kind: AsrErrorKind::Inference,
                 message: e.message,
-                retryable: false,
+                retryable: true,
             })?;
 
         Ok(self.collect_updates(transcript.segments))
@@ -138,13 +141,15 @@ impl PipelineEngine for WhisperEngine {
                 "whisper_final_transcription {sample_count}",
                 sample_count = samples.len(),
             );
+            // Final flush on shutdown is still a Whisper inference failure,
+            // not a missing runtime.
             let transcript = self
                 .api
                 .transcribe(&self.model, &samples)
                 .map_err(|e| AsrError {
-                    kind: AsrErrorKind::RuntimeUnavailable,
+                    kind: AsrErrorKind::Inference,
                     message: e.message,
-                    retryable: false,
+                    retryable: true,
                 })?;
             let _ = self.collect_updates(transcript.segments);
         }

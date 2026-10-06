@@ -392,7 +392,7 @@ impl LocalAsrPipeline {
             })
             .map_err(|_| AsrError {
                 kind: AsrErrorKind::Internal,
-                message: "Failed to start the Moonshine inference worker.".to_string(),
+                message: "Failed to start the local ASR inference worker.".to_string(),
                 retryable: true,
             })?;
 
@@ -649,7 +649,7 @@ fn invalid_state_error(message: &str) -> AsrError {
 fn worker_join_error() -> AsrError {
     AsrError {
         kind: AsrErrorKind::Internal,
-        message: "The Moonshine inference worker terminated unexpectedly.".to_string(),
+        message: "The local ASR inference worker terminated unexpectedly.".to_string(),
         retryable: true,
     }
 }
@@ -657,7 +657,7 @@ fn worker_join_error() -> AsrError {
 fn worker_startup_timeout_error() -> AsrError {
     AsrError {
         kind: AsrErrorKind::RuntimeUnavailable,
-        message: "Moonshine inference worker did not become ready before the startup timeout."
+        message: "Local ASR inference worker did not become ready before the startup timeout."
             .to_string(),
         retryable: true,
     }
