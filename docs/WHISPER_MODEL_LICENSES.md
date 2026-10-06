@@ -2,7 +2,7 @@
 
 Recorded: 2026-10-05
 Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
-Source commit: `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` (ggml-org/whisper.cpp, vendored at `third_party/whisper.cpp`)
+Source commit: `5359861c739e955e79d9a303bcbc70fb988958b1` (ggml-org/whisper.cpp, vendored at `third_party/whisper.cpp`)
 
 ## Vendored source
 
@@ -14,11 +14,11 @@ Source commit: `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` (ggml-org/whisper.cpp,
 
 | Artifact | Source | Size (bytes) | License |
 |---|---|---:|---|
-| `ggml-small.bin` | https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true | 487,601,967 | **MIT** |
+| `ggml-small.bin` | https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true | 487,601,967 | **MIT** |
 
 The authoritative statement is the upstream model repository metadata:
 `https://huggingface.co/ggerganov/whisper.cpp` (license field: `mit`),
-commit `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`.
+commit `5359861c739e955e79d9a303bcbc70fb988958b1`.
 The same MIT license governs the vendored whisper.cpp source tree, so the
 model weights and the vendored runtime share a compatible permissive license.
 

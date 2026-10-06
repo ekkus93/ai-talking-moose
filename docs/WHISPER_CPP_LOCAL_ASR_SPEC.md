@@ -129,15 +129,15 @@ format: mono int16 PCM
 Pinned upstream location:
 
 ```text
-https://github.com/ggml-org/whisper.cpp/tree/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774
-https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true
+https://github.com/ggml-org/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1
+https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true
 ```
 
 Known metadata from the pinned Hugging Face asset:
 
 ```text
 x-linked-size: 487601967 bytes
-x-repo-commit: 60c0be6ac8fa71b1a2ae2dd938a31a34a508e774
+x-repo-commit: 5359861c739e955e79d9a303bcbc70fb988958b1
 sha256: 1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b
 ```
 

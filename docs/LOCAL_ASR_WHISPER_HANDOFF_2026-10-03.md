@@ -456,7 +456,7 @@ models/ggml-small.bin
 Pinned model URL:
 
 ```text
-https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true
+https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true
 ```
 
 Earlier wrong-path URL:
@@ -475,7 +475,7 @@ HEAD metadata for `ggml-small.bin`:
 
 - HTTP status: `302` to a CDN
 - `x-linked-size`: `487601967` bytes
-- `x-repo-commit`: `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`
+- `x-repo-commit`: `5359861c739e955e79d9a303bcbc70fb988958b1`
 
 Approximate size:
 
@@ -497,7 +497,7 @@ Pinned in `src-tauri/src/asr/whisper/manifest.rs`:
 - model URL:
 
 ```text
-https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true
+https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true
 ```
 
 - bytes: `487601967`
@@ -840,13 +840,13 @@ But only proceed after confirming:
 Check:
 
 ```bash
-curl -sI "https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true"
+curl -sI "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true"
 ```
 
 Expected values:
 
 - size: `487601967`
-- repo commit: `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`
+- repo commit: `5359861c739e955e79d9a303bcbc70fb988958b1`
 
 Still need:
 
@@ -858,7 +858,7 @@ If downloading locally for verification only, use a temporary location outside t
 ```bash
 mkdir -p /tmp/whisper-check
 cd /tmp/whisper-check
-curl -fL "https://huggingface.co/ggerganov/whisper.cpp/resolve/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774/ggml-small.bin?download=true" -o ggml-small.bin
+curl -fL "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true" -o ggml-small.bin
 sha256sum ggml-small.bin
 ```
 
