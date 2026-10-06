@@ -352,10 +352,32 @@ pub async fn transcribe_for_acceptance(
 
     let installer = WhisperModelInstaller::new(model_root.to_path_buf())
         .map_err(|error| error.message.to_string())?;
-    let lease = installer
-        .acquire_verified_model_lease()
-        .map_err(|error| error.message.to_string())?
-        .ok_or("selected Whisper model is not installed and verified".to_string())?;
+    // `acquire_verified_model_lease` uses a blocking lock owned by a
+    // tokio runtime mutex, which panics on tokio runtime threads. The
+    // acceptance binary runs on a tokio runtime, so the lease is acquired
+    // on a dedicated std thread — matching the production pipeline, where
+    // engine load happens on std threads.
+    let lease = {
+        let joined = std::thread::scope(|scope| {
+            scope.spawn(|| installer.acquire_verified_model_lease()).join()
+        });
+        match joined {
+            Ok(inner) => match inner {
+                Ok(Some(lease)) => lease,
+                Ok(None) => {
+                    return Err(
+                        "selected Whisper model is not installed and verified".to_string(),
+                    );
+                }
+                Err(error) => return Err(error.message.to_string()),
+            },
+            Err(join_error) => {
+                return Err(format!(
+                    "whisper model lease acquisition thread failed: {join_error:?}"
+                ));
+            }
+        }
+    };
 
     let installed_bytes = lease
         .model_path()
