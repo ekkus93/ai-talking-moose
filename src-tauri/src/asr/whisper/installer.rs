@@ -270,6 +270,11 @@ impl WhisperModelInstaller {
         self.install_root.join(MODEL_FILENAME)
     }
 
+    fn ensure_install_root(&self) -> Result<(), WhisperModelInstallError> {
+        fs::create_dir_all(&self.install_root)
+            .map_err(|_| WhisperModelInstallError::io("create the Whisper model directory"))
+    }
+
     /// Check whether the installed model is intact and returns its size.
     pub fn verify_installed(
         &self,
@@ -353,6 +358,11 @@ impl WhisperModelInstaller {
                 ..outcome
             });
         }
+
+        // Explicit installation owns creation of the canonical per-model root.
+        // Descriptor queries remain side-effect free, while a clean profile does
+        // not require workflow/test code to pre-create directories.
+        self.ensure_install_root()?;
 
         // Disk space check.
         match self.disk_space.available_bytes(&self.install_root) {
@@ -493,6 +503,23 @@ pub fn map_install_error(error: WhisperModelInstallError) -> AsrError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ensure_install_root_creates_clean_profile_directory() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let root = temp
+            .path()
+            .join("models")
+            .join("whisper")
+            .join("whisper-small");
+        assert!(!root.exists());
+
+        let installer = WhisperModelInstaller::new(&root).unwrap();
+        installer.ensure_install_root().unwrap();
+
+        assert!(root.is_dir());
+        assert_eq!(installer.model_path(), root.join(MODEL_FILENAME));
+    }
 
     #[test]
     fn installer_struct_compiles() {

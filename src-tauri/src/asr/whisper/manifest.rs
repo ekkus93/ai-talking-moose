@@ -3,7 +3,8 @@ use super::super::types::{
 };
 
 use ring::digest::{Context, SHA256};
-use std::fs;
+use std::fs::File;
+use std::io::{BufReader, Read};
 use std::path::Path;
 
 /// Stable application-owned identifier for the Whisper Small local model.
@@ -206,61 +207,127 @@ fn is_safe_model_file_name(name: &str) -> bool {
     name.split('/').all(safe_segment)
 }
 
-/// Hex-encoded SHA-256 of the given bytes, matching the `ring` convention used by
-/// the rest of the app.
+/// Verification buffer size. Model integrity checks are intentionally streaming so
+/// memory usage stays bounded independently of the ~488 MB model size.
+const VERIFY_BUFFER_BYTES: usize = 64 * 1024;
+
+/// Hex-encoded SHA-256 of the given bytes.
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut context = Context::new(&SHA256);
     context.update(bytes);
-    context
-        .finish()
-        .as_ref()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    digest_hex(context.finish().as_ref())
 }
 
-#[allow(dead_code)]
-/// Verify a downloaded Whisper model weight: exact byte size, SHA-256 pin, and the
-/// GGUF magic prefix. Mirrors the Moonshine model verification contract.
-pub fn verify_model(path: &Path) -> Result<(), AsrError> {
-    let bytes = fs::read(path).map_err(|error| AsrError {
+fn digest_hex(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(output, "{byte:02x}");
+    }
+    output
+}
+
+fn model_corrupt(message: impl Into<String>, retryable: bool) -> AsrError {
+    AsrError {
         kind: AsrErrorKind::ModelCorrupt,
-        message: format!(
-            "Could not read Whisper model at {}: {error}",
-            path.display()
-        ),
-        retryable: true,
+        message: message.into(),
+        retryable,
+    }
+}
+
+/// Verify one model file against explicit expectations using bounded streaming I/O.
+///
+/// Keeping the expectations injectable makes the integrity algorithm testable with
+/// tiny fixtures without weakening the production pins.
+fn verify_model_against(
+    path: &Path,
+    expected_bytes: u64,
+    expected_sha256: &str,
+    expected_magic: [u8; 4],
+) -> Result<(), AsrError> {
+    let file = File::open(path).map_err(|error| {
+        model_corrupt(
+            format!("Could not read Whisper model at {}: {error}", path.display()),
+            true,
+        )
     })?;
+    let mut reader = BufReader::with_capacity(VERIFY_BUFFER_BYTES, file);
+    let mut sha256 = Context::new(&SHA256);
+    let mut buffer = [0_u8; VERIFY_BUFFER_BYTES];
+    let mut total_bytes = 0_u64;
+    let mut observed_magic = [0_u8; 4];
+    let mut observed_magic_len = 0_usize;
 
-    if bytes.len() != WHISPER_MODEL_BYTES as usize {
-        return Err(AsrError {
-            kind: AsrErrorKind::ModelCorrupt,
-            message: format!(
-                "Whisper model size is {} bytes; expected {}",
-                bytes.len(),
-                WHISPER_MODEL_BYTES
+    loop {
+        let read = reader.read(&mut buffer).map_err(|error| {
+            model_corrupt(
+                format!("Could not read Whisper model at {}: {error}", path.display()),
+                true,
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+
+        let read_u64 = u64::try_from(read)
+            .map_err(|_| model_corrupt("Whisper model size overflowed u64.", false))?;
+        total_bytes = total_bytes
+            .checked_add(read_u64)
+            .ok_or_else(|| model_corrupt("Whisper model size overflowed u64.", false))?;
+        if total_bytes > expected_bytes {
+            return Err(model_corrupt(
+                format!(
+                    "Whisper model size exceeds {expected_bytes} bytes; observed at least {total_bytes}"
+                ),
+                true,
+            ));
+        }
+
+        if observed_magic_len < observed_magic.len() {
+            let copy_len = (observed_magic.len() - observed_magic_len).min(read);
+            observed_magic[observed_magic_len..observed_magic_len + copy_len]
+                .copy_from_slice(&buffer[..copy_len]);
+            observed_magic_len += copy_len;
+        }
+
+        sha256.update(&buffer[..read]);
+    }
+
+    if total_bytes != expected_bytes {
+        return Err(model_corrupt(
+            format!(
+                "Whisper model size is {total_bytes} bytes; expected {expected_bytes}"
             ),
-            retryable: true,
-        });
+            true,
+        ));
     }
 
-    if bytes[0..4] != WHISPER_MODEL_MAGIC {
-        return Err(AsrError {
-            kind: AsrErrorKind::ModelCorrupt,
-            message: "Whisper model has an unsupported header magic.".to_string(),
-            retryable: false,
-        });
+    if observed_magic_len != observed_magic.len() || observed_magic != expected_magic {
+        return Err(model_corrupt(
+            "Whisper model has an unsupported header magic.",
+            false,
+        ));
     }
 
-    if sha256_hex(&bytes) != WHISPER_MODEL_SHA256 {
-        return Err(AsrError {
-            kind: AsrErrorKind::ModelCorrupt,
-            message: "Whisper model SHA-256 did not match the verified pin.".to_string(),
-            retryable: false,
-        });
+    if digest_hex(sha256.finish().as_ref()) != expected_sha256 {
+        return Err(model_corrupt(
+            "Whisper model SHA-256 did not match the verified pin.",
+            false,
+        ));
     }
 
     Ok(())
+}
+
+/// Verify a downloaded Whisper model weight: exact byte size, SHA-256 pin, and the
+/// GGUF magic prefix. The model is never loaded wholesale into memory.
+pub fn verify_model(path: &Path) -> Result<(), AsrError> {
+    verify_model_against(
+        path,
+        WHISPER_MODEL_BYTES,
+        WHISPER_MODEL_SHA256,
+        WHISPER_MODEL_MAGIC,
+    )
 }
 
 #[cfg(test)]
@@ -337,6 +404,73 @@ mod tests {
         let result = verify_model(&path);
         assert!(matches!(
             result,
+            Err(AsrError {
+                kind: AsrErrorKind::ModelCorrupt,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn streaming_verify_accepts_small_fixture() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("fixture.bin");
+        let bytes = b"lmgg-tiny-whisper-fixture";
+        write(&path, bytes).unwrap();
+        let expected_sha = sha256_hex(bytes);
+
+        assert!(verify_model_against(
+            &path,
+            u64::try_from(bytes.len()).unwrap(),
+            &expected_sha,
+            *b"lmgg",
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn streaming_verify_rejects_truncated_and_oversized_fixtures() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("fixture.bin");
+        let bytes = b"lmgg-tiny-whisper-fixture";
+        write(&path, bytes).unwrap();
+        let expected_sha = sha256_hex(bytes);
+        let actual = u64::try_from(bytes.len()).unwrap();
+
+        assert!(matches!(
+            verify_model_against(&path, actual + 1, &expected_sha, *b"lmgg"),
+            Err(AsrError {
+                kind: AsrErrorKind::ModelCorrupt,
+                ..
+            })
+        ));
+        assert!(matches!(
+            verify_model_against(&path, actual - 1, &expected_sha, *b"lmgg"),
+            Err(AsrError {
+                kind: AsrErrorKind::ModelCorrupt,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn streaming_verify_rejects_wrong_sha_and_magic() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("fixture.bin");
+        let bytes = b"lmgg-tiny-whisper-fixture";
+        write(&path, bytes).unwrap();
+        let actual = u64::try_from(bytes.len()).unwrap();
+        let expected_sha = sha256_hex(bytes);
+
+        assert!(matches!(
+            verify_model_against(&path, actual, &"0".repeat(64), *b"lmgg"),
+            Err(AsrError {
+                kind: AsrErrorKind::ModelCorrupt,
+                ..
+            })
+        ));
+        assert!(matches!(
+            verify_model_against(&path, actual, &expected_sha, *b"GGUF"),
             Err(AsrError {
                 kind: AsrErrorKind::ModelCorrupt,
                 ..

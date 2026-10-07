@@ -8,7 +8,7 @@ use crate::asr::moonshine::{
 use crate::asr::whisper::{
     installer::{
         WhisperModelInstallCancellation, WhisperModelInstallPhase, WhisperModelInstallProgress,
-        WhisperModelInstallProgressCallback,
+        WhisperModelInstallProgressCallback, WhisperModelInstaller,
     },
     manifest,
     manifest::{WHISPER_RUNTIME_UNBUILT_MESSAGE, WHISPER_SMALL_DISPLAY_NAME},
@@ -120,9 +120,12 @@ pub(super) async fn load_descriptor(
 
 /// Build a Whisper Small descriptor that reflects the real local install state
 /// by querying the Whisper installer rather than assuming `NotInstalled`.
-pub(super) fn whisper_descriptor(state: &AppState, active: bool) -> AsrModelDescriptor {
+pub(super) fn whisper_descriptor(
+    installer: &WhisperModelInstaller,
+    active: bool,
+) -> AsrModelDescriptor {
     let mut descriptor = manifest::model_descriptor(active);
-    match state.whisper_installer.verify_installed() {
+    match installer.verify_installed() {
         Ok(Some(outcome)) => {
             descriptor.install_state = AsrModelInstallState::Installed;
             descriptor.installed_bytes = Some(outcome.installed_bytes);
@@ -136,6 +139,15 @@ pub(super) fn whisper_descriptor(state: &AppState, active: bool) -> AsrModelDesc
         }
     }
     descriptor
+}
+
+pub(super) async fn load_whisper_descriptor(
+    installer: Arc<WhisperModelInstaller>,
+    active: bool,
+) -> Result<AsrModelDescriptor, String> {
+    tokio::task::spawn_blocking(move || whisper_descriptor(installer.as_ref(), active))
+        .await
+        .map_err(|_| "Whisper model verification worker terminated unexpectedly.".to_string())
 }
 
 fn model_is_in_use(
@@ -203,8 +215,8 @@ pub async fn get_asr_models(state: State<'_, AppState>) -> Result<Vec<AsrModelDe
         MoonshineModelArchitecture::SmallStreaming,
         small_active,
     );
-    let whisper = whisper_descriptor(state.inner(), whisper_active);
-    let (tiny, small) = tokio::try_join!(tiny, small)?;
+    let whisper = load_whisper_descriptor(state.whisper_installer.clone(), whisper_active);
+    let (tiny, small, whisper) = tokio::try_join!(tiny, small, whisper)?;
     Ok(vec![tiny, small, whisper])
 }
 
@@ -293,7 +305,8 @@ async fn install_whisper<R: Runtime>(
         .map_err(|error| error.message)?;
 
     let active = model_in_use(state, AsrMode::WhisperSmall);
-    let mut descriptor = whisper_descriptor(state, active);
+    let mut descriptor =
+        load_whisper_descriptor(state.whisper_installer.clone(), active).await?;
     descriptor.installed_bytes = Some(outcome.installed_bytes);
     descriptor.revision = outcome.revision;
     Ok(descriptor)
@@ -313,7 +326,7 @@ pub async fn delete_asr_model(
             .await
             .map_err(|error| error.message)?;
         let active = model_in_use(state.inner(), mode);
-        return Ok(whisper_descriptor(state.inner(), active));
+        return load_whisper_descriptor(state.whisper_installer.clone(), active).await;
     }
 
     let architecture = architecture_for_mode(mode)?;
