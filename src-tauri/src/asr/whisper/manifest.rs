@@ -13,10 +13,13 @@ pub const WHISPER_SMALL_ID: &str = "whisper-small-ggml";
 pub const WHISPER_SMALL_DISPLAY_NAME: &str = "Whisper Small";
 
 /// whisper.cpp source commit the CMake build links against.
-pub const WHISPER_SOURCE_COMMIT: &str = "5359861c739e955e79d9a303bcbc70fb988958b1";
+pub const WHISPER_SOURCE_COMMIT: &str = "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774";
 
-/// Hugging Face download URL for the `ggml-small` weight, pinned to the vendored
-/// Whisper.cpp source commit.
+/// Immutable Hugging Face repository revision identifying the model artifact.
+pub const WHISPER_MODEL_REVISION: &str = "5359861c739e955e79d9a303bcbc70fb988958b1";
+
+/// Hugging Face download URL for the `ggml-small` weight, pinned to the immutable
+/// model repository revision.
 pub const WHISPER_MODEL_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true";
 
@@ -28,7 +31,7 @@ pub const WHISPER_MODEL_SHA256: &str =
 pub const WHISPER_MODEL_BYTES: u64 = 487_601_967;
 
 /// Runtime release label surfaced in diagnostics (the whisper.cpp source commit).
-pub const WHISPER_RUNTIME_RELEASE: &str = "5359861c739e955e79d9a303bcbc70fb988958b1";
+pub const WHISPER_RUNTIME_RELEASE: &str = "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774";
 
 /// Expected GGUF magic prefix of the `ggml-small.bin` weight.
 pub const WHISPER_MODEL_MAGIC: [u8; 4] = *b"lmgg";
@@ -118,9 +121,9 @@ pub fn validate_manifest_pins() -> Result<(), AsrError> {
         ));
     }
 
-    if !WHISPER_MODEL_URL.contains(WHISPER_SOURCE_COMMIT) {
+    if !WHISPER_MODEL_URL.contains(WHISPER_MODEL_REVISION) {
         return Err(internal_validation_error(
-            "WHISPER_MODEL_URL must reference WHISPER_SOURCE_COMMIT",
+            "WHISPER_MODEL_URL must reference WHISPER_MODEL_REVISION",
         ));
     }
 
@@ -280,7 +283,7 @@ mod tests {
         assert_eq!(WHISPER_MODEL_BYTES, 487_601_967);
         assert_eq!(
             WHISPER_SOURCE_COMMIT,
-            "5359861c739e955e79d9a303bcbc70fb988958b1"
+            "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774"
         );
         assert_eq!(WHISPER_MODEL_MAGIC, [b'l', b'm', b'g', b'g']);
     }
