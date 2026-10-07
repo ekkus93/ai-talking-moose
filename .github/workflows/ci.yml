@@ -259,6 +259,7 @@ jobs:
           bash -n scripts/prepare_ubuntu_apt.sh
           bash -n scripts/run_backend_failure_matrix.sh
           bash -n scripts/run_backend_stress_matrix.sh
+          python3 scripts/check_whisper_acceptance_workflow.py
           test -s .github/workflows/ci.yml
           grep -q '^name: CI$' .github/workflows/ci.yml
 
@@ -330,6 +331,10 @@ jobs:
             ${{ runner.os }}-cargo-
       - name: Validate native runtime manifest
         run: python3 scripts/validate_moonshine_runtime_manifest.py
+      - name: Verify Whisper source, model, and license provenance
+        run: |
+          python3 scripts/check_whisper_provenance.py
+          python3 -m unittest scripts.test_check_whisper_provenance
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
       - name: Check Rust formatting

@@ -86,6 +86,7 @@ jobs:
           report_root="$work_root/reports"
           corpus_wav="$GITHUB_WORKSPACE/third_party/whisper.cpp/samples/jfk.wav"
           mkdir -p "$report_root"
+          test ! -e "$model_root"
           test -f "$corpus_wav"
 
           cpu_name="$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -n 1)"
