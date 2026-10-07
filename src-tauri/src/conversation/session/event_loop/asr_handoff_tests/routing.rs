@@ -85,3 +85,64 @@ async fn local_final_transcript_becomes_one_attributed_gemini_text_turn() {
     assert!(!manager
         .should_suppress_interrupted_response_event(&LiveServerEvent::AudioData(vec![1, 2, 3, 4])));
 }
+
+#[tokio::test]
+async fn whisper_multiple_partials_and_blank_final_commit_only_one_real_user_turn() {
+    let manager = ConversationManager::new();
+    let generation = 52;
+    let session_id = "whisper-session";
+    manager.generation.store(generation, Ordering::SeqCst);
+    manager.is_in_conversation.store(true, Ordering::SeqCst);
+    *manager.active_session_id.lock() = Some(session_id.to_string());
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
+    *manager.lifecycle.write() = ConversationLifecycle::Listening;
+    let _stop_count = attach_counting_local_asr(&manager, generation).await;
+
+    let audio_upload_count = Arc::new(AtomicUsize::new(0));
+    let text_turns = Arc::new(SyncMutex::new(Vec::new()));
+    *manager.live_session.lock().await = Some(Box::new(RecordingSession {
+        audio_upload_count: audio_upload_count.clone(),
+        text_turns: text_turns.clone(),
+    }));
+    *manager.state_callback.lock() = Some(Arc::new(|_| {}));
+    *manager.lifecycle_callback.lock() = Some(Arc::new(|_| {}));
+    *manager.transcript_callback.lock() = Some(Arc::new(|_, _, _| {}));
+
+    for partial in ["hello", "hello moo", "hello moose"] {
+        assert!(!manager
+            .handle_local_asr_event(
+                generation,
+                session_id,
+                AsrEvent::PartialTranscript {
+                    text: partial.to_string(),
+                },
+            )
+            .await
+            .unwrap());
+    }
+
+    assert!(!manager
+        .handle_local_asr_event(
+            generation,
+            session_id,
+            AsrEvent::FinalTranscript {
+                text: "   ".to_string(),
+            },
+        )
+        .await
+        .unwrap());
+
+    assert!(manager
+        .handle_local_asr_event(
+            generation,
+            session_id,
+            AsrEvent::FinalTranscript {
+                text: "hello moose".to_string(),
+            },
+        )
+        .await
+        .unwrap());
+
+    assert_eq!(text_turns.lock().as_slice(), &["hello moose".to_string()]);
+    assert_eq!(audio_upload_count.load(AtomicOrdering::SeqCst), 0);
+}
