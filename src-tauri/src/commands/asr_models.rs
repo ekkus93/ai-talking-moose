@@ -305,8 +305,7 @@ async fn install_whisper<R: Runtime>(
         .map_err(|error| error.message)?;
 
     let active = model_in_use(state, AsrMode::WhisperSmall);
-    let mut descriptor =
-        load_whisper_descriptor(state.whisper_installer.clone(), active).await?;
+    let mut descriptor = load_whisper_descriptor(state.whisper_installer.clone(), active).await?;
     descriptor.installed_bytes = Some(outcome.installed_bytes);
     descriptor.revision = outcome.revision;
     Ok(descriptor)

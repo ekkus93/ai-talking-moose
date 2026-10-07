@@ -70,9 +70,7 @@ impl WhisperUtteranceState {
         if has_speech {
             self.trailing_silence_samples = 0;
         } else {
-            self.trailing_silence_samples = self
-                .trailing_silence_samples
-                .saturating_add(pcm.len());
+            self.trailing_silence_samples = self.trailing_silence_samples.saturating_add(pcm.len());
         }
 
         if total_samples >= WHISPER_MAX_UTTERANCE_SAMPLES
@@ -240,8 +238,7 @@ impl WhisperEngine {
 
         let inference_started = Instant::now();
         let result = self.api.transcribe(&self.model, &self.audio_buffer);
-        let latency_ms =
-            u32::try_from(inference_started.elapsed().as_millis()).unwrap_or(u32::MAX);
+        let latency_ms = u32::try_from(inference_started.elapsed().as_millis()).unwrap_or(u32::MAX);
         let segment_id = self.utterance.segment_id;
 
         if finalize {

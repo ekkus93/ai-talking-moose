@@ -247,7 +247,10 @@ fn verify_model_against(
 ) -> Result<(), AsrError> {
     let file = File::open(path).map_err(|error| {
         model_corrupt(
-            format!("Could not read Whisper model at {}: {error}", path.display()),
+            format!(
+                "Could not read Whisper model at {}: {error}",
+                path.display()
+            ),
             true,
         )
     })?;
@@ -261,7 +264,10 @@ fn verify_model_against(
     loop {
         let read = reader.read(&mut buffer).map_err(|error| {
             model_corrupt(
-                format!("Could not read Whisper model at {}: {error}", path.display()),
+                format!(
+                    "Could not read Whisper model at {}: {error}",
+                    path.display()
+                ),
                 true,
             )
         })?;
@@ -295,9 +301,7 @@ fn verify_model_against(
 
     if total_bytes != expected_bytes {
         return Err(model_corrupt(
-            format!(
-                "Whisper model size is {total_bytes} bytes; expected {expected_bytes}"
-            ),
+            format!("Whisper model size is {total_bytes} bytes; expected {expected_bytes}"),
             true,
         ));
     }
