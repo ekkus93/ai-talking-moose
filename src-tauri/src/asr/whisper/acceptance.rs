@@ -359,15 +359,15 @@ pub async fn transcribe_for_acceptance(
     // engine load happens on std threads.
     let lease = {
         let joined = std::thread::scope(|scope| {
-            scope.spawn(|| installer.acquire_verified_model_lease()).join()
+            scope
+                .spawn(|| installer.acquire_verified_model_lease())
+                .join()
         });
         match joined {
             Ok(inner) => match inner {
                 Ok(Some(lease)) => lease,
                 Ok(None) => {
-                    return Err(
-                        "selected Whisper model is not installed and verified".to_string(),
-                    );
+                    return Err("selected Whisper model is not installed and verified".to_string());
                 }
                 Err(error) => return Err(error.message.to_string()),
             },
