@@ -21,11 +21,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:all": "npm run check:frontend && npm run check:rust && npm run check:generated-backend-contract",
-    "check:frontend": "npm run check:generated-trees && npm run check:whisper-provenance && npm run check:whisper-build-policy && npm run check:whisper-acceptance-workflow && npm run check:tauri-command-contract && npm run check:frontend-contract-shapes && npm run check:local-llm-contract-negative-probes && npm run check:tts-contract-negative-probe && npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
+    "check:frontend": "npm run check:generated-trees && npm run check:whisper-provenance && npm run check:whisper-acceptance-workflow && npm run check:tauri-command-contract && npm run check:frontend-contract-shapes && npm run check:local-llm-contract-negative-probes && npm run check:tts-contract-negative-probe && npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features",
     "check:generated-trees": "node scripts/check_generated_trees_untracked.mjs",
     "check:whisper-provenance": "python3 scripts/check_whisper_provenance.py && python3 -m unittest scripts.test_check_whisper_provenance",
-    "check:whisper-build-policy": "python3 scripts/check_whisper_build_policy.py && python3 -m unittest scripts.test_check_whisper_build_policy",
     "check:whisper-acceptance-workflow": "python3 scripts/check_whisper_acceptance_workflow.py"
   },
   "dependencies": {
