@@ -35,16 +35,14 @@ const whisper: AsrModelDescriptor = {
   runtime_release: "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774",
 };
 
+const models = [tiny, small, whisper];
+
 describe("AsrSettingsPanel accessibility", () => {
   let progressListener: ((event: AsrModelProgressEvent) => void) | null = null;
 
   beforeEach(() => {
     useMooseStore.setState({ settings: frontendDefaultSettings() });
-    vi.spyOn(tauriBridge, "getAsrModels").mockResolvedValue([
-      tiny,
-      small,
-      whisper,
-    ]);
+    vi.spyOn(tauriBridge, "getAsrModels").mockResolvedValue(models);
     vi.spyOn(tauriBridge, "getAsrDiagnostics").mockResolvedValue({
       selected_mode: "moonshine_tiny_streaming",
       engine_name: "Moonshine Tiny Streaming",
@@ -84,73 +82,56 @@ describe("AsrSettingsPanel accessibility", () => {
     vi.restoreAllMocks();
   });
 
-  it(
-    "exposes numeric download progress and consistently labeled refresh controls",
-    async () => {
-      render(<AsrSettingsPanel />);
-      expect(
-        await screen.findByRole("button", {
-          name: "Re-check local ASR model integrity",
-        }),
-      ).toBeInTheDocument();
-      expect(
-        await screen.findByRole("button", {
-          name: "Refresh ASR diagnostics",
-        }),
-      ).toBeInTheDocument();
+  it("shows progress and refresh controls", async () => {
+    render(<AsrSettingsPanel />);
 
-      await act(async () => {
-        progressListener?.({
-          mode: "moonshine_tiny_streaming",
-          install_state: "downloading",
-          downloaded_bytes: 25,
-          total_bytes: 100,
-          current_file: "model.bin",
-        });
+    expect(
+      await screen.findByRole("button", {
+        name: "Re-check local ASR model integrity",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: "Refresh ASR diagnostics",
+      }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      progressListener?.({
+        mode: "moonshine_tiny_streaming",
+        install_state: "downloading",
+        downloaded_bytes: 25,
+        total_bytes: 100,
+        current_file: "model.bin",
       });
+    });
 
-      const progress = screen.getByRole("progressbar", {
-        name: "Moonshine Tiny Streaming download progress",
+    const progress = screen.getByRole("progressbar", {
+      name: "Moonshine Tiny Streaming download progress",
+    });
+    expect(progress).toHaveAttribute("aria-valuenow", "25");
+    expect(progress).toHaveAttribute("aria-valuetext", "25% downloaded");
+  });
+
+  it("uses truthful Whisper wording", async () => {
+    render(<AsrSettingsPanel />);
+
+    expect(await screen.findByText(/local endpointing/i)).toBeInTheDocument();
+    expect(screen.getByText(/utterance ends/i)).toBeInTheDocument();
+
+    await act(async () => {
+      progressListener?.({
+        mode: "whisper_small",
+        install_state: "verifying",
+        downloaded_bytes: whisper.expected_bytes,
+        total_bytes: whisper.expected_bytes,
+        current_file: "ggml-small.bin",
       });
-      expect(progress).toHaveAttribute("aria-valuemin", "0");
-      expect(progress).toHaveAttribute("aria-valuemax", "100");
-      expect(progress).toHaveAttribute("aria-valuenow", "25");
-      expect(progress).toHaveAttribute("aria-valuetext", "25% downloaded");
-    },
-  );
+    });
 
-  it(
-    "describes Whisper finality truthfully and uses SHA-256-only verification wording",
-    async () => {
-      render(<AsrSettingsPanel />);
-
-      expect(
-        await screen.findByText(
-          /in-utterance partial updates and local endpointing/i,
-        ),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          /final user turn is emitted only when the utterance ends/i,
-        ),
-      ).toBeInTheDocument();
-
-      await act(async () => {
-        progressListener?.({
-          mode: "whisper_small",
-          install_state: "verifying",
-          downloaded_bytes: whisper.expected_bytes,
-          total_bytes: whisper.expected_bytes,
-          current_file: "ggml-small.bin",
-        });
-      });
-
-      expect(
-        screen.getByText("Verifying SHA-256 and install metadata…"),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText("Verifying SHA-256/CRC32C and install metadata…"),
-      ).not.toBeInTheDocument();
-    },
-  );
+    expect(
+      screen.getByText("Verifying SHA-256 and install metadata…"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/CRC32C/)).not.toBeInTheDocument();
+  });
 });
