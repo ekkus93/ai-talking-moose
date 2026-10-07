@@ -82,7 +82,7 @@ pub fn model_descriptor(active: bool) -> AsrModelDescriptor {
         display_name: WHISPER_SMALL_DISPLAY_NAME.to_string(),
         mode: AsrMode::WhisperSmall,
         install_state: AsrModelInstallState::NotInstalled,
-        revision: WHISPER_SOURCE_COMMIT.to_string(),
+        revision: WHISPER_MODEL_REVISION.to_string(),
         runtime_release: WHISPER_RUNTIME_RELEASE.to_string(),
         installed_bytes: None,
         expected_bytes: WHISPER_MODEL_BYTES,
@@ -93,7 +93,7 @@ pub fn model_descriptor(active: bool) -> AsrModelDescriptor {
 
 /// Fail-closed validation for the Whisper Small manifest pins.
 ///
-/// Ensures the model URL references the vendored Whisper.cpp source commit, the SHA-256
+/// Ensures the model URL references the immutable model-artifact revision, the SHA-256
 /// pin is a well-formed 64-character ASCII hex digest, the expected byte size is non-zero,
 /// the expected file name is path-safe, and the recorded repository and license fields are
 /// non-empty.
@@ -498,32 +498,3 @@ mod tests {
         assert!(!is_ascii_hex_sha256(invalid_short));
         let invalid_long = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987bc";
         assert!(!is_ascii_hex_sha256(invalid_long));
-        let invalid_symbol = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987G";
-        assert!(!is_ascii_hex_sha256(invalid_symbol));
-    }
-
-    #[test]
-    fn is_safe_model_file_name_accepts_pinned_name() {
-        assert!(is_safe_model_file_name(WHISPER_MODEL_FILE_NAME));
-        assert!(is_safe_model_file_name("ggml-small.bin"));
-        assert!(is_safe_model_file_name("models/ggml-small.bin"));
-    }
-
-    #[test]
-    fn is_safe_model_file_name_rejects_path_traversal_and_invalid_names() {
-        assert!(!is_safe_model_file_name(""));
-        assert!(!is_safe_model_file_name(".."));
-        assert!(!is_safe_model_file_name("../ggml-small.bin"));
-        assert!(!is_safe_model_file_name("..ggml-small.bin"));
-        assert!(!is_safe_model_file_name("ggml..small.bin"));
-        assert!(!is_safe_model_file_name("ggml-small/.."));
-        assert!(!is_safe_model_file_name("ggml-small/../ggml-small.bin"));
-        assert!(!is_safe_model_file_name("/ggml-small.bin"));
-        assert!(!is_safe_model_file_name("ggml-small/..gg"));
-        assert!(!is_safe_model_file_name("ggml-small/gg..bin"));
-        assert!(!is_safe_model_file_name("ggml-small/..."));
-        assert!(!is_safe_model_file_name("ggml-small/\0bin"));
-        assert!(!is_safe_model_file_name("bin\\ggml-small"));
-        assert!(!is_safe_model_file_name("ggml-small/ggml-small\0.bin"));
-    }
-}

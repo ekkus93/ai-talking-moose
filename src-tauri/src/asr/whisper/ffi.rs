@@ -297,7 +297,9 @@ impl NativeWhisperApi {
 
         // The context was already loaded by `load_model`; `whisper_full` consumes the
         // model from `model.ctx` and re-uses the per-call `params` we build below.
-        let n_samples = u32::try_from(audio.len()).unwrap_or(0) as i32;
+        let n_samples = i32::try_from(audio.len()).map_err(|_| {
+            FfiError::invalid_response("Whisper audio buffer exceeds the native sample-count limit")
+        })?;
 
         // SAFETY: `whisper_full_default_params` returns a by-value C struct with every
         // field at the exact C width declared in the pinned whisper.h. We only mutate
@@ -389,10 +391,9 @@ impl WhisperApi for NativeWhisperApi {
             let cparams = unsafe { whisper_context_default_params() };
             let ctx = unsafe { whisper_init_from_file_with_params(model_path.as_ptr(), cparams) };
             if ctx.is_null() {
-                return Err(FfiError::invalid_response(format!(
-                    "whisper_init_from_file_with_params failed to load {}",
-                    model_path.to_string_lossy()
-                )));
+                return Err(FfiError::invalid_response(
+                    "whisper_init_from_file_with_params failed to load the verified model",
+                ));
             }
             Ok(WhisperModel::new(ctx))
         }
