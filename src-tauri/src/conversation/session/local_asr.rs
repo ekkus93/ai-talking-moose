@@ -375,7 +375,12 @@ mod tests {
             })
             .await;
 
-        let error = result.expect_err("Whisper should fail only for its own unavailable runtime/model state in this fixture");
+        let error = match result {
+            Ok(_) => panic!(
+                "Whisper should fail only for its own unavailable runtime/model state in this fixture"
+            ),
+            Err(error) => error,
+        };
         assert!(error.contains("Whisper"));
         assert!(!error.contains("Moonshine"));
         let (diagnostics, _) = manager
