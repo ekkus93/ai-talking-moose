@@ -212,6 +212,7 @@ fn is_safe_model_file_name(name: &str) -> bool {
 const VERIFY_BUFFER_BYTES: usize = 64 * 1024;
 
 /// Hex-encoded SHA-256 of the given bytes.
+#[cfg(test)]
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut context = Context::new(&SHA256);
     context.update(bytes);
