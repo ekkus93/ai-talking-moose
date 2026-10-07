@@ -14,7 +14,7 @@ pub(super) fn whisper_model_root(db_path: Option<&str>) -> PathBuf {
         .unwrap_or_else(|| Path::new("."))
         .join("models")
         .join("whisper")
-            .join("whisper-small")
+        .join("whisper-small")
 }
 
 pub(super) fn moonshine_model_root(db_path: Option<&str>) -> PathBuf {
