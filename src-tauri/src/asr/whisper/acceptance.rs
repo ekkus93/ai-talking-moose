@@ -28,11 +28,11 @@ use super::installer::{
     WhisperModelInstallProgressCallback, WhisperModelInstaller,
 };
 use super::manifest::{
-    WHISPER_MODEL_BYTES, WHISPER_MODEL_MAGIC, WHISPER_MODEL_SHA256, WHISPER_SMALL_ID,
-    WHISPER_SOURCE_COMMIT,
+    WHISPER_MODEL_BYTES, WHISPER_MODEL_MAGIC, WHISPER_MODEL_REVISION, WHISPER_MODEL_SHA256,
+    WHISPER_SMALL_ID, WHISPER_SOURCE_COMMIT,
 };
 
-const REPORT_SCHEMA_VERSION: u32 = 1;
+const REPORT_SCHEMA_VERSION: u32 = 2;
 const MODEL_FILENAME: &str = "ggml-small.bin";
 const QUANTIZATION: &str = "f16";
 const LICENSE_STATE: &str = "MIT";
@@ -107,7 +107,10 @@ pub struct WhisperInstallAcceptanceReport {
     pub generated_at_utc: String,
     pub git_sha: Option<String>,
     pub model_id: String,
+    /// Immutable model-artifact repository revision.
     pub revision: String,
+    /// Exact whisper.cpp native source revision compiled into the runtime.
+    pub source_commit: String,
     pub artifact_filename: String,
     pub sha256: String,
     pub expected_bytes: u64,
@@ -140,7 +143,10 @@ pub struct WhisperTranscribeAcceptanceReport {
     pub generated_at_utc: String,
     pub git_sha: Option<String>,
     pub model_id: String,
+    /// Immutable model-artifact repository revision.
     pub revision: String,
+    /// Exact whisper.cpp native source revision compiled into the runtime.
+    pub source_commit: String,
     pub artifact_filename: String,
     pub sha256: String,
     pub expected_bytes: u64,
@@ -320,7 +326,8 @@ pub async fn install_for_acceptance(
         generated_at_utc: Utc::now().to_rfc3339(),
         git_sha: git_sha(),
         model_id: WHISPER_SMALL_ID.to_string(),
-        revision: WHISPER_SOURCE_COMMIT.to_string(),
+        revision: WHISPER_MODEL_REVISION.to_string(),
+        source_commit: WHISPER_SOURCE_COMMIT.to_string(),
         artifact_filename: MODEL_FILENAME.to_string(),
         sha256: WHISPER_MODEL_SHA256.to_string(),
         expected_bytes: WHISPER_MODEL_BYTES,
@@ -489,7 +496,8 @@ pub async fn transcribe_for_acceptance(
         generated_at_utc: Utc::now().to_rfc3339(),
         git_sha: git_sha(),
         model_id: WHISPER_SMALL_ID.to_string(),
-        revision: WHISPER_SOURCE_COMMIT.to_string(),
+        revision: WHISPER_MODEL_REVISION.to_string(),
+        source_commit: WHISPER_SOURCE_COMMIT.to_string(),
         artifact_filename: MODEL_FILENAME.to_string(),
         sha256: WHISPER_MODEL_SHA256.to_string(),
         expected_bytes: WHISPER_MODEL_BYTES,

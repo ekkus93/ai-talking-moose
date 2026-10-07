@@ -143,11 +143,15 @@ jobs:
           ).strip()
           corpus_sha256 = hashlib.sha256(corpus_wav.read_bytes()).hexdigest()
 
-          assert install["schema_version"] == 1
-          assert transcribe["schema_version"] == 1
+          assert install["schema_version"] == 2
+          assert transcribe["schema_version"] == 2
           assert install["git_sha"] == transcribe["git_sha"] == repository_sha
           assert install["model_id"] == transcribe["model_id"] == "whisper-small-ggml"
-          assert install["revision"] == transcribe["revision"] == whisper_source_actual
+          assert install["revision"] == transcribe["revision"]
+          assert install["source_commit"] == transcribe["source_commit"] == whisper_source_actual
+          assert install["revision"] != install["source_commit"], (
+              "model revision and native source revision must be recorded separately"
+          )
           assert install["sha256"] == transcribe["sha256"]
           assert install["expected_bytes"] == transcribe["expected_bytes"]
           assert install["production_installer_verified"] is True
@@ -173,8 +177,9 @@ jobs:
           evidence = {
               "schema_version": 1,
               "repository_sha": repository_sha,
-              "whisper_source_expected": install["revision"],
+              "whisper_source_expected": install["source_commit"],
               "whisper_source_actual": whisper_source_actual,
+              "model_revision": install["revision"],
               "model_sha256": install["sha256"],
               "model_bytes": install["installed_bytes"],
               "test_audio_path": str(corpus_wav),
@@ -191,9 +196,10 @@ jobs:
           with summary.open("a", encoding="utf-8") as out:
               out.write("## Whisper real CPU acceptance\n\n")
               out.write(f"Repository SHA: `{repository_sha}`  \n")
-              out.write(f"whisper.cpp source: `{whisper_source_actual}`  \n\n")
+              out.write(f"whisper.cpp source: `{whisper_source_actual}`  \n")
+              out.write(f"Model revision: `{install['revision']}`  \n\n")
               out.write(
-                  "| Model | Revision | SHA256 | Bytes | Duration (ms) | "
+                  "| Model | Model revision | SHA256 | Bytes | Duration (ms) | "
                   "No-speech | Segments | Text | Network denied |\n"
               )
               out.write("| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |\n")
