@@ -252,9 +252,7 @@ impl InstallMarker {
         }
 
         match self.schema_version {
-            1 => {
-                self.revision == manifest::WHISPER_SOURCE_COMMIT && self.source_commit.is_none()
-            }
+            1 => self.revision == manifest::WHISPER_SOURCE_COMMIT && self.source_commit.is_none(),
             INSTALL_MARKER_SCHEMA_VERSION => {
                 self.revision == manifest::WHISPER_MODEL_REVISION
                     && self.source_commit.as_deref() == Some(manifest::WHISPER_SOURCE_COMMIT)

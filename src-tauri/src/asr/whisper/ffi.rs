@@ -1,6 +1,6 @@
-use std::ffi::{CStr, CString};
 #[cfg(whisper_native_linked)]
 use std::ffi::{c_char, c_void};
+use std::ffi::{CStr, CString};
 
 pub(super) const WHISPER_SAMPLING_GREEDY: i32 = 0;
 // NUL-terminated C string backing the forced English language code.
