@@ -1,5 +1,11 @@
 # Agent Developer Guide — Talking Moose AI
 
+## Agent Operating Rules
+
+- **One main agent only.** Do not spawn subagents (or any child/task agents) or delegate work to them — all work happens in this single agent session.
+- **Why:** this workspace runs against a local model, which does not support the subagent path. If you attempt one, it will most likely error out.
+- If a task looks parallelizable, do it yourself in one session (e.g., run independent checks back-to-back in a single Bash command or a series of tool calls) instead of reaching for a subagent.
+
 ## Architecture & Project Structure
 
 - **Desktop Shell:** Tauri 2 (`src-tauri/`) with custom retro window styling (`decorations: false`).
