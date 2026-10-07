@@ -17,10 +17,15 @@ use serde::Serialize;
 use std::fs;
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use super::super::runtime_metrics::{
     current_resident_memory_bytes, peak_resident_memory_bytes, process_cpu_time_micros,
+};
+use super::engine::{
+    WHISPER_ENDPOINT_SILENCE_SAMPLES, WHISPER_MAX_UTTERANCE_SAMPLES,
+    WHISPER_PARTIAL_INTERVAL_SAMPLES,
 };
 use super::ffi::{path_to_cstring, NativeWhisperApi, WhisperApi};
 use super::installer::{
@@ -31,6 +36,8 @@ use super::manifest::{
     WHISPER_MODEL_BYTES, WHISPER_MODEL_MAGIC, WHISPER_MODEL_REVISION, WHISPER_MODEL_SHA256,
     WHISPER_SMALL_ID, WHISPER_SOURCE_COMMIT,
 };
+use crate::asr::pipeline::{LocalAsrPipeline, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS};
+use crate::asr::AsrEvent;
 
 const REPORT_SCHEMA_VERSION: u32 = 2;
 const MODEL_FILENAME: &str = "ggml-small.bin";
@@ -137,6 +144,28 @@ pub struct WhisperTranscribeRuntime {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct WhisperPipelineAcceptanceMetrics {
+    pub partial_interval_samples: usize,
+    pub endpoint_silence_samples: usize,
+    pub maximum_utterance_samples: usize,
+    pub queue_capacity_chunks: usize,
+    pub partial_event_count: u64,
+    pub final_event_count: u64,
+    pub first_partial_latency_ms: Option<u64>,
+    pub first_final_latency_ms: Option<u64>,
+    pub processed_audio_ms: u64,
+    pub inference_wall_time_ms: u64,
+    pub real_time_factor: Option<f32>,
+    pub process_cpu_time_ms: Option<u64>,
+    pub average_cpu_utilization_percent: Option<f32>,
+    pub peak_resident_memory_bytes: Option<u64>,
+    pub nominal_dropped_chunks: u64,
+    pub overload_attempted_chunks: u64,
+    pub overload_accepted_chunks: u64,
+    pub overload_dropped_chunks: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct WhisperTranscribeAcceptanceReport {
     pub schema_version: u32,
     pub phase: &'static str,
@@ -166,6 +195,7 @@ pub struct WhisperTranscribeAcceptanceReport {
     pub network_denial_probe_passed: bool,
     pub status: String,
     pub runtime: WhisperTranscribeRuntime,
+    pub pipeline: WhisperPipelineAcceptanceMetrics,
     pub transcript: WhisperTranscriptReport,
     pub transcribe_wall_ms: u64,
     pub phase_wall_ms: u64,
@@ -344,6 +374,115 @@ pub async fn install_for_acceptance(
     Ok(report)
 }
 
+fn pcm_f32_to_i16_le(samples: &[f32]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(samples.len().saturating_mul(2));
+    for sample in samples {
+        let scaled = (sample.clamp(-1.0, 32767.0 / 32768.0) * 32768.0).round() as i16;
+        bytes.extend_from_slice(&scaled.to_le_bytes());
+    }
+    bytes
+}
+
+async fn production_pipeline_metrics(
+    installer: std::sync::Arc<WhisperModelInstaller>,
+    samples: &[f32],
+) -> Result<WhisperPipelineAcceptanceMetrics, String> {
+    let events = Arc::new(StdMutex::new(Vec::<AsrEvent>::new()));
+    let callback_events = events.clone();
+    let callback = Arc::new(move |event: AsrEvent| {
+        callback_events.lock().expect("acceptance event lock").push(event);
+    });
+
+    let mut pipeline = LocalAsrPipeline::start_whisper(installer.clone(), callback)
+        .await
+        .map_err(|error| error.message)?;
+
+    let mut nominal_dropped_chunks = 0_u64;
+    for chunk in samples.chunks(1_600) {
+        let accepted = pipeline
+            .try_send_pcm_for_acceptance(pcm_f32_to_i16_le(chunk))
+            .map_err(|error| error.message)?;
+        if !accepted {
+            nominal_dropped_chunks = nominal_dropped_chunks.saturating_add(1);
+        }
+        // Feed at the production 100 ms cadence so nominal drop evidence is
+        // meaningful rather than an artificial producer burst.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    pipeline
+        .stop_and_join()
+        .await
+        .map_err(|error| error.message)?;
+    let diagnostics = pipeline.diagnostics();
+    let nominal_events = events.lock().expect("acceptance event lock");
+    let partial_event_count = nominal_events
+        .iter()
+        .filter(|event| matches!(event, AsrEvent::PartialTranscript { .. }))
+        .count() as u64;
+    let final_event_count = nominal_events
+        .iter()
+        .filter(|event| matches!(event, AsrEvent::FinalTranscript { .. }))
+        .count() as u64;
+    drop(nominal_events);
+
+    // Deliberately outrun a second production worker. The bounded sender must
+    // exercise drop-newest rather than blocking or growing without bound.
+    let overload_events = Arc::new(StdMutex::new(Vec::<AsrEvent>::new()));
+    let overload_events_for_callback = overload_events.clone();
+    let overload_callback = Arc::new(move |event: AsrEvent| {
+        overload_events_for_callback
+            .lock()
+            .expect("overload event lock")
+            .push(event);
+    });
+    let mut overload = LocalAsrPipeline::start_whisper(installer, overload_callback)
+        .await
+        .map_err(|error| error.message)?;
+    let representative = samples
+        .chunks(1_600)
+        .find(|chunk| !chunk.is_empty())
+        .ok_or_else(|| "Whisper acceptance corpus contains no PCM samples".to_string())?;
+    let overload_bytes = pcm_f32_to_i16_le(representative);
+    let overload_attempted_chunks = 64_u64;
+    let mut overload_accepted_chunks = 0_u64;
+    let mut overload_dropped_chunks = 0_u64;
+    for _ in 0..overload_attempted_chunks {
+        if overload
+            .try_send_pcm_for_acceptance(overload_bytes.clone())
+            .map_err(|error| error.message)?
+        {
+            overload_accepted_chunks = overload_accepted_chunks.saturating_add(1);
+        } else {
+            overload_dropped_chunks = overload_dropped_chunks.saturating_add(1);
+        }
+    }
+    overload
+        .stop_and_join()
+        .await
+        .map_err(|error| error.message)?;
+
+    Ok(WhisperPipelineAcceptanceMetrics {
+        partial_interval_samples: WHISPER_PARTIAL_INTERVAL_SAMPLES,
+        endpoint_silence_samples: WHISPER_ENDPOINT_SILENCE_SAMPLES,
+        maximum_utterance_samples: WHISPER_MAX_UTTERANCE_SAMPLES,
+        queue_capacity_chunks: LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        partial_event_count,
+        final_event_count,
+        first_partial_latency_ms: diagnostics.first_partial_latency_ms,
+        first_final_latency_ms: diagnostics.first_final_latency_ms,
+        processed_audio_ms: diagnostics.processed_audio_ms,
+        inference_wall_time_ms: diagnostics.inference_wall_time_ms,
+        real_time_factor: diagnostics.real_time_factor,
+        process_cpu_time_ms: diagnostics.process_cpu_time_ms,
+        average_cpu_utilization_percent: diagnostics.average_cpu_utilization_percent,
+        peak_resident_memory_bytes: diagnostics.peak_resident_memory_bytes,
+        nominal_dropped_chunks,
+        overload_attempted_chunks,
+        overload_accepted_chunks,
+        overload_dropped_chunks,
+    })
+}
+
 pub async fn transcribe_for_acceptance(
     model_root: &Path,
     corpus_wav: &Path,
@@ -490,6 +629,17 @@ pub async fn transcribe_for_acceptance(
 
     let duration_ms = sample_count_to_duration_ms(wav.samples.len(), wav.sample_rate);
 
+    // Release the direct FFI model lease before starting the production worker;
+    // both paths intentionally serialize model-owned operations through the
+    // install/runtime lease.
+    drop(model);
+    drop(lease);
+    let pipeline = production_pipeline_metrics(
+        std::sync::Arc::new(installer),
+        &wav.samples,
+    )
+    .await?;
+
     let report = WhisperTranscribeAcceptanceReport {
         schema_version: REPORT_SCHEMA_VERSION,
         phase: "transcribe",
@@ -525,6 +675,7 @@ pub async fn transcribe_for_acceptance(
         runtime: WhisperTranscribeRuntime {
             whisper_native_linked: true,
         },
+        pipeline,
         transcript: WhisperTranscriptReport {
             duration_ms,
             no_speech_prob,
