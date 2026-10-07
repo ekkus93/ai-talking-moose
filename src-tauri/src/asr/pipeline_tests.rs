@@ -747,11 +747,9 @@ async fn whitespace_stop_final_closes_speech_without_user_transcript() {
             AsrEvent::SpeechEnded { monotonic_ms: None },
         ]
     );
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, AsrEvent::FinalTranscript { .. }))
-    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })));
 }
 
 #[tokio::test]
