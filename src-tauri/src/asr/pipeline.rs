@@ -230,10 +230,7 @@ impl LocalAsrPipeline {
     /// Returns false when the bounded queue is full, matching capture's
     /// drop-newest overload policy. This remains crate-private.
     #[allow(dead_code)]
-    pub(crate) fn try_send_pcm_for_acceptance(
-        &self,
-        pcm_bytes: Vec<u8>,
-    ) -> Result<bool, AsrError> {
+    pub(crate) fn try_send_pcm_for_acceptance(&self, pcm_bytes: Vec<u8>) -> Result<bool, AsrError> {
         let sender = self.pcm_sender.as_ref().ok_or_else(|| {
             invalid_state_error("Local ASR input is closed; acceptance PCM was not accepted.")
         })?;
