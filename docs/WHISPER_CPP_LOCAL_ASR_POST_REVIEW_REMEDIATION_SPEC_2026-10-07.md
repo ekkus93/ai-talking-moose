@@ -1,11 +1,11 @@
 # Whisper.cpp Local ASR Post-Review Remediation Spec
 
-**Date:** 2026-10-07  
-**Status:** Draft remediation specification  
-**Review baseline:** `master` at `b2525ef58e840e7ebc8d7beb64f8de211ffc9955`  
-**Review source:** comprehensive static review plus targeted executable checks of the 2026-10-07 master snapshot  
-**Original implementation spec:** `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`  
-**Original implementation TODO:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`  
+**Date:** 2026-10-07
+**Status:** Draft remediation specification
+**Review baseline:** `master` at `b2525ef58e840e7ebc8d7beb64f8de211ffc9955`
+**Review source:** comprehensive static review plus targeted executable checks of the 2026-10-07 master snapshot
+**Original implementation spec:** `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
+**Original implementation TODO:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`
 **Companion remediation TODO:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md`
 
 ## 1. Purpose

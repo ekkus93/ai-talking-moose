@@ -1,9 +1,9 @@
 # Whisper.cpp Local ASR Post-Review Remediation TODO
 
-**Date:** 2026-10-07  
-**Status:** Open  
-**Review baseline:** `master` at `b2525ef58e840e7ebc8d7beb64f8de211ffc9955`  
-**Spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_SPEC_2026-10-07.md`  
+**Date:** 2026-10-07
+**Status:** Open
+**Review baseline:** `master` at `b2525ef58e840e7ebc8d7beb64f8de211ffc9955`
+**Spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_SPEC_2026-10-07.md`
 **Original TODO to reconcile at closeout:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`
 
 This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remediation. A checkbox may be marked complete only when the current production source and test/evidence state satisfy the requirement. Existing checkmarks in the original Whisper TODO are not completion evidence for this remediation.
