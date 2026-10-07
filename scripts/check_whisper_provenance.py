@@ -8,6 +8,11 @@ import re
 import subprocess
 from pathlib import Path
 
+try:
+    from scripts.check_whisper_build_policy import validate_build_policy_text
+except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+    from check_whisper_build_policy import validate_build_policy_text
+
 SOURCE_RE = re.compile(
     r'pub const WHISPER_SOURCE_COMMIT: &str = "([0-9a-fA-F]{40})";'
 )
@@ -98,6 +103,10 @@ def require_documented(path: Path, required: tuple[str, ...]) -> None:
             raise ValueError(f"{path.name} is missing required Whisper provenance: {value}")
 
 
+def validate_build_policy(repo_root: Path) -> None:
+    validate_build_policy_text((repo_root / "src-tauri/build.rs").read_text(encoding="utf-8"))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -121,6 +130,7 @@ def main() -> int:
     required_docs = (expected, model_revision, model_license)
     require_documented(repo_root / "docs/WHISPER_MODEL_LICENSES.md", required_docs)
     require_documented(repo_root / "docs/THIRD_PARTY_NOTICES.md", required_docs)
+    validate_build_policy(repo_root)
 
     print(
         "Whisper provenance OK: "
