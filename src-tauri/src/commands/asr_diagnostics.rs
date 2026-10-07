@@ -1,6 +1,4 @@
-use super::asr_models::{
-    architecture_for_mode, load_descriptor, model_in_use, whisper_descriptor,
-};
+use super::asr_models::{architecture_for_mode, load_descriptor, model_in_use, whisper_descriptor};
 use crate::app::state::AppState;
 use crate::asr::pipeline::LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
