@@ -390,7 +390,10 @@ async fn production_pipeline_metrics(
     let events = Arc::new(StdMutex::new(Vec::<AsrEvent>::new()));
     let callback_events = events.clone();
     let callback = Arc::new(move |event: AsrEvent| {
-        callback_events.lock().expect("acceptance event lock").push(event);
+        callback_events
+            .lock()
+            .expect("acceptance event lock")
+            .push(event);
     });
 
     let mut pipeline = LocalAsrPipeline::start_whisper(installer.clone(), callback)
