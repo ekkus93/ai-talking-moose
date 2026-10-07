@@ -12,6 +12,7 @@ struct FakeState {
     received_pcm: StdMutex<Vec<Vec<f32>>>,
     fail_push: StdMutex<Option<AsrError>>,
     updates: StdMutex<Vec<StreamingTranscriptUpdate>>,
+    stop_updates: StdMutex<Vec<StreamingTranscriptUpdate>>,
     block_push: AtomicBool,
     worker_thread: StdMutex<Option<thread::ThreadId>>,
 }
@@ -39,9 +40,11 @@ impl PipelineEngine for FakeEngine {
         Ok(std::mem::take(&mut *self.state.updates.lock().unwrap()))
     }
 
-    fn stop(&mut self) -> Result<(), AsrError> {
+    fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
         self.state.stops.fetch_add(1, Ordering::SeqCst);
-        Ok(())
+        Ok(std::mem::take(
+            &mut *self.state.stop_updates.lock().unwrap(),
+        ))
     }
 }
 
@@ -603,7 +606,7 @@ async fn stop_is_idempotent_and_joins_worker() {
 }
 
 #[tokio::test]
-async fn stop_discards_queued_audio_instead_of_draining_it() {
+async fn stop_drains_accepted_queued_audio_before_finalization() {
     let state = Arc::new(FakeState::default());
     state.block_push.store(true, Ordering::SeqCst);
     let mut pipeline = fake_pipeline(state.clone()).await;
@@ -612,10 +615,55 @@ async fn stop_discards_queued_audio_instead_of_draining_it() {
     wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
     sender.try_send(vec![0, 0]).unwrap();
     sender.try_send(vec![0, 0]).unwrap();
+
     pipeline.request_stop();
     state.block_push.store(false, Ordering::SeqCst);
     pipeline.stop_and_join().await.unwrap();
-    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 3);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn stop_time_final_update_crosses_normal_transcript_path_once() {
+    let state = Arc::new(FakeState::default());
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 77,
+            text: "tail words".to_string(),
+            latency_ms: 4,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_with_factory(
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }))
+        },
+        callback,
+    )
+    .await
+    .unwrap();
+
+    pipeline.stop_and_join().await.unwrap();
+    pipeline.stop_and_join().await.unwrap();
+
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        events.lock().unwrap().as_slice(),
+        [
+            AsrEvent::SpeechStarted { monotonic_ms: None },
+            AsrEvent::FinalTranscript {
+                text: "tail words".to_string(),
+            },
+            AsrEvent::SpeechEnded { monotonic_ms: None },
+        ]
+    );
 }
 
 #[tokio::test]

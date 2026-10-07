@@ -65,7 +65,7 @@ pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(LocalAsrPipelineEvent) + Sen
 pub trait PipelineEngine: Send {
     fn input_sample_rate_hz(&self) -> u32;
     fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError>;
-    fn stop(&mut self) -> Result<(), AsrError>;
+    fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError>;
 }
 
 impl PipelineEngine for MoonshineTinyEngine {
@@ -77,8 +77,9 @@ impl PipelineEngine for MoonshineTinyEngine {
         MoonshineTinyEngine::push_pcm(self, pcm)
     }
 
-    fn stop(&mut self) -> Result<(), AsrError> {
-        MoonshineTinyEngine::stop(self)
+    fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
+        MoonshineTinyEngine::stop(self)?;
+        Ok(Vec::new())
     }
 }
 
@@ -96,6 +97,7 @@ pub struct LocalAsrPipeline {
     pcm_sender: Option<mpsc::Sender<Vec<u8>>>,
     running: Arc<AtomicBool>,
     stop_requested: Arc<AtomicBool>,
+    abort_requested: Arc<AtomicBool>,
     metrics: Arc<Mutex<RuntimeMetrics>>,
     worker: Option<JoinHandle<Result<(), AsrError>>>,
 }
@@ -281,6 +283,16 @@ impl LocalAsrPipeline {
     }
 
     fn request_stop(&mut self) {
+        // Graceful stop closes the owned producer and lets the worker drain
+        // every chunk already accepted before finalizing the engine.
+        self.stop_requested.store(true, Ordering::SeqCst);
+        self.pcm_sender.take();
+    }
+
+    fn request_abort(&mut self) {
+        // Drop is a safety-net abort path. Unlike normal stop_and_join, it may
+        // discard accepted queued audio because no async caller can await drain.
+        self.abort_requested.store(true, Ordering::SeqCst);
         self.stop_requested.store(true, Ordering::SeqCst);
         self.pcm_sender.take();
     }
@@ -335,11 +347,13 @@ impl LocalAsrPipeline {
         let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
         let running = Arc::new(AtomicBool::new(false));
         let stop_requested = Arc::new(AtomicBool::new(false));
+        let abort_requested = Arc::new(AtomicBool::new(false));
         let metrics = Arc::new(Mutex::new(RuntimeMetrics::new()));
         let (ready_tx, ready_rx) = oneshot::channel::<Result<(), AsrError>>();
 
         let worker_running = running.clone();
         let worker_stop = stop_requested.clone();
+        let worker_abort = abort_requested.clone();
         let worker_metrics = metrics.clone();
         let worker_callback = event_callback.clone();
         let worker = thread::Builder::new()
@@ -357,7 +371,7 @@ impl LocalAsrPipeline {
                     }
                 };
                 if worker_stop.load(Ordering::SeqCst) {
-                    return engine.stop();
+                    return engine.stop().map(|_| ());
                 }
                 worker_metrics.lock().mark_engine_ready();
 
@@ -377,13 +391,14 @@ impl LocalAsrPipeline {
                 worker_running.store(true, Ordering::SeqCst);
                 if ready_tx.send(Ok(())).is_err() {
                     worker_running.store(false, Ordering::SeqCst);
-                    return engine.stop();
+                    return engine.stop().map(|_| ());
                 }
 
                 let result = run_worker(
                     engine.as_mut(),
                     &mut pcm_rx,
                     &worker_stop,
+                    &worker_abort,
                     &worker_metrics,
                     &worker_callback,
                 );
@@ -406,6 +421,7 @@ impl LocalAsrPipeline {
                     pcm_sender: Some(pcm_tx),
                     running,
                     stop_requested,
+                    abort_requested,
                     metrics,
                     worker: Some(startup_worker.take_worker()),
                 };
@@ -455,7 +471,7 @@ impl LocalAsrResource for LocalAsrPipeline {
 
 impl Drop for LocalAsrPipeline {
     fn drop(&mut self) {
-        self.request_stop();
+        self.request_abort();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
@@ -532,36 +548,60 @@ fn reap_cancelled_startup_worker(
     }
 }
 
+fn apply_transcript_updates(
+    updates: Vec<StreamingTranscriptUpdate>,
+    transcript_state: &mut TranscriptStateMachine,
+    metrics: &Mutex<RuntimeMetrics>,
+    event_callback: &LocalAsrPipelineEventCallback,
+) {
+    for update in updates {
+        let latency_ms = match &update {
+            StreamingTranscriptUpdate::Partial { latency_ms, .. }
+            | StreamingTranscriptUpdate::Final { latency_ms, .. } => *latency_ms,
+        };
+        let emitted_events = transcript_state.apply(update.clone());
+        metrics
+            .lock()
+            .record_transcript_events(&update, &emitted_events, latency_ms);
+        for event in emitted_events {
+            event_callback(event);
+        }
+    }
+}
+
 fn run_worker(
     engine: &mut dyn PipelineEngine,
     pcm_rx: &mut mpsc::Receiver<Vec<u8>>,
     stop_requested: &AtomicBool,
+    abort_requested: &AtomicBool,
     metrics: &Mutex<RuntimeMetrics>,
     event_callback: &LocalAsrPipelineEventCallback,
 ) -> Result<(), AsrError> {
     let mut terminal_error = None;
-    let mut audio_started: Option<Instant> = None;
     let mut transcript_state = TranscriptStateMachine::default();
-    while !stop_requested.load(Ordering::SeqCst) {
+
+    loop {
+        if abort_requested.load(Ordering::SeqCst) {
+            break;
+        }
+
         let bytes = match pcm_rx.try_recv() {
             Ok(bytes) => bytes,
             Err(TryRecvError::Empty) => {
+                if stop_requested.load(Ordering::SeqCst) {
+                    break;
+                }
                 thread::sleep(WORKER_POLL_INTERVAL);
                 continue;
             }
             Err(TryRecvError::Disconnected) => break,
         };
-        if stop_requested.load(Ordering::SeqCst) {
-            break;
-        }
+
         if bytes.is_empty() {
             continue;
         }
 
         metrics.lock().record_audio_start_if_needed();
-        if audio_started.is_none() {
-            audio_started = Some(Instant::now());
-        }
         let pcm = match decode_mono_i16_le(&bytes) {
             Ok(pcm) => pcm,
             Err(error) => {
@@ -579,19 +619,7 @@ fn run_worker(
 
         match inference_result {
             Ok(updates) => {
-                for update in updates {
-                    let latency_ms = match &update {
-                        StreamingTranscriptUpdate::Partial { latency_ms, .. } => *latency_ms,
-                        StreamingTranscriptUpdate::Final { latency_ms, .. } => *latency_ms,
-                    };
-                    let emitted_events = transcript_state.apply(update.clone());
-                    metrics
-                        .lock()
-                        .record_transcript_events(&update, &emitted_events, latency_ms);
-                    for event in emitted_events {
-                        event_callback(event);
-                    }
-                }
+                apply_transcript_updates(updates, &mut transcript_state, metrics, event_callback)
             }
             Err(error) => {
                 record_terminal_error(metrics, event_callback, &error);
@@ -601,10 +629,19 @@ fn run_worker(
         }
     }
 
-    if let Err(stop_error) = engine.stop() {
-        if terminal_error.is_none() {
-            record_terminal_error(metrics, event_callback, &stop_error);
-            terminal_error = Some(stop_error);
+    let stop_started = Instant::now();
+    match engine.stop() {
+        Ok(updates) => {
+            metrics.lock().record_inference(0, stop_started.elapsed());
+            if terminal_error.is_none() && !abort_requested.load(Ordering::SeqCst) {
+                apply_transcript_updates(updates, &mut transcript_state, metrics, event_callback);
+            }
+        }
+        Err(stop_error) => {
+            if terminal_error.is_none() {
+                record_terminal_error(metrics, event_callback, &stop_error);
+                terminal_error = Some(stop_error);
+            }
         }
     }
 
