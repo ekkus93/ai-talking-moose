@@ -27,7 +27,7 @@ pub(crate) use progress::{
 
 const MODEL_FILENAME: &str = "ggml-small.bin";
 const INSTALL_MARKER_FILE: &str = ".talking-moose-model.json";
-const INSTALL_MARKER_SCHEMA_VERSION: u32 = 1;
+const INSTALL_MARKER_SCHEMA_VERSION: u32 = 2;
 
 // --- Error types ---------------------------------------------------------
 
@@ -203,6 +203,8 @@ struct InstallMarker {
     expected_bytes: u64,
     runtime_release: String,
     runtime_commit: String,
+    #[serde(default)]
+    source_commit: Option<String>,
 }
 
 impl InstallMarker {
@@ -210,10 +212,27 @@ impl InstallMarker {
         Self {
             schema_version: INSTALL_MARKER_SCHEMA_VERSION,
             model_id: manifest::WHISPER_SMALL_ID.to_string(),
-            revision: manifest::WHISPER_SOURCE_COMMIT.to_string(),
+            revision: manifest::WHISPER_MODEL_REVISION.to_string(),
             expected_bytes: manifest::WHISPER_MODEL_BYTES,
             runtime_release: manifest::WHISPER_RUNTIME_RELEASE.to_string(),
             runtime_commit: manifest::WHISPER_SOURCE_COMMIT.to_string(),
+            source_commit: Some(manifest::WHISPER_SOURCE_COMMIT.to_string()),
+        }
+    }
+
+    fn is_compatible(&self) -> bool {
+        let common = self.model_id == manifest::WHISPER_SMALL_ID
+            && self.expected_bytes == manifest::WHISPER_MODEL_BYTES
+            && self.runtime_release == manifest::WHISPER_RUNTIME_RELEASE
+            && self.runtime_commit == manifest::WHISPER_SOURCE_COMMIT;
+        match self.schema_version {
+            1 => common && self.revision == manifest::WHISPER_SOURCE_COMMIT,
+            INSTALL_MARKER_SCHEMA_VERSION => {
+                common
+                    && self.revision == manifest::WHISPER_MODEL_REVISION
+                    && self.source_commit.as_deref() == Some(manifest::WHISPER_SOURCE_COMMIT)
+            }
+            _ => false,
         }
     }
 }
@@ -275,6 +294,50 @@ impl WhisperModelInstaller {
             .map_err(|_| WhisperModelInstallError::io("create the Whisper model directory"))
     }
 
+    fn legacy_model_path(&self) -> Option<PathBuf> {
+        if self.install_root.file_name()?.to_str()? != "whisper-small" {
+            return None;
+        }
+        self.install_root
+            .parent()
+            .map(|parent| parent.join(MODEL_FILENAME))
+    }
+
+    fn migrate_legacy_layout_if_present(&self) -> Result<bool, WhisperModelInstallError> {
+        if self.model_path().exists() {
+            return Ok(false);
+        }
+        let Some(legacy_model_path) = self.legacy_model_path() else {
+            return Ok(false);
+        };
+        if !legacy_model_path.is_file() {
+            return Ok(false);
+        }
+
+        manifest::verify_model(&legacy_model_path)
+            .map_err(|_| WhisperModelInstallError::corrupt_install())?;
+        self.ensure_install_root()?;
+
+        let canonical_model_path = self.model_path();
+        fs::rename(&legacy_model_path, &canonical_model_path)
+            .map_err(|_| WhisperModelInstallError::promotion())?;
+
+        let marker_path = self.install_root.join(INSTALL_MARKER_FILE);
+        let marker_json = serde_json::to_string(&InstallMarker::new())
+            .map_err(|_| WhisperModelInstallError::invalid_manifest())?;
+        if fs::write(&marker_path, marker_json).is_err() {
+            let _ = fs::rename(&canonical_model_path, &legacy_model_path);
+            return Err(WhisperModelInstallError::io(
+                "write the migrated install marker",
+            ));
+        }
+
+        if let Some(parent) = legacy_model_path.parent() {
+            let _ = fs::remove_file(parent.join(INSTALL_MARKER_FILE));
+        }
+        Ok(true)
+    }
+
     /// Check whether the installed model is intact and returns its size.
     pub fn verify_installed(
         &self,
@@ -289,7 +352,7 @@ impl WhisperModelInstaller {
                 .map_err(|_| WhisperModelInstallError::corrupt_install())?,
             Err(_) => return Ok(None),
         };
-        if marker.schema_version != INSTALL_MARKER_SCHEMA_VERSION {
+        if !marker.is_compatible() {
             return Ok(None);
         }
         let metadata =
@@ -305,7 +368,7 @@ impl WhisperModelInstaller {
         Ok(Some(WhisperModelInstallOutcome {
             disposition: WhisperModelInstallDisposition::Installed,
             model_id: marker.model_id,
-            revision: marker.revision,
+            revision: manifest::WHISPER_MODEL_REVISION.to_string(),
             installed_bytes: file_size,
             model_path: model_path.clone(),
         }))
@@ -320,6 +383,7 @@ impl WhisperModelInstaller {
     ) -> Result<Option<WhisperVerifiedModelLease>, WhisperModelInstallError> {
         let model_id = manifest::WHISPER_SMALL_ID;
         let guard = install_operation_lock(model_id).blocking_lock_owned();
+        self.migrate_legacy_layout_if_present()?;
         let outcome = match self.verify_installed() {
             Ok(Some(outcome)) => outcome,
             Ok(None) => {
@@ -349,9 +413,18 @@ impl WhisperModelInstaller {
         let model_id = manifest::WHISPER_SMALL_ID.to_string();
         let lock = install_operation_lock(&model_id);
         let guard = lock.lock().await;
+        self.migrate_legacy_layout_if_present()?;
 
-        // Fast path: already installed and intact.
+        // Fast path: already installed and intact. Refresh metadata while the
+        // explicit install operation owns the lock so v1 markers become v2
+        // without requiring a model redownload.
         if let Ok(Some(outcome)) = self.verify_installed() {
+            let marker_path = self.install_root.join(INSTALL_MARKER_FILE);
+            fs::write(
+                &marker_path,
+                serde_json::to_string(&InstallMarker::new()).unwrap_or_default(),
+            )
+            .map_err(|_| WhisperModelInstallError::io("refresh the install marker"))?;
             drop(guard);
             return Ok(WhisperModelInstallOutcome {
                 disposition: WhisperModelInstallDisposition::AlreadyInstalled,
@@ -432,7 +505,7 @@ impl WhisperModelInstaller {
                             result = Ok(WhisperModelInstallOutcome {
                                 disposition: WhisperModelInstallDisposition::Installed,
                                 model_id: manifest::WHISPER_SMALL_ID.to_string(),
-                                revision: manifest::WHISPER_SOURCE_COMMIT.to_string(),
+                                revision: manifest::WHISPER_MODEL_REVISION.to_string(),
                                 installed_bytes: manifest::WHISPER_MODEL_BYTES,
                                 model_path,
                             });
@@ -457,9 +530,17 @@ impl WhisperModelInstaller {
         let _guard = lock.lock().await;
         let model_path = self.model_path();
         delete_model_path(&model_path)?;
-        // Also remove the marker file.
         let marker_path = self.install_root.join(INSTALL_MARKER_FILE);
         let _ = fs::remove_file(&marker_path);
+
+        // Compatibility cleanup for profiles created before the canonical
+        // per-model directory was introduced.
+        if let Some(legacy_model_path) = self.legacy_model_path() {
+            delete_model_path(&legacy_model_path)?;
+            if let Some(parent) = legacy_model_path.parent() {
+                let _ = fs::remove_file(parent.join(INSTALL_MARKER_FILE));
+            }
+        }
         Ok(())
     }
 }
@@ -518,6 +599,44 @@ mod tests {
 
         assert!(root.is_dir());
         assert_eq!(installer.model_path(), root.join(MODEL_FILENAME));
+    }
+
+    #[test]
+    fn marker_v1_remains_compatible_for_verified_existing_install() {
+        let marker = InstallMarker {
+            schema_version: 1,
+            model_id: manifest::WHISPER_SMALL_ID.to_string(),
+            revision: manifest::WHISPER_SOURCE_COMMIT.to_string(),
+            expected_bytes: manifest::WHISPER_MODEL_BYTES,
+            runtime_release: manifest::WHISPER_RUNTIME_RELEASE.to_string(),
+            runtime_commit: manifest::WHISPER_SOURCE_COMMIT.to_string(),
+            source_commit: None,
+        };
+        assert!(marker.is_compatible());
+        let current = InstallMarker::new();
+        assert_eq!(current.revision, manifest::WHISPER_MODEL_REVISION);
+        assert_eq!(
+            current.source_commit.as_deref(),
+            Some(manifest::WHISPER_SOURCE_COMMIT)
+        );
+    }
+
+    #[test]
+    fn legacy_parent_layout_is_detected_only_for_canonical_whisper_small_root() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let canonical = temp
+            .path()
+            .join("models")
+            .join("whisper")
+            .join("whisper-small");
+        let installer = WhisperModelInstaller::new(&canonical).unwrap();
+        assert_eq!(
+            installer.legacy_model_path().unwrap(),
+            temp.path().join("models").join("whisper").join(MODEL_FILENAME)
+        );
+
+        let arbitrary = WhisperModelInstaller::new(temp.path().join("other")).unwrap();
+        assert!(arbitrary.legacy_model_path().is_none());
     }
 
     #[test]
