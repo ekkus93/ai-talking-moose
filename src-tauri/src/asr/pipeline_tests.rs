@@ -2,8 +2,38 @@ use super::*;
 use crate::test_support::{assert_log_capture_live, capture_logs};
 use base64::Engine as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex as StdMutex;
+use std::sync::{Condvar, Mutex as StdMutex};
 use std::time::{Duration, Instant};
+
+#[derive(Default)]
+struct PushGate {
+    state: StdMutex<(bool, bool)>,
+    changed: Condvar,
+}
+
+impl PushGate {
+    fn block_until_released(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.0 = true;
+        self.changed.notify_all();
+        while !state.1 {
+            state = self.changed.wait(state).unwrap();
+        }
+    }
+
+    fn wait_until_entered(&self) {
+        let mut state = self.state.lock().unwrap();
+        while !state.0 {
+            state = self.changed.wait(state).unwrap();
+        }
+    }
+
+    fn release(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.1 = true;
+        self.changed.notify_all();
+    }
+}
 
 #[derive(Default)]
 struct FakeState {
@@ -13,6 +43,7 @@ struct FakeState {
     fail_push: StdMutex<Option<AsrError>>,
     updates: StdMutex<Vec<StreamingTranscriptUpdate>>,
     stop_updates: StdMutex<Vec<StreamingTranscriptUpdate>>,
+    push_gate: StdMutex<Option<Arc<PushGate>>>,
     block_push: AtomicBool,
     worker_thread: StdMutex<Option<thread::ThreadId>>,
 }
@@ -31,6 +62,9 @@ impl PipelineEngine for FakeEngine {
         *self.state.worker_thread.lock().unwrap() = Some(thread::current().id());
         self.state.pushes.fetch_add(1, Ordering::SeqCst);
         self.state.received_pcm.lock().unwrap().push(pcm.to_vec());
+        if let Some(gate) = self.state.push_gate.lock().unwrap().clone() {
+            gate.block_until_released();
+        }
         while self.state.block_push.load(Ordering::SeqCst) {
             thread::sleep(Duration::from_millis(1));
         }
@@ -608,16 +642,21 @@ async fn stop_is_idempotent_and_joins_worker() {
 #[tokio::test]
 async fn stop_drains_accepted_queued_audio_before_finalization() {
     let state = Arc::new(FakeState::default());
-    state.block_push.store(true, Ordering::SeqCst);
+    let gate = Arc::new(PushGate::default());
+    *state.push_gate.lock().unwrap() = Some(gate.clone());
     let mut pipeline = fake_pipeline(state.clone()).await;
     let sender = pipeline.test_sender();
+
+    // The worker deterministically blocks inside the first accepted push. The
+    // next two chunks therefore remain queued when normal stop is requested.
     sender.try_send(vec![0, 0]).unwrap();
-    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    gate.wait_until_entered();
     sender.try_send(vec![0, 0]).unwrap();
     sender.try_send(vec![0, 0]).unwrap();
 
     pipeline.request_stop();
-    state.block_push.store(false, Ordering::SeqCst);
+    *state.push_gate.lock().unwrap() = None;
+    gate.release();
     pipeline.stop_and_join().await.unwrap();
 
     assert_eq!(state.pushes.load(Ordering::SeqCst), 3);
@@ -625,7 +664,7 @@ async fn stop_drains_accepted_queued_audio_before_finalization() {
 }
 
 #[tokio::test]
-async fn stop_time_final_update_crosses_normal_transcript_path_once() {
+async fn sub_threshold_stop_final_crosses_normal_path_exactly_once() {
     let state = Arc::new(FakeState::default());
     state
         .stop_updates
@@ -650,9 +689,15 @@ async fn stop_time_final_update_crosses_normal_transcript_path_once() {
     .await
     .unwrap();
 
+    // One two-byte PCM sample is far below Whisper's partial cadence. It is
+    // accepted before stop and the final produced by engine.stop still crosses
+    // the ordinary transcript state machine exactly once.
+    pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
     pipeline.stop_and_join().await.unwrap();
     pipeline.stop_and_join().await.unwrap();
 
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
     assert_eq!(
         events.lock().unwrap().as_slice(),
@@ -663,6 +708,49 @@ async fn stop_time_final_update_crosses_normal_transcript_path_once() {
             },
             AsrEvent::SpeechEnded { monotonic_ms: None },
         ]
+    );
+}
+
+#[tokio::test]
+async fn whitespace_stop_final_closes_speech_without_user_transcript() {
+    let state = Arc::new(FakeState::default());
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 78,
+            text: "   ".to_string(),
+            latency_ms: 2,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_with_factory(
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }))
+        },
+        callback,
+    )
+    .await
+    .unwrap();
+
+    pipeline.stop_and_join().await.unwrap();
+
+    let events = events.lock().unwrap();
+    assert_eq!(
+        events.as_slice(),
+        [
+            AsrEvent::SpeechStarted { monotonic_ms: None },
+            AsrEvent::SpeechEnded { monotonic_ms: None },
+        ]
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, AsrEvent::FinalTranscript { .. }))
     );
 }
 
