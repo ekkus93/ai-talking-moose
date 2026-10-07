@@ -62,7 +62,12 @@ impl PipelineEngine for FakeEngine {
         *self.state.worker_thread.lock().unwrap() = Some(thread::current().id());
         self.state.pushes.fetch_add(1, Ordering::SeqCst);
         self.state.received_pcm.lock().unwrap().push(pcm.to_vec());
-        if let Some(gate) = self.state.push_gate.lock().unwrap().clone() {
+        // Clone the optional gate while holding the mutex, then release the
+        // mutex before blocking. Keeping the temporary lock guard alive across
+        // block_until_released() deadlocks tests that clear the gate before
+        // releasing the worker.
+        let push_gate = self.state.push_gate.lock().unwrap().clone();
+        if let Some(gate) = push_gate {
             gate.block_until_released();
         }
         while self.state.block_push.load(Ordering::SeqCst) {
