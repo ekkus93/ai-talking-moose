@@ -356,7 +356,10 @@ mod tests {
         let temp = tempfile::TempDir::new().unwrap();
         let whisper_installer = Arc::new(
             crate::asr::whisper::WhisperModelInstaller::new(
-                temp.path().join("models").join("whisper").join("whisper-small"),
+                temp.path()
+                    .join("models")
+                    .join("whisper")
+                    .join("whisper-small"),
             )
             .unwrap(),
         );
