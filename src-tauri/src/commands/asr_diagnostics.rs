@@ -152,7 +152,8 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
     }
     let architecture = architecture_for_mode(selected_mode)?;
     let active = model_in_use(state.inner(), selected_mode);
-    let descriptor = load_descriptor(state.moonshine_installer.clone(), architecture, active).await?;
+    let descriptor =
+        load_descriptor(state.moonshine_installer.clone(), architecture, active).await?;
     let (runtime, local_dropped_chunks) =
         if state.conversation_mgr.active_asr_mode() == Some(selected_mode) {
             (
