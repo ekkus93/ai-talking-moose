@@ -10,12 +10,12 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-100 — Canonical whisper.cpp source provenance
 
-- [ ] Decide and record the one canonical whisper.cpp source revision that production is intended to build.
-- [ ] Make `third_party/whisper.cpp` resolve to that exact revision.
-- [ ] Make the Whisper manifest/runtime identity report the same exact revision.
-- [ ] Make installation/runtime metadata that records Whisper source identity use the same revision.
-- [ ] Update `docs/WHISPER_MODEL_LICENSES.md` to the actual source revision.
-- [ ] Update `docs/THIRD_PARTY_NOTICES.md` to the actual source revision.
+- [x] Decide and record the one canonical whisper.cpp source revision that production is intended to build.
+- [x] Make `third_party/whisper.cpp` resolve to that exact revision.
+- [x] Make the Whisper manifest/runtime identity report the same exact revision.
+- [x] Make installation/runtime metadata that records Whisper source identity use the same revision.
+- [x] Update `docs/WHISPER_MODEL_LICENSES.md` to the actual source revision.
+- [x] Update `docs/THIRD_PARTY_NOTICES.md` to the actual source revision.
 - [ ] Update any current handoff/pipeline/acceptance documentation that reports the source revision.
 - [ ] Add a deterministic check that fails when the expected Whisper source revision and tracked/built native source differ.
 - [ ] Add a regression fixture/test proving the mismatch check fails on a deliberately wrong revision.
@@ -25,11 +25,11 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-110 — License and provenance truthfulness
 
-- [ ] Reconcile the `ggml-small.bin` license state across all current repository documents.
-- [ ] Reconcile the whisper.cpp source license/attribution state across all current repository documents.
-- [ ] Record the exact model URL/revision, expected byte size, and SHA-256 in the authoritative provenance record.
+- [x] Reconcile the `ggml-small.bin` license state across all current repository documents.
+- [x] Reconcile the whisper.cpp source license/attribution state across all current repository documents.
+- [x] Record the exact model URL/revision, expected byte size, and SHA-256 in the authoritative provenance record.
 - [ ] Ensure any required redistributable license/notice text is included in the repository/package path used for release.
-- [ ] Remove contradictory “verified” versus “pending verification” statements for the same artifact.
+- [x] Remove contradictory “verified” versus “pending verification” statements for the same artifact.
 - [ ] Add/extend a documentation/provenance check if one can prevent these contradictions from recurring.
 
 **Acceptance:** current release-facing docs agree on source identity, model identity, and license state.
@@ -183,9 +183,9 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-510 — Portable CPU parallelism detection
 
-- [ ] Remove `/proc/nproc` CPU-count probing.
-- [ ] Use `std::thread::available_parallelism()` or an equivalent portable API.
-- [ ] Preserve a safe nonzero fallback.
+- [x] Remove `/proc/nproc` CPU-count probing.
+- [x] Use `std::thread::available_parallelism()` or an equivalent portable API.
+- [x] Preserve a safe nonzero fallback.
 - [ ] Preserve explicit operator/build override behavior if present.
 - [ ] Add a focused unit/helper test where practical.
 
@@ -224,7 +224,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-700 — Repair real-CPU acceptance workflow
 
-- [ ] Fix the malformed indentation in `.github/workflows/whisper-real-cpu-acceptance.yml` embedded Python validation.
+- [x] Fix the malformed indentation in `.github/workflows/whisper-real-cpu-acceptance.yml` embedded Python validation.
 - [ ] Add an ordinary-CI/static check that extracts/parses/compiles the embedded acceptance validation code without downloading the real model.
 - [ ] Ensure the workflow remains manually/explicitly invoked and separate from ordinary CI.
 - [ ] Ensure the workflow does not depend on harness-created Whisper model directories that production code should create itself.
@@ -414,3 +414,11 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 - [ ] Every task/subtask in the original Whisper TODO has been re-audited and reconciled.
 - [ ] All required exact-head and exact-master gates pass.
 - [ ] Whisper local ASR can be declared production-complete with no unresolved mandatory review finding.
+
+### Progress evidence — 2026-10-07 initial remediation slice
+
+- Native whisper.cpp source identity is now separated from the independently pinned model-artifact revision. Production manifest/runtime identity uses tracked gitlink revision `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`; the Hugging Face model artifact remains pinned to revision `5359861c739e955e79d9a303bcbc70fb988958b1`.
+- `docs/WHISPER_MODEL_LICENSES.md` and `docs/THIRD_PARTY_NOTICES.md` now distinguish native-source and model-artifact identities and agree on the model's MIT license state.
+- `src-tauri/build.rs` now uses `std::thread::available_parallelism()` with a nonzero fallback of 1 instead of the nonexistent `/proc/nproc` path.
+- The malformed real-CPU acceptance validator indentation was repaired on `master`.
+- Exact-master ordinary CI run `37606288444` passed at `465a2e19a93b80b4e39c60bd44f494daee1ba4c0`. This validates the current source slice but does not substitute for the still-open real-CPU acceptance/provenance gates.
