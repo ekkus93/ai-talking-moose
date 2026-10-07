@@ -1,21 +1,27 @@
 use super::installer::{LocalTtsInstallErrorKind, LocalTtsInstaller};
-use super::manifest::{local_tts_model_manifest, LocalTtsModelManifest, LocalTtsPlatform};
-use super::runtime_verification::{LocalTtsRuntimeVerificationErrorKind, LocalTtsRuntimeVerifier};
-use super::storage::{global_local_tts_storage, LocalTtsInstallState};
-use ort::session::RunOptions;
+use super::manifest::local_tts_model_manifest;
+#[cfg(test)]
+use super::manifest::LocalTtsPlatform;
+use super::storage::LocalTtsInstallState;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
+mod cancellation;
 mod engine;
 mod npz;
 mod tokenize;
+mod verification;
 
+pub(super) use cancellation::LocalTtsRuntimeCancellation;
 use engine::KittenTtsRuntimeEngineFactory;
+pub(super) use verification::LocalTtsRuntimeIdentity;
+use verification::{
+    current_platform, runtime_identity, GlobalRuntimeArtifactVerifier, RuntimeArtifactVerifier,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -164,66 +170,6 @@ pub struct LocalTtsInferenceOutput {
     pub sample_rate_hz: u32,
 }
 
-#[derive(Default)]
-struct LocalTtsRuntimeCancellationInner {
-    cancelled: AtomicBool,
-    run_options: Mutex<Option<Arc<RunOptions>>>,
-}
-
-#[derive(Clone, Default)]
-pub(super) struct LocalTtsRuntimeCancellation {
-    inner: Arc<LocalTtsRuntimeCancellationInner>,
-}
-
-impl LocalTtsRuntimeCancellation {
-    fn cancel(&self) {
-        self.inner.cancelled.store(true, Ordering::SeqCst);
-        let run_options = self.inner.run_options.lock().clone();
-        if let Some(run_options) = run_options {
-            let _ = run_options.terminate();
-        }
-    }
-
-    pub(super) fn is_cancelled(&self) -> bool {
-        self.inner.cancelled.load(Ordering::SeqCst)
-    }
-
-    pub(super) fn check_cancelled(&self) -> Result<(), LocalTtsRuntimeError> {
-        if self.is_cancelled() {
-            Err(LocalTtsRuntimeError::cancelled())
-        } else {
-            Ok(())
-        }
-    }
-
-    pub(super) fn install_run_options(&self, run_options: Arc<RunOptions>) {
-        *self.inner.run_options.lock() = Some(run_options.clone());
-        if self.is_cancelled() {
-            let _ = run_options.terminate();
-        }
-    }
-
-    pub(super) fn clear_run_options(&self) {
-        *self.inner.run_options.lock() = None;
-    }
-
-    #[cfg(test)]
-    pub(super) fn has_run_options(&self) -> bool {
-        self.inner.run_options.lock().is_some()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct LocalTtsRuntimeIdentity {
-    pub(super) model_id: String,
-    pub(super) model_revision: String,
-    pub(super) runtime_compatibility_version: u32,
-    pub(super) adapter_contract: String,
-    pub(super) onnx_runtime_version: String,
-    pub(super) g2p_source_revision: String,
-    pub(super) platform: LocalTtsPlatform,
-}
-
 pub(super) trait LocalTtsRuntimeEngine: Send {
     fn load(
         &mut self,
@@ -247,54 +193,6 @@ pub(super) trait LocalTtsRuntimeEngine: Send {
 
 trait LocalTtsRuntimeEngineFactory: Send + Sync {
     fn create(&self) -> Result<Box<dyn LocalTtsRuntimeEngine>, LocalTtsRuntimeError>;
-}
-
-trait RuntimeArtifactVerifier: Send + Sync {
-    fn verify(
-        &self,
-        model_id: &str,
-        platform: LocalTtsPlatform,
-    ) -> Result<Vec<PathBuf>, LocalTtsRuntimeError>;
-}
-
-#[derive(Default)]
-struct GlobalRuntimeArtifactVerifier {
-    verifier: Mutex<Option<Arc<LocalTtsRuntimeVerifier>>>,
-}
-
-impl RuntimeArtifactVerifier for GlobalRuntimeArtifactVerifier {
-    fn verify(
-        &self,
-        model_id: &str,
-        platform: LocalTtsPlatform,
-    ) -> Result<Vec<PathBuf>, LocalTtsRuntimeError> {
-        let verifier = {
-            let mut slot = self.verifier.lock();
-            if let Some(verifier) = slot.as_ref() {
-                verifier.clone()
-            } else {
-                let storage = global_local_tts_storage()
-                    .map_err(|_| LocalTtsRuntimeError::model_not_installed())?;
-                let verifier = Arc::new(LocalTtsRuntimeVerifier::new(storage));
-                *slot = Some(verifier.clone());
-                verifier
-            }
-        };
-        verifier
-            .verified_artifact_paths(model_id, platform)
-            .map_err(|error| match error.kind {
-                LocalTtsRuntimeVerificationErrorKind::UnknownModel => {
-                    LocalTtsRuntimeError::unknown_model()
-                }
-                LocalTtsRuntimeVerificationErrorKind::CorruptInstall => {
-                    LocalTtsRuntimeError::model_not_installed()
-                }
-                LocalTtsRuntimeVerificationErrorKind::Io
-                | LocalTtsRuntimeVerificationErrorKind::Sha256Mismatch => {
-                    LocalTtsRuntimeError::verification()
-                }
-            })
-    }
 }
 
 struct RuntimeState {
@@ -775,38 +673,6 @@ pub struct LocalTtsRuntimeStatus {
     pub last_generated_audio_duration_ms: Option<f64>,
     pub last_real_time_factor: Option<f64>,
     pub last_error_category: Option<LocalTtsRuntimeErrorKind>,
-}
-
-fn runtime_identity(
-    manifest: &LocalTtsModelManifest,
-    platform: LocalTtsPlatform,
-) -> LocalTtsRuntimeIdentity {
-    LocalTtsRuntimeIdentity {
-        model_id: manifest.provider_model_id.to_string(),
-        model_revision: manifest.model_source_revision.to_string(),
-        runtime_compatibility_version: manifest.runtime.compatibility_version,
-        adapter_contract: manifest.runtime.adapter_contract.to_string(),
-        onnx_runtime_version: manifest.runtime.onnx_runtime_version.to_string(),
-        g2p_source_revision: manifest.runtime.g2p_source_revision.to_string(),
-        platform,
-    }
-}
-
-fn current_platform() -> Result<LocalTtsPlatform, LocalTtsRuntimeError> {
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    {
-        return Ok(LocalTtsPlatform::LinuxX86_64);
-    }
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    {
-        return Ok(LocalTtsPlatform::MacosArm64);
-    }
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    {
-        return Ok(LocalTtsPlatform::MacosX86_64);
-    }
-    #[allow(unreachable_code)]
-    Err(LocalTtsRuntimeError::unsupported_platform())
 }
 
 #[cfg(test)]
