@@ -4,10 +4,7 @@ import { AsrSettingsPanel } from "../components/Settings/AsrSettingsPanel";
 import { frontendDefaultSettings } from "../lib/backendContract";
 import { tauriBridge } from "../lib/tauriBridge";
 import { useMooseStore } from "../stores/mooseStore";
-import type {
-  AsrModelDescriptor,
-  AsrModelProgressEvent,
-} from "../types/moose";
+import type { AsrModelDescriptor, AsrModelProgressEvent } from "../types/moose";
 
 const tiny: AsrModelDescriptor = {
   id: "moonshine-tiny-streaming-en",
@@ -39,9 +36,7 @@ const whisper: AsrModelDescriptor = {
 };
 
 describe("AsrSettingsPanel accessibility", () => {
-  let progressListener:
-    | ((event: AsrModelProgressEvent) => void)
-    | null = null;
+  let progressListener: ((event: AsrModelProgressEvent) => void) | null = null;
 
   beforeEach(() => {
     useMooseStore.setState({ settings: frontendDefaultSettings() });
