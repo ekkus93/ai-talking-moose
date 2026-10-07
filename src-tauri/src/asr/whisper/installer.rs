@@ -671,7 +671,10 @@ mod tests {
         let installer = WhisperModelInstaller::new(&canonical).unwrap();
         assert_eq!(
             installer.legacy_model_path().unwrap(),
-            temp.path().join("models").join("whisper").join(MODEL_FILENAME)
+            temp.path()
+                .join("models")
+                .join("whisper")
+                .join(MODEL_FILENAME)
         );
 
         let arbitrary = WhisperModelInstaller::new(temp.path().join("other")).unwrap();
@@ -699,7 +702,10 @@ mod tests {
 
         assert!(migrated);
         assert!(!legacy_model.exists());
-        assert_eq!(fs::read(installer.model_path()).unwrap(), b"verified-fixture");
+        assert_eq!(
+            fs::read(installer.model_path()).unwrap(),
+            b"verified-fixture"
+        );
         assert!(!legacy_root.join(INSTALL_MARKER_FILE).exists());
 
         let marker: InstallMarker =

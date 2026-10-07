@@ -261,7 +261,7 @@ async fn whisper_preparation_does_not_require_moonshine_installer() {
     let capture = Arc::new(SyncMutex::new(AudioCapture::new_mock()));
     let playback = Arc::new(AudioPlayback::new_mock());
 
-    let error = manager
+    let error = match manager
         .prepare_local_asr(LocalAsrPreparation {
             generation: 73,
             asr_mode: AsrMode::WhisperSmall,
@@ -274,7 +274,10 @@ async fn whisper_preparation_does_not_require_moonshine_installer() {
             provider_error_callback: Arc::new(|_| {}),
         })
         .await
-        .expect_err("empty Whisper profile should fail closed");
+    {
+        Ok(_) => panic!("empty Whisper profile should fail closed"),
+        Err(error) => error,
+    };
 
     assert!(error.contains("Whisper") || error.contains("whisper"));
     assert!(

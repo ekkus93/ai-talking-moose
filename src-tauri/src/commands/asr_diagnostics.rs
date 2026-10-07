@@ -141,7 +141,7 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
         let active = model_in_use(state.inner(), selected_mode);
         return Ok(compose_asr_diagnostics(
             selected_mode,
-            Some(&whisper_descriptor(
+            Some(&load_whisper_descriptor(
                 state.whisper_installer.as_ref(),
                 active,
             )),
