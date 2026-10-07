@@ -118,6 +118,18 @@ describe("AsrSettingsPanel accessibility", () => {
     expect(
       screen.getByText(/final user turn is emitted only when the utterance ends/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/downloaded only when you explicitly press download/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/microphone PCM stays on this computer/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Only finalized transcript text is sent to Gemini/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/never switch to cloud microphone upload automatically/i),
+    ).toBeInTheDocument();
 
     await act(async () => {
       progressListener?.({
