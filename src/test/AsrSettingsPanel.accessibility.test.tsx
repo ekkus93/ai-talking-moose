@@ -109,43 +109,49 @@ describe("AsrSettingsPanel accessibility", () => {
     expect(progress).toHaveAttribute("aria-valuenow", "25");
     expect(progress).toHaveAttribute("aria-valuetext", "25% downloaded");
   });
-  it("describes Whisper finality truthfully and uses SHA-256-only verification wording", async () => {
-    render(<AsrSettingsPanel />);
 
-    expect(
-      await screen.findByText(/in-utterance partial updates and local endpointing/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/final user turn is emitted only when the utterance ends/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/downloaded only when you explicitly press download/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/microphone PCM stays on this computer/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Only finalized transcript text is sent to Gemini/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/never switch to cloud microphone upload automatically/i),
-    ).toBeInTheDocument();
+  it(
+    "describes Whisper finality truthfully and uses SHA-256-only verification wording",
+    async () => {
+      render(<AsrSettingsPanel />);
 
-    await act(async () => {
-      progressListener?.({
-        mode: "whisper_small",
-        install_state: "verifying",
-        downloaded_bytes: whisper.expected_bytes,
-        total_bytes: whisper.expected_bytes,
-        current_file: "ggml-small.bin",
+      expect(
+        await screen.findByText(
+          /in-utterance partial updates and local endpointing/i,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/final user turn is emitted only when the utterance ends/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/downloaded only when you explicitly press download/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/microphone PCM stays on this computer/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Only finalized transcript text is sent to Gemini/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/never switch to cloud microphone upload automatically/i),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        progressListener?.({
+          mode: "whisper_small",
+          install_state: "verifying",
+          downloaded_bytes: whisper.expected_bytes,
+          total_bytes: whisper.expected_bytes,
+          current_file: "ggml-small.bin",
+        });
       });
-    });
 
-    expect(
-      screen.getByText("Verifying SHA-256 and install metadata…"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Verifying SHA-256/CRC32C and install metadata…"),
-    ).not.toBeInTheDocument();
-  });
+      expect(
+        screen.getByText("Verifying SHA-256 and install metadata…"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Verifying SHA-256/CRC32C and install metadata…"),
+      ).not.toBeInTheDocument();
+    },
+  );
 });
