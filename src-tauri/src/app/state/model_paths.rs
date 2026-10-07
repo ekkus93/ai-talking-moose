@@ -5,7 +5,8 @@ pub(super) fn whisper_model_root(db_path: Option<&str>) -> PathBuf {
         return std::env::temp_dir()
             .join("talking-moose-ai-tests")
             .join("models")
-            .join("whisper");
+            .join("whisper")
+            .join("whisper-small");
     };
 
     Path::new(db_path)
@@ -13,6 +14,7 @@ pub(super) fn whisper_model_root(db_path: Option<&str>) -> PathBuf {
         .unwrap_or_else(|| Path::new("."))
         .join("models")
         .join("whisper")
+            .join("whisper-small")
 }
 
 pub(super) fn moonshine_model_root(db_path: Option<&str>) -> PathBuf {
