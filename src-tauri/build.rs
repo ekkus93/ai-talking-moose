@@ -6,6 +6,7 @@ const ONNXRUNTIME_DYLIB: &str = "libonnxruntime.1.23.2.dylib";
 const UNKNOWN_BUILD_COMMIT: &str = "unknown";
 
 const WHISPER_LIB_DIR: &str = "TALKING_MOOSE_WHISPER_LIB_DIR";
+const WHISPER_BUILD_JOBS: &str = "TALKING_MOOSE_WHISPER_BUILD_JOBS";
 const WHISPER_STATIC_LIBS: [&str; 4] = ["whisper", "ggml", "ggml-cpu", "ggml-base"];
 
 fn explicit_library_dir() -> Option<PathBuf> {
@@ -167,6 +168,25 @@ fn cpu_count() -> usize {
         .unwrap_or(1)
 }
 
+fn explicit_whisper_build_jobs() -> Option<usize> {
+    let raw = std::env::var(WHISPER_BUILD_JOBS).ok()?;
+    let value = raw.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let jobs: usize = value
+        .parse()
+        .unwrap_or_else(|_| panic!("{WHISPER_BUILD_JOBS} must be a positive integer"));
+    if jobs == 0 {
+        panic!("{WHISPER_BUILD_JOBS} must be greater than zero");
+    }
+    Some(jobs)
+}
+
+fn whisper_build_jobs() -> usize {
+    explicit_whisper_build_jobs().unwrap_or_else(cpu_count)
+}
+
 fn emit_rerun_tree(root: &Path) {
     let mut pending = vec![root.to_path_buf()];
     while let Some(path) = pending.pop() {
@@ -247,7 +267,7 @@ fn build_whisper_from_source() {
         }
     }
 
-    let threads = cpu_count().to_string();
+    let threads = whisper_build_jobs().to_string();
     let make = Command::new("make")
         .current_dir(&build_dir)
         .arg("-j")
@@ -270,6 +290,7 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(whisper_native_linked)");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_MOONSHINE_LIB_DIR");
     println!("cargo:rerun-if-env-changed={WHISPER_LIB_DIR}");
+    println!("cargo:rerun-if-env-changed={WHISPER_BUILD_JOBS}");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-changed=native/macos/{MOONSHINE_DYLIB}");
