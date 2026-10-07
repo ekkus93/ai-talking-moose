@@ -505,13 +505,11 @@ impl AppState {
         let whisper_installer_inner =
             WhisperModelInstaller::new(&whisper_root).map_err(|error| error.to_string())?;
         if db_path.is_some() {
-            if let Some(legacy_root) = whisper_root.parent() {
-                // Migration is compatibility-only and fail-closed: a corrupt or
-                // unreadable legacy cache is never trusted and does not prevent
-                // the application from starting. The canonical installer will
-                // report NotInstalled/Corrupt and allow an explicit reinstall.
-                let _ = whisper_installer_inner.migrate_legacy_layout(legacy_root);
-            }
+            // Compatibility migration verifies the old artifact against current
+            // immutable pins and rewrites canonical metadata. Failure is
+            // intentionally fail-closed to the normal NotInstalled/Corrupt path
+            // rather than preventing the application from starting.
+            let _ = whisper_installer_inner.migrate_legacy_layout_if_present();
         }
         let whisper_installer = Arc::new(whisper_installer_inner);
         let local_llm_runtime = Arc::new(LocalRuntimeManager::new());

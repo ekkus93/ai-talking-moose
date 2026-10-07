@@ -303,7 +303,7 @@ impl WhisperModelInstaller {
             .map(|parent| parent.join(MODEL_FILENAME))
     }
 
-    fn migrate_legacy_layout_if_present(&self) -> Result<bool, WhisperModelInstallError> {
+    pub(crate) fn migrate_legacy_layout_if_present(&self) -> Result<bool, WhisperModelInstallError> {
         if self.model_path().exists() {
             return Ok(false);
         }
