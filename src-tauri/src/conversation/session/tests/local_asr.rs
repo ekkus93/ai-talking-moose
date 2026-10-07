@@ -245,14 +245,16 @@ async fn cancelled_wake_local_asr_start_cannot_mutate_newer_committed_session() 
     manager.stop_session(fresh_capture, fresh_playback).await;
 }
 
-
 #[tokio::test]
 async fn whisper_preparation_does_not_require_moonshine_installer() {
     let manager = ConversationManager::new();
     let temp = tempfile::TempDir::new().unwrap();
     let whisper_installer = Arc::new(
         crate::asr::whisper::WhisperModelInstaller::new(
-            temp.path().join("models").join("whisper").join("whisper-small"),
+            temp.path()
+                .join("models")
+                .join("whisper")
+                .join("whisper-small"),
         )
         .unwrap(),
     );
