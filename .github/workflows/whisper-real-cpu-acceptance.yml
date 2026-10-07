@@ -1,3 +1,103 @@
+name: Whisper Real CPU Acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whisper-real-cpu-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  CARGO_INCREMENTAL: "0"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  real-cpu-acceptance:
+    name: Real whisper-small CPU acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Verify acceptance source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "Whisper ASR acceptance checkout: $actual"
+          test "$actual" = "$GITHUB_SHA"
+          python3 scripts/check_whisper_provenance.py
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+           build-essential \
+           clang \
+           cmake \
+           libasound2-dev \
+           libayatana-appindicator3-dev \
+           libclang-dev \
+           librsvg2-dev \
+           libssl-dev \
+           libwebkit2gtk-4.1-dev \
+           libxdo-dev \
+           util-linux
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+           ~/.cargo/registry
+           ~/.cargo/git
+          key: whisper-acceptance-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+           whisper-acceptance-${{ runner.os }}-
+           ${{ runner.os }}-cargo-
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: Build opt-in acceptance binary
+        run: |
+          cargo build --locked --manifest-path src-tauri/Cargo.toml \
+           --features whisper-acceptance \
+           --bin whisper_acceptance
+
+      - name: Install, isolate, and transcribe
+        id: acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="$GITHUB_WORKSPACE/src-tauri/target/debug/whisper_acceptance"
+          work_root="$RUNNER_TEMP/talking-moose-whisper-acceptance"
+          model_root="$work_root/models/whisper/whisper-small"
+          report_root="$work_root/reports"
+          corpus_wav="$GITHUB_WORKSPACE/third_party/whisper.cpp/samples/jfk.wav"
+          mkdir -p "$report_root"
+          test ! -e "$model_root"
+          test -f "$corpus_wav"
+
+          cpu_name="$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -n 1)"
+          test -n "$cpu_name"
+
+          echo "Installing the verified whisper-small model through the production installer"
+          "$binary" install "$model_root" "$report_root/whisper-small-install.json"
+
+          echo "Transcribing $corpus_wav inside an OS network namespace with no default route"
+          sudo unshare --net -- env \
+
            "GITHUB_SHA=$GITHUB_SHA" \
            "TALKING_MOOSE_ACCEPTANCE_HOST_CPU=$cpu_name" \
            "$binary" transcribe \
