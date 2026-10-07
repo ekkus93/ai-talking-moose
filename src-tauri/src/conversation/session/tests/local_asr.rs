@@ -244,3 +244,51 @@ async fn cancelled_wake_local_asr_start_cannot_mutate_newer_committed_session() 
 
     manager.stop_session(fresh_capture, fresh_playback).await;
 }
+
+
+#[tokio::test]
+async fn whisper_preparation_does_not_require_moonshine_installer() {
+    let manager = ConversationManager::new();
+    let temp = tempfile::TempDir::new().unwrap();
+    let whisper_installer = Arc::new(
+        crate::asr::whisper::WhisperModelInstaller::new(
+            temp.path().join("models").join("whisper").join("whisper-small"),
+        )
+        .unwrap(),
+    );
+    let capture = Arc::new(SyncMutex::new(AudioCapture::new_mock()));
+    let playback = Arc::new(AudioPlayback::new_mock());
+
+    let error = manager
+        .prepare_local_asr(LocalAsrPreparation {
+            generation: 73,
+            asr_mode: AsrMode::WhisperSmall,
+            installer: None,
+            whisper_installer: Some(whisper_installer),
+            session_id: "whisper-without-moonshine".to_string(),
+            capture,
+            playback,
+            state_callback: Arc::new(|_| {}),
+            provider_error_callback: Arc::new(|_| {}),
+        })
+        .await
+        .expect_err("empty Whisper profile should fail closed");
+
+    assert!(error.contains("Whisper") || error.contains("whisper"));
+    assert!(
+        !error.contains("Moonshine"),
+        "Whisper startup must not depend on Moonshine-only installer state: {error}"
+    );
+
+    let (diagnostics, _) = manager
+        .last_local_asr_diagnostics(AsrMode::WhisperSmall)
+        .expect("Whisper failure should be retained in local diagnostics");
+    let kind = diagnostics
+        .last_error
+        .expect("Whisper diagnostics should include the startup failure")
+        .kind;
+    assert!(matches!(
+        kind,
+        AsrErrorKind::ModelNotInstalled | AsrErrorKind::RuntimeUnavailable
+    ));
+}
