@@ -351,6 +351,12 @@ impl WhisperModelInstaller {
         })
     }
 
+    pub(crate) fn migrate_legacy_layout_if_present(
+        &self,
+    ) -> Result<bool, WhisperModelInstallError> {
+        self.migrate_legacy_layout()
+    }
+
     fn migrate_legacy_layout_with_verifier<F>(
         &self,
         legacy_root: &Path,
