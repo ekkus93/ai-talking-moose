@@ -367,7 +367,7 @@ mod tests {
         assert_eq!(descriptor.id, WHISPER_SMALL_ID);
         assert_eq!(descriptor.display_name, WHISPER_SMALL_DISPLAY_NAME);
         assert_eq!(descriptor.expected_bytes, WHISPER_MODEL_BYTES);
-        assert_eq!(descriptor.revision, WHISPER_SOURCE_COMMIT);
+        assert_eq!(descriptor.revision, WHISPER_MODEL_REVISION);
         assert_eq!(descriptor.runtime_release, WHISPER_RUNTIME_RELEASE);
         assert_eq!(
             descriptor.error_message,
@@ -498,3 +498,5 @@ mod tests {
         assert!(!is_ascii_hex_sha256(invalid_short));
         let invalid_long = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987bc";
         assert!(!is_ascii_hex_sha256(invalid_long));
+    }
+}
