@@ -1,5 +1,7 @@
+#[cfg(any(whisper_native_linked, test))]
+use std::ffi::c_char;
 #[cfg(whisper_native_linked)]
-use std::ffi::{c_char, c_void};
+use std::ffi::c_void;
 use std::ffi::{CStr, CString};
 
 pub(super) const WHISPER_SAMPLING_GREEDY: i32 = 0;
