@@ -15,6 +15,10 @@ const requireText = (source, needle, label) => {
 
 const runtime = read("src-tauri/src/asr/wake_word_runtime.rs");
 const engine = read("src-tauri/src/app/wake_word_engine.rs");
+const engineArtifacts = read("src-tauri/src/app/wake_word_engine/artifacts.rs");
+const engineNative = read("src-tauri/src/app/wake_word_engine/native.rs");
+const engineTypes = read("src-tauri/src/app/wake_word_engine/types.rs");
+const engineSources = [engine, engineArtifacts, engineNative, engineTypes].join("\n");
 const composition = read("src-tauri/src/app/wake_word_composition.rs");
 const state = read("src-tauri/src/app/state.rs");
 const capture = read("src-tauri/src/app/wake_word_authoritative_capture.rs");
@@ -122,13 +126,15 @@ for (const [label, source] of [
   }
 }
 
-requireText(engine, "verify_model_artifacts", "model identity verification");
-requireText(engine, "verify_runtime_artifacts", "runtime identity verification");
-requireText(engine, "NativeArchitecture::ElfX86_64", "Linux native architecture verification");
-requireText(engine, "NativeArchitecture::MachOArm64", "macOS native architecture verification");
-requireText(engine, "pub trait SherpaKwsEngine", "local KWS engine boundary");
+requireText(engineSources, "verify_model_artifacts", "model identity verification");
+requireText(engineSources, "verify_runtime_artifacts", "runtime identity verification");
+requireText(engineSources, "NativeArchitecture::ElfX86_64", "Linux native architecture verification");
+requireText(engineSources, "NativeArchitecture::MachOArm64", "macOS native architecture verification");
+requireText(engineSources, "pub trait SherpaKwsEngine", "local KWS engine boundary");
 
-const productionEngine = engine.split("#[cfg(test)]")[0];
+const productionEngine = [engine, engineArtifacts, engineNative, engineTypes]
+  .map((source) => source.split("#[cfg(test)]")[0])
+  .join("\n");
 for (const forbidden of [
   "reqwest",
   "ureq",
