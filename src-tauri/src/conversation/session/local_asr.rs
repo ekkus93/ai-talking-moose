@@ -349,4 +349,44 @@ mod tests {
             AsrErrorKind::Inference
         );
     }
+
+    #[tokio::test]
+    async fn whisper_preparation_does_not_require_moonshine_installer() {
+        let manager = ConversationManager::new();
+        let temp = tempfile::TempDir::new().unwrap();
+        let whisper_installer = Arc::new(
+            crate::asr::whisper::WhisperModelInstaller::new(
+                temp.path().join("models").join("whisper").join("whisper-small"),
+            )
+            .unwrap(),
+        );
+
+        let result = manager
+            .prepare_local_asr(LocalAsrPreparation {
+                generation: 1,
+                asr_mode: AsrMode::WhisperSmall,
+                installer: None,
+                whisper_installer: Some(whisper_installer),
+                session_id: "session".to_string(),
+                capture: Arc::new(SyncMutex::new(AudioCapture::new())),
+                playback: Arc::new(AudioPlayback::new()),
+                state_callback: Arc::new(|_| {}),
+                provider_error_callback: Arc::new(|_| {}),
+            })
+            .await;
+
+        let error = result.expect_err("Whisper should fail only for its own unavailable runtime/model state in this fixture");
+        assert!(error.contains("Whisper"));
+        assert!(!error.contains("Moonshine"));
+        let (diagnostics, _) = manager
+            .last_local_asr_diagnostics(AsrMode::WhisperSmall)
+            .expect("Whisper diagnostics should record the preparation failure");
+        let last_error = diagnostics
+            .last_error
+            .expect("Whisper preparation failure should preserve error taxonomy");
+        assert!(matches!(
+            last_error.kind,
+            AsrErrorKind::RuntimeUnavailable | AsrErrorKind::ModelNotInstalled
+        ));
+    }
 }
