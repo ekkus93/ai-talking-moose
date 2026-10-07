@@ -162,11 +162,9 @@ fn emit_whisper_link(build_dir: &Path) {
 }
 
 fn cpu_count() -> usize {
-    std::fs::read_to_string("/proc/nproc")
-        .ok()
-        .and_then(|content| content.trim().parse::<usize>().ok())
-        .filter(|n| *n > 0)
-        .unwrap_or(4)
+    std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1)
 }
 
 fn build_whisper_from_source() {
