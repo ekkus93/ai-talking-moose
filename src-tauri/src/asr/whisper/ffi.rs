@@ -4,9 +4,11 @@ use std::ffi::c_char;
 use std::ffi::c_void;
 use std::ffi::{CStr, CString};
 
+#[cfg(whisper_native_linked)]
 pub(super) const WHISPER_SAMPLING_GREEDY: i32 = 0;
 // NUL-terminated C string backing the forced English language code.
 // Static so its address is stable for the lifetime of a `whisper_full` call.
+#[cfg(whisper_native_linked)]
 static WHISPER_LANGUAGE_EN: [u8; 3] = [b'e', b'n', 0];
 
 #[cfg(any(whisper_native_linked, test))]
