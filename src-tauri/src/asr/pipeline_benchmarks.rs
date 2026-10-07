@@ -9,12 +9,15 @@ use crate::ai::local_tts::{
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::TtsRequest;
 use crate::asr::moonshine::{
-    model_manifest_info, MoonshineModelInstallCancellation, MoonshineTinyEngine,
+    model_manifest_info, MoonshineModelArchitecture, MoonshineModelInstallCancellation,
+    MoonshineTinyEngine,
 };
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+
+const MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ: u32 = LOCAL_ASR_INPUT_SAMPLE_RATE_HZ;
 
 #[cfg(target_os = "macos")]
 fn benchmark_architecture_name(architecture: MoonshineModelArchitecture) -> &'static str {
@@ -438,9 +441,7 @@ fn moonshine_transcribe_generated_audio(engine: &mut MoonshineTinyEngine, pcm: &
     updates
         .iter()
         .filter_map(|update| match update {
-            crate::asr::StreamingTranscriptUpdate::Final { text, .. }
-                if !text.trim().is_empty() =>
-            {
+            StreamingTranscriptUpdate::Final { text, .. } if !text.trim().is_empty() => {
                 Some(text.trim())
             }
             _ => None,

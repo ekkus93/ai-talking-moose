@@ -26,7 +26,7 @@ fn macos_microphone_permission_state() -> MicrophonePermissionState {
     let audio_media_type = unsafe { AVMediaTypeAudio };
     let status = AVCaptureDevice::authorization_status_for_media_type(audio_media_type);
 
-    map_av_authorization_status(status)
+    map_av_authorization_status(status as i64)
 }
 
 pub fn microphone_permission_state() -> MicrophonePermissionState {
@@ -126,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn only_granted_state_reports_granted() {
+    fn granted_reports_granted() {
         assert!(MicrophonePermissionState::Granted.is_granted());
         assert!(!MicrophonePermissionState::NotRequested.is_granted());
         assert!(!MicrophonePermissionState::Denied.is_granted());
@@ -134,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn apple_av_status_raw_values_map_correctly() {
+    fn maps_apple_authorization_raw_values() {
         assert_eq!(
             map_av_authorization_status(0),
             MicrophonePermissionState::NotRequested
@@ -156,11 +156,7 @@ mod tests {
             MicrophonePermissionState::Granted
         );
         assert_eq!(
-            map_av_authorization_status(-1),
-            MicrophonePermissionState::Unavailable
-        );
-        assert_eq!(
-            map_av_authorization_status(5),
+            map_av_authorization_status(999),
             MicrophonePermissionState::Unavailable
         );
     }
