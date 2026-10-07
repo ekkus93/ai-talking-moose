@@ -39,17 +39,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            clang \
-            cmake \
-            libasound2-dev \
-            libayatana-appindicator3-dev \
-            libclang-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            util-linux
+           build-essential \
+           clang \
+           cmake \
+           libasound2-dev \
+           libayatana-appindicator3-dev \
+           libclang-dev \
+           librsvg2-dev \
+           libssl-dev \
+           libwebkit2gtk-4.1-dev \
+           libxdo-dev \
+           util-linux
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -58,12 +58,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
+           ~/.cargo/registry
+           ~/.cargo/git
           key: whisper-acceptance-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
-            whisper-acceptance-${{ runner.os }}-
-            ${{ runner.os }}-cargo-
+           whisper-acceptance-${{ runner.os }}-
+           ${{ runner.os }}-cargo-
 
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
@@ -71,8 +71,8 @@ jobs:
       - name: Build opt-in acceptance binary
         run: |
           cargo build --locked --manifest-path src-tauri/Cargo.toml \
-            --features whisper-acceptance \
-            --bin whisper_acceptance
+           --features whisper-acceptance \
+           --bin whisper_acceptance
 
       - name: Install, isolate, and transcribe
         id: acceptance
@@ -95,13 +95,13 @@ jobs:
 
           echo "Transcribing $corpus_wav inside an OS network namespace with no default route"
           sudo unshare --net -- env \
-            "GITHUB_SHA=$GITHUB_SHA" \
-            "TALKING_MOOSE_ACCEPTANCE_HOST_CPU=$cpu_name" \
-            "$binary" transcribe \
-              "$model_root" \
-              "$corpus_wav" \
-              "$report_root/whisper-small-transcribe.json" \
-              --require-network-denied
+           "GITHUB_SHA=$GITHUB_SHA" \
+           "TALKING_MOOSE_ACCEPTANCE_HOST_CPU=$cpu_name" \
+           "$binary" transcribe \
+             "$model_root" \
+             "$corpus_wav" \
+             "$report_root/whisper-small-transcribe.json" \
+             --require-network-denied
 
           sudo chown -R "$(id -u):$(id -g)" "$work_root"
           echo "report_root=$report_root" >> "$GITHUB_OUTPUT"
@@ -121,75 +121,75 @@ jobs:
           install_report = root / "whisper-small-install.json"
           transcribe_report = root / "whisper-small-transcribe.json"
           for p in (install_report, transcribe_report):
-              assert p.exists(), f"missing report: {p}"
+             assert p.exists(), f"missing report: {p}"
 
           install = json.loads(install_report.read_text(encoding="utf-8"))
           transcribe = json.loads(transcribe_report.read_text(encoding="utf-8"))
 
-           print("## Whisper real CPU acceptance", file=open("/dev/stdout", "w"))
-           summary = pathlib.Path(__import__("os").environ["GITHUB_STEP_SUMMARY"])
-           with summary.open("a", encoding="utf-8") as out:
-               out.write("## Whisper real CPU acceptance\n\n")
-               out.write(
-                   "| Model | Revision | SHA256 | Bytes | Duration (ms) | "
-                   "No-speech | Segments | Text | Network denied |\n"
-               )
-               out.write("| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |\n")
-               out.write(
-                   f"| whisper-small | {install['revision']} | "
-                   f"{install['sha256'][:16]}... | {install['installed_bytes']} | "
-                   f"{transcribe['transcript']['duration_ms']} | "
-                   f"{transcribe['transcript']['no_speech_prob']:.3f} | "
-                   f"{transcribe['transcript']['num_segments']} | "
-                   f"{transcribe['transcript']['text']} | yes |\n"
-               )
+          print("## Whisper real CPU acceptance", file=open("/dev/stdout", "w"))
+          summary = pathlib.Path(__import__("os").environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as out:
+              out.write("## Whisper real CPU acceptance\n\n")
+              out.write(
+                  "| Model | Revision | SHA256 | Bytes | Duration (ms) | "
+                  "No-speech | Segments | Text | Network denied |\n"
+              )
+              out.write("| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |\n")
+              out.write(
+                  f"| whisper-small | {install['revision']} | "
+                  f"{install['sha256'][:16]}... | {install['installed_bytes']} | "
+                  f"{transcribe['transcript']['duration_ms']} | "
+                  f"{transcribe['transcript']['no_speech_prob']:.3f} | "
+                  f"{transcribe['transcript']['num_segments']} | "
+                  f"{transcribe['transcript']['text']} | yes |\n"
+              )
 
-               out.write("\n## Process resources\n\n")
-               out.write(
-                   "| Phase wall (ms) | CPU time (ms) | CPU usage (%) | "
-                   "RSS (bytes) | Peak RSS (bytes) |\n"
-               )
-               out.write("| ---: | ---: | ---: | ---: | ---: |\n")
-               resource_usage = transcribe.get("process_cpu_usage_percent")
-               if resource_usage is None:
-                   resource_usage_text = "n/a"
-               else:
-                   resource_usage_text = f"{resource_usage:.2f}"
-               out.write(
-                   f"| {transcribe.get('phase_wall_ms')} | "
-                   f"{transcribe.get('process_cpu_time_ms')} | {resource_usage_text} | "
-                   f"{transcribe.get('resident_memory_bytes')} | "
-                   f"{transcribe.get('peak_resident_memory_bytes')} |\n"
-               )
+              out.write("\n## Process resources\n\n")
+              out.write(
+                  "| Phase wall (ms) | CPU time (ms) | CPU usage (%) | "
+                  "RSS (bytes) | Peak RSS (bytes) |\n"
+              )
+              out.write("| ---: | ---: | ---: | ---: | ---: |\n")
+              resource_usage = transcribe.get("process_cpu_usage_percent")
+              if resource_usage is None:
+                  resource_usage_text = "n/a"
+              else:
+                  resource_usage_text = f"{resource_usage:.2f}"
+              out.write(
+                  f"| {transcribe.get('phase_wall_ms')} | "
+                  f"{transcribe.get('process_cpu_time_ms')} | {resource_usage_text} | "
+                  f"{transcribe.get('resident_memory_bytes')} | "
+                  f"{transcribe.get('peak_resident_memory_bytes')} |\n"
+              )
 
-           assert install["schema_version"] == 1
-           assert transcribe["schema_version"] == 1
-           assert (
-               install["model_id"] == transcribe["model_id"] == "whisper-small-ggml"
-           )
-           assert install["revision"] == transcribe["revision"]
-           assert install["sha256"] == transcribe["sha256"]
-           assert install["expected_bytes"] == transcribe["expected_bytes"]
-           assert install["production_installer_verified"] is True
-           assert install["disposition"] in ("installed", "already-installed")
-           assert install["installed_bytes"] == install["expected_bytes"]
-           assert transcribe["runtime"]["whisper_native_linked"] is True
-           assert transcribe["network_denial_probe_passed"] is True
-           assert transcribe["transcript"]["transcription_ok"] is True
-           assert transcribe["transcript"]["no_speech_prob"] >= 0.0
-           assert transcribe["transcript"]["no_speech_prob"] <= 1.0
-           assert transcribe["transcript"]["num_segments"] >= 0
-           assert transcribe["transcript"]["text"].strip()
-           assert transcribe["phase_wall_ms"] > 0
-           assert transcribe["phase_wall_ms"] >= transcribe["transcribe_wall_ms"]
-           assert transcribe["process_cpu_time_ms"] > 0
-           assert transcribe["process_cpu_usage_percent"] is not None
-           resource_usage = float(transcribe["process_cpu_usage_percent"])
-           assert 0.0 <= resource_usage < float("inf")
-           assert transcribe["baseline_resident_memory_bytes"] > 0
-           assert transcribe["resident_memory_bytes"] > 0
-           assert transcribe["peak_resident_memory_bytes"] >= transcribe["resident_memory_bytes"]
-           assert transcribe["status"] == "pass"
+          assert install["schema_version"] == 1
+          assert transcribe["schema_version"] == 1
+          assert (
+              install["model_id"] == transcribe["model_id"] == "whisper-small-ggml"
+          )
+          assert install["revision"] == transcribe["revision"]
+          assert install["sha256"] == transcribe["sha256"]
+          assert install["expected_bytes"] == transcribe["expected_bytes"]
+          assert install["production_installer_verified"] is True
+          assert install["disposition"] in ("installed", "already-installed")
+          assert install["installed_bytes"] == install["expected_bytes"]
+          assert transcribe["runtime"]["whisper_native_linked"] is True
+          assert transcribe["network_denial_probe_passed"] is True
+          assert transcribe["transcript"]["transcription_ok"] is True
+          assert transcribe["transcript"]["no_speech_prob"] >= 0.0
+          assert transcribe["transcript"]["no_speech_prob"] <= 1.0
+          assert transcribe["transcript"]["num_segments"] >= 0
+          assert transcribe["transcript"]["text"].strip()
+          assert transcribe["phase_wall_ms"] > 0
+          assert transcribe["phase_wall_ms"] >= transcribe["transcribe_wall_ms"]
+          assert transcribe["process_cpu_time_ms"] > 0
+          assert transcribe["process_cpu_usage_percent"] is not None
+          resource_usage = float(transcribe["process_cpu_usage_percent"])
+          assert 0.0 <= resource_usage < float("inf")
+          assert transcribe["baseline_resident_memory_bytes"] > 0
+          assert transcribe["resident_memory_bytes"] > 0
+          assert transcribe["peak_resident_memory_bytes"] >= transcribe["resident_memory_bytes"]
+          assert transcribe["status"] == "pass"
           PY
 
       - name: Upload real-model acceptance evidence
