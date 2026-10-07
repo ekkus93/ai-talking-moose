@@ -417,16 +417,19 @@ async fn production_pipeline_metrics(
         .await
         .map_err(|error| error.message)?;
     let diagnostics = pipeline.diagnostics();
-    let nominal_events = events.lock().expect("acceptance event lock");
-    let partial_event_count = nominal_events
-        .iter()
-        .filter(|event| matches!(event, AsrEvent::PartialTranscript { .. }))
-        .count() as u64;
-    let final_event_count = nominal_events
-        .iter()
-        .filter(|event| matches!(event, AsrEvent::FinalTranscript { .. }))
-        .count() as u64;
-    drop(nominal_events);
+    let (partial_event_count, final_event_count) = {
+        let nominal_events = events.lock().expect("acceptance event lock");
+        (
+            nominal_events
+                .iter()
+                .filter(|event| matches!(event, AsrEvent::PartialTranscript { .. }))
+                .count() as u64,
+            nominal_events
+                .iter()
+                .filter(|event| matches!(event, AsrEvent::FinalTranscript { .. }))
+                .count() as u64,
+        )
+    };
 
     // Deliberately outrun a second production worker. The bounded sender must
     // exercise drop-newest rather than blocking or growing without bound.
