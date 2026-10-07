@@ -38,23 +38,12 @@ enum InferenceAction {
     Final,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct WhisperUtteranceState {
     segment_id: u64,
     active: bool,
     last_partial_at_samples: usize,
     trailing_silence_samples: usize,
-}
-
-impl Default for WhisperUtteranceState {
-    fn default() -> Self {
-        Self {
-            segment_id: 0,
-            active: false,
-            last_partial_at_samples: 0,
-            trailing_silence_samples: 0,
-        }
-    }
 }
 
 impl WhisperUtteranceState {
