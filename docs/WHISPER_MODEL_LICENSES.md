@@ -2,7 +2,8 @@
 
 Recorded: 2026-10-05
 Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
-Source commit: `5359861c739e955e79d9a303bcbc70fb988958b1` (ggml-org/whisper.cpp, vendored at `third_party/whisper.cpp`)
+Native source commit: `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` (ggml-org/whisper.cpp, vendored at `third_party/whisper.cpp`)
+Model artifact revision: `5359861c739e955e79d9a303bcbc70fb988958b1` (Hugging Face `ggerganov/whisper.cpp`)
 
 ## Vendored source
 
