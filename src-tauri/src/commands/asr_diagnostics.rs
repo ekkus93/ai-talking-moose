@@ -1,5 +1,5 @@
 use super::asr_models::{
-    architecture_for_mode, load_descriptor, load_whisper_descriptor, model_in_use,
+    architecture_for_mode, load_descriptor, model_in_use, whisper_descriptor,
 };
 use crate::app::state::AppState;
 use crate::asr::pipeline::LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
@@ -139,12 +139,10 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
     }
     if selected_mode == AsrMode::WhisperSmall {
         let active = model_in_use(state.inner(), selected_mode);
+        let descriptor = whisper_descriptor(state.whisper_installer.as_ref(), active);
         return Ok(compose_asr_diagnostics(
             selected_mode,
-            Some(&load_whisper_descriptor(
-                state.whisper_installer.as_ref(),
-                active,
-            )),
+            Some(&descriptor),
             None,
             dropped_chunks,
             capture_diagnostics.sample_rate_hz,
