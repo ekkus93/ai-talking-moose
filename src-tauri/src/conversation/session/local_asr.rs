@@ -180,25 +180,6 @@ impl ConversationManager {
         }
 
         self.local_asr_diagnostics.clear(asr_mode);
-        let installer = match installer {
-            Some(installer) => installer,
-            None => {
-                let message = concat!(
-                    "Local Moonshine ASR is selected, but the model installer is unavailable. ",
-                    "No microphone audio was sent."
-                )
-                .to_string();
-                self.local_asr_diagnostics.remember_error(
-                    asr_mode,
-                    AsrError {
-                        kind: AsrErrorKind::RuntimeUnavailable,
-                        message: message.clone(),
-                        retryable: false,
-                    },
-                );
-                return Err(message);
-            }
-        };
 
         let manager_for_asr = self.clone();
         let session_id_for_asr = session_id.clone();
@@ -253,11 +234,31 @@ impl ConversationManager {
         });
 
         let pipeline_result = match asr_mode {
-            AsrMode::MoonshineTinyStreaming => {
-                LocalAsrPipeline::start_tiny(installer, event_callback).await
-            }
-            AsrMode::MoonshineSmallStreaming => {
-                LocalAsrPipeline::start_small(installer, event_callback).await
+            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => {
+                let installer = match installer {
+                    Some(installer) => installer,
+                    None => {
+                        let message = concat!(
+                            "Local Moonshine ASR is selected, but the model installer is unavailable. ",
+                            "No microphone audio was sent."
+                        )
+                        .to_string();
+                        self.local_asr_diagnostics.remember_error(
+                            asr_mode,
+                            AsrError {
+                                kind: AsrErrorKind::RuntimeUnavailable,
+                                message: message.clone(),
+                                retryable: false,
+                            },
+                        );
+                        return Err(message);
+                    }
+                };
+                if asr_mode == AsrMode::MoonshineTinyStreaming {
+                    LocalAsrPipeline::start_tiny(installer, event_callback).await
+                } else {
+                    LocalAsrPipeline::start_small(installer, event_callback).await
+                }
             }
             AsrMode::WhisperSmall => {
                 let whisper_installer = match whisper_installer {

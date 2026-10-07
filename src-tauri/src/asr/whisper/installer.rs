@@ -466,7 +466,6 @@ impl WhisperModelInstaller {
 
 // --- Error mapping for the engine -----------------------------------------
 
-#[allow(dead_code)]
 pub fn map_install_error(error: WhisperModelInstallError) -> AsrError {
     match error.kind {
         WhisperModelInstallErrorKind::CorruptInstall

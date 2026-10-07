@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::asr::pipeline::PipelineEngine;
 use crate::asr::transcript_state::StreamingTranscriptUpdate;
 use crate::asr::types::{AsrError, AsrErrorKind};
-use crate::asr::whisper::installer::WhisperModelInstaller;
+use crate::asr::whisper::installer::{map_install_error, WhisperModelInstaller};
 use crate::asr::whisper::{
     path_to_cstring, NativeWhisperApi, WhisperApi, WhisperModel, WhisperSegment,
 };
@@ -37,6 +37,14 @@ pub struct WhisperEngine {
 /// if the native load fails. The lease is retained internally until the
 /// model is fully loaded.
 pub fn open(installer: Arc<WhisperModelInstaller>) -> Result<WhisperEngine, AsrError> {
+    if !cfg!(whisper_native_linked) {
+        return Err(AsrError {
+            kind: AsrErrorKind::RuntimeUnavailable,
+            message: crate::asr::whisper::manifest::WHISPER_RUNTIME_UNBUILT_MESSAGE.to_string(),
+            retryable: false,
+        });
+    }
+
     let lease = match installer.acquire_verified_model_lease() {
         Ok(Some(lease)) => lease,
         Ok(None) => {
@@ -46,13 +54,7 @@ pub fn open(installer: Arc<WhisperModelInstaller>) -> Result<WhisperEngine, AsrE
                 retryable: false,
             });
         }
-        Err(error) => {
-            return Err(AsrError {
-                kind: AsrErrorKind::ModelLoadFailed,
-                message: error.message,
-                retryable: error.retryable,
-            });
-        }
+        Err(error) => return Err(map_install_error(error)),
     };
 
     let api: Box<dyn WhisperApi> = Box::new(NativeWhisperApi);

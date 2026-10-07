@@ -247,12 +247,10 @@ pub(crate) struct WhisperModel {
     ctx: *mut std::ffi::c_void,
 }
 
-// SAFETY: WhisperModel is owned by a single worker thread and the C context
-// is freed in Drop before the pointer is dropped. The C runtime is not
-// re-entrant across threads, but whisper.cpp is documented as thread-safe for
-// single-context use.
+// SAFETY: WhisperModel is constructed on the local-ASR worker and then remains
+// exclusively owned by that worker until Drop. Moving ownership to that worker
+// is sound; shared concurrent access is deliberately not promised.
 unsafe impl Send for WhisperModel {}
-unsafe impl Sync for WhisperModel {}
 
 impl WhisperModel {
     #[cfg(whisper_native_linked)]
