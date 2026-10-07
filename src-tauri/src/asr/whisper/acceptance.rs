@@ -599,11 +599,12 @@ pub async fn transcribe_for_acceptance(
         }
     };
 
-    let sampled_peak_resident_memory_bytes = match (baseline_resident_memory_bytes, resident_memory_bytes) {
-        (Some(baseline), Some(resident)) => Some(baseline.max(resident)),
-        (None, resident) => resident,
-        _ => None,
-    };
+    let sampled_peak_resident_memory_bytes =
+        match (baseline_resident_memory_bytes, resident_memory_bytes) {
+            (Some(baseline), Some(resident)) => Some(baseline.max(resident)),
+            (None, resident) => resident,
+            _ => None,
+        };
     let peak_resident_memory_bytes = match (
         peak_resident_memory_bytes(),
         sampled_peak_resident_memory_bytes,
