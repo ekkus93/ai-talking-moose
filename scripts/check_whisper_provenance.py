@@ -22,6 +22,16 @@ MODEL_REVISION_RE = re.compile(
 MODEL_LICENSE_RE = re.compile(
     r'pub const WHISPER_MODEL_LICENSE: &str = "([^"]+)";'
 )
+RAW_C_TYPES = (
+    "WhisperAhead",
+    "WhisperAheads",
+    "WhisperVadParams",
+    "WhisperGrammarElement",
+    "WhisperGreedy",
+    "WhisperBeamSearch",
+    "WhisperFullParams",
+    "WhisperContextParams",
+)
 
 
 def expected_source_commit(manifest_path: Path) -> str:
@@ -107,6 +117,27 @@ def validate_build_policy(repo_root: Path) -> None:
     validate_build_policy_text((repo_root / "src-tauri/build.rs").read_text(encoding="utf-8"))
 
 
+def validate_ffi_safety_text(text: str) -> None:
+    if "unsafe impl Sync for WhisperModel" in text:
+        raise ValueError("WhisperModel must not promise Sync/shared concurrent access")
+    if "unsafe impl Send for WhisperModel" not in text:
+        raise ValueError("WhisperModel Send ownership-transfer contract is missing")
+    if "shared concurrent access is deliberately not promised" not in text:
+        raise ValueError("WhisperModel Send safety comment must reject shared access")
+
+    for type_name in RAW_C_TYPES:
+        if not re.search(rf"\bstruct\s+{type_name}\b", text):
+            raise ValueError(f"raw Whisper FFI type is missing: {type_name}")
+        if re.search(rf"\bpub(?:\([^)]*\))?\s+struct\s+{type_name}\b", text):
+            raise ValueError(f"raw Whisper FFI type must remain private: {type_name}")
+
+
+def validate_ffi_safety(repo_root: Path) -> None:
+    validate_ffi_safety_text(
+        (repo_root / "src-tauri/src/asr/whisper/ffi.rs").read_text(encoding="utf-8")
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -131,6 +162,7 @@ def main() -> int:
     require_documented(repo_root / "docs/WHISPER_MODEL_LICENSES.md", required_docs)
     require_documented(repo_root / "docs/THIRD_PARTY_NOTICES.md", required_docs)
     validate_build_policy(repo_root)
+    validate_ffi_safety(repo_root)
 
     print(
         "Whisper provenance OK: "

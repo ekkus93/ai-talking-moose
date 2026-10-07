@@ -1,7 +1,7 @@
 import unittest
 
 from scripts.check_whisper_build_policy import BuildPolicyError, validate_build_policy_text
-from scripts.check_whisper_provenance import validate
+from scripts.check_whisper_provenance import validate, validate_ffi_safety_text
 
 
 VALID_BUILD_POLICY = """
@@ -45,6 +45,20 @@ fn main() {
 }
 """
 
+VALID_FFI_SAFETY = """
+struct WhisperAhead;
+struct WhisperAheads;
+struct WhisperVadParams;
+struct WhisperGrammarElement;
+struct WhisperGreedy;
+struct WhisperBeamSearch;
+struct WhisperFullParams;
+struct WhisperContextParams;
+pub(crate) struct WhisperModel;
+// SAFETY: moving ownership is sound; shared concurrent access is deliberately not promised.
+unsafe impl Send for WhisperModel {}
+"""
+
 
 class WhisperProvenanceTest(unittest.TestCase):
     def test_matching_revision_passes(self):
@@ -77,6 +91,23 @@ class WhisperProvenanceTest(unittest.TestCase):
                 VALID_BUILD_POLICY.replace(
                     '        whisper_src.join("ggml").join("include"),\n',
                     "",
+                )
+            )
+
+    def test_valid_ffi_safety_policy_passes(self):
+        validate_ffi_safety_text(VALID_FFI_SAFETY)
+
+    def test_ffi_safety_rejects_sync_model(self):
+        with self.assertRaisesRegex(ValueError, "must not promise Sync"):
+            validate_ffi_safety_text(
+                VALID_FFI_SAFETY + "\nunsafe impl Sync for WhisperModel {}\n"
+            )
+
+    def test_ffi_safety_rejects_public_raw_c_type(self):
+        with self.assertRaisesRegex(ValueError, "must remain private"):
+            validate_ffi_safety_text(
+                VALID_FFI_SAFETY.replace(
+                    "struct WhisperFullParams;", "pub(crate) struct WhisperFullParams;"
                 )
             )
 
