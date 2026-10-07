@@ -599,17 +599,18 @@ pub async fn transcribe_for_acceptance(
         }
     };
 
-    let sampled_peak_resident_memory_bytes =
-        match (baseline_resident_memory_bytes, resident_memory_bytes) {
-            (Some(baseline), Some(resident)) => Some(baseline.max(resident)),
-            (None, resident) => resident,
-            _ => None,
-        };
-    let peak_resident_memory_bytes =
-        match (peak_resident_memory_bytes(), sampled_peak_resident_memory_bytes) {
-            (Some(high_water), Some(sampled)) => Some(high_water.max(sampled)),
-            (high_water, sampled) => high_water.or(sampled),
-        };
+    let sampled_peak_resident_memory_bytes = match (baseline_resident_memory_bytes, resident_memory_bytes) {
+        (Some(baseline), Some(resident)) => Some(baseline.max(resident)),
+        (None, resident) => resident,
+        _ => None,
+    };
+    let peak_resident_memory_bytes = match (
+        peak_resident_memory_bytes(),
+        sampled_peak_resident_memory_bytes,
+    ) {
+        (Some(high_water), Some(sampled)) => Some(high_water.max(sampled)),
+        (high_water, sampled) => high_water.or(sampled),
+    };
 
     let mut combined = String::new();
     let mut segment_count = 0;
@@ -634,11 +635,8 @@ pub async fn transcribe_for_acceptance(
     // install/runtime lease.
     drop(model);
     drop(lease);
-    let pipeline = production_pipeline_metrics(
-        std::sync::Arc::new(installer),
-        &wav.samples,
-    )
-    .await?;
+    let pipeline =
+        production_pipeline_metrics(std::sync::Arc::new(installer), &wav.samples).await?;
 
     let report = WhisperTranscribeAcceptanceReport {
         schema_version: REPORT_SCHEMA_VERSION,
