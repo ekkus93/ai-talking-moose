@@ -40,11 +40,7 @@ describe("AsrSettingsPanel accessibility", () => {
 
   beforeEach(() => {
     useMooseStore.setState({ settings: frontendDefaultSettings() });
-    vi.spyOn(tauriBridge, "getAsrModels").mockResolvedValue([
-      tiny,
-      small,
-      whisper,
-    ]);
+    vi.spyOn(tauriBridge, "getAsrModels").mockResolvedValue([tiny, small, whisper]);
     vi.spyOn(tauriBridge, "getAsrDiagnostics").mockResolvedValue({
       selected_mode: "moonshine_tiny_streaming",
       engine_name: "Moonshine Tiny Streaming",
