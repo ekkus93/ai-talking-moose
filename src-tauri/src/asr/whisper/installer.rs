@@ -377,8 +377,10 @@ impl WhisperModelInstaller {
         match fs::rename(&legacy_model, &model_path) {
             Ok(()) => {}
             Err(_) => {
-                fs::copy(&legacy_model, &model_path).map_err(|_| WhisperModelInstallError::promotion())?;
-                fs::remove_file(&legacy_model).map_err(|_| WhisperModelInstallError::promotion())?;
+                fs::copy(&legacy_model, &model_path)
+                    .map_err(|_| WhisperModelInstallError::promotion())?;
+                fs::remove_file(&legacy_model)
+                    .map_err(|_| WhisperModelInstallError::promotion())?;
             }
         }
 
@@ -700,10 +702,9 @@ mod tests {
         assert_eq!(fs::read(installer.model_path()).unwrap(), b"verified-fixture");
         assert!(!legacy_root.join(INSTALL_MARKER_FILE).exists());
 
-        let marker: InstallMarker = serde_json::from_str(
-            &fs::read_to_string(new_root.join(INSTALL_MARKER_FILE)).unwrap(),
-        )
-        .unwrap();
+        let marker: InstallMarker =
+            serde_json::from_str(&fs::read_to_string(new_root.join(INSTALL_MARKER_FILE)).unwrap())
+                .unwrap();
         assert_eq!(marker, InstallMarker::new());
     }
 
