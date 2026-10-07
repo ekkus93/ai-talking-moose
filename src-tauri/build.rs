@@ -167,6 +167,43 @@ fn cpu_count() -> usize {
         .unwrap_or(1)
 }
 
+fn emit_rerun_tree(root: &Path) {
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if metadata.is_file() {
+            println!("cargo:rerun-if-changed={}", path.display());
+            continue;
+        }
+        if !metadata.is_dir() {
+            continue;
+        }
+        let Ok(entries) = std::fs::read_dir(&path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            pending.push(entry.path());
+        }
+    }
+}
+
+fn emit_whisper_native_rerun_paths(whisper_src: &Path) {
+    for path in [
+        whisper_src.join("CMakeLists.txt"),
+        whisper_src.join("cmake"),
+        whisper_src.join("include"),
+        whisper_src.join("src"),
+        whisper_src.join("ggml").join("CMakeLists.txt"),
+        whisper_src.join("ggml").join("cmake"),
+        whisper_src.join("ggml").join("include"),
+        whisper_src.join("ggml").join("src"),
+    ] {
+        emit_rerun_tree(&path);
+    }
+}
+
 fn build_whisper_from_source() {
     if !target_is_linux() {
         return;
@@ -186,22 +223,7 @@ fn build_whisper_from_source() {
         return;
     }
 
-    println!(
-        "cargo:rerun-if-changed={}",
-        whisper_src.join("CMakeLists.txt").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
-        whisper_src.join("src").join("CMakeLists.txt").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
-        whisper_src.join("ggml").join("CMakeLists.txt").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
-        whisper_src.join("src").join("whisper.cpp").display()
-    );
+    emit_whisper_native_rerun_paths(&whisper_src);
 
     let configure = Command::new("cmake")
         .current_dir(&build_dir)

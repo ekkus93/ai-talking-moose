@@ -26,12 +26,21 @@ const small: AsrModelDescriptor = {
   mode: "moonshine_small_streaming",
 };
 
+const whisper: AsrModelDescriptor = {
+  ...tiny,
+  id: "whisper-small-ggml",
+  display_name: "Whisper Small",
+  mode: "whisper_small",
+  revision: "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774",
+  runtime_release: "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774",
+};
+
 describe("AsrSettingsPanel accessibility", () => {
   let progressListener: ((event: AsrModelProgressEvent) => void) | null = null;
 
   beforeEach(() => {
     useMooseStore.setState({ settings: frontendDefaultSettings() });
-    vi.spyOn(tauriBridge, "getAsrModels").mockResolvedValue([tiny, small]);
+    vi.spyOn(tauriBridge, "getAsrModels").mockResolvedValue([tiny, small, whisper]);
     vi.spyOn(tauriBridge, "getAsrDiagnostics").mockResolvedValue({
       selected_mode: "moonshine_tiny_streaming",
       engine_name: "Moonshine Tiny Streaming",
@@ -99,5 +108,32 @@ describe("AsrSettingsPanel accessibility", () => {
     expect(progress).toHaveAttribute("aria-valuemax", "100");
     expect(progress).toHaveAttribute("aria-valuenow", "25");
     expect(progress).toHaveAttribute("aria-valuetext", "25% downloaded");
+  });
+  it("describes Whisper finality truthfully and uses SHA-256-only verification wording", async () => {
+    render(<AsrSettingsPanel />);
+
+    expect(
+      await screen.findByText(/in-utterance partial updates and local endpointing/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/final user turn is emitted only when the utterance ends/i),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      progressListener?.({
+        mode: "whisper_small",
+        install_state: "verifying",
+        downloaded_bytes: whisper.expected_bytes,
+        total_bytes: whisper.expected_bytes,
+        current_file: "ggml-small.bin",
+      });
+    });
+
+    expect(
+      screen.getByText("Verifying SHA-256 and install metadata…"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Verifying SHA-256/CRC32C and install metadata…"),
+    ).not.toBeInTheDocument();
   });
 });

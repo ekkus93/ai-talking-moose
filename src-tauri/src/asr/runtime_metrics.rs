@@ -124,11 +124,14 @@ impl RuntimeMetrics {
             }
         });
         let resident_memory_bytes = current_resident_memory_bytes();
-        let peak_resident_memory_bytes =
-            match (self.peak_resident_memory_bytes, resident_memory_bytes) {
-                (Some(peak), Some(current)) => Some(peak.max(current)),
-                (peak, current) => peak.or(current),
-            };
+        let sampled_peak = match (self.peak_resident_memory_bytes, resident_memory_bytes) {
+            (Some(peak), Some(current)) => Some(peak.max(current)),
+            (peak, current) => peak.or(current),
+        };
+        let peak_resident_memory_bytes = match (peak_resident_memory_bytes(), sampled_peak) {
+            (Some(high_water), Some(sampled)) => Some(high_water.max(sampled)),
+            (high_water, sampled) => high_water.or(sampled),
+        };
 
         LocalAsrRuntimeDiagnostics {
             input_sample_rate_hz,
@@ -214,6 +217,21 @@ pub(crate) fn current_resident_memory_bytes() -> Option<u64> {
     resident_pages.checked_mul(page_size)
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn peak_resident_memory_bytes() -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let line = status.lines().find(|line| line.starts_with("VmHWM:"))?;
+    let mut fields = line.split_whitespace();
+    if fields.next()? != "VmHWM:" {
+        return None;
+    }
+    let kib = fields.next()?.parse::<u64>().ok()?;
+    match fields.next() {
+        Some("kB") | None => kib.checked_mul(1024),
+        Some(_) => None,
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[repr(C)]
 struct MachTimeValue {
@@ -271,8 +289,35 @@ pub(crate) fn current_resident_memory_bytes() -> Option<u64> {
     Some(unsafe { info.assume_init() }.resident_size)
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) fn peak_resident_memory_bytes() -> Option<u64> {
+    let mut info = std::mem::MaybeUninit::<MachTaskBasicInfo>::zeroed();
+    let mut count =
+        u32::try_from(std::mem::size_of::<MachTaskBasicInfo>() / std::mem::size_of::<u32>())
+            .ok()?;
+    // SAFETY: same MACH_TASK_BASIC_INFO buffer contract as the current-RSS query above.
+    let result = unsafe {
+        task_info(
+            mach_task_self_,
+            MACH_TASK_BASIC_INFO,
+            info.as_mut_ptr().cast::<i32>(),
+            &mut count,
+        )
+    };
+    if result != 0 {
+        return None;
+    }
+    // SAFETY: successful `task_info` initialized the requested structure.
+    Some(unsafe { info.assume_init() }.resident_size_max)
+}
+
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn current_resident_memory_bytes() -> Option<u64> {
+    None
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub(crate) fn peak_resident_memory_bytes() -> Option<u64> {
     None
 }
 

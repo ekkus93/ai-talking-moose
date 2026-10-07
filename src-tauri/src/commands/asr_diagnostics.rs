@@ -1,4 +1,6 @@
-use super::asr_models::{architecture_for_mode, load_descriptor, model_in_use, whisper_descriptor};
+use super::asr_models::{
+    architecture_for_mode, load_descriptor, load_whisper_descriptor, model_in_use,
+};
 use crate::app::state::AppState;
 use crate::asr::pipeline::LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
@@ -83,34 +85,39 @@ fn compose_asr_diagnostics(
                 peak_resident_memory_bytes: runtime.peak_resident_memory_bytes,
             }
         }
-        AsrMode::WhisperSmall => AsrDiagnostics {
-            selected_mode,
-            engine_name: descriptor.map_or_else(
-                || "Whisper.cpp local ASR".to_string(),
-                |model| model.display_name.clone(),
-            ),
-            model_id: descriptor.map(|model| model.id.clone()),
-            model_revision: descriptor.map(|model| model.revision.clone()),
-            install_state: descriptor.map(|model| model.install_state),
-            input_sample_rate_hz: capture_sample_rate_hz.unwrap_or(0),
-            streaming: false,
-            metrics_snapshot: false,
-            cpu_threads: None,
-            queue_depth: 0,
-            queue_capacity: LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
-            dropped_chunks,
-            last_error: None,
-            first_partial_latency_ms: None,
-            first_final_latency_ms: None,
-            last_transcription_latency_ms: None,
-            processed_audio_ms: 0,
-            inference_wall_time_ms: 0,
-            real_time_factor: None,
-            process_cpu_time_ms: None,
-            average_cpu_utilization_percent: None,
-            baseline_resident_memory_bytes: None,
-            resident_memory_bytes: None,
-            peak_resident_memory_bytes: None,
+        AsrMode::WhisperSmall => {
+            let runtime = runtime.unwrap_or_else(empty_local_runtime);
+            AsrDiagnostics {
+                selected_mode,
+                engine_name: descriptor.map_or_else(
+                    || "Whisper.cpp local ASR".to_string(),
+                    |model| model.display_name.clone(),
+                ),
+                model_id: descriptor.map(|model| model.id.clone()),
+                model_revision: descriptor.map(|model| model.revision.clone()),
+                install_state: descriptor.map(|model| model.install_state),
+                input_sample_rate_hz: runtime.input_sample_rate_hz,
+                streaming: runtime.streaming,
+                metrics_snapshot: runtime.metrics_snapshot,
+                cpu_threads: std::thread::available_parallelism()
+                    .ok()
+                    .map(std::num::NonZero::get),
+                queue_depth: runtime.queue_depth,
+                queue_capacity: runtime.queue_capacity,
+                dropped_chunks,
+                last_error: runtime.last_error,
+                first_partial_latency_ms: runtime.first_partial_latency_ms,
+                first_final_latency_ms: runtime.first_final_latency_ms,
+                last_transcription_latency_ms: runtime.last_transcription_latency_ms,
+                processed_audio_ms: runtime.processed_audio_ms,
+                inference_wall_time_ms: runtime.inference_wall_time_ms,
+                real_time_factor: runtime.real_time_factor,
+                process_cpu_time_ms: runtime.process_cpu_time_ms,
+                average_cpu_utilization_percent: runtime.average_cpu_utilization_percent,
+                baseline_resident_memory_bytes: runtime.baseline_resident_memory_bytes,
+                resident_memory_bytes: runtime.resident_memory_bytes,
+                peak_resident_memory_bytes: runtime.peak_resident_memory_bytes,
+            }
         },
     }
 }

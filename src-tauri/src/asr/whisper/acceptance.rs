@@ -19,7 +19,9 @@ use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use super::super::runtime_metrics::{current_resident_memory_bytes, process_cpu_time_micros};
+use super::super::runtime_metrics::{
+    current_resident_memory_bytes, peak_resident_memory_bytes, process_cpu_time_micros,
+};
 use super::ffi::{path_to_cstring, NativeWhisperApi, WhisperApi};
 use super::installer::{
     WhisperModelInstallCancellation, WhisperModelInstallDisposition,
@@ -33,8 +35,7 @@ use super::manifest::{
 const REPORT_SCHEMA_VERSION: u32 = 1;
 const MODEL_FILENAME: &str = "ggml-small.bin";
 const QUANTIZATION: &str = "f16";
-const LICENSE_STATE: &str =
-    "pending: ggml-small.bin weight license must be verified before release";
+const LICENSE_STATE: &str = "MIT";
 
 fn git_sha() -> Option<String> {
     std::env::var("GITHUB_SHA")
@@ -452,11 +453,17 @@ pub async fn transcribe_for_acceptance(
         }
     };
 
-    let peak_resident_memory_bytes = match (baseline_resident_memory_bytes, resident_memory_bytes) {
-        (Some(baseline), Some(resident)) => Some(baseline.max(resident)),
-        (None, resident) => resident,
-        _ => None,
-    };
+    let sampled_peak_resident_memory_bytes =
+        match (baseline_resident_memory_bytes, resident_memory_bytes) {
+            (Some(baseline), Some(resident)) => Some(baseline.max(resident)),
+            (None, resident) => resident,
+            _ => None,
+        };
+    let peak_resident_memory_bytes =
+        match (peak_resident_memory_bytes(), sampled_peak_resident_memory_bytes) {
+            (Some(high_water), Some(sampled)) => Some(high_water.max(sampled)),
+            (high_water, sampled) => high_water.or(sampled),
+        };
 
     let mut combined = String::new();
     let mut segment_count = 0;

@@ -242,7 +242,9 @@ export const AsrSettingsPanel: React.FC = () => {
                 <div className="flex justify-between gap-2 text-gray-600">
                   <span>
                     {modelProgress.install_state === "verifying"
-                      ? "Verifying SHA-256/CRC32C and install metadata…"
+                      ? mode === "whisper_small"
+                        ? "Verifying SHA-256 and install metadata…"
+                        : "Verifying SHA-256/CRC32C and install metadata…"
                       : modelProgress.current_file
                         ? `Downloading ${modelProgress.current_file}`
                         : "Starting download…"}
@@ -348,7 +350,7 @@ export const AsrSettingsPanel: React.FC = () => {
         {renderLocalModel(
           "whisper_small",
           "Whisper Small",
-          "Local English recognition that batches microphone PCM into short windows; supports wake-word activation. The model is downloaded only when you explicitly press Download, and partial transcripts are updated in batched intervals.",
+          "Local English recognition with in-utterance partial updates and local endpointing; supports wake-word activation. A final user turn is emitted only when the utterance ends (silence, the bounded maximum duration, or explicit stop). The model is downloaded only when you explicitly press Download.",
         )}
 
         <div
