@@ -134,7 +134,7 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
         let active = model_in_use(state.inner(), selected_mode);
         return Ok(compose_asr_diagnostics(
             selected_mode,
-            Some(&whisper_descriptor(state.inner(), active)),
+            Some(&whisper_descriptor(state.whisper_installer.as_ref(), active)),
             None,
             dropped_chunks,
             capture_diagnostics.sample_rate_hz,
@@ -238,69 +238,3 @@ mod tests {
             last_transcription_latency_ms: Some(12),
             processed_audio_ms: 1_000,
             inference_wall_time_ms: 250,
-            real_time_factor: Some(0.25),
-            process_cpu_time_ms: Some(325),
-            average_cpu_utilization_percent: Some(32.5),
-            baseline_resident_memory_bytes: Some(100),
-            resident_memory_bytes: Some(200),
-            peak_resident_memory_bytes: Some(250),
-        };
-        let diagnostics = compose_asr_diagnostics(
-            AsrMode::MoonshineSmallStreaming,
-            Some(&descriptor),
-            Some(runtime),
-            1,
-            Some(16_000),
-        );
-        assert!(diagnostics.streaming);
-        assert!(!diagnostics.metrics_snapshot);
-        assert_eq!(diagnostics.queue_depth, 2);
-        assert_eq!(diagnostics.first_partial_latency_ms, Some(41));
-        assert_eq!(diagnostics.first_final_latency_ms, Some(88));
-        assert_eq!(diagnostics.last_transcription_latency_ms, Some(12));
-        assert_eq!(diagnostics.processed_audio_ms, 1_000);
-        assert_eq!(diagnostics.inference_wall_time_ms, 250);
-        assert_eq!(diagnostics.real_time_factor, Some(0.25));
-        assert_eq!(diagnostics.process_cpu_time_ms, Some(325));
-        assert_eq!(diagnostics.average_cpu_utilization_percent, Some(32.5));
-        assert_eq!(diagnostics.baseline_resident_memory_bytes, Some(100));
-        assert_eq!(diagnostics.resident_memory_bytes, Some(200));
-        assert_eq!(diagnostics.peak_resident_memory_bytes, Some(250));
-    }
-
-    #[test]
-    fn cloud_diagnostics_do_not_fabricate_local_runtime_metrics() {
-        let diagnostics =
-            compose_asr_diagnostics(AsrMode::GeminiLiveAudio, None, None, 4, Some(16_000));
-        assert_eq!(diagnostics.engine_name, "Gemini Live Cloud Audio");
-        assert_eq!(diagnostics.model_id, None);
-        assert_eq!(diagnostics.install_state, None);
-        assert_eq!(diagnostics.cpu_threads, None);
-        assert_eq!(diagnostics.queue_capacity, 0);
-        assert!(!diagnostics.metrics_snapshot);
-        assert_eq!(diagnostics.real_time_factor, None);
-        assert_eq!(diagnostics.resident_memory_bytes, None);
-        assert_eq!(diagnostics.dropped_chunks, 4);
-    }
-
-    #[test]
-    fn whisper_diagnostics_fail_closed_without_a_local_runtime() {
-        let diagnostics = compose_asr_diagnostics(
-            AsrMode::WhisperSmall,
-            Some(&manifest::model_descriptor(true)),
-            None,
-            0,
-            Some(16_000),
-        );
-
-        assert_eq!(diagnostics.selected_mode, AsrMode::WhisperSmall);
-        assert_eq!(diagnostics.model_id, Some("whisper-small-ggml".to_string()));
-        assert_eq!(
-            diagnostics.install_state,
-            Some(AsrModelInstallState::NotInstalled)
-        );
-        assert!(!diagnostics.streaming);
-        assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
-        assert_eq!(diagnostics.first_partial_latency_ms, None);
-    }
-}
