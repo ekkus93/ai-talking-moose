@@ -4,7 +4,9 @@ use std::time::Instant;
 use crate::asr::pipeline::PipelineEngine;
 use crate::asr::transcript_state::StreamingTranscriptUpdate;
 use crate::asr::types::{AsrError, AsrErrorKind};
-use crate::asr::whisper::installer::{map_install_error, WhisperModelInstaller};
+use crate::asr::whisper::installer::{
+    map_install_error, WhisperModelInstaller, WhisperVerifiedModelLease,
+};
 use crate::asr::whisper::{
     path_to_cstring, NativeWhisperApi, WhisperApi, WhisperModel, WhisperSegment,
 };
@@ -105,6 +107,10 @@ impl WhisperUtteranceState {
 pub struct WhisperEngine {
     api: Box<dyn WhisperApi>,
     model: WhisperModel,
+    /// Holds the installer operation lock for the whole native model lifetime so
+    /// user-initiated delete/reinstall cannot race the verified model path while
+    /// the worker is loading or transcribing with it.
+    _lease: WhisperVerifiedModelLease,
     audio_buffer: Vec<f32>,
     utterance: WhisperUtteranceState,
     stopped: bool,
@@ -155,6 +161,7 @@ pub fn open(installer: Arc<WhisperModelInstaller>) -> Result<WhisperEngine, AsrE
     Ok(WhisperEngine {
         api,
         model,
+        _lease: lease,
         audio_buffer: Vec::with_capacity(WHISPER_MAX_UTTERANCE_SAMPLES.min(32_000)),
         utterance: WhisperUtteranceState::default(),
         stopped: false,
