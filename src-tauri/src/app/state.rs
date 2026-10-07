@@ -501,10 +501,19 @@ impl AppState {
             MoonshineModelInstaller::new(moonshine_model_root(db_path))
                 .map_err(|error| error.to_string())?,
         );
-        let whisper_installer = Arc::new(
-            WhisperModelInstaller::new(whisper_model_root(db_path))
-                .map_err(|error| error.to_string())?,
-        );
+        let whisper_root = whisper_model_root(db_path);
+        let whisper_installer_inner =
+            WhisperModelInstaller::new(&whisper_root).map_err(|error| error.to_string())?;
+        if db_path.is_some() {
+            if let Some(legacy_root) = whisper_root.parent() {
+                // Migration is compatibility-only and fail-closed: a corrupt or
+                // unreadable legacy cache is never trusted and does not prevent
+                // the application from starting. The canonical installer will
+                // report NotInstalled/Corrupt and allow an explicit reinstall.
+                let _ = whisper_installer_inner.migrate_legacy_layout(legacy_root);
+            }
+        }
+        let whisper_installer = Arc::new(whisper_installer_inner);
         let local_llm_runtime = Arc::new(LocalRuntimeManager::new());
         let local_tts_runtime = Arc::new(LocalTtsRuntimeManager::new());
 

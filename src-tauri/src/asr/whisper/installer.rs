@@ -640,6 +640,59 @@ mod tests {
     }
 
     #[test]
+    fn legacy_layout_migration_rewrites_marker_and_preserves_model_bytes() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let legacy_root = temp.path().join("models").join("whisper");
+        let new_root = legacy_root.join("whisper-small");
+        fs::create_dir_all(&legacy_root).unwrap();
+        let legacy_model = legacy_root.join(MODEL_FILENAME);
+        fs::write(&legacy_model, b"verified-fixture").unwrap();
+        fs::write(
+            legacy_root.join(INSTALL_MARKER_FILE),
+            r#"{"schema_version":1,"model_id":"old","revision":"old","expected_bytes":1,"runtime_release":"old","runtime_commit":"old"}"#,
+        )
+        .unwrap();
+
+        let installer = WhisperModelInstaller::new(&new_root).unwrap();
+        let migrated = installer
+            .migrate_legacy_layout_with_verifier(&legacy_root, |_path| Ok(()))
+            .unwrap();
+
+        assert!(migrated);
+        assert!(!legacy_model.exists());
+        assert_eq!(fs::read(installer.model_path()).unwrap(), b"verified-fixture");
+        assert!(!legacy_root.join(INSTALL_MARKER_FILE).exists());
+
+        let marker: InstallMarker = serde_json::from_str(
+            &fs::read_to_string(new_root.join(INSTALL_MARKER_FILE)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(marker, InstallMarker::new());
+    }
+
+    #[test]
+    fn legacy_layout_migration_does_not_replace_existing_canonical_model() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let legacy_root = temp.path().join("models").join("whisper");
+        let new_root = legacy_root.join("whisper-small");
+        fs::create_dir_all(&new_root).unwrap();
+        fs::write(legacy_root.join(MODEL_FILENAME), b"legacy").unwrap();
+        fs::write(new_root.join(MODEL_FILENAME), b"canonical").unwrap();
+
+        let installer = WhisperModelInstaller::new(&new_root).unwrap();
+        let migrated = installer
+            .migrate_legacy_layout_with_verifier(&legacy_root, |_path| Ok(()))
+            .unwrap();
+
+        assert!(!migrated);
+        assert_eq!(fs::read(installer.model_path()).unwrap(), b"canonical");
+        assert_eq!(
+            fs::read(legacy_root.join(MODEL_FILENAME)).unwrap(),
+            b"legacy"
+        );
+    }
+
+    #[test]
     fn installer_struct_compiles() {
         // Just a compile test to ensure the struct is well-formed.
         let _ = std::mem::size_of::<WhisperModelInstaller>();
