@@ -1,6 +1,7 @@
 import unittest
 
 from scripts.check_whisper_build_policy import BuildPolicyError, validate_build_policy_text
+from scripts.check_whisper_acceptance_workflow import WorkflowPolicyError, validate_shell_continuations
 from scripts.check_whisper_provenance import validate, validate_ffi_safety_text
 
 
@@ -93,6 +94,15 @@ class WhisperProvenanceTest(unittest.TestCase):
                     "",
                 )
             )
+
+    def test_acceptance_shell_continuation_rejects_blank_line(self):
+        broken = "run: |\n  env " + chr(92) + "\n\n  FOO=bar\n"
+        with self.assertRaisesRegex(WorkflowPolicyError, "blank line after shell continuation"):
+            validate_shell_continuations(broken)
+
+    def test_acceptance_shell_continuation_accepts_adjacent_line(self):
+        valid = "run: |\n  env " + chr(92) + "\n  FOO=bar\n"
+        validate_shell_continuations(valid)
 
     def test_valid_ffi_safety_policy_passes(self):
         validate_ffi_safety_text(VALID_FFI_SAFETY)

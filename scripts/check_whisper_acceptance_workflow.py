@@ -109,6 +109,21 @@ def validate_acceptance_contract(text: str) -> None:
     forbid_pattern(text, r"\b(?:curl|wget)\b", "ad hoc shell model download")
 
 
+def validate_shell_continuations(text: str) -> None:
+    """Reject shell line continuations that silently split a command."""
+    lines = text.splitlines()
+    for number, line in enumerate(lines[:-1], start=1):
+        if line.rstrip().endswith("\\"):
+            if line != line.rstrip():
+                raise WorkflowPolicyError(
+                    f"trailing whitespace after shell continuation on line {number}"
+                )
+            if not lines[number].strip():
+                raise WorkflowPolicyError(
+                    f"blank line after shell continuation on line {number}"
+                )
+
+
 def validate_embedded_python(text: str) -> None:
     blocks = embedded_python_blocks(text)
     if not blocks:
@@ -122,6 +137,7 @@ def validate_embedded_python(text: str) -> None:
 def validate_workflow_text(text: str) -> int:
     validate_manual_only_trigger(text)
     validate_acceptance_contract(text)
+    validate_shell_continuations(text)
     validate_embedded_python(text)
     return len(embedded_python_blocks(text))
 

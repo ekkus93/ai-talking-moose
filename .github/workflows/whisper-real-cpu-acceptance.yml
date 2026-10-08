@@ -97,7 +97,6 @@ jobs:
 
           echo "Transcribing $corpus_wav inside an OS network namespace with no default route"
           sudo unshare --net -- env \
-
            "GITHUB_SHA=$GITHUB_SHA" \
            "TALKING_MOOSE_ACCEPTANCE_HOST_CPU=$cpu_name" \
            "$binary" transcribe \
