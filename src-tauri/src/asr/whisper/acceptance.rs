@@ -228,6 +228,10 @@ struct WavSamples {
 /// It fails closed for any non-PCM, non-16-bit, or malformed container.
 fn read_wav_f32(path: &Path) -> Result<WavSamples, String> {
     let raw = fs::read(path).map_err(|error| format!("read wav file: {error}"))?;
+    parse_wav_f32(&raw)
+}
+
+fn parse_wav_f32(raw: &[u8]) -> Result<WavSamples, String> {
     if raw.len() < 44 {
         return Err("wav file is too small to contain a valid RIFF/WAVE header".to_string());
     }
@@ -243,21 +247,21 @@ fn read_wav_f32(path: &Path) -> Result<WavSamples, String> {
     if raw[12..16].to_vec() != b"fmt ".to_vec() {
         return Err("wav file has no fmt chunk immediately after the WAVE header".to_string());
     }
-    let fmt_size = le32(&raw, 16);
+    let fmt_size = le32(raw, 16);
     if fmt_size != 16 {
         return Err(format!(
             "wav fmt chunk size {fmt_size} is not the standard PCM size of 16"
         ));
     }
 
-    let audio_format = le16(&raw, 20);
+    let audio_format = le16(raw, 20);
     if audio_format != 1 {
         return Err(format!("wav file is not PCM (format tag {audio_format})"));
     }
-    let channels = le16(&raw, 22);
-    let sample_rate = le32(&raw, 24);
-    let block_align = le16(&raw, 32);
-    let bits_per_sample = le16(&raw, 34);
+    let channels = le16(raw, 22);
+    let sample_rate = le32(raw, 24);
+    let block_align = le16(raw, 32);
+    let bits_per_sample = le16(raw, 34);
 
     if bits_per_sample != 16 {
         return Err(format!(
@@ -276,12 +280,12 @@ fn read_wav_f32(path: &Path) -> Result<WavSamples, String> {
 
     // Scan the remaining chunks for the data chunk.
     let file_len = raw.len();
-    let mut offset: usize = 40;
+    let mut offset = 12 + 8 + fmt_size as usize + (fmt_size as usize % 2);
     let mut data_start: Option<usize> = None;
     let mut data_size: Option<u32> = None;
     while offset + 8 <= file_len {
         if raw[offset..offset + 4].to_vec() != b"data".to_vec() {
-            let chunk_size = le32(&raw, offset + 4) as usize;
+            let chunk_size = le32(raw, offset + 4) as usize;
             if chunk_size == 0 {
                 offset = file_len;
             } else {
@@ -292,7 +296,7 @@ fn read_wav_f32(path: &Path) -> Result<WavSamples, String> {
                 offset = next;
             }
         } else {
-            data_size = Some(le32(&raw, offset + 4));
+            data_size = Some(le32(raw, offset + 4));
             data_start = Some(offset + 8);
             break;
         }
@@ -307,7 +311,7 @@ fn read_wav_f32(path: &Path) -> Result<WavSamples, String> {
     }
 
     let data = &raw[data_start..data_start + data_size as usize];
-    if data.len() % 2 != 0 {
+    if !data.len().is_multiple_of(2) {
         return Err("wav data has an odd number of bytes for 16-bit samples".to_string());
     }
 
@@ -743,5 +747,41 @@ fn sample_count_to_duration_ms(sample_count: usize, sample_rate: u32) -> u64 {
         0
     } else {
         (sample_count as f64 / sample_rate as f64 * 1000.0).ceil() as u64
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_wav_f32;
+
+    #[test]
+    fn wav_parser_skips_metadata_chunks_before_audio_data() {
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&0_u32.to_le_bytes()); // Filled with RIFF payload size below.
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend_from_slice(&16_u32.to_le_bytes());
+        wav.extend_from_slice(&1_u16.to_le_bytes()); // PCM
+        wav.extend_from_slice(&1_u16.to_le_bytes()); // mono
+        wav.extend_from_slice(&16_000_u32.to_le_bytes());
+        wav.extend_from_slice(&32_000_u32.to_le_bytes());
+        wav.extend_from_slice(&2_u16.to_le_bytes());
+        wav.extend_from_slice(&16_u16.to_le_bytes());
+        wav.extend_from_slice(b"LIST");
+        wav.extend_from_slice(&3_u32.to_le_bytes());
+        wav.extend_from_slice(b"abc\0"); // Odd chunks have one pad byte.
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&4_u32.to_le_bytes());
+        wav.extend_from_slice(&i16::MIN.to_le_bytes());
+        wav.extend_from_slice(&16_384_i16.to_le_bytes());
+        let riff_payload_size = (wav.len() - 8) as u32;
+        wav[4..8].copy_from_slice(&riff_payload_size.to_le_bytes());
+
+        let parsed = parse_wav_f32(&wav).expect("valid WAV with a LIST metadata chunk");
+        assert_eq!(parsed.sample_rate, 16_000);
+        assert_eq!(parsed.channels, 1);
+        assert_eq!(parsed.bits_per_sample, 16);
+        assert_eq!(parsed.samples, vec![-1.0, 0.5]);
     }
 }
