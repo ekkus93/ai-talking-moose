@@ -236,10 +236,10 @@ jobs:
           assert transcribe["resident_memory_bytes"] > 0
           assert transcribe["peak_resident_memory_bytes"] >= transcribe["resident_memory_bytes"]
           pipeline = transcribe["pipeline"]
-          assert pipeline["partial_interval_samples"] == 4800
+          assert pipeline["partial_interval_samples"] == 80000
           assert pipeline["endpoint_silence_samples"] == 8000
           assert pipeline["maximum_utterance_samples"] == 480000
-          assert pipeline["queue_capacity_chunks"] == 8
+          assert pipeline["queue_capacity_chunks"] == 40
           assert pipeline["partial_event_count"] >= 2
           assert pipeline["final_event_count"] == 1
           assert pipeline["first_partial_latency_ms"] is not None
@@ -253,6 +253,9 @@ jobs:
           assert pipeline["average_cpu_utilization_percent"] is not None
           assert pipeline["peak_resident_memory_bytes"] is not None
           assert pipeline["overload_attempted_chunks"] == 64
+          assert pipeline["nominal_dropped_chunks"] == 0, (
+              "normal-cadence Whisper input must not lose chunks"
+          )
           assert (
               pipeline["overload_accepted_chunks"] + pipeline["overload_dropped_chunks"]
               == pipeline["overload_attempted_chunks"]

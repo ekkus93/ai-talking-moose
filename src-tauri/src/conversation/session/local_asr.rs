@@ -1,8 +1,8 @@
 use super::*;
 use crate::asr::pipeline::{
-    LocalAsrPipeline, LocalAsrPipelineEventCallback, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+    local_asr_queue_capacity, LocalAsrPipeline, LocalAsrPipelineEventCallback,
 };
-use crate::asr::types::LocalAsrRuntimeDiagnostics;
+use crate::asr::types::{LocalAsrArchitecture, LocalAsrRuntimeDiagnostics};
 use crate::asr::{AsrError, AsrErrorKind};
 
 #[derive(Default)]
@@ -46,7 +46,15 @@ impl LocalAsrDiagnosticsStore {
             mode,
             LocalAsrRuntimeDiagnostics {
                 input_sample_rate_hz: 16_000,
-                queue_capacity: LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+                queue_capacity: local_asr_queue_capacity(match mode {
+                    AsrMode::WhisperSmall => LocalAsrArchitecture::WhisperSmall,
+                    AsrMode::MoonshineSmallStreaming => {
+                        LocalAsrArchitecture::MoonshineSmallStreaming
+                    }
+                    AsrMode::MoonshineTinyStreaming | AsrMode::GeminiLiveAudio => {
+                        LocalAsrArchitecture::MoonshineTinyStreaming
+                    }
+                }),
                 last_error: Some(error),
                 ..LocalAsrRuntimeDiagnostics::default()
             },

@@ -110,6 +110,7 @@ async fn fake_pipeline_for_architecture(
     let (callback, _) = callback_events();
     LocalAsrPipeline::start_architecture(
         architecture,
+        local_asr_queue_capacity(architecture),
         move || {
             Ok(Box::new(FakeEngine {
                 state,
@@ -921,6 +922,23 @@ async fn small_pipeline_uses_same_bounded_worker_and_reports_small_architecture(
     wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
     pipeline.stop_and_join().await.unwrap();
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn whisper_pipeline_uses_its_own_inference_absorption_queue() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state).await;
+
+    let diagnostics = pipeline.diagnostics();
+    assert_eq!(diagnostics.architecture, LocalAsrArchitecture::WhisperSmall);
+    assert_eq!(
+        diagnostics.queue_capacity,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
+    );
+    assert_eq!(diagnostics.queue_depth, 0);
+
+    pipeline.stop_and_join().await.unwrap();
 }
 
 #[tokio::test]

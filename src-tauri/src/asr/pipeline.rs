@@ -27,6 +27,18 @@ use tracing::debug;
 /// dropped by `AudioCapture`, which owns the authoritative overload counter.
 pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 8;
 
+/// Whisper runs whole-utterance CPU inference for each partial. Keep up to four
+/// seconds queued during that synchronous work so normal capture is not lost.
+pub const WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 40;
+
+pub const fn local_asr_queue_capacity(architecture: LocalAsrArchitecture) -> usize {
+    match architecture {
+        LocalAsrArchitecture::WhisperSmall => WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        LocalAsrArchitecture::MoonshineTinyStreaming
+        | LocalAsrArchitecture::MoonshineSmallStreaming => LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+    }
+}
+
 pub(crate) const LOCAL_ASR_INPUT_SAMPLE_RATE_HZ: u32 = 16_000;
 
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
@@ -98,6 +110,7 @@ impl PipelineEngine for MoonshineTinyEngine {
 pub struct LocalAsrPipeline {
     architecture: LocalAsrArchitecture,
     input_sample_rate_hz: u32,
+    queue_capacity_chunks: usize,
     pcm_sender: Option<mpsc::Sender<Vec<u8>>>,
     running: Arc<AtomicBool>,
     stop_requested: Arc<AtomicBool>,
@@ -115,6 +128,7 @@ impl LocalAsrPipeline {
     ) -> Result<Self, AsrError> {
         Self::start_architecture(
             LocalAsrArchitecture::MoonshineTinyStreaming,
+            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
             move || {
                 MoonshineTinyEngine::open(&installer)
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
@@ -134,6 +148,7 @@ impl LocalAsrPipeline {
     ) -> Result<Self, AsrError> {
         Self::start_architecture(
             LocalAsrArchitecture::MoonshineSmallStreaming,
+            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
             move || {
                 MoonshineSmallEngine::open_small(&installer)
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
@@ -154,6 +169,7 @@ impl LocalAsrPipeline {
     ) -> Result<Self, AsrError> {
         Self::start_architecture(
             LocalAsrArchitecture::WhisperSmall,
+            WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
             move || {
                 crate::asr::whisper::engine::open(installer)
                     .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
@@ -272,12 +288,12 @@ impl LocalAsrPipeline {
 
     fn runtime_diagnostics(&self) -> LocalAsrRuntimeDiagnostics {
         let queue_depth = self.pcm_sender.as_ref().map_or(0, |sender| {
-            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS.saturating_sub(sender.capacity())
+            self.queue_capacity_chunks.saturating_sub(sender.capacity())
         });
         self.metrics.lock().runtime_diagnostics(
             self.input_sample_rate_hz,
             queue_depth,
-            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            self.queue_capacity_chunks,
             self.is_running(),
         )
     }
@@ -330,6 +346,7 @@ impl LocalAsrPipeline {
     {
         Self::start_architecture(
             LocalAsrArchitecture::MoonshineTinyStreaming,
+            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
             factory,
             event_callback,
             WORKER_STARTUP_TIMEOUT,
@@ -349,6 +366,7 @@ impl LocalAsrPipeline {
     {
         Self::start_architecture(
             LocalAsrArchitecture::MoonshineTinyStreaming,
+            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
             factory,
             event_callback,
             WORKER_STARTUP_TIMEOUT,
@@ -359,6 +377,7 @@ impl LocalAsrPipeline {
 
     async fn start_architecture<F>(
         architecture: LocalAsrArchitecture,
+        queue_capacity_chunks: usize,
         factory: F,
         event_callback: LocalAsrPipelineEventCallback,
         startup_timeout: Duration,
@@ -367,7 +386,7 @@ impl LocalAsrPipeline {
     where
         F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
     {
-        let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+        let (pcm_tx, mut pcm_rx) = mpsc::channel::<Vec<u8>>(queue_capacity_chunks);
         let running = Arc::new(AtomicBool::new(false));
         let stop_requested = Arc::new(AtomicBool::new(false));
         let abort_requested = Arc::new(AtomicBool::new(false));
@@ -441,6 +460,7 @@ impl LocalAsrPipeline {
                 let pipeline = Self {
                     architecture,
                     input_sample_rate_hz: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+                    queue_capacity_chunks,
                     pcm_sender: Some(pcm_tx),
                     running,
                     stop_requested,

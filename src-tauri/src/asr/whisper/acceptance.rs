@@ -36,7 +36,7 @@ use super::manifest::{
     WHISPER_MODEL_BYTES, WHISPER_MODEL_MAGIC, WHISPER_MODEL_REVISION, WHISPER_MODEL_SHA256,
     WHISPER_SMALL_ID, WHISPER_SOURCE_COMMIT,
 };
-use crate::asr::pipeline::{LocalAsrPipeline, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS};
+use crate::asr::pipeline::{LocalAsrPipeline, WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS};
 use crate::asr::AsrEvent;
 
 const REPORT_SCHEMA_VERSION: u32 = 2;
@@ -519,7 +519,7 @@ async fn production_pipeline_metrics(
         partial_interval_samples: WHISPER_PARTIAL_INTERVAL_SAMPLES,
         endpoint_silence_samples: WHISPER_ENDPOINT_SILENCE_SAMPLES,
         maximum_utterance_samples: WHISPER_MAX_UTTERANCE_SAMPLES,
-        queue_capacity_chunks: LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        queue_capacity_chunks: WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
         partial_event_count,
         final_event_count,
         first_partial_latency_ms: diagnostics.first_partial_latency_ms,

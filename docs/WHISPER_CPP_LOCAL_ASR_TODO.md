@@ -99,7 +99,7 @@ Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 - [x] Add worker thread name:
   - [x] `whisper-small-asr`.
 - [x] Preserve bounded queue:
-  - [x] capacity 8 chunks;
+  - [x] Moonshine capacity remains 8 chunks; Whisper uses its own 40-chunk queue after the exact-source benchmark showed multi-second synchronous inference;
   - [x] drop-newest overload policy;
   - [x] no CPAL blocking.
 - [x] Implement transcription windowing:
@@ -107,10 +107,11 @@ Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
   - [x] bounded recent window for partials;
   - [x] final flush on endpoint or stop.
 
-  *Implementation note:* `WHISPER_BATCH_THRESHOLD_SAMPLES = 4_800`
-  (300 ms @ 16 kHz); `push_pcm` runs `whisper_full` at the threshold,
-  `stop()` flushes the leftover buffer, and the producer emits ~100 ms
-  PCM chunks into the bounded `Vec<u8>` channel.
+  *Implementation note:* the original `4_800`-sample (300 ms) partial interval
+  was qualified and shown to drop 87 nominal-load chunks. Production now uses
+  `WHISPER_PARTIAL_INTERVAL_SAMPLES = 80_000` (5 s), with an exact-source
+  acceptance rerun pending. `stop()` flushes the leftover buffer, and the
+  producer emits ~100 ms PCM chunks into the bounded `Vec<u8>` channel.
 - [x] Map Whisper failure states to:
   - [x] `AsrErrorKind::ModelNotInstalled`;
   - [x] `AsrErrorKind::ModelCorrupt`;
@@ -210,11 +211,11 @@ P3 complete:
   - [x] real-time factor;
   - [x] process RSS;
   - [x] dropped chunks under nominal and deliberate overload.
-- [ ] Tune transcription windowing and repeat exact-source streaming acceptance; current 300 ms partial cadence dropped 87 nominal-load chunks:
-  - [ ] partial interval;
+- [ ] Verify the updated sparse partial cadence and repeat exact-source streaming acceptance; prior 300 ms partial cadence dropped 87 nominal-load chunks:
+  - [x] partial interval increased to five seconds (80,000 samples), pending CPU acceptance evidence;
   - [x] endpoint silence threshold (measured setting: 500 ms);
   - [x] maximum utterance length (measured bound: 30 s);
-  - [x] queue capacity evidence (8 x ~100 ms; retain 800 ms until cadence/runtime tuning shows a larger queue is needed).
+  - [x] Whisper queue increased to 40 x ~100 ms (4 seconds) based on measured multi-second synchronous inference; Moonshine remains at 8 chunks.
 
 ## Verification gates
 

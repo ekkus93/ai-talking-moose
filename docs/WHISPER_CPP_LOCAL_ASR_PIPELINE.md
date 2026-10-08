@@ -68,7 +68,7 @@ The production startup path is fail-closed before microphone capture. A selected
 Whisper uses the shared `LocalAsrPipeline` bounded-worker path:
 
 - One authoritative capture source feeds a bounded local-ASR ingress queue.
-- The ingress queue capacity is eight chunks. With normal 100 ms chunks, this bounds queued microphone audio to roughly 800 ms.
+- Moonshine ingress has capacity eight chunks (about 800 ms). Whisper has capacity 40 chunks (about four seconds) because each partial runs synchronous whole-utterance inference; the larger Whisper-only queue absorbs that bounded CPU pause while preserving the Moonshine queue budget.
 - Native model loading and inference run on a dedicated OS worker, not on the async caller thread and not on the CPAL callback thread.
 - The worker emits provider-neutral `AsrEvent` values into the conversation layer.
 
@@ -78,7 +78,7 @@ The normal producer policy is non-blocking. When capture cannot enqueue because 
 
 Whisper no longer treats every approximately 300 ms batch as a final utterance. It maintains an explicit utterance state:
 
-- `WHISPER_PARTIAL_INTERVAL_SAMPLES = 4_800` at 16 kHz, approximately 300 ms.
+- `WHISPER_PARTIAL_INTERVAL_SAMPLES = 80_000` at 16 kHz, five seconds. Each partial re-transcribes the accumulated utterance, so this cadence gives the worker time to accept queued microphone audio between inference calls.
 - `WHISPER_ENDPOINT_SILENCE_SAMPLES = 8_000` at 16 kHz, approximately 500 ms.
 - `WHISPER_MAX_UTTERANCE_SAMPLES = 480_000` at 16 kHz, approximately 30 seconds.
 - `WHISPER_SPEECH_RMS_THRESHOLD = 0.008` for local endpointing.

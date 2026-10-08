@@ -1,16 +1,24 @@
 use super::asr_models::{architecture_for_mode, load_descriptor, model_in_use, whisper_descriptor};
 use crate::app::state::AppState;
-use crate::asr::pipeline::LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
+use crate::asr::pipeline::local_asr_queue_capacity;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
 use crate::asr::{AsrDiagnostics, AsrMode, AsrModelDescriptor};
 use tauri::State;
 
-fn empty_local_runtime() -> LocalAsrRuntimeDiagnostics {
+fn empty_local_runtime(mode: AsrMode) -> LocalAsrRuntimeDiagnostics {
     LocalAsrRuntimeDiagnostics {
         input_sample_rate_hz: 16_000,
         streaming: false,
         queue_depth: 0,
-        queue_capacity: LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        queue_capacity: local_asr_queue_capacity(match mode {
+            AsrMode::WhisperSmall => crate::asr::types::LocalAsrArchitecture::WhisperSmall,
+            AsrMode::MoonshineSmallStreaming => {
+                crate::asr::types::LocalAsrArchitecture::MoonshineSmallStreaming
+            }
+            AsrMode::MoonshineTinyStreaming | AsrMode::GeminiLiveAudio => {
+                crate::asr::types::LocalAsrArchitecture::MoonshineTinyStreaming
+            }
+        }),
         ..LocalAsrRuntimeDiagnostics::default()
     }
 }
@@ -50,7 +58,7 @@ fn compose_asr_diagnostics(
             peak_resident_memory_bytes: None,
         },
         AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => {
-            let runtime = runtime.unwrap_or_else(empty_local_runtime);
+            let runtime = runtime.unwrap_or_else(|| empty_local_runtime(selected_mode));
             AsrDiagnostics {
                 selected_mode,
                 engine_name: descriptor.map_or_else(
@@ -84,7 +92,7 @@ fn compose_asr_diagnostics(
             }
         }
         AsrMode::WhisperSmall => {
-            let runtime = runtime.unwrap_or_else(empty_local_runtime);
+            let runtime = runtime.unwrap_or_else(|| empty_local_runtime(selected_mode));
             AsrDiagnostics {
                 selected_mode,
                 engine_name: descriptor.map_or_else(
@@ -181,6 +189,9 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::asr::pipeline::{
+        LOCAL_ASR_QUEUE_CAPACITY_CHUNKS, WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+    };
     use crate::asr::whisper::manifest;
     use crate::asr::AsrModelInstallState;
 
@@ -306,7 +317,10 @@ mod tests {
             Some(AsrModelInstallState::NotInstalled)
         );
         assert!(!diagnostics.streaming);
-        assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+        assert_eq!(
+            diagnostics.queue_capacity,
+            WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
+        );
         assert_eq!(diagnostics.first_partial_latency_ms, None);
     }
 }

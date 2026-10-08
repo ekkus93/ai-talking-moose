@@ -256,7 +256,7 @@ Whisper.cpp must consume the same local audio contract as Moonshine:
 - mono;
 - 16-bit little-endian PCM;
 - 100 ms chunks from `AudioCapture`;
-- bounded queue capacity of 8 chunks.
+- bounded queue; Moonshine retains 8 chunks and Whisper uses its separately measured 40-chunk capacity.
 
 If the existing local pipeline queue is currently represented internally as `f32` for Moonshine, the Whisper engine may either:
 
@@ -293,12 +293,12 @@ Overload policy should remain the same as the existing local pipeline:
 
 Whisper.cpp does not provide the same line-streaming model as Moonshine. The current implementation re-runs batch inference over one bounded utterance window and emits local partial updates on a fixed cadence. The named values are owned by `src-tauri/src/asr/whisper/engine.rs`:
 
-- partial refresh every 4,800 samples (300 ms at 16 kHz);
+- partial refresh every 80,000 samples (5 seconds at 16 kHz), selected after the original 300 ms cadence dropped most audio at normal input rate;
 - local RMS endpoint after 8,000 quiet samples (500 ms);
 - forced finalization at 480,000 samples (30 seconds);
 - local speech RMS threshold 0.008.
 
-These thresholds are grouped in `WhisperEngineConfig`, so focused acceptance/tests can override them independently. Production currently uses the defaults above. The partial cadence is not an utterance boundary. Endpoint, maximum duration, and graceful stop produce a final update. The pipeline applies and emits that update before acknowledging delivery to the engine; only then does the engine clear its bounded PCM window and advance the segment identity. No cloud VAD is involved.
+These thresholds are grouped in `WhisperEngineConfig`, so focused acceptance/tests can override them independently. Production currently uses the defaults above; real-CPU acceptance must still confirm that the wider cadence and queue prevent nominal-load drops. The partial cadence is not an utterance boundary. Endpoint, maximum duration, and graceful stop produce a final update. The pipeline applies and emits that update before acknowledging delivery to the engine; only then does the engine clear its bounded PCM window and advance the segment identity. No cloud VAD is involved.
 
 ## Partial and final transcript semantics
 

@@ -14,9 +14,11 @@ use tracing::debug;
 
 /// Partial-inference cadence for an active utterance.
 ///
-/// 4,800 samples at 16 kHz = 300 ms. This controls how often Whisper may refresh
-/// a local partial; it is explicitly not an utterance/finality boundary.
-pub const WHISPER_PARTIAL_INTERVAL_SAMPLES: usize = 4_800;
+/// 80,000 samples at 16 kHz = 5 seconds. Whisper.cpp re-transcribes the whole
+/// accumulated utterance for each partial, so a wider cadence leaves the worker
+/// time to drain microphone PCM between CPU-bound inference calls. This is not a
+/// finality boundary.
+pub const WHISPER_PARTIAL_INTERVAL_SAMPLES: usize = 80_000;
 
 /// Consecutive local silence required to finalize an active utterance.
 ///

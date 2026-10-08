@@ -264,15 +264,15 @@ Implementation and static-policy checks are complete. Actual workflow execution 
 - [x] Record true/high-water process RSS using an OS-appropriate metric (`/proc/self/status` `VmHWM`; pipeline 838,987,776 bytes).
 - [x] Record dropped chunks under nominal load (87 at 100 ms input cadence).
 - [x] Run a deliberate overload scenario (64 attempted, 8 accepted, 56 dropped).
-- [x] Record the configured partial interval/cadence (300 ms; performance tuning remains open).
+- [x] Record the qualified partial interval/cadence (300 ms); the working tree now uses five seconds pending repeat acceptance.
 - [x] Record the configured endpoint silence threshold/hangover (500 ms).
 - [x] Record maximum utterance duration/forced-finalization bound (30 s).
-- [x] Record and justify queue capacity (8 x ~100 ms = 800 ms bounded ingress; do not increase because the measured issue is inference throughput, not insufficient buffering).
+- [x] Record and justify qualified queue capacity (8 x ~100 ms = 800 ms); based on measured multi-second inference, the working tree now gives Whisper a separate 40-chunk/four-second queue while Moonshine stays at eight chunks.
 - [x] Store machine-readable raw metrics with the workflow artifact `whisper-real-cpu-37738499386-1-1f78a43adaf4b3907aa82fc96215e4d353bccb8c`.
 - [x] Summarize measurements and the observed limitation in the benchmark/evidence document.
 - [x] Record CPU and RSS evidence. P5 tuning/nominal-load acceptance remains open because observed drops and RTF do not support a realtime performance claim.
 
-**Acceptance:** P5 performance/behavior claims are supported by exact-source real-CPU evidence, not workflow structure alone.
+**Acceptance:** P5 performance/behavior claims are supported by exact-source real-CPU evidence, not workflow structure alone. The acceptance validator now fails if the production-cadence corpus feed drops any chunks; the previous 87-drop run remains recorded as the baseline failure.
 
 ## WPR-800 — Regression coverage audit
 
@@ -356,7 +356,7 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 - [x] Re-verify nominal and deliberate-overload dropped-chunk evidence (87 nominal; 64 attempted / 8 accepted / 56 dropped deliberate overload).
 - [x] Re-verify true high-water RSS evidence (`VmHWM`; see benchmark).
 - [ ] Resolve the nominal streaming overload (87 drops) and repeat exact-source acceptance; do not describe the current implementation as realtime-qualified.
-- [x] Re-verify configured partial interval, endpoint, maximum utterance, and queue capacity (300 ms / 500 ms / 30 s / 800 ms); tune/acceptance remains open after the nominal-load drops.
+- [x] Re-verify qualified partial interval, endpoint, maximum utterance, and queue capacity (300 ms / 500 ms / 30 s / 800 ms); a five-second/40-chunk Whisper configuration is in the working tree pending exact-source acceptance.
 
 **Acceptance:** no checkbox in the original TODO remains checked solely because an earlier implementation note or commit message claimed completion.
 
@@ -386,7 +386,7 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the production-source tree before the workflow-only numeric-separator follow-up; `npm run check:frontend` passed at the exact qualification head `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`. The reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The initial real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes scanning of the valid odd-sized `LIST` metadata chunk. A later run (`37733089447`, job `113172940265`) exposed that the delete command did not persist its JSON report; commit `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` fixes persistence and the delete-report schema version. Run `37737097750` then exposed Rust numeric separators in `WHISPER_MODEL_BYTES`; commit `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` fixes parsing and adds an ordinary-CI check against the actual manifest.
 
-The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed; cadence/runtime tuning and a repeat exact-source acceptance remain required. Automatic ordinary CI run `37738053693` on this SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks also passed on the production tree.
+The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed. In response, this working change sets a five-second Whisper partial cadence, adds a separate 40-chunk Whisper queue (leaving Moonshine at eight), and makes the acceptance validator reject any nominal-load drops. These settings require exact-source real-CPU acceptance before qualification. Automatic ordinary CI run `37738053693` on the old qualification SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks have passed for the current change.
 
 ## WPR-960 — Exact-master closeout
 
