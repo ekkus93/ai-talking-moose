@@ -44,8 +44,10 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Keep model artifact and model-specific marker/metadata inside the canonical per-model directory where practical.
 - [x] Define migration/compatibility behavior for an existing older `<app-data>/models/whisper/` layout if deployed profiles can contain it.
 - [x] Add a test starting with no Whisper directory at all.
-- [ ] Verify first install succeeds without test/workflow code pre-creating the Whisper model root.
-- [ ] Verify delete/reinstall remains correct after the layout change.
+- [x] Verify first install succeeds without test/workflow code pre-creating the Whisper model root.
+- [x] Verify delete/reinstall remains correct after the layout change.
+
+The manual acceptance run verified install, delete, and reinstall at source SHA `0034e16ea17d23b8fc89c0f22a1722c1bbe7ae6d` (run `37731195815`, artifact `whisper-real-cpu-37731195815-1-0034e16ea17d23b8fc89c0f22a1722c1bbe7ae6d`). The subsequent `master` change only fixes WAV metadata chunk scanning; repeat full acceptance at the new SHA for final qualification.
 
 **Acceptance:** a clean application profile can install, verify, use, delete, and reinstall Whisper through production code alone.
 
@@ -300,47 +302,47 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 ### P0 reconciliation
 
-- [ ] Re-verify exact whisper.cpp source pin against actual tracked/built source.
-- [ ] Re-verify model SHA/bytes/license.
+- [x] Re-verify exact whisper.cpp source pin against actual tracked/built source.
+- [x] Re-verify model SHA/bytes/license metadata against the manifest and license documents; downloaded-artifact verification remains open under P5.
 - [ ] Re-verify target matrix claims against actual qualification evidence.
-- [ ] Re-verify privacy/handoff documentation.
+- [x] Re-verify privacy/handoff documentation.
 
 ### P1 reconciliation
 
-- [ ] Re-verify manifest source revision.
-- [ ] Re-verify installer clean-profile behavior.
-- [ ] Re-verify canonical model directory layout.
-- [ ] Re-verify native source-change rebuild behavior.
-- [ ] Re-verify FFI safety/threading claims.
+- [x] Re-verify manifest source revision.
+- [x] Re-verify installer clean-profile code and regression behavior; real-profile execution remains open under WPR-200.
+- [x] Re-verify canonical model directory layout.
+- [x] Re-verify native source-change rebuild behavior.
+- [x] Re-verify FFI safety/threading claims.
 
 ### P2 reconciliation
 
-- [ ] Re-verify utterance state tracking.
-- [ ] Re-verify actual partial event emission.
-- [ ] Re-verify final event semantics.
-- [ ] Re-verify bounded recent/current window behavior.
-- [ ] Re-verify endpoint finalization.
-- [ ] Re-verify stop-time final flush delivery.
-- [ ] Re-verify all documented error mappings.
-- [ ] Re-verify no provider/cloud fallback.
+- [x] Re-verify utterance state tracking.
+- [x] Re-verify actual partial event emission.
+- [x] Re-verify final event semantics.
+- [x] Re-verify bounded recent/current window behavior.
+- [x] Re-verify endpoint finalization.
+- [x] Re-verify stop-time final flush delivery.
+- [x] Re-verify all documented error mappings.
+- [x] Re-verify no provider/cloud fallback.
 
 ### P3 reconciliation
 
-- [ ] Re-verify fail-closed model preparation before microphone capture.
-- [ ] Re-verify normal shutdown drains accepted PCM before worker termination.
-- [ ] Re-verify wake-word mode support/fail-closed behavior.
-- [ ] Re-verify model commands and progress events.
-- [ ] Re-verify diagnostics report truthful source/model/runtime identity.
-- [ ] Re-run/reconcile generated frontend/backend contracts if shapes changed.
+- [x] Re-verify fail-closed model preparation before microphone capture.
+- [x] Re-verify normal shutdown drains accepted PCM before worker termination.
+- [x] Re-verify wake-word mode support/fail-closed behavior.
+- [x] Re-verify model commands and progress events.
+- [x] Re-verify diagnostics report truthful source/model/runtime identity.
+- [x] Re-run/reconcile generated frontend/backend contracts if shapes changed.
 
 ### P4 reconciliation
 
-- [ ] Mark already-implemented frontend items only after final-source re-verification.
-- [ ] Verify install state/byte count/revision display.
-- [ ] Verify active-conversation mutation disabling.
-- [ ] Verify local/privacy/download disclosure.
-- [ ] Verify partial transcript disclosure matches actual WPR-300 behavior.
-- [ ] Verify README/pipeline/benchmark docs are current.
+- [x] Mark already-implemented frontend items only after final-source re-verification.
+- [x] Verify install state/byte count/revision display.
+- [x] Verify active-conversation mutation disabling.
+- [x] Verify local/privacy/download disclosure.
+- [x] Verify partial transcript disclosure matches actual WPR-300 behavior.
+- [x] Verify README/pipeline/benchmark docs are current.
 
 ### P5 reconciliation
 
@@ -359,19 +361,19 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 ## WPR-950 — Exact-head final qualification
 
-**Exact qualification head:** _TBD_
+**Exact qualification head:** `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` (`master`, 2026-10-08)
 
-- [ ] Reload current `master` immediately before qualification and record the exact SHA.
-- [ ] Confirm all production-source remediation is present at that SHA.
-- [ ] Run `npm run check:frontend`.
-- [ ] Run `npm run check:rust`.
-- [ ] Run `npm run check:all`.
-- [ ] Run `npm run check:generated-trees`.
-- [ ] Run `npm run check:generated-backend-contract`.
-- [ ] Run `npm run check:tauri-command-contract`.
-- [ ] Run `npm run check:frontend-contract-shapes`.
-- [ ] Run `python3 scripts/check_local_llm_packaging_policy.py` when required by repository policy/changed paths.
-- [ ] Run all Whisper-specific focused tests/checkers added by this remediation.
+- [x] Reload current `master` immediately before qualification and record the exact SHA.
+- [x] Confirm all production-source remediation is present at that SHA.
+- [x] Run `npm run check:frontend`.
+- [x] Run `npm run check:rust`.
+- [x] Run `npm run check:all`.
+- [x] Run `npm run check:generated-trees`.
+- [x] Run `npm run check:generated-backend-contract`.
+- [x] Run `npm run check:tauri-command-contract`.
+- [x] Run `npm run check:frontend-contract-shapes`.
+- [x] Run `python3 scripts/check_local_llm_packaging_policy.py` when required by repository policy/changed paths.
+- [x] Run all Whisper-specific focused tests/checkers added by this remediation.
 - [ ] Run the repaired real-CPU Whisper acceptance workflow on the exact qualification SHA.
 - [ ] Verify all required ordinary CI runs on the exact qualification SHA are terminal and successful.
 - [ ] Verify the real-CPU acceptance run is terminal and successful.
@@ -380,6 +382,10 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 - [ ] Record exact workflow/run/job/artifact identities in a final evidence document under `docs/evidence/`.
 - [ ] Complete WPR-900 original-TODO reconciliation using the exact qualification source/evidence.
 - [ ] Mark every mandatory WPR task/subtask complete only after evidence exists.
+
+`CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the exact production-source tree committed at `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3`; the reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The previous real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus (`wav chunk extends beyond the file`). The cause was the parser starting chunk scanning four bytes late and treating the valid `LIST` chunk as malformed. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes that offset and adds a regression test for odd-sized metadata chunks. Run the repaired workflow again at this exact SHA; the previous run did not produce transcription or CPU/performance evidence.
+
+The rerun at `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` (run `37733089447`, failed job `113172940265`) completed the production install/delete/reinstall and reached the machine-readable evidence validator, which failed because `whisper-small-delete.json` did not exist. The acceptance CLI printed the delete report but did not persist it to the report path it accepts. The validator also expects delete-report schema version 1, so the fix preserves that version independently of the install/transcription schema version 2. Regression coverage now checks both the on-disk report and its schema, and the static workflow-policy checker guards the expected delete output path/version. A successful real-CPU acceptance must be repeated on the resulting production-source commit; no performance/evidence claims are qualified by the failed run.
 
 ## WPR-960 — Exact-master closeout
 
