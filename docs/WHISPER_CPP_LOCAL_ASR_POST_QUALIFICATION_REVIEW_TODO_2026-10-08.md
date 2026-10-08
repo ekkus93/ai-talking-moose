@@ -1,7 +1,7 @@
 # Whisper.cpp Local ASR Post-Qualification Review TODO
 
 **Date:** 2026-10-08
-**Status:** Implementation complete locally; exact-source ordinary CI and real-CPU acceptance remain open
+**Status:** Implementation complete; exact-source ordinary CI passed, real-CPU acceptance remains open
 **Review baseline:** `master` at `0268fb2bd3af2e31d355d9064824129ba89c1887`
 **Spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_SPEC_2026-10-08.md`
 **Prior accepted run:** `37744371559`, job `113202252940`, checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`
@@ -97,7 +97,7 @@ All items start open. Mark a subtask complete only after the current source and 
 - [x] Run `npm run check:all`, including the full `npm run check:rust` quality gate and ordinary frontend/contract/Whisper static checks.
 - [x] Run `npm run check:generated-backend-contract` when IPC/exported shapes change; no generated shape drift was produced.
 - [x] Run affected native build-policy gates; keep ordinary CI real-model-free.
-- [ ] Verify ordinary CI passes at the final production source SHA.
+- [x] Verify ordinary CI passes at the production source SHA `29759a18d7c91c26113d33e16a55c6d7f80bdb0d` (push run `37754990128`).
 - [ ] After installer/runtime/stop source changes, run the manual real-CPU Whisper acceptance workflow at that exact source checkout.
 - [ ] Verify source/model/corpus hashes and bytes, clean install/delete/reinstall, network-denied transcription, partial/final counts, nominal drops, overload, CPU, RSS, latency, and RTF from the workflow artifact.
 - [ ] Record run/job/source SHA/artifact identity, artifact hash/bytes, and measured limits in `docs/evidence/`; retain the earlier run as a separate historical baseline.
