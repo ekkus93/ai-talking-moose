@@ -362,12 +362,12 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 ## WPR-950 — Exact-head final qualification
 
-**Exact qualification head:** `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` (`master`, 2026-10-08)
+**Candidate final source head:** `df1e381f0d58115375c2a6d0112d2c5863149fc2` (`master`, 2026-10-08); production changes are not qualified until the manual real-CPU acceptance passes at this SHA.
 
-- [x] Reload current `master` immediately before qualification and record the exact SHA.
-- [x] Confirm all production-source remediation is present at that SHA.
-- [x] Run `npm run check:frontend`.
-- [x] Run `npm run check:rust`.
+- [x] Reload current `master` immediately before local qualification and record the exact SHA.
+- [x] Confirm production remediation and evidence-driven tuning are present at that SHA.
+- [x] Run `npm run check:frontend` through `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all`.
+- [x] Run `npm run check:rust` (`887` passed, `3` ignored).
 - [x] Run `npm run check:all`.
 - [x] Run `npm run check:generated-trees`.
 - [x] Run `npm run check:generated-backend-contract`.
@@ -375,28 +375,30 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 - [x] Run `npm run check:frontend-contract-shapes`.
 - [x] Run `python3 scripts/check_local_llm_packaging_policy.py` when required by repository policy/changed paths.
 - [x] Run all Whisper-specific focused tests/checkers added by this remediation.
-- [x] Run the repaired real-CPU Whisper acceptance workflow on the exact qualification SHA (run `37738499386`, job `113183457764`, attempt 1).
-- [x] Verify required ordinary CI run `37738053693` on the exact qualification SHA is terminal and successful; Rust tests/quality and CI plumbing passed, remaining jobs were skipped by scope classification.
-- [x] Verify the real-CPU acceptance run is terminal and successful.
-- [x] Verify acceptance validation passed for exact repository SHA, native Whisper source revision, model SHA/bytes, and test-audio identity.
-- [x] Verify CPU/RSS/latency/RTF/overload evidence fields are present in the validated artifact.
-- [x] Record exact workflow/run/job/artifact identities in [the qualification evidence record](evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md).
-- [ ] Complete WPR-900 original-TODO reconciliation using the exact qualification source/evidence.
+- [ ] Run the real-CPU Whisper acceptance workflow on candidate SHA `df1e381f0d58115375c2a6d0112d2c5863149fc2`.
+- [x] Verify automatic ordinary CI run `37741248169` on the candidate SHA is terminal and successful.
+- [ ] Verify the real-CPU acceptance run is terminal and successful.
+- [ ] Verify acceptance validation passed for exact repository SHA, native Whisper source revision, model SHA/bytes, test-audio identity, and zero nominal-load drops.
+- [ ] Verify CPU/RSS/latency/RTF/overload evidence fields are present in the candidate-SHA artifact.
+- [x] Record previous exact workflow/run/job/artifact identities and their baseline metrics in [the qualification evidence record](evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md).
+- [ ] Complete WPR-900 original-TODO reconciliation using candidate-source evidence.
 - [ ] Mark every mandatory WPR task/subtask complete only after evidence exists.
 
 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the production-source tree before the workflow-only numeric-separator follow-up; `npm run check:frontend` passed at the exact qualification head `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`. The reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The initial real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes scanning of the valid odd-sized `LIST` metadata chunk. A later run (`37733089447`, job `113172940265`) exposed that the delete command did not persist its JSON report; commit `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` fixes persistence and the delete-report schema version. Run `37737097750` then exposed Rust numeric separators in `WHISPER_MODEL_BYTES`; commit `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` fixes parsing and adds an ordinary-CI check against the actual manifest.
 
 The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed. In response, this working change sets a five-second Whisper partial cadence, adds a separate 40-chunk Whisper queue (leaving Moonshine at eight), and makes the acceptance validator reject any nominal-load drops. These settings require exact-source real-CPU acceptance before qualification. Automatic ordinary CI run `37738053693` on the old qualification SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks have passed for the current change.
 
+Candidate source commit `df1e381f0d58115375c2a6d0112d2c5863149fc2` is pushed to `master`. Local `npm run check:all` passed (887 Rust tests passed, 3 ignored; 127 frontend tests passed), and automatic CI run `37741248169` completed successfully. The candidate's manual Whisper CPU acceptance has not run yet; its validator requires zero normal-cadence drops.
+
 ## WPR-960 — Exact-master closeout
 
-**Final master SHA:** _TBD_
+**Candidate master SHA:** `df1e381f0d58115375c2a6d0112d2c5863149fc2`; final qualification remains pending.
 
-- [ ] Re-read current `master` after evidence/TODO reconciliation.
-- [ ] Verify whether any commit after the exact qualification head changed production source.
-- [ ] If production source changed, repeat WPR-950 on the new exact source SHA.
-- [ ] If only docs/evidence/checklist files changed, record that fact explicitly.
-- [ ] Run the repository's applicable documentation-scope/exact-master CI on final `master`.
+- [x] Re-read current `master` after the runtime/evidence changes.
+- [x] Verify that production source changed after the previous exact qualification head.
+- [x] Repeat local WPR-950 gates on candidate source `df1e381f0d58115375c2a6d0112d2c5863149fc2`; its real-CPU acceptance remains pending.
+- [x] Record that the candidate commit changed production source and therefore requires a new exact-source real-CPU run.
+- [x] Run applicable ordinary CI on candidate `master` (run `37741248169`, success).
 - [ ] Verify final `master` contains the qualified production source unchanged.
 - [ ] Verify `docs/WHISPER_CPP_LOCAL_ASR_TODO.md` is reconciled with final-source evidence.
 - [ ] Verify this remediation TODO is reconciled with final-source evidence.
