@@ -206,6 +206,26 @@ def validate_delete_report_output() -> None:
     )
 
 
+def validate_manifest_byte_parser() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    manifest = (WORKFLOW.parents[2] / "src-tauri/src/asr/whisper/manifest.rs").read_text(
+        encoding="utf-8"
+    )
+    require_contains(
+        workflow,
+        r"pub const WHISPER_MODEL_BYTES: u64 = ([\d_]+);",
+        "manifest byte parser accepts Rust numeric separators",
+    )
+    require_contains(
+        workflow,
+        'int(match.group(1).replace("_", ""))',
+        "manifest byte parser normalizes Rust numeric separators",
+    )
+    match = re.search(r"pub const WHISPER_MODEL_BYTES: u64 = ([\d_]+);", manifest)
+    if match is None or int(match.group(1).replace("_", "")) <= 0:
+        raise WorkflowPolicyError(
+            "canonical Whisper manifest byte count cannot be parsed by acceptance policy"
+        )
 def validate_workflow_text(text: str) -> int:
     validate_manual_only_trigger(text)
     validate_acceptance_contract(text)
@@ -217,6 +237,7 @@ def validate_workflow_text(text: str) -> int:
 def main() -> int:
     text = WORKFLOW.read_text(encoding="utf-8")
     validate_delete_report_output()
+    validate_manifest_byte_parser()
     block_count = validate_workflow_text(text)
     print(
         "Whisper acceptance workflow policy OK "
