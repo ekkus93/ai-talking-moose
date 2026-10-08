@@ -21,7 +21,7 @@ Talking Moose supports four ASR choices:
 | Local Whisper.cpp Small | Processed locally on the host | Finalized user text may be sent to Gemini Live for the Moose's conversational response |
 | Google Gemini Live Audio | Streamed to Google during the active conversation | Google processes the corresponding conversation content |
 
-Moonshine and local Whisper.cpp make **speech recognition local**; they do not make the realtime conversation LLM or Google-generated voice response local. The application must communicate that distinction clearly anywhere the ASR mode is selected.
+Moonshine and local Whisper.cpp make **speech recognition local**; they do not make the realtime conversation LLM or Google-generated voice response local. Local partial transcript updates stay on the host. Only finalized non-empty user text may be sent to Gemini Live for the response.
 
 Local Whisper.cpp uses a pinned whisper.cpp source commit and a user-downloaded, SHA-verified `ggml-small` model file. Whisper microphone audio remains local. Whisper installation is explicit and separate from conversation start.
 

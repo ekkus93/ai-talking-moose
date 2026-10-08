@@ -130,6 +130,14 @@ pub struct WhisperInstallAcceptanceReport {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct WhisperDeleteAcceptanceReport {
+    pub schema_version: u32,
+    pub phase: String,
+    pub removed: bool,
+    pub model_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct WhisperTranscriptReport {
     pub duration_ms: u64,
     pub no_speech_prob: f32,
@@ -372,6 +380,31 @@ pub async fn install_for_acceptance(
 
     write_report(report_path, &report)?;
     Ok(report)
+}
+
+pub async fn delete_for_acceptance(
+    model_root: &Path,
+) -> Result<WhisperDeleteAcceptanceReport, String> {
+    let installer = WhisperModelInstaller::new(model_root.to_path_buf())
+        .map_err(|error| error.message.to_string())?;
+    if !installer.model_path().is_file() {
+        return Err(
+            "production installer delete acceptance requires an installed model".to_string(),
+        );
+    }
+    installer
+        .delete()
+        .await
+        .map_err(|error| error.message.to_string())?;
+    if installer.model_path().exists() {
+        return Err("production installer left the Whisper model after delete".to_string());
+    }
+    Ok(WhisperDeleteAcceptanceReport {
+        schema_version: REPORT_SCHEMA_VERSION,
+        phase: "delete".to_string(),
+        removed: true,
+        model_path: installer.model_path().display().to_string(),
+    })
 }
 
 fn pcm_f32_to_i16_le(samples: &[f32]) -> Vec<u8> {

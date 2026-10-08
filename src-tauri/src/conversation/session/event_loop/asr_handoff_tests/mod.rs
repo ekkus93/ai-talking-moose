@@ -39,6 +39,41 @@ struct CountingLocalAsrResource {
     stop_count: Arc<AtomicUsize>,
 }
 
+struct FinalOnStopLocalAsrResource {
+    manager: Arc<ConversationManager>,
+    generation: u64,
+    session_id: String,
+}
+
+#[async_trait]
+impl crate::asr::lifecycle::LocalAsrResource for FinalOnStopLocalAsrResource {
+    async fn stop(&mut self) -> Result<(), crate::asr::AsrError> {
+        let accepted = self
+            .manager
+            .handle_local_asr_event(
+                self.generation,
+                &self.session_id,
+                AsrEvent::FinalTranscript {
+                    text: "stop-time final".to_string(),
+                },
+            )
+            .await
+            .map_err(|error| crate::asr::AsrError {
+                kind: crate::asr::AsrErrorKind::Internal,
+                message: error.to_string(),
+                retryable: false,
+            })?;
+        if !accepted {
+            return Err(crate::asr::AsrError {
+                kind: crate::asr::AsrErrorKind::InvalidState,
+                message: "stop-time final was rejected during graceful shutdown".to_string(),
+                retryable: false,
+            });
+        }
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl crate::asr::lifecycle::LocalAsrResource for CountingLocalAsrResource {
     async fn stop(&mut self) -> Result<(), crate::asr::AsrError> {

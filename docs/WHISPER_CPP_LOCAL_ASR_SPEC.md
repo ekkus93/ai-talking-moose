@@ -1,11 +1,13 @@
 # Whisper.cpp Local ASR Specification
 
-Status: Proposed; implementation not started.
+Status: Implemented; exact-head real-CPU and final-master qualification are pending.
 Recorded: 2026-10-03
 Primary target: private local Linux.
 Related documents:
 
 - `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md`
+- `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md` (current implementation behavior)
+- `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md` (authoritative remediation and qualification status)
 - `docs/MOONSHINE_LOCAL_ASR_PIPELINE.md`
 - `docs/LOCAL_LLM_ARCHITECTURE.md`
 - `docs/PRIVACY.md`
@@ -129,7 +131,7 @@ format: mono int16 PCM
 Pinned upstream location:
 
 ```text
-https://github.com/ggml-org/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1
+https://github.com/ggml-org/whisper.cpp/tree/60c0be6ac8fa71b1a2ae2dd938a31a34a508e774
 https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true
 ```
 
@@ -289,26 +291,14 @@ Overload policy should remain the same as the existing local pipeline:
 
 ## Transcription strategy
 
-Whisper.cpp does not provide the same line-streaming model as Moonshine. V1 should use a batch endpoint strategy.
+Whisper.cpp does not provide the same line-streaming model as Moonshine. The current implementation re-runs batch inference over one bounded utterance window and emits local partial updates on a fixed cadence. The named values are owned by `src-tauri/src/asr/whisper/engine.rs`:
 
-Recommended V1 behavior:
+- partial refresh every 4,800 samples (300 ms at 16 kHz);
+- local RMS endpoint after 8,000 quiet samples (500 ms);
+- forced finalization at 480,000 samples (30 seconds);
+- local speech RMS threshold 0.008.
 
-1. Accumulate 100 ms PCM chunks.
-2. During active speech, run `whisper_full` on a bounded recent window.
-3. Emit `PartialTranscript` when the recent-window transcription produces a stable non-empty result.
-4. Emit `FinalTranscript` when an endpoint condition occurs.
-5. Emit `SpeechEnded` after final transcript processing.
-6. Reset the utterance accumulator.
-
-Endpoint conditions may include:
-
-- silence threshold after a transcription window;
-- maximum utterance length, for example 10 seconds;
-- conversation stop;
-- mode change;
-- shutdown.
-
-A later version may add VAD-based endpoint detection. V1 should not depend on an unproven VAD implementation.
+These thresholds are grouped in `WhisperEngineConfig`, so focused acceptance/tests can override them independently. Production currently uses the defaults above. The partial cadence is not an utterance boundary. Endpoint, maximum duration, and graceful stop produce a final update. The pipeline applies and emits that update before acknowledging delivery to the engine; only then does the engine clear its bounded PCM window and advance the segment identity. No cloud VAD is involved.
 
 ## Partial and final transcript semantics
 
@@ -407,7 +397,7 @@ resident_memory_bytes
 peak_resident_memory_bytes
 ```
 
-Memory values should remain process RSS snapshots because the native Whisper.cpp allocator is process-global.
+Current RSS is a process snapshot. Peak RSS uses the operating system high-water metric (`VmHWM` on Linux and `resident_size_max` on macOS); it must not be described as a sparse-sampling peak.
 
 ## Settings and UI
 
@@ -438,7 +428,7 @@ Map installer/engine failures to the existing `AsrErrorKind` values:
 | Invalid PCM or audio input | `AudioInput` |
 | Whisper inference failure | `Inference` |
 | Invalid pipeline state | `InvalidState` |
-| User cancelled install | `Cancelled` |
+| User cancelled the explicit model download | `WhisperModelInstallErrorKind::Cancelled` (installer API, not an ASR engine error) |
 | Invalid manifest or internal bug | `Internal` |
 
 Required behavior:
@@ -498,14 +488,10 @@ Real model acceptance should be separate from ordinary CI:
 - record evidence to `docs/`;
 - never add real model downloads to ordinary `check:all`.
 
-## Open decisions
+## Current decisions and qualification gaps
 
-Before implementation, these need confirmation:
-
-1. Exact `ggml-small.bin` SHA256.
-2. Exact license for `ggml-small.bin`.
-3. Exact whisper.cpp source commit.
-4. Whether to vendor whisper.cpp source in this repository or use a pinned external dependency.
-5. Whether V1 partial transcripts use fixed transcription intervals or endpoint-driven transcription.
-6. Whether a VAD/endpoint detector is in scope before V1 final transcript behavior.
-7. Supported macOS behavior: V1 may be Linux-only, with macOS supported later if native build works.
+- The model artifact revision, URL, expected byte count, SHA-256, and license are recorded in the runtime manifest and reconciled in the license/notice documents. The real-CPU workflow independently hashes the installed bytes; its final-source run remains pending.
+- Native whisper.cpp is built from the tracked `third_party/whisper.cpp` submodule at the pinned source revision. The provenance check compares the manifest, gitlink, and checked-out source independently.
+- Partial cadence, local RMS endpointing, maximum utterance duration, and bounded queue policy are implemented and documented. Their production CPU/latency/RSS impact remains unqualified until the manual real-CPU workflow completes on the exact source SHA.
+- Cloud VAD is out of scope; the local RMS endpoint is deterministic and testable.
+- Supported operating-system and architecture claims remain subject to exact-head ordinary CI and target-specific build evidence; see the remediation TODO before declaring production qualification.

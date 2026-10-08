@@ -138,6 +138,17 @@ def validate_ffi_safety(repo_root: Path) -> None:
     )
 
 
+def validate_release_notice_policy_text(text: str) -> None:
+    required = (
+        "scripts/check_whisper_provenance.py",
+        "third_party/whisper.cpp/LICENSE",
+        "WHISPER_CPP_LICENSE",
+    )
+    for value in required:
+        if value not in text:
+            raise ValueError(f"macOS release preparation is missing Whisper notice staging: {value}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -163,6 +174,9 @@ def main() -> int:
     require_documented(repo_root / "docs/THIRD_PARTY_NOTICES.md", required_docs)
     validate_build_policy(repo_root)
     validate_ffi_safety(repo_root)
+    validate_release_notice_policy_text(
+        (repo_root / "scripts/prepare_moonshine_macos.sh").read_text(encoding="utf-8")
+    )
 
     print(
         "Whisper provenance OK: "

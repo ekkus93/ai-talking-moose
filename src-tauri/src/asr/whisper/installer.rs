@@ -584,34 +584,74 @@ impl WhisperModelInstaller {
 
 // --- Error mapping for the engine -----------------------------------------
 
-#[allow(dead_code)]
-pub fn map_install_error(error: WhisperModelInstallError) -> AsrError {
-    match error.kind {
+pub(crate) enum WhisperFailure {
+    ModelNotInstalled,
+    RuntimeUnavailable,
+    ModelLoad(String),
+    AudioInput,
+    Inference(String),
+    InvalidState(String),
+    Internal(String),
+    Verification(WhisperModelInstallError),
+}
+
+/// The sole Whisper-internal to public ASR error mapping boundary.
+pub(crate) fn map_whisper_failure(failure: WhisperFailure) -> AsrError {
+    let (kind, message, retryable) = match failure {
+        WhisperFailure::ModelNotInstalled => (
+            AsrErrorKind::ModelNotInstalled,
+            "The Whisper Small model is not installed. Install it in Settings before starting local speech recognition.".to_string(),
+            false,
+        ),
+        WhisperFailure::RuntimeUnavailable => (
+            AsrErrorKind::RuntimeUnavailable,
+            manifest::WHISPER_RUNTIME_UNBUILT_MESSAGE.to_string(),
+            false,
+        ),
+        WhisperFailure::ModelLoad(message) => {
+            (AsrErrorKind::ModelLoadFailed, message, false)
+        }
+        WhisperFailure::AudioInput => (
+            AsrErrorKind::AudioInput,
+            "Whisper Small local ASR received invalid PCM samples.".to_string(),
+            true,
+        ),
+        WhisperFailure::Inference(message) => (AsrErrorKind::Inference, message, true),
+        WhisperFailure::InvalidState(message) => (AsrErrorKind::InvalidState, message, false),
+        WhisperFailure::Internal(message) => (AsrErrorKind::Internal, message, false),
+        WhisperFailure::Verification(error) => match error.kind {
         WhisperModelInstallErrorKind::CorruptInstall
         | WhisperModelInstallErrorKind::SizeMismatch
-        | WhisperModelInstallErrorKind::Sha256Mismatch => AsrError {
-            kind: AsrErrorKind::ModelCorrupt,
-            message: "The Whisper Small model is incomplete or corrupt. Reinstall it in Settings before starting local speech recognition. No microphone audio was sent to Google.".to_string(),
-            retryable: true,
+        | WhisperModelInstallErrorKind::Sha256Mismatch => (
+            AsrErrorKind::ModelCorrupt,
+            "The Whisper Small model is incomplete or corrupt. Reinstall it in Settings before starting local speech recognition. No microphone audio was sent to Google.".to_string(),
+            true,
+        ),
+        WhisperModelInstallErrorKind::InvalidManifest => (
+            AsrErrorKind::Internal,
+            "The bundled Whisper Small model metadata is invalid. Update or reinstall the application.".to_string(),
+            false,
+        ),
+        WhisperModelInstallErrorKind::Io => (
+            AsrErrorKind::Internal,
+            format!("Whisper Small model verification could not access the installed artifact. {}", error.message),
+            error.retryable,
+        ),
+        WhisperModelInstallErrorKind::InsufficientDiskSpace
+        | WhisperModelInstallErrorKind::Network
+        | WhisperModelInstallErrorKind::Http
+        | WhisperModelInstallErrorKind::Promotion
+        | WhisperModelInstallErrorKind::Cancelled => (
+            AsrErrorKind::Internal,
+            "An installation-only Whisper error reached model startup unexpectedly.".to_string(),
+            false,
+        ),
         },
-        WhisperModelInstallErrorKind::Cancelled => AsrError {
-            kind: AsrErrorKind::Cancelled,
-            message: "The Whisper Small model verification was cancelled.".to_string(),
-            retryable: true,
-        },
-        WhisperModelInstallErrorKind::InvalidManifest => AsrError {
-            kind: AsrErrorKind::Internal,
-            message: "The bundled Whisper Small model metadata is invalid. Update or reinstall the application.".to_string(),
-            retryable: false,
-        },
-        _ => AsrError {
-            kind: AsrErrorKind::ModelLoadFailed,
-            message: format!(
-                "Whisper Small could not be verified before local speech recognition started. {0}",
-                error.message
-            ),
-            retryable: true,
-        },
+    };
+    AsrError {
+        kind,
+        message,
+        retryable,
     }
 }
 
@@ -734,32 +774,103 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn active_verified_model_lease_blocks_delete_until_released() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let installer = Arc::new(WhisperModelInstaller::new(temp.path()).unwrap());
+        fs::write(installer.model_path(), b"leased model fixture").unwrap();
+        let operation_lock = install_operation_lock(manifest::WHISPER_SMALL_ID);
+        let lease = WhisperVerifiedModelLease {
+            model_path: installer.model_path(),
+            _operation_guard: operation_lock.clone().lock_owned().await,
+        };
+
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let delete_installer = installer.clone();
+        let delete_task = tokio::spawn(async move {
+            let _ = started_tx.send(());
+            delete_installer.delete().await
+        });
+        started_rx.await.unwrap();
+
+        assert!(installer.model_path().exists());
+        assert!(
+            !delete_task.is_finished(),
+            "delete must wait for the active model lease"
+        );
+        drop(lease);
+        delete_task.await.unwrap().unwrap();
+        assert!(!installer.model_path().exists());
+    }
+
     #[test]
-    fn public_error_mapping_preserves_integrity_cancellation_and_internal_classes() {
+    fn public_error_mapping_covers_all_whisper_engine_failure_classes() {
+        for (failure, expected) in [
+            (
+                WhisperFailure::ModelNotInstalled,
+                AsrErrorKind::ModelNotInstalled,
+            ),
+            (
+                WhisperFailure::RuntimeUnavailable,
+                AsrErrorKind::RuntimeUnavailable,
+            ),
+            (
+                WhisperFailure::ModelLoad("load failed".to_string()),
+                AsrErrorKind::ModelLoadFailed,
+            ),
+            (WhisperFailure::AudioInput, AsrErrorKind::AudioInput),
+            (
+                WhisperFailure::Inference("inference failed".to_string()),
+                AsrErrorKind::Inference,
+            ),
+            (
+                WhisperFailure::InvalidState("invalid state".to_string()),
+                AsrErrorKind::InvalidState,
+            ),
+            (
+                WhisperFailure::Internal("internal failure".to_string()),
+                AsrErrorKind::Internal,
+            ),
+        ] {
+            assert_eq!(map_whisper_failure(failure).kind, expected);
+        }
+
         for kind in [
             WhisperModelInstallErrorKind::CorruptInstall,
             WhisperModelInstallErrorKind::SizeMismatch,
             WhisperModelInstallErrorKind::Sha256Mismatch,
         ] {
-            let mapped = map_install_error(WhisperModelInstallError::new(kind, "integrity", true));
+            let mapped = map_whisper_failure(WhisperFailure::Verification(
+                WhisperModelInstallError::new(kind, "integrity", true),
+            ));
             assert_eq!(mapped.kind, AsrErrorKind::ModelCorrupt);
         }
 
-        let cancelled = map_install_error(WhisperModelInstallError::cancelled());
-        assert_eq!(cancelled.kind, AsrErrorKind::Cancelled);
+        let cancelled = map_whisper_failure(WhisperFailure::Verification(
+            WhisperModelInstallError::cancelled(),
+        ));
+        assert_eq!(cancelled.kind, AsrErrorKind::Internal);
 
-        let invalid = map_install_error(WhisperModelInstallError::invalid_manifest());
+        let invalid = map_whisper_failure(WhisperFailure::Verification(
+            WhisperModelInstallError::invalid_manifest(),
+        ));
         assert_eq!(invalid.kind, AsrErrorKind::Internal);
+
+        let io = map_whisper_failure(WhisperFailure::Verification(WhisperModelInstallError::io(
+            "read the model",
+        )));
+        assert_eq!(io.kind, AsrErrorKind::Internal);
 
         for kind in [
             WhisperModelInstallErrorKind::Network,
             WhisperModelInstallErrorKind::Http,
-            WhisperModelInstallErrorKind::Io,
             WhisperModelInstallErrorKind::Promotion,
             WhisperModelInstallErrorKind::InsufficientDiskSpace,
         ] {
-            let mapped = map_install_error(WhisperModelInstallError::new(kind, "load", true));
-            assert_eq!(mapped.kind, AsrErrorKind::ModelLoadFailed);
+            let mapped = map_whisper_failure(WhisperFailure::Verification(
+                WhisperModelInstallError::new(kind, "unexpected", true),
+            ));
+            assert_eq!(mapped.kind, AsrErrorKind::Internal);
         }
     }
 

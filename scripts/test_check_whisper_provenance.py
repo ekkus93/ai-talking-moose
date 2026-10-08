@@ -2,7 +2,11 @@ import unittest
 
 from scripts.check_whisper_build_policy import BuildPolicyError, validate_build_policy_text
 from scripts.check_whisper_acceptance_workflow import WorkflowPolicyError, validate_shell_continuations
-from scripts.check_whisper_provenance import validate, validate_ffi_safety_text
+from scripts.check_whisper_provenance import (
+    validate,
+    validate_ffi_safety_text,
+    validate_release_notice_policy_text,
+)
 
 
 VALID_BUILD_POLICY = """
@@ -62,6 +66,19 @@ unsafe impl Send for WhisperModel {}
 
 
 class WhisperProvenanceTest(unittest.TestCase):
+    def test_release_preparation_stages_pinned_whisper_license(self):
+        validate_release_notice_policy_text(
+            "python3 scripts/check_whisper_provenance.py\n"
+            "cp $repo_root/third_party/whisper.cpp/LICENSE path/WHISPER_CPP_LICENSE\n"
+        )
+
+    def test_release_preparation_must_keep_whisper_license(self):
+        with self.assertRaisesRegex(ValueError, "WHISPER_CPP_LICENSE"):
+            validate_release_notice_policy_text(
+                "python3 scripts/check_whisper_provenance.py\n"
+                "cp $repo_root/third_party/whisper.cpp/LICENSE path/license\n"
+            )
+
     def test_matching_revision_passes(self):
         sha = "1" * 40
         validate(sha, sha)

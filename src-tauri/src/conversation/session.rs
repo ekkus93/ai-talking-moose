@@ -304,20 +304,24 @@ impl ConversationManager {
         final_lifecycle: ConversationLifecycle,
     ) -> Option<Box<dyn LiveSession>> {
         let lifecycle_callback = self.lifecycle_callback.lock().clone();
-        self.generation.fetch_add(1, Ordering::SeqCst);
-        self.is_in_conversation.store(false, Ordering::SeqCst);
-        self.output_suppressed.store(false, Ordering::SeqCst);
         Self::set_lifecycle(
             &self.lifecycle,
             ConversationLifecycle::Stopping,
             lifecycle_callback.as_ref(),
         );
 
+        // Keep the current generation routable while the local-ASR worker drains
+        // accepted PCM and delivers its stop-time FinalTranscript. Capture is
+        // already stopped, so no new microphone input can enter the pipeline.
         capture.lock().stop();
-        playback.flush();
         let active_asr_mode = *self.active_asr_mode.lock();
         self.stop_local_asr_for_shutdown(active_asr_mode, &capture)
             .await;
+
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        self.is_in_conversation.store(false, Ordering::SeqCst);
+        self.output_suppressed.store(false, Ordering::SeqCst);
+        playback.flush();
 
         let session = self.live_session.lock().await.take();
         *self.active_session_id.lock() = None;

@@ -25,6 +25,8 @@ for command in git cmake python3 lipo otool install_name_tool codesign; do
 done
 command -v git-lfs >/dev/null || git lfs version >/dev/null 2>&1 || fail "git-lfs is required"
 
+python3 "$repo_root/scripts/check_whisper_provenance.py"
+
 IFS=$'\t' read -r runtime_release source_commit ort_version deployment_target ort_sha256 ort_bytes < <(python3 - "$manifest" "$arch" <<'PY'
 import json, sys
 manifest_path, arch = sys.argv[1:]
@@ -136,6 +138,9 @@ rm -rf "$notice_dir/MoonshineRuntime"
 mkdir -p "$notice_dir/MoonshineRuntime/source"
 cp "$repo_root/LICENSE" "$notice_dir/TALKING_MOOSE_LICENSE"
 cp "$repo_root/docs/THIRD_PARTY_NOTICES.md" "$notice_dir/THIRD_PARTY_NOTICES.md"
+mkdir -p "$notice_dir/WhisperRuntime"
+cp "$repo_root/third_party/whisper.cpp/LICENSE" \
+  "$notice_dir/WhisperRuntime/WHISPER_CPP_LICENSE"
 cp "$manifest" "$notice_dir/MoonshineRuntime/moonshine-runtime.json"
 cp "$source_dir/LICENSE" "$notice_dir/MoonshineRuntime/MOONSHINE_LICENSE"
 

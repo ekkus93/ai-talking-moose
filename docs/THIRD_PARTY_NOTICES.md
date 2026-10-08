@@ -20,7 +20,7 @@ Exact model component URLs, sizes, and checksums are recorded in `docs/MOONSHINE
 
 | Component | Pin / identity | License | Notes |
 | --- | --- | --- | --- |
-| whisper.cpp source | `ggml-org/whisper.cpp`; vendored commit `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` | MIT | Built through `src-tauri/build.rs` on supported local ASR targets; exact upstream MIT notice must be included in release notices when redistributed. |
+| whisper.cpp source | `ggml-org/whisper.cpp`; vendored commit `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` | MIT | Built through `src-tauri/build.rs` on supported Linux local-ASR targets; macOS release preparation verifies this checkout and stages its exact upstream MIT notice in the Tauri resource path. |
 | `ggml-small.bin` weights | Hugging Face asset `ggml-small.bin` in `ggerganov/whisper.cpp`, source commit `5359861c739e955e79d9a303bcbc70fb988958b1`: `https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true`; 487601967 bytes; SHA-256 `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b` | MIT | Downloaded only after explicit user action; not bundled. The model repository metadata records the artifact license as MIT; exact SHA-256 and byte size are enforced by the production installer. |
 
 ## Moonshine vendored native dependencies
@@ -85,9 +85,10 @@ These crates are thin Rust bindings around Apple's Security framework and are us
 Before producing a signed/notarized V1 distribution:
 
 - run `scripts/prepare_moonshine_macos.sh` so the package notice directory is regenerated from the pinned Moonshine source tree and includes the Talking Moose project license;
+- the same preparation step verifies the pinned whisper.cpp checkout and stages its upstream `LICENSE` text at `Resources/native/macos/notices/WhisperRuntime/WHISPER_CPP_LICENSE`;
 - run `scripts/collect_release_licenses.py` after `npm ci` and Cargo dependency resolution to collect production npm and resolved Rust license/notice texts plus a generated dependency inventory, including `llama-cpp-2`, `llama-cpp-sys-2`, `ort`, and `piper-plus-g2p`;
 - run `scripts/check_local_tts_packaging_policy.py` so Local TTS model/runtime assets remain externally installed, immutable/checksum-pinned, model-weight-free in the app bundle, and free of unapproved eSpeak/GPL payloads;
-- include the generated inventories and license/notice texts under the application bundle's `Resources/native/macos/notices` path, including the checked-in `LocalLlmRuntime/LLAMA_CPP_LICENSE` native notice and `LocalLlmRuntime/LLAMA_CPP_RS_LICENSE_MIT` binding notice;
+- include the generated inventories and license/notice texts under the application bundle's `Resources/native/macos/notices` path, including the staged Whisper source license and checked-in `LocalLlmRuntime/LLAMA_CPP_LICENSE` native notice and `LocalLlmRuntime/LLAMA_CPP_RS_LICENSE_MIT` binding notice;
 - keep installer-downloaded Local TTS artifact evidence in `docs/LOCAL_TTS_ASSET_LICENSES.md` rather than representing those external assets as bundled application resources;
 - verify that no non-commercial Moonshine model has entered the release payload;
 - verify that model downloads remain limited to the explicitly approved English Tiny/Small manifests;

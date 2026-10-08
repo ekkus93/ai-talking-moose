@@ -1,6 +1,6 @@
 # Whisper.cpp Local ASR TODO
 
-Status: Proposed implementation plan. P0 verification gates complete (2026-10-05).
+Status: Historical implementation checklist; P4 source/docs are implemented. Exact-head real-CPU and final-master qualification remain open in `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md`.
 Recorded: 2026-10-03
 Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 
@@ -119,12 +119,15 @@ Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
   - [x] `AsrErrorKind::AudioInput`;
   - [x] `AsrErrorKind::Inference`;
   - [x] `AsrErrorKind::InvalidState`;
-  - [x] `AsrErrorKind::Cancelled`;
   - [x] `AsrErrorKind::Internal`.
 
   *Implementation note:* transcribe FFI failures (both `push_pcm` and `stop`)
   map to `Inference` (retryable) to match Moonshine's transcribe-stream
-  convention, so all nine kinds are reachable from the whisper path.
+  convention. `AsrErrorKind::Cancelled` is not emitted by the Whisper engine:
+  cancellation applies to the user-initiated model download and remains in the
+  installer error domain. Whisper ASR session startup, inference, and shutdown
+  do not expose a cancellation operation. The shared public enum retains the
+  kind for other ASR implementations.
 - [x] Ensure no fallback to Gemini Live, Moonshine, or fake provider.
 
 ## P3: Conversation, wake word, and IPC
@@ -167,22 +170,22 @@ P3 complete:
 
 ## P4: Frontend and docs
 
-- [ ] Update frontend ASR model list:
-  - [ ] show Whisper Small as local;
-  - [ ] show install state;
-  - [ ] show expected and installed byte counts;
-  - [ ] show runtime revision;
-  - [ ] disable install while conversation is active.
-- [ ] Update settings disclosure:
-  - [ ] Whisper ASR is local;
-  - [ ] model download is explicit;
-  - [ ] no microphone audio is sent to Google;
-  - [ ] partial transcript behavior may be batch-based.
+- [x] Update frontend ASR model list:
+  - [x] show Whisper Small as local;
+  - [x] show install state;
+  - [x] show expected and installed byte counts;
+  - [x] show runtime revision;
+  - [x] disable install/delete while the active conversation makes mutation unsafe.
+- [x] Update settings disclosure:
+  - [x] Whisper ASR is local;
+  - [x] model download is explicit;
+  - [x] no microphone audio is sent to Google;
+  - [x] partial transcript behavior reflects batched partial refreshes and utterance finality.
 - [x] Update `docs/PRIVACY.md`.
-- [ ] Update `README.md` if local ASR options are described there.
-- [ ] Add or update:
-  - [ ] `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md`, if runtime behavior needs its own document;
-  - [ ] `docs/WHISPER_CPP_CPU_BENCHMARK.md`, if benchmarks are produced.
+- [x] Update `README.md` where local ASR options are described.
+- [x] Add or update:
+  - [x] `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md`, documenting current runtime behavior;
+  - [x] `docs/WHISPER_CPP_CPU_BENCHMARK.md`, with pending qualification values clearly labeled.
 
 ## P5: Real CPU acceptance and performance
 
@@ -192,13 +195,13 @@ P3 complete:
   - [x] pinned `ggml-small.bin` SHA256;
   - [x] no real model in ordinary CI;
   - [x] no real model in repository.
-- [ ] Record evidence:
-  - [x] source SHA;
-  - [x] model SHA;
-  - [x] artifact bytes;
-  - [x] test audio;
-  - [x] transcription output;
-  - [x] latency;
+- [ ] Record exact-source run evidence:
+  - [ ] repository/source SHA;
+  - [ ] actual model SHA;
+  - [ ] installed artifact bytes;
+  - [ ] test audio identity;
+  - [ ] transcription output;
+  - [ ] transcript latency;
   - [ ] CPU usage;
   - [ ] RSS.
 - [ ] Benchmark on supported Linux hardware:

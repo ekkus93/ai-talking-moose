@@ -11,7 +11,7 @@
 **Talking Moose AI** lives directly on your desktop inside a deliberately retro-styled Macintosh window. Rather than being a corporate support chatbot, the Moose is a dry-witted, humorous desktop character.
 
 - **Real-time spoken conversation:** Click the Moose to start a voice conversation.
-- **Local or cloud speech recognition:** Moonshine Tiny/Small and Whisper Small provide local ASR; Gemini Live provides an explicitly selected cloud-audio mode.
+- **Local or cloud speech recognition:** Moonshine Tiny/Small and Whisper Small provide local ASR; their partial transcripts stay local and only finalized non-empty text may be sent to Gemini Live. Gemini Live audio is available as an explicitly selected cloud mode.
 - **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
 - **Local-first text generation:** New profiles use the Local text provider by default. SmolLM2 360M is selected but is never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains an optional text provider.
 - **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS or Local KittenTTS. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification.

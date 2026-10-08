@@ -2,6 +2,7 @@ use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
 use crate::asr::{AsrError, AsrErrorKind};
 use async_trait::async_trait;
+use parking_lot::Mutex as SyncMutex;
 use tokio::sync::Mutex;
 
 #[async_trait]
@@ -32,6 +33,15 @@ struct ActiveLocalAsrResource {
 pub struct LocalAsrLifecycle {
     operation: Mutex<()>,
     active: Mutex<Option<ActiveLocalAsrResource>>,
+    draining_generation: SyncMutex<Option<u64>>,
+}
+
+struct DrainingGenerationGuard<'a>(&'a SyncMutex<Option<u64>>);
+
+impl Drop for DrainingGenerationGuard<'_> {
+    fn drop(&mut self) {
+        *self.0.lock() = None;
+    }
 }
 
 impl LocalAsrLifecycle {
@@ -57,8 +67,18 @@ impl LocalAsrLifecycle {
 
     pub async fn stop_and_clear(&self) -> Result<(), AsrError> {
         let _operation_guard = self.operation.lock().await;
-        let current = self.active.lock().await.take();
-        let Some(mut current) = current else {
+        let generation = self
+            .active
+            .lock()
+            .await
+            .as_ref()
+            .map(|active| active.generation);
+        let Some(generation) = generation else {
+            return Ok(());
+        };
+        *self.draining_generation.lock() = Some(generation);
+        let _draining_guard = DrainingGenerationGuard(&self.draining_generation);
+        let Some(mut current) = self.active.lock().await.take() else {
             return Ok(());
         };
         current.resource.stop().await
@@ -108,6 +128,7 @@ impl LocalAsrLifecycle {
             .await
             .as_ref()
             .is_some_and(|active| active.generation == generation)
+            || *self.draining_generation.lock() == Some(generation)
     }
 }
 
@@ -162,5 +183,47 @@ mod tests {
         lifecycle.stop_and_clear().await.unwrap();
         assert_eq!(second_stop.load(Ordering::SeqCst), 1);
         assert!(!lifecycle.is_active().await);
+    }
+
+    struct BlockingStopResource {
+        started: Option<tokio::sync::oneshot::Sender<()>>,
+        release: tokio::sync::oneshot::Receiver<()>,
+    }
+
+    #[async_trait]
+    impl LocalAsrResource for BlockingStopResource {
+        async fn stop(&mut self) -> Result<(), AsrError> {
+            if let Some(started) = self.started.take() {
+                let _ = started.send(());
+            }
+            let _ = (&mut self.release).await;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn callbacks_remain_valid_while_graceful_stop_drains_final_updates() {
+        let lifecycle = Arc::new(LocalAsrLifecycle::default());
+        let generation = 42;
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        lifecycle
+            .attach(
+                generation,
+                Box::new(BlockingStopResource {
+                    started: Some(started_tx),
+                    release: release_rx,
+                }),
+            )
+            .await
+            .unwrap();
+
+        let lifecycle_for_stop = lifecycle.clone();
+        let stop = tokio::spawn(async move { lifecycle_for_stop.stop_and_clear().await });
+        started_rx.await.unwrap();
+        assert!(lifecycle.accepts_callback(generation).await);
+        release_tx.send(()).unwrap();
+        stop.await.unwrap().unwrap();
+        assert!(!lifecycle.accepts_callback(generation).await);
     }
 }

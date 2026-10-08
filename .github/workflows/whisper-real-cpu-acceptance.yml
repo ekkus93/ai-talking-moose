@@ -93,7 +93,18 @@ jobs:
           test -n "$cpu_name"
 
           echo "Installing the verified whisper-small model through the production installer"
-          "$binary" install "$model_root" "$report_root/whisper-small-install.json"
+          "$binary" install "$model_root" "$report_root/whisper-small-install-initial.json" \
+            2>&1 | tee "$report_root/install.log"
+
+          echo "Deleting the installed model through the production installer"
+          "$binary" delete "$model_root" "$report_root/whisper-small-delete.json" \
+            2>&1 | tee "$report_root/delete.log"
+          test ! -e "$model_root/ggml-small.bin"
+          test ! -e "$model_root/.talking-moose-model.json"
+
+          echo "Reinstalling into the same clean-profile model root"
+          "$binary" install "$model_root" "$report_root/whisper-small-install.json" \
+            2>&1 | tee "$report_root/reinstall.log"
 
           echo "Transcribing $corpus_wav inside an OS network namespace with no default route"
           sudo unshare --net -- env \
@@ -103,7 +114,7 @@ jobs:
              "$model_root" \
              "$corpus_wav" \
              "$report_root/whisper-small-transcribe.json" \
-             --require-network-denied
+             --require-network-denied 2>&1 | tee "$report_root/transcribe.log"
 
           sudo chown -R "$(id -u):$(id -g)" "$work_root"
           echo "report_root=$report_root" >> "$GITHUB_OUTPUT"
@@ -119,18 +130,52 @@ jobs:
           import json
           import os
           import pathlib
+          import re
           import subprocess
           import sys
 
           root = pathlib.Path(sys.argv[1])
           corpus_wav = pathlib.Path(sys.argv[2])
           install_report = root / "whisper-small-install.json"
+          initial_install_report = root / "whisper-small-install-initial.json"
+          delete_report = root / "whisper-small-delete.json"
           transcribe_report = root / "whisper-small-transcribe.json"
-          for report_path in (install_report, transcribe_report):
+          for report_path in (
+              initial_install_report,
+              delete_report,
+              install_report,
+              transcribe_report,
+          ):
               assert report_path.exists(), f"missing report: {report_path}"
 
           install = json.loads(install_report.read_text(encoding="utf-8"))
+          initial_install = json.loads(
+              initial_install_report.read_text(encoding="utf-8")
+          )
+          deletion = json.loads(delete_report.read_text(encoding="utf-8"))
           transcribe = json.loads(transcribe_report.read_text(encoding="utf-8"))
+          manifest = pathlib.Path("src-tauri/src/asr/whisper/manifest.rs").read_text(
+              encoding="utf-8"
+          )
+
+          def manifest_value(name):
+              match = re.search(
+                  rf'pub const {name}: &str =\s*"([^"]+)";', manifest
+              )
+              assert match, f"canonical manifest is missing {name}"
+              return match.group(1)
+
+          def manifest_bytes():
+              match = re.search(r"pub const WHISPER_MODEL_BYTES: u64 = (\d+);", manifest)
+              assert match, "canonical manifest is missing WHISPER_MODEL_BYTES"
+              return int(match.group(1))
+          model_path = (
+              root.parent / "models" / "whisper" / "whisper-small" / "ggml-small.bin"
+          )
+          assert model_path.is_file(), f"missing installed model: {model_path}"
+          model_bytes = model_path.stat().st_size
+          with model_path.open("rb") as model_file:
+              model_sha256 = hashlib.file_digest(model_file, "sha256").hexdigest()
           gitlink_line = subprocess.check_output(
               ["git", "ls-tree", "HEAD", "--", "third_party/whisper.cpp"],
               text=True,
@@ -138,6 +183,13 @@ jobs:
           gitlink_fields = gitlink_line.split()
           assert gitlink_fields[:2] == ["160000", "commit"], gitlink_line
           whisper_source_actual = gitlink_fields[2]
+          whisper_source_expected = manifest_value("WHISPER_SOURCE_COMMIT")
+          model_sha256_expected = manifest_value("WHISPER_MODEL_SHA256")
+          model_bytes_expected = manifest_bytes()
+          assert whisper_source_actual == whisper_source_expected, (
+              f"native source mismatch: expected {whisper_source_expected}, "
+              f"found {whisper_source_actual}"
+          )
           repository_sha = subprocess.check_output(
               ["git", "rev-parse", "HEAD"], text=True
           ).strip()
@@ -154,8 +206,17 @@ jobs:
           )
           assert install["sha256"] == transcribe["sha256"]
           assert install["expected_bytes"] == transcribe["expected_bytes"]
+          assert install["sha256"] == model_sha256_expected
+          assert install["expected_bytes"] == model_bytes_expected
+          assert model_sha256 == install["sha256"]
+          assert model_bytes == install["installed_bytes"] == install["expected_bytes"]
           assert install["production_installer_verified"] is True
-          assert install["disposition"] in ("installed", "already-installed")
+          assert initial_install["disposition"] == "installed"
+          assert initial_install["production_installer_verified"] is True
+          assert deletion["schema_version"] == 1
+          assert deletion["phase"] == "delete"
+          assert deletion["removed"] is True
+          assert install["disposition"] == "installed"
           assert install["installed_bytes"] == install["expected_bytes"]
           assert transcribe["runtime"]["whisper_native_linked"] is True
           assert transcribe["network_denial_probe_passed"] is True
@@ -177,8 +238,8 @@ jobs:
           assert pipeline["endpoint_silence_samples"] == 8000
           assert pipeline["maximum_utterance_samples"] == 480000
           assert pipeline["queue_capacity_chunks"] == 8
-          assert pipeline["partial_event_count"] >= 1
-          assert pipeline["final_event_count"] >= 1
+          assert pipeline["partial_event_count"] >= 2
+          assert pipeline["final_event_count"] == 1
           assert pipeline["first_partial_latency_ms"] is not None
           assert pipeline["first_final_latency_ms"] is not None
           assert pipeline["first_final_latency_ms"] >= pipeline["first_partial_latency_ms"]
@@ -200,11 +261,25 @@ jobs:
           evidence = {
               "schema_version": 1,
               "repository_sha": repository_sha,
-              "whisper_source_expected": install["source_commit"],
+              "workflow_identity": {
+                  "repository": os.environ["GITHUB_REPOSITORY"],
+                  "run_id": os.environ["GITHUB_RUN_ID"],
+                  "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+                  "job": os.environ["GITHUB_JOB"],
+                  "run_url": (
+                      f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
+                      f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+                  ),
+                  "artifact_name": (
+                      f"whisper-real-cpu-{os.environ['GITHUB_RUN_ID']}-"
+                      f"{os.environ['GITHUB_RUN_ATTEMPT']}-{repository_sha}"
+                  ),
+              },
+              "whisper_source_expected": whisper_source_expected,
               "whisper_source_actual": whisper_source_actual,
               "model_revision": install["revision"],
-              "model_sha256": install["sha256"],
-              "model_bytes": install["installed_bytes"],
+              "model_sha256": model_sha256,
+              "model_bytes": model_bytes,
               "pipeline_metrics": pipeline,
               "test_audio_path": str(corpus_wav),
               "test_audio_sha256": corpus_sha256,
@@ -220,6 +295,7 @@ jobs:
           with summary.open("a", encoding="utf-8") as out:
               out.write("## Whisper real CPU acceptance\n\n")
               out.write(f"Repository SHA: `{repository_sha}`  \n")
+              out.write(f"Workflow run: `{os.environ['GITHUB_RUN_ID']}`  \n")
               out.write(f"whisper.cpp source: `{whisper_source_actual}`  \n")
               out.write(f"Model revision: `{install['revision']}`  \n\n")
               out.write(
@@ -270,7 +346,21 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-real-cpu-${{ github.sha }}
-          path: ${{ runner.temp }}/talking-moose-whisper-acceptance/reports/*.json
+          name: whisper-real-cpu-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/talking-moose-whisper-acceptance/reports/*
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Show bounded failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set -u
+          report_root="$RUNNER_TEMP/talking-moose-whisper-acceptance/reports"
+          if [[ -d "$report_root" ]]; then
+            for log in "$report_root"/*.log; do
+              [[ -f "$log" ]] || continue
+              echo "--- ${log##*/} (last 80 lines) ---"
+              tail -n 80 "$log"
+            done
+          fi
