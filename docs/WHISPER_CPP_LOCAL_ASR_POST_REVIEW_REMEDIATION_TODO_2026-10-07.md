@@ -362,7 +362,7 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 ## WPR-950 — Exact-head final qualification
 
-**Candidate final source head:** `df1e381f0d58115375c2a6d0112d2c5863149fc2` (`master`, 2026-10-08); production changes are not qualified until the manual real-CPU acceptance passes at this SHA.
+**Candidate final source head:** `6b62fc25f243c35117a507f967acebaa903c8b0b` (`master`, 2026-10-08); production changes remain unqualified pending a zero-drop manual real-CPU acceptance at this SHA.
 
 - [x] Reload current `master` immediately before local qualification and record the exact SHA.
 - [x] Confirm production remediation and evidence-driven tuning are present at that SHA.
@@ -375,8 +375,9 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 - [x] Run `npm run check:frontend-contract-shapes`.
 - [x] Run `python3 scripts/check_local_llm_packaging_policy.py` when required by repository policy/changed paths.
 - [x] Run all Whisper-specific focused tests/checkers added by this remediation.
-- [ ] Run the real-CPU Whisper acceptance workflow on candidate SHA `df1e381f0d58115375c2a6d0112d2c5863149fc2`.
-- [x] Verify automatic ordinary CI run `37741248169` on the candidate SHA is terminal and successful.
+- [ ] Run the real-CPU Whisper acceptance workflow on candidate SHA `6b62fc25f243c35117a507f967acebaa903c8b0b`.
+- [x] Verify automatic ordinary CI run `37741248169` on previous source candidate `df1e381f0d58115375c2a6d0112d2c5863149fc2` is terminal and successful.
+- [ ] Verify automatic ordinary CI for current source candidate `6b62fc25f243c35117a507f967acebaa903c8b0b` is terminal and successful.
 - [ ] Verify the real-CPU acceptance run is terminal and successful.
 - [ ] Verify acceptance validation passed for exact repository SHA, native Whisper source revision, model SHA/bytes, test-audio identity, and zero nominal-load drops.
 - [ ] Verify CPU/RSS/latency/RTF/overload evidence fields are present in the candidate-SHA artifact.
@@ -386,17 +387,17 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the production-source tree before the workflow-only numeric-separator follow-up; `npm run check:frontend` passed at the exact qualification head `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`. The reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The initial real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes scanning of the valid odd-sized `LIST` metadata chunk. A later run (`37733089447`, job `113172940265`) exposed that the delete command did not persist its JSON report; commit `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` fixes persistence and the delete-report schema version. Run `37737097750` then exposed Rust numeric separators in `WHISPER_MODEL_BYTES`; commit `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` fixes parsing and adds an ordinary-CI check against the actual manifest.
 
-The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed. In response, this working change sets a five-second Whisper partial cadence, first added a separate 40-chunk Whisper queue (leaving Moonshine at eight), but its run still dropped 3 chunks. Current working code uses 56 Whisper chunks and the acceptance validator rejects nominal-load drops. The 56-chunk setting requires exact-source real-CPU acceptance before qualification. Automatic ordinary CI run `37738053693` on the old qualification SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks have passed for the current change.
+The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed. In response, this working change sets a five-second Whisper partial cadence, first added a separate 40-chunk Whisper queue (leaving Moonshine at eight), but its run still dropped 3 chunks. Current working code uses 56 Whisper chunks and the acceptance validator rejects nominal-load drops. The first 56-chunk setting requires exact-source real-CPU acceptance before qualification. Automatic ordinary CI run `37738053693` on the old qualification SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks have passed for the current change.
 
-Candidate source commit `df1e381f0d58115375c2a6d0112d2c5863149fc2` is pushed to `master`. Local `npm run check:all` passed (887 Rust tests passed, 3 ignored; 127 frontend tests passed), and automatic CI run `37741248169` completed successfully. The candidate's manual Whisper CPU acceptance has not run yet; its validator requires zero normal-cadence drops.
+Candidate source commit `df1e381f0d58115375c2a6d0112d2c5863149fc2` was pushed to `master`; local `npm run check:all` passed (887 Rust tests passed, 3 ignored; 127 frontend tests passed), and automatic CI run `37741248169` succeeded. Its manual acceptance (`37742220074`) failed the zero-drop assertion with 3 chunks dropped. Candidate `6b62fc25f243c35117a507f967acebaa903c8b0b` raises the Whisper queue to 56 chunks; local Rust and workflow checks pass. Automatic CI and exact-source real-CPU acceptance for this new candidate remain pending.
 
 ## WPR-960 — Exact-master closeout
 
-**Candidate production-source commit:** `df1e381f0d58115375c2a6d0112d2c5863149fc2`; `master` has only added documentation commits since, and final qualification remains pending.
+**Candidate production-source commit:** `6b62fc25f243c35117a507f967acebaa903c8b0b`; final qualification remains pending.
 
 - [x] Re-read current `master` after the runtime/evidence changes.
 - [x] Verify that production source changed after the previous exact qualification head.
-- [x] Repeat local WPR-950 gates on candidate source `df1e381f0d58115375c2a6d0112d2c5863149fc2`; its real-CPU acceptance remains pending.
+- [x] Repeat local Rust and workflow gates on source candidate `6b62fc25f243c35117a507f967acebaa903c8b0b`; its real-CPU acceptance remains pending.
 - [x] Record that the candidate commit changed production source and therefore requires a new exact-source real-CPU run.
 - [x] Run applicable ordinary CI on candidate `master` (run `37741248169`, success).
 - [ ] Verify final `master` contains the qualified production source unchanged.
