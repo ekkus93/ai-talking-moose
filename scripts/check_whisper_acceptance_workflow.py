@@ -17,6 +17,8 @@ WORKFLOW = (
     Path(__file__).resolve().parents[1]
     / ".github/workflows/whisper-real-cpu-acceptance.yml"
 )
+ACCEPTANCE_SOURCE = WORKFLOW.parents[2] / "src-tauri/src/asr/whisper/acceptance.rs"
+ACCEPTANCE_CLI = WORKFLOW.parents[2] / "src-tauri/src/bin/whisper_acceptance.rs"
 
 
 class WorkflowPolicyError(ValueError):
@@ -184,6 +186,26 @@ def validate_embedded_python(text: str) -> None:
         compile(source, f"{WORKFLOW}#python-{number}", "exec")
 
 
+def validate_delete_report_output() -> None:
+    acceptance = ACCEPTANCE_SOURCE.read_text(encoding="utf-8")
+    cli = ACCEPTANCE_CLI.read_text(encoding="utf-8")
+    require_contains(
+        acceptance,
+        "write_report(report_path, &report)",
+        "delete acceptance report persisted to its requested path",
+    )
+    require_contains(
+        acceptance,
+        "const DELETE_REPORT_SCHEMA_VERSION: u32 = 1;",
+        "delete report uses the schema version expected by the workflow validator",
+    )
+    require_contains(
+        cli,
+        "delete_for_acceptance(&model_root, &report_path)",
+        "delete CLI passes the requested machine-readable report path",
+    )
+
+
 def validate_workflow_text(text: str) -> int:
     validate_manual_only_trigger(text)
     validate_acceptance_contract(text)
@@ -194,6 +216,7 @@ def validate_workflow_text(text: str) -> int:
 
 def main() -> int:
     text = WORKFLOW.read_text(encoding="utf-8")
+    validate_delete_report_output()
     block_count = validate_workflow_text(text)
     print(
         "Whisper acceptance workflow policy OK "

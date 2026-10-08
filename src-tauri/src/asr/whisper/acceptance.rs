@@ -40,6 +40,7 @@ use crate::asr::pipeline::{LocalAsrPipeline, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS};
 use crate::asr::AsrEvent;
 
 const REPORT_SCHEMA_VERSION: u32 = 2;
+const DELETE_REPORT_SCHEMA_VERSION: u32 = 1;
 const MODEL_FILENAME: &str = "ggml-small.bin";
 const QUANTIZATION: &str = "f16";
 const LICENSE_STATE: &str = "MIT";
@@ -105,6 +106,20 @@ fn disposition_name(disposition: WhisperModelInstallDisposition) -> &'static str
         WhisperModelInstallDisposition::Installed => "installed",
         WhisperModelInstallDisposition::AlreadyInstalled => "already-installed",
     }
+}
+
+fn write_delete_acceptance_report(
+    report_path: &Path,
+    model_path: &Path,
+) -> Result<WhisperDeleteAcceptanceReport, String> {
+    let report = WhisperDeleteAcceptanceReport {
+        schema_version: DELETE_REPORT_SCHEMA_VERSION,
+        phase: "delete".to_string(),
+        removed: true,
+        model_path: model_path.display().to_string(),
+    };
+    write_report(report_path, &report)?;
+    Ok(report)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -388,6 +403,7 @@ pub async fn install_for_acceptance(
 
 pub async fn delete_for_acceptance(
     model_root: &Path,
+    report_path: &Path,
 ) -> Result<WhisperDeleteAcceptanceReport, String> {
     let installer = WhisperModelInstaller::new(model_root.to_path_buf())
         .map_err(|error| error.message.to_string())?;
@@ -403,12 +419,7 @@ pub async fn delete_for_acceptance(
     if installer.model_path().exists() {
         return Err("production installer left the Whisper model after delete".to_string());
     }
-    Ok(WhisperDeleteAcceptanceReport {
-        schema_version: REPORT_SCHEMA_VERSION,
-        phase: "delete".to_string(),
-        removed: true,
-        model_path: installer.model_path().display().to_string(),
-    })
+    write_delete_acceptance_report(report_path, &installer.model_path())
 }
 
 fn pcm_f32_to_i16_le(samples: &[f32]) -> Vec<u8> {
@@ -752,7 +763,26 @@ fn sample_count_to_duration_ms(sample_count: usize, sample_rate: u32) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_wav_f32;
+    use super::{parse_wav_f32, write_delete_acceptance_report};
+
+    #[test]
+    fn delete_acceptance_writes_machine_readable_report() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let report_path = directory.path().join("reports/delete.json");
+        let model_path = directory.path().join("model/ggml-small.bin");
+
+        let report = write_delete_acceptance_report(&report_path, &model_path)
+            .expect("delete acceptance report");
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&report_path).expect("written report"))
+                .expect("valid JSON report");
+
+        assert_eq!(report.phase, "delete");
+        assert_eq!(written["schema_version"], 1);
+        assert_eq!(written["phase"], "delete");
+        assert_eq!(written["removed"], true);
+        assert_eq!(written["model_path"], model_path.display().to_string());
+    }
 
     #[test]
     fn wav_parser_skips_metadata_chunks_before_audio_data() {

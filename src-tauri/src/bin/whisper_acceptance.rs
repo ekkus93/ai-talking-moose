@@ -73,9 +73,11 @@ async fn main() {
         .and_then(|report| {
             serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
         }),
-        "delete" => delete_for_acceptance(&model_root).await.and_then(|report| {
-            serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
-        }),
+        "delete" => delete_for_acceptance(&model_root, &report_path)
+            .await
+            .and_then(|report| {
+                serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
+            }),
         _ => {
             eprintln!("{}", usage());
             std::process::exit(2);
