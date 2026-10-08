@@ -392,7 +392,7 @@ Candidate source commit `df1e381f0d58115375c2a6d0112d2c5863149fc2` is pushed to 
 
 ## WPR-960 — Exact-master closeout
 
-**Candidate master SHA:** `df1e381f0d58115375c2a6d0112d2c5863149fc2`; final qualification remains pending.
+**Candidate production-source commit:** `df1e381f0d58115375c2a6d0112d2c5863149fc2`; `master` has only added documentation commits since, and final qualification remains pending.
 
 - [x] Re-read current `master` after the runtime/evidence changes.
 - [x] Verify that production source changed after the previous exact qualification head.
