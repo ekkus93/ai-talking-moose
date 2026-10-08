@@ -24,6 +24,7 @@ pub(crate) mod wake_word_command_handoff;
 pub(crate) mod wake_word_command_lifecycle;
 #[allow(dead_code)]
 pub(crate) mod wake_word_composition;
+mod wake_word_listener_controller;
 #[allow(dead_code)]
 pub(crate) mod wake_word_listener_status;
 #[allow(dead_code)]
