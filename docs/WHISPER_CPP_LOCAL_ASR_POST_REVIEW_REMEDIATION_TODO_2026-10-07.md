@@ -256,21 +256,21 @@ Implementation and static-policy checks are complete. Actual workflow execution 
 
 ## WPR-720 — Real CPU/performance evidence and tuning
 
-- [ ] Run acceptance on the exact final production source SHA on supported Linux CPU hardware.
-- [ ] Record first partial latency.
-- [ ] Record final transcript latency from endpoint/finalization.
-- [ ] Record real-time factor.
-- [ ] Record CPU utilization using a documented sampling method.
-- [ ] Record true/high-water process RSS using an OS-appropriate metric rather than sparse snapshots labeled as peak.
-- [ ] Record dropped chunks under nominal load.
-- [ ] Run a deliberate overload scenario and record dropped-chunk behavior.
-- [ ] Record the chosen partial interval/cadence.
-- [ ] Record the chosen endpoint silence threshold/hangover.
-- [ ] Record maximum utterance duration/forced-finalization behavior.
-- [ ] Record and justify queue capacity; change capacity only if evidence shows the current 8 x ~100 ms budget is insufficient.
-- [ ] Store machine-readable raw metrics with the workflow artifact.
-- [ ] Summarize measurements and any acceptance bounds in the benchmark/evidence document.
-- [ ] Do not declare P5 complete until CPU and RSS evidence are present.
+- [x] Run acceptance on the exact final production source SHA on supported Linux CPU hardware (run `37738499386`, source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`).
+- [x] Record first partial latency (3,522 ms).
+- [x] Record final transcript latency from endpoint/finalization (21,676 ms).
+- [x] Record real-time factor (9.205 over 2,300 ms processed audio; 11 s source was not fully processed because chunks were dropped).
+- [x] Record CPU utilization using a documented sampling method (process CPU time divided by phase wall time; pipeline average 387.26%).
+- [x] Record true/high-water process RSS using an OS-appropriate metric (`/proc/self/status` `VmHWM`; pipeline 838,987,776 bytes).
+- [x] Record dropped chunks under nominal load (87 at 100 ms input cadence).
+- [x] Run a deliberate overload scenario (64 attempted, 8 accepted, 56 dropped).
+- [x] Record the configured partial interval/cadence (300 ms; performance tuning remains open).
+- [x] Record the configured endpoint silence threshold/hangover (500 ms).
+- [x] Record maximum utterance duration/forced-finalization bound (30 s).
+- [x] Record and justify queue capacity (8 x ~100 ms = 800 ms bounded ingress; do not increase because the measured issue is inference throughput, not insufficient buffering).
+- [x] Store machine-readable raw metrics with the workflow artifact `whisper-real-cpu-37738499386-1-1f78a43adaf4b3907aa82fc96215e4d353bccb8c`.
+- [x] Summarize measurements and the observed limitation in the benchmark/evidence document.
+- [x] Record CPU and RSS evidence. P5 tuning/nominal-load acceptance remains open because observed drops and RTF do not support a realtime performance claim.
 
 **Acceptance:** P5 performance/behavior claims are supported by exact-source real-CPU evidence, not workflow structure alone.
 
@@ -346,22 +346,23 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 ### P5 reconciliation
 
-- [ ] Re-verify workflow syntax/execution.
-- [ ] Re-verify actual native source provenance evidence.
-- [ ] Re-verify model provenance evidence.
-- [ ] Re-verify transcript output evidence.
-- [ ] Re-verify first-partial/final latency evidence.
-- [ ] Re-verify CPU evidence.
-- [ ] Re-verify true/high-water RSS evidence.
-- [ ] Re-verify RTF evidence.
-- [ ] Re-verify dropped-chunk overload evidence.
-- [ ] Re-verify window/endpoint/max-utterance/queue tuning evidence.
+- [x] Re-verify workflow syntax/execution (successful run `37738499386`).
+- [x] Re-verify actual native source provenance evidence (`60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`).
+- [x] Re-verify model provenance evidence (revision, SHA, and bytes checked by the workflow and inspected in its artifact).
+- [x] Re-verify transcript output evidence (expected JFK transcript, one segment).
+- [x] Re-verify first-partial/final latency evidence against the extracted immutable artifact (3,522 / 21,676 ms).
+- [x] Re-verify CPU evidence against the extracted immutable artifact (process CPU / phase wall method; see benchmark).
+- [x] Re-verify RTF evidence against the extracted immutable artifact (9.205407 over 2,300 ms actually processed).
+- [x] Re-verify nominal and deliberate-overload dropped-chunk evidence (87 nominal; 64 attempted / 8 accepted / 56 dropped deliberate overload).
+- [x] Re-verify true high-water RSS evidence (`VmHWM`; see benchmark).
+- [ ] Resolve the nominal streaming overload (87 drops) and repeat exact-source acceptance; do not describe the current implementation as realtime-qualified.
+- [x] Re-verify configured partial interval, endpoint, maximum utterance, and queue capacity (300 ms / 500 ms / 30 s / 800 ms); tune/acceptance remains open after the nominal-load drops.
 
 **Acceptance:** no checkbox in the original TODO remains checked solely because an earlier implementation note or commit message claimed completion.
 
 ## WPR-950 — Exact-head final qualification
 
-**Exact qualification head:** `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` (`master`, 2026-10-08)
+**Exact qualification head:** `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` (`master`, 2026-10-08)
 
 - [x] Reload current `master` immediately before qualification and record the exact SHA.
 - [x] Confirm all production-source remediation is present at that SHA.
@@ -374,18 +375,18 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 - [x] Run `npm run check:frontend-contract-shapes`.
 - [x] Run `python3 scripts/check_local_llm_packaging_policy.py` when required by repository policy/changed paths.
 - [x] Run all Whisper-specific focused tests/checkers added by this remediation.
-- [ ] Run the repaired real-CPU Whisper acceptance workflow on the exact qualification SHA.
-- [ ] Verify all required ordinary CI runs on the exact qualification SHA are terminal and successful.
-- [ ] Verify the real-CPU acceptance run is terminal and successful.
-- [ ] Verify acceptance evidence records exact repository SHA, native Whisper source revision, model SHA/bytes, and test-audio identity.
-- [ ] Verify CPU/RSS/latency/RTF/overload evidence is present.
-- [ ] Record exact workflow/run/job/artifact identities in a final evidence document under `docs/evidence/`.
+- [x] Run the repaired real-CPU Whisper acceptance workflow on the exact qualification SHA (run `37738499386`, job `113183457764`, attempt 1).
+- [x] Verify required ordinary CI run `37738053693` on the exact qualification SHA is terminal and successful; Rust tests/quality and CI plumbing passed, remaining jobs were skipped by scope classification.
+- [x] Verify the real-CPU acceptance run is terminal and successful.
+- [x] Verify acceptance validation passed for exact repository SHA, native Whisper source revision, model SHA/bytes, and test-audio identity.
+- [x] Verify CPU/RSS/latency/RTF/overload evidence fields are present in the validated artifact.
+- [x] Record exact workflow/run/job/artifact identities in [the qualification evidence record](evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md).
 - [ ] Complete WPR-900 original-TODO reconciliation using the exact qualification source/evidence.
 - [ ] Mark every mandatory WPR task/subtask complete only after evidence exists.
 
-`CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the exact production-source tree committed at `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3`; the reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The previous real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus (`wav chunk extends beyond the file`). The cause was the parser starting chunk scanning four bytes late and treating the valid `LIST` chunk as malformed. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes that offset and adds a regression test for odd-sized metadata chunks. Run the repaired workflow again at this exact SHA; the previous run did not produce transcription or CPU/performance evidence.
+`CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the production-source tree before the workflow-only numeric-separator follow-up; `npm run check:frontend` passed at the exact qualification head `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`. The reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The initial real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes scanning of the valid odd-sized `LIST` metadata chunk. A later run (`37733089447`, job `113172940265`) exposed that the delete command did not persist its JSON report; commit `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` fixes persistence and the delete-report schema version. Run `37737097750` then exposed Rust numeric separators in `WHISPER_MODEL_BYTES`; commit `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` fixes parsing and adds an ordinary-CI check against the actual manifest.
 
-The rerun at `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` (run `37733089447`, failed job `113172940265`) completed the production install/delete/reinstall and reached the machine-readable evidence validator, which failed because `whisper-small-delete.json` did not exist. The acceptance CLI printed the delete report but did not persist it to the report path it accepts. The validator also expects delete-report schema version 1, so the fix preserves that version independently of the install/transcription schema version 2. Regression coverage now checks both the on-disk report and its schema, and the static workflow-policy checker guards the expected delete output path/version. A successful real-CPU acceptance must be repeated on the resulting production-source commit; no performance/evidence claims are qualified by the failed run.
+The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed; cadence/runtime tuning and a repeat exact-source acceptance remain required. Automatic ordinary CI run `37738053693` on this SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks also passed on the production tree.
 
 ## WPR-960 — Exact-master closeout
 

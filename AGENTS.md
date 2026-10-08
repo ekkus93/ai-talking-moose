@@ -6,6 +6,12 @@
 - **Why:** this workspace runs against a local model, which does not support the subagent path. If you attempt one, it will most likely error out.
 - If a task looks parallelizable, do it yourself in one session (e.g., run independent checks back-to-back in a single Bash command or a series of tool calls) instead of reaching for a subagent.
 
+## Code Navigation
+
+- When Serena is available and its active language server supports the code being explored, use Serena's symbol, reference, and diagnostics tools to locate and understand code before broad text searches or whole-file reads.
+- Read Serena's instructions once per conversation and activate this repository when needed before using its project tools.
+- Use `rg` for exact text searches, documentation/configuration files, languages Serena does not support in the current session, and as a fallback when Serena is unavailable or does not find the needed result.
+
 ## Architecture & Project Structure
 
 - **Desktop Shell:** Tauri 2 (`src-tauri/`) with custom retro window styling (`decorations: false`).

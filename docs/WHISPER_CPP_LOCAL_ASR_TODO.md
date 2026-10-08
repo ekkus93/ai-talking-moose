@@ -195,26 +195,26 @@ P3 complete:
   - [x] pinned `ggml-small.bin` SHA256;
   - [x] no real model in ordinary CI;
   - [x] no real model in repository.
-- [ ] Record exact-source run evidence:
-  - [ ] repository/source SHA;
-  - [ ] actual model SHA;
-  - [ ] installed artifact bytes;
-  - [ ] test audio identity;
-  - [ ] transcription output;
-  - [ ] transcript latency;
-  - [ ] CPU usage;
-  - [ ] RSS.
-- [ ] Benchmark on supported Linux hardware:
-  - [ ] first partial latency;
-  - [ ] final transcript latency;
-  - [ ] real-time factor;
-  - [ ] process RSS;
-  - [ ] dropped chunks under overload.
-- [ ] Tune transcription windowing:
+- [x] Record exact-source run evidence in `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`:
+  - [x] repository/source SHA;
+  - [x] actual model SHA;
+  - [x] installed artifact bytes;
+  - [x] test audio identity;
+  - [x] transcription output;
+  - [x] transcript latency;
+  - [x] CPU usage;
+  - [x] RSS.
+- [x] Benchmark on supported Linux hardware and record:
+  - [x] first partial latency;
+  - [x] final transcript latency;
+  - [x] real-time factor;
+  - [x] process RSS;
+  - [x] dropped chunks under nominal and deliberate overload.
+- [ ] Tune transcription windowing and repeat exact-source streaming acceptance; current 300 ms partial cadence dropped 87 nominal-load chunks:
   - [ ] partial interval;
-  - [ ] endpoint silence threshold;
-  - [ ] maximum utterance length;
-  - [ ] queue capacity if 800 ms is insufficient.
+  - [x] endpoint silence threshold (measured setting: 500 ms);
+  - [x] maximum utterance length (measured bound: 30 s);
+  - [x] queue capacity evidence (8 x ~100 ms; retain 800 ms until cadence/runtime tuning shows a larger queue is needed).
 
 ## Verification gates
 
