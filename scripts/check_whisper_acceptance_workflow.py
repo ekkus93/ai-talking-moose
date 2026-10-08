@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
-"""Compile embedded Python blocks in the Whisper real-CPU workflow."""
+"""Statically validate the Whisper real-CPU acceptance workflow.
+
+The real acceptance workflow is intentionally not run by ordinary CI because it
+may download the real Whisper model. This checker keeps ordinary CI cheap while
+still failing closed on workflow regressions that would make acceptance evidence
+untrustworthy or unreachable.
+"""
 
 from __future__ import annotations
 
+import re
 import textwrap
 from pathlib import Path
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/whisper-real-cpu-acceptance.yml"
+WORKFLOW = (
+    Path(__file__).resolve().parents[1]
+    / ".github/workflows/whisper-real-cpu-acceptance.yml"
+)
+
+
+class WorkflowPolicyError(ValueError):
+    """Raised when the real-CPU acceptance workflow violates policy."""
 
 
 def embedded_python_blocks(text: str) -> list[str]:
@@ -23,19 +37,102 @@ def embedded_python_blocks(text: str) -> list[str]:
             body.append(lines[index])
             index += 1
         if index >= len(lines):
-            raise ValueError("unterminated embedded Python heredoc")
+            raise WorkflowPolicyError("unterminated embedded Python heredoc")
         blocks.append(textwrap.dedent("\n".join(body)) + "\n")
         index += 1
     return blocks
 
 
-def main() -> int:
-    blocks = embedded_python_blocks(WORKFLOW.read_text(encoding="utf-8"))
+def require_contains(text: str, snippet: str, description: str) -> None:
+    if snippet not in text:
+        raise WorkflowPolicyError(f"missing {description}: {snippet}")
+
+
+def forbid_pattern(text: str, pattern: str, description: str) -> None:
+    if re.search(pattern, text, flags=re.MULTILINE):
+        raise WorkflowPolicyError(f"forbidden {description}: {pattern}")
+
+
+def validate_manual_only_trigger(text: str) -> None:
+    require_contains(text, "workflow_dispatch:", "manual workflow_dispatch trigger")
+    forbid_pattern(text, r"^\s*push\s*:", "push trigger")
+    forbid_pattern(text, r"^\s*pull_request\s*:", "pull_request trigger")
+    forbid_pattern(text, r"^\s*schedule\s*:", "scheduled trigger")
+
+
+def validate_acceptance_contract(text: str) -> None:
+    require_contains(
+        text,
+        "python3 scripts/check_whisper_provenance.py",
+        "native-source/model provenance preflight",
+    )
+    require_contains(
+        text,
+        "--features whisper-acceptance",
+        "opt-in whisper-acceptance build feature",
+    )
+    require_contains(
+        text,
+        'test ! -e "$model_root"',
+        "clean-profile production-installer precondition",
+    )
+    require_contains(
+        text,
+        '"$binary" install "$model_root"',
+        "production installer invocation",
+    )
+    require_contains(
+        text,
+        "sudo unshare --net",
+        "network-isolated transcription invocation",
+    )
+    require_contains(
+        text,
+        "--require-network-denied",
+        "network-denial acceptance assertion",
+    )
+    require_contains(
+        text,
+        "whisper-real-cpu-evidence.json",
+        "machine-readable real-CPU evidence output",
+    )
+    require_contains(
+        text,
+        "actions/upload-artifact@v4",
+        "real-CPU evidence artifact upload",
+    )
+    require_contains(
+        text,
+        "whisper-real-cpu-${{ github.sha }}",
+        "SHA-bound real-CPU evidence artifact name",
+    )
+    forbid_pattern(text, r"\b(?:curl|wget)\b", "ad hoc shell model download")
+
+
+def validate_embedded_python(text: str) -> None:
+    blocks = embedded_python_blocks(text)
     if not blocks:
-        raise SystemExit("Whisper acceptance workflow has no embedded Python validation block")
+        raise WorkflowPolicyError(
+            "Whisper acceptance workflow has no embedded Python validation block"
+        )
     for number, source in enumerate(blocks, start=1):
         compile(source, f"{WORKFLOW}#python-{number}", "exec")
-    print(f"Whisper acceptance workflow Python syntax OK ({len(blocks)} block(s))")
+
+
+def validate_workflow_text(text: str) -> int:
+    validate_manual_only_trigger(text)
+    validate_acceptance_contract(text)
+    validate_embedded_python(text)
+    return len(embedded_python_blocks(text))
+
+
+def main() -> int:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    block_count = validate_workflow_text(text)
+    print(
+        "Whisper acceptance workflow policy OK "
+        f"({block_count} embedded Python block(s))"
+    )
     return 0
 
 
