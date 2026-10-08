@@ -1,6 +1,6 @@
 # Whisper.cpp Local ASR Specification
 
-Status: Implemented; exact-head real-CPU and final-master qualification are pending.
+Status: Implemented and qualified on the recorded Linux x86_64 CPU runner; see the exact-source evidence and limitations in the remediation TODO.
 Recorded: 2026-10-03
 Primary target: private local Linux.
 Related documents:
@@ -490,8 +490,8 @@ Real model acceptance should be separate from ordinary CI:
 
 ## Current decisions and qualification gaps
 
-- The model artifact revision, URL, expected byte count, SHA-256, and license are recorded in the runtime manifest and reconciled in the license/notice documents. The real-CPU workflow independently hashes the installed bytes; its final-source run remains pending.
+- The model artifact revision, URL, expected byte count, SHA-256, and license are recorded in the runtime manifest and reconciled in the license/notice documents. The real-CPU workflow independently hashes the installed bytes; final-source evidence is recorded in `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`.
 - Native whisper.cpp is built from the tracked `third_party/whisper.cpp` submodule at the pinned source revision. The provenance check compares the manifest, gitlink, and checked-out source independently.
-- Partial cadence, local RMS endpointing, maximum utterance duration, and bounded queue policy are implemented and documented. Their production CPU/latency/RSS impact remains unqualified until the manual real-CPU workflow completes on the exact source SHA.
+- Partial cadence, local RMS endpointing, maximum utterance duration, and bounded queue policy are implemented and documented. Their production CPU/latency/RSS impact was measured on the exact accepted source checkout; the evidence qualifies the recorded corpus and runner, not all hardware or utterance lengths.
 - Cloud VAD is out of scope; the local RMS endpoint is deterministic and testable.
-- Supported operating-system and architecture claims remain subject to exact-head ordinary CI and target-specific build evidence; see the remediation TODO before declaring production qualification.
+- Real CPU qualification covers Linux x86_64 only. Linux aarch64 is not claimed as CPU-qualified; Whisper fails closed on macOS and other non-Linux targets.

@@ -1,6 +1,6 @@
 # Whisper.cpp Local ASR TODO
 
-Status: Historical implementation checklist; P4 source/docs are implemented. Exact-head real-CPU and final-master qualification remain open in `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md`.
+Status: Complete; implementation tasks and subtasks were re-audited. Real-CPU evidence and exact-master closeout are recorded in `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md`.
 Recorded: 2026-10-03
 Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 
@@ -12,9 +12,9 @@ Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 - [x] Record exact license text for `ggml-small.bin`.
 - [x] Record exact license text for vendored whisper.cpp source, if vendored.
 - [x] Confirm supported target matrix:
-  - [x] Linux x86_64 CPU.
-  - [x] Linux aarch64 CPU, if supported.
-  - [x] macOS behavior, if included.
+  - [x] Linux x86_64 CPU (real-CPU qualified on the recorded GitHub runner).
+  - [x] Linux aarch64 CPU, if supported (not currently claimed or real-CPU qualified).
+  - [x] macOS behavior, if included (Whisper remains unavailable on non-Linux targets; build fails closed).
 - [x] Confirm native integration approach:
   - [x] default: `build.rs`/CMake FFI;
   - [x] fallback: pinned Rust crate, only if compatible.
@@ -99,7 +99,7 @@ Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 - [x] Add worker thread name:
   - [x] `whisper-small-asr`.
 - [x] Preserve bounded queue:
-  - [x] Moonshine capacity remains 8 chunks; Whisper uses its own 40-chunk queue after the exact-source benchmark showed multi-second synchronous inference;
+  - [x] Moonshine capacity remains 8 chunks; Whisper uses its own 56-chunk queue after exact-source benchmarks showed multi-second synchronous inference;
   - [x] drop-newest overload policy;
   - [x] no CPAL blocking.
 - [x] Implement transcription windowing:
@@ -108,9 +108,10 @@ Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
   - [x] final flush on endpoint or stop.
 
   *Implementation note:* the original `4_800`-sample (300 ms) partial interval
-  was qualified and shown to drop 87 nominal-load chunks. Production now uses
-  `WHISPER_PARTIAL_INTERVAL_SAMPLES = 80_000` (5 s), with an exact-source
-  acceptance rerun pending. `stop()` flushes the leftover buffer, and the
+  was measured and shown to drop 87 nominal-load chunks. Production uses
+  `WHISPER_PARTIAL_INTERVAL_SAMPLES = 80_000` (5 s), verified by the exact-source
+  acceptance run recorded in the remediation evidence. `stop()` flushes the
+  leftover buffer, and the
   producer emits ~100 ms PCM chunks into the bounded `Vec<u8>` channel.
 - [x] Map Whisper failure states to:
   - [x] `AsrErrorKind::ModelNotInstalled`;
@@ -186,7 +187,7 @@ P3 complete:
 - [x] Update `README.md` where local ASR options are described.
 - [x] Add or update:
   - [x] `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md`, documenting current runtime behavior;
-  - [x] `docs/WHISPER_CPP_CPU_BENCHMARK.md`, with pending qualification values clearly labeled.
+  - [x] `docs/WHISPER_CPP_CPU_BENCHMARK.md`, with baseline and final qualification values clearly labeled.
 
 ## P5: Real CPU acceptance and performance
 
@@ -211,11 +212,11 @@ P3 complete:
   - [x] real-time factor;
   - [x] process RSS;
   - [x] dropped chunks under nominal and deliberate overload.
-- [ ] Verify the updated sparse partial cadence and repeat exact-source streaming acceptance; prior 300 ms partial cadence dropped 87 nominal-load chunks:
-  - [x] partial interval increased to five seconds (80,000 samples), pending CPU acceptance evidence;
+- [x] Verify the updated sparse partial cadence and repeat exact-source streaming acceptance; prior 300 ms partial cadence dropped 87 nominal-load chunks:
+  - [x] partial interval is five seconds (80,000 samples), verified by exact-source CPU acceptance;
   - [x] endpoint silence threshold (measured setting: 500 ms);
   - [x] maximum utterance length (measured bound: 30 s);
-  - [x] Whisper queue increased to 56 x ~100 ms (5.6 seconds) after the four-second queue still dropped 3 nominal-load chunks; Moonshine remains at 8 chunks.
+  - [x] Whisper queue is 56 x ~100 ms (5.6 seconds); exact-source acceptance retained all nominal corpus chunks; Moonshine remains at 8 chunks.
 
 ## Verification gates
 

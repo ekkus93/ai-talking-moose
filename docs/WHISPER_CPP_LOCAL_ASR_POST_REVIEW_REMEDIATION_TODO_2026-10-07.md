@@ -1,7 +1,7 @@
 # Whisper.cpp Local ASR Post-Review Remediation TODO
 
 **Date:** 2026-10-07
-**Status:** Open
+**Status:** Complete; exact-source real-CPU acceptance and exact-head ordinary CI passed, with historical tuning failures retained below.
 **Review baseline:** `master` at `b2525ef58e840e7ebc8d7beb64f8de211ffc9955`
 **Spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_SPEC_2026-10-07.md`
 **Original TODO to reconcile at closeout:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`
@@ -256,23 +256,23 @@ Implementation and static-policy checks are complete. Actual workflow execution 
 
 ## WPR-720 — Real CPU/performance evidence and tuning
 
-- [x] Run acceptance on the exact final production source SHA on supported Linux CPU hardware (run `37738499386`, source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`).
-- [x] Record first partial latency (3,522 ms).
-- [x] Record final transcript latency from endpoint/finalization (21,676 ms).
-- [x] Record real-time factor (9.205 over 2,300 ms processed audio; 11 s source was not fully processed because chunks were dropped).
-- [x] Record CPU utilization using a documented sampling method (process CPU time divided by phase wall time; pipeline average 387.26%).
-- [x] Record true/high-water process RSS using an OS-appropriate metric (`/proc/self/status` `VmHWM`; pipeline 838,987,776 bytes).
-- [x] Record dropped chunks under nominal load (87 at 100 ms input cadence).
-- [x] Run a deliberate overload scenario (64 attempted, 8 accepted, 56 dropped).
-- [x] Record the qualified partial interval/cadence (300 ms); the working tree now uses five seconds pending repeat acceptance.
+- [x] Run acceptance on the exact final production source SHA on Linux x86_64 CPU hardware (run `37744371559`, qualification checkout SHA `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`; production source commit `6b62fc25f243c35117a507f967acebaa903c8b0b`).
+- [x] Record first partial latency (8,219 ms).
+- [x] Record final transcript latency from endpoint/finalization (16,986 ms).
+- [x] Record real-time factor (0.87482446 over all 11,000 ms of corpus audio).
+- [x] Record CPU utilization using a documented sampling method (process CPU time divided by phase wall time; pipeline average 224.20%).
+- [x] Record true/high-water process RSS using an OS-appropriate metric (`/proc/self/status` `VmHWM`; pipeline 707,805,184 bytes).
+- [x] Record dropped chunks under nominal load (0 at 100 ms input cadence on the acceptance corpus/runner).
+- [x] Run a deliberate overload scenario (64 attempted, 56 accepted, 8 dropped).
+- [x] Record the qualified partial interval/cadence (five seconds; 80,000 samples).
 - [x] Record the configured endpoint silence threshold/hangover (500 ms).
 - [x] Record maximum utterance duration/forced-finalization bound (30 s).
-- [x] Record and justify qualified queue capacity (8 x ~100 ms = 800 ms); based on measured multi-second inference, the first candidate used a separate 40-chunk/four-second Whisper queue; it still dropped 3 chunks, so current code raises Whisper to 56 chunks/5.6 seconds while Moonshine stays at eight.
-- [x] Store machine-readable raw metrics with the workflow artifact `whisper-real-cpu-37738499386-1-1f78a43adaf4b3907aa82fc96215e4d353bccb8c`.
+- [x] Record and justify qualified queue capacity (56 x ~100 ms = 5.6 seconds for Whisper; the 40-chunk candidate dropped 3 chunks; Moonshine stays at eight).
+- [x] Store machine-readable raw metrics with workflow artifact `whisper-real-cpu-37744371559-1-0628de3d0cd946d8d1c0c3fe89afce8f3253854c`.
 - [x] Summarize measurements and the observed limitation in the benchmark/evidence document.
-- [x] Record CPU and RSS evidence. P5 tuning/nominal-load acceptance remains open because observed drops and RTF do not support a realtime performance claim.
+- [x] Record final CPU and RSS evidence. The measured corpus met the zero-drop criterion; partial/final latency is sparse (8.2/17.0 seconds) and no cross-hardware realtime latency guarantee is claimed.
 
-**Acceptance:** P5 performance/behavior claims are supported by exact-source real-CPU evidence, not workflow structure alone. The acceptance validator now fails if the production-cadence corpus feed drops any chunks; the previous 87-drop run remains recorded as the baseline failure.
+**Acceptance:** P5 performance/behavior claims are supported by exact-source real-CPU evidence, not workflow structure alone. The acceptance validator fails if the production-cadence corpus feed drops any chunks; final acceptance passed with zero nominal drops. The previous 87-drop run remains recorded as a historical baseline failure.
 
 ## WPR-800 — Regression coverage audit
 
@@ -303,8 +303,8 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 ### P0 reconciliation
 
 - [x] Re-verify exact whisper.cpp source pin against actual tracked/built source.
-- [x] Re-verify model SHA/bytes/license metadata against the manifest and license documents; downloaded-artifact verification remains open under P5.
-- [ ] Re-verify target matrix claims against actual qualification evidence.
+- [x] Re-verify model SHA/bytes/license metadata against the manifest and license documents; the downloaded artifact was verified in the final P5 run.
+- [x] Re-verify target matrix claims against actual qualification evidence: real CPU was exercised on Linux x86_64; this is the only real-CPU-qualified target. Linux aarch64 has no qualification claim, and `build.rs` deliberately leaves Whisper unavailable on macOS/non-Linux targets.
 - [x] Re-verify privacy/handoff documentation.
 
 ### P1 reconciliation
@@ -346,23 +346,23 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 
 ### P5 reconciliation
 
-- [x] Re-verify workflow syntax/execution (successful run `37738499386`).
+- [x] Re-verify workflow syntax/execution (successful final run `37744371559`).
 - [x] Re-verify actual native source provenance evidence (`60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`).
 - [x] Re-verify model provenance evidence (revision, SHA, and bytes checked by the workflow and inspected in its artifact).
 - [x] Re-verify transcript output evidence (expected JFK transcript, one segment).
-- [x] Re-verify first-partial/final latency evidence against the extracted immutable artifact (3,522 / 21,676 ms).
+- [x] Re-verify first-partial/final latency evidence against the extracted immutable artifact (8,219 / 16,986 ms).
 - [x] Re-verify CPU evidence against the extracted immutable artifact (process CPU / phase wall method; see benchmark).
-- [x] Re-verify RTF evidence against the extracted immutable artifact (9.205407 over 2,300 ms actually processed).
-- [x] Re-verify nominal and deliberate-overload dropped-chunk evidence (87 nominal; 64 attempted / 8 accepted / 56 dropped deliberate overload).
+- [x] Re-verify RTF evidence against the extracted immutable artifact (0.87482446 over all 11,000 ms processed).
+- [x] Re-verify nominal and deliberate-overload dropped-chunk evidence (0 nominal; 64 attempted / 56 accepted / 8 dropped deliberate overload).
 - [x] Re-verify true high-water RSS evidence (`VmHWM`; see benchmark).
-- [ ] Resolve the nominal streaming overload (87 drops) and repeat exact-source acceptance; do not describe the current implementation as realtime-qualified.
-- [x] Re-verify qualified partial interval, endpoint, maximum utterance, and queue capacity (300 ms / 500 ms / 30 s / 800 ms); the five-second/40-chunk candidate dropped 3 chunks; the working tree now uses 56 Whisper chunks pending exact-source acceptance.
+- [x] Resolve the nominal streaming overload (87 baseline drops) and repeat exact-source acceptance; qualification is limited to the measured corpus/runner, with no universal latency claim.
+- [x] Re-verify qualified partial interval, endpoint, maximum utterance, and queue capacity (5 s / 500 ms / 30 s / 5.6 s); the 40-chunk candidate dropped 3 chunks, while the final 56-chunk candidate passed.
 
 **Acceptance:** no checkbox in the original TODO remains checked solely because an earlier implementation note or commit message claimed completion.
 
 ## WPR-950 — Exact-head final qualification
 
-**Candidate final source head:** `6b62fc25f243c35117a507f967acebaa903c8b0b` (`master`, 2026-10-08); production changes remain unqualified pending a zero-drop manual real-CPU acceptance at this SHA.
+**Qualified production-source commit:** `6b62fc25f243c35117a507f967acebaa903c8b0b`; **exact acceptance checkout:** `0628de3d0cd946d8d1c0c3fe89afce8f3253854c` (`master`, 2026-10-08; docs-only descendant of the production commit).
 
 - [x] Reload current `master` immediately before local qualification and record the exact SHA.
 - [x] Confirm production remediation and evidence-driven tuning are present at that SHA.
@@ -375,57 +375,57 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 - [x] Run `npm run check:frontend-contract-shapes`.
 - [x] Run `python3 scripts/check_local_llm_packaging_policy.py` when required by repository policy/changed paths.
 - [x] Run all Whisper-specific focused tests/checkers added by this remediation.
-- [ ] Run the real-CPU Whisper acceptance workflow on candidate SHA `6b62fc25f243c35117a507f967acebaa903c8b0b`.
+- [x] Run the real-CPU Whisper acceptance workflow on the production candidate; successful run `37744371559`, job `113202252940`, tested exact checkout SHA `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`.
 - [x] Verify automatic ordinary CI run `37741248169` on previous source candidate `df1e381f0d58115375c2a6d0112d2c5863149fc2` is terminal and successful.
-- [ ] Verify automatic ordinary CI for current source candidate `6b62fc25f243c35117a507f967acebaa903c8b0b` is terminal and successful.
-- [ ] Verify the real-CPU acceptance run is terminal and successful.
-- [ ] Verify acceptance validation passed for exact repository SHA, native Whisper source revision, model SHA/bytes, test-audio identity, and zero nominal-load drops.
-- [ ] Verify CPU/RSS/latency/RTF/overload evidence fields are present in the candidate-SHA artifact.
+- [x] Verify automatic ordinary CI for exact acceptance checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c` is terminal and successful (run `37743783282`).
+- [x] Verify the real-CPU acceptance run is terminal and successful (run `37744371559`).
+- [x] Verify acceptance validation passed for exact repository SHA, native Whisper source revision, model SHA/bytes, test-audio identity, and zero nominal-load drops.
+- [x] Verify CPU/RSS/latency/RTF/overload evidence fields are present in the exact-checkout artifact.
 - [x] Record previous exact workflow/run/job/artifact identities and their baseline metrics in [the qualification evidence record](evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md).
-- [ ] Complete WPR-900 original-TODO reconciliation using candidate-source evidence.
-- [ ] Mark every mandatory WPR task/subtask complete only after evidence exists.
+- [x] Complete WPR-900 original-TODO reconciliation using final source and exact-checkout evidence.
+- [x] Mark every mandatory WPR task/subtask complete only after evidence exists.
 
-`CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the production-source tree before the workflow-only numeric-separator follow-up; `npm run check:frontend` passed at the exact qualification head `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`. The reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The initial real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes scanning of the valid odd-sized `LIST` metadata chunk. A later run (`37733089447`, job `113172940265`) exposed that the delete command did not persist its JSON report; commit `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` fixes persistence and the delete-report schema version. Run `37737097750` then exposed Rust numeric separators in `WHISPER_MODEL_BYTES`; commit `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` fixes parsing and adds an ordinary-CI check against the actual manifest.
+`CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 npm run check:all` passed on the production-source tree before the workflow-only numeric-separator follow-up; `npm run check:frontend` passed at the exact qualification head `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`. The reduced debug profile was needed after the standard-profile attempt exhausted the available filesystem space. The initial real-CPU run (`37731195815`, job `113160456529`) installed and verified the model, deleted it, reinstalled it, then failed to parse the pinned `jfk.wav` corpus; this was fixed and the full install/delete/reinstall flow passed in the final run. Commit `1c21f2d98a0ea54b921e076c1c3fc54c9503a0bc` fixes scanning of the valid odd-sized `LIST` metadata chunk. A later run (`37733089447`, job `113172940265`) exposed that the delete command did not persist its JSON report; commit `a90dc39d825f611e4ec6f4a879d3b84d9f6ba2a3` fixes persistence and the delete-report schema version. Run `37737097750` then exposed Rust numeric separators in `WHISPER_MODEL_BYTES`; commit `1f78a43adaf4b3907aa82fc96215e4d353bccb8c` fixes parsing and adds an ordinary-CI check against the actual manifest.
 
-The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed. In response, this working change sets a five-second Whisper partial cadence, first added a separate 40-chunk Whisper queue (leaving Moonshine at eight), but its run still dropped 3 chunks. Current working code uses 56 Whisper chunks and the acceptance validator rejects nominal-load drops. The first 56-chunk setting requires exact-source real-CPU acceptance before qualification. Automatic ordinary CI run `37738053693` on the old qualification SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks have passed for the current change.
+The repaired real-CPU workflow succeeded on run `37738499386` at exact source SHA `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`, job `113183457764`, attempt 1. Its machine-readable evidence artifact is recorded in the linked qualification evidence file. The artifact has been inspected and transcribed. Batch offline transcription passed, but streaming metrics show 87 nominal-load drops and 9.205 RTF over only 2.3 seconds processed. In response, this working change sets a five-second Whisper partial cadence, first added a separate 40-chunk Whisper queue (leaving Moonshine at eight), but its run still dropped 3 chunks. Current working code uses 56 Whisper chunks and the acceptance validator rejects nominal-load drops. The 56-chunk setting passed exact-source real-CPU acceptance on run `37744371559`; final metrics are recorded in the qualification evidence document. Automatic ordinary CI run `37738053693` on the old qualification SHA completed successfully; its Rust/CI plumbing jobs passed, while unrelated quality/build jobs were skipped by CI scope classification. The local frontend, Rust, and full checks have passed for the current change.
 
-Candidate source commit `df1e381f0d58115375c2a6d0112d2c5863149fc2` was pushed to `master`; local `npm run check:all` passed (887 Rust tests passed, 3 ignored; 127 frontend tests passed), and automatic CI run `37741248169` succeeded. Its manual acceptance (`37742220074`) failed the zero-drop assertion with 3 chunks dropped. Candidate `6b62fc25f243c35117a507f967acebaa903c8b0b` raises the Whisper queue to 56 chunks; local Rust and workflow checks pass. Automatic CI and exact-source real-CPU acceptance for this new candidate remain pending.
+Candidate source commit `df1e381f0d58115375c2a6d0112d2c5863149fc2` was pushed to `master`; local `npm run check:all` passed (887 Rust tests passed, 3 ignored; 127 frontend tests passed), and automatic CI run `37741248169` succeeded. Its manual acceptance (`37742220074`) failed the zero-drop assertion with 3 chunks dropped. Production commit `6b62fc25f243c35117a507f967acebaa903c8b0b` raises the Whisper queue to 56 chunks. Its exact acceptance checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c` passed CPU acceptance (run `37744371559`) and ordinary CI (run `37743783282`).
 
 ## WPR-960 — Exact-master closeout
 
-**Candidate production-source commit:** `6b62fc25f243c35117a507f967acebaa903c8b0b`; final qualification remains pending.
+**Qualified production-source commit:** `6b62fc25f243c35117a507f967acebaa903c8b0b`; exact accepted checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`.
 
 - [x] Re-read current `master` after the runtime/evidence changes.
 - [x] Verify that production source changed after the previous exact qualification head.
-- [x] Repeat local Rust and workflow gates on source candidate `6b62fc25f243c35117a507f967acebaa903c8b0b`; its real-CPU acceptance remains pending.
-- [x] Record that the candidate commit changed production source and therefore requires a new exact-source real-CPU run.
+- [x] Repeat local Rust and workflow gates on source candidate `6b62fc25f243c35117a507f967acebaa903c8b0b`; real-CPU acceptance passed on exact checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`.
+- [x] Record that the candidate commit changed production source and therefore required a new exact-source real-CPU run.
 - [x] Run applicable ordinary CI on candidate `master` (run `37741248169`, success).
-- [ ] Verify final `master` contains the qualified production source unchanged.
-- [ ] Verify `docs/WHISPER_CPP_LOCAL_ASR_TODO.md` is reconciled with final-source evidence.
-- [ ] Verify this remediation TODO is reconciled with final-source evidence.
-- [ ] Verify no current documentation contradicts source/model/license/runtime identity.
-- [ ] Verify no mandatory finding from the 2026-10-07 Whisper review remains open.
+- [x] Verify qualification checkout `master` contains the qualified production source unchanged; later closeout changes are documentation-only.
+- [x] Verify `docs/WHISPER_CPP_LOCAL_ASR_TODO.md` is reconciled with final-source evidence.
+- [x] Verify this remediation TODO is reconciled with final-source evidence.
+- [x] Verify no current documentation contradicts source/model/license/runtime identity.
+- [x] Verify no mandatory finding from the 2026-10-07 Whisper review remains open.
 
 ## Final acceptance
 
-- [ ] Built whisper.cpp source revision and reported source revision are identical and independently checked.
-- [ ] Whisper model/source provenance and licenses are internally consistent.
-- [ ] Clean-profile installation succeeds using production code only.
-- [ ] Installed-model verification is streaming/bounded-memory and blocking-isolated.
-- [ ] Error taxonomy truthfully distinguishes missing, corrupt, unavailable, load, input, inference, state, cancellation, and internal failures as applicable.
-- [ ] Whisper emits partials and exactly one final per logical utterance.
-- [ ] A 300 ms inference cadence does not create 300 ms provider turns.
-- [ ] Normal stop drains accepted PCM and delivers final transcript output exactly once.
-- [ ] Whisper startup has no dependency on Moonshine-only installer state.
-- [ ] FFI unsafe trait guarantees match actual ownership/threading.
-- [ ] Native source/header changes reliably trigger rebuilds.
-- [ ] Build CPU parallelism detection is portable.
-- [ ] Frontend and docs describe actual Whisper behavior and verification.
-- [ ] Real-CPU acceptance executes successfully and verifies actual native/model provenance.
-- [ ] First-partial latency, final latency, RTF, CPU, true/high-water RSS, and overload/drop evidence are recorded for the exact final source SHA.
-- [ ] Every task/subtask in the original Whisper TODO has been re-audited and reconciled.
-- [ ] All required exact-head and exact-master gates pass.
-- [ ] Whisper local ASR can be declared production-complete with no unresolved mandatory review finding.
+- [x] Built whisper.cpp source revision and reported source revision are identical and independently checked.
+- [x] Whisper model/source provenance and licenses are internally consistent.
+- [x] Clean-profile installation succeeds using production code only.
+- [x] Installed-model verification is streaming/bounded-memory and blocking-isolated.
+- [x] Error taxonomy truthfully distinguishes missing, corrupt, unavailable, load, input, inference, state, cancellation, and internal failures as applicable.
+- [x] Whisper emits partials and exactly one final per logical utterance.
+- [x] A 300 ms inference cadence does not create 300 ms provider turns.
+- [x] Normal stop drains accepted PCM and delivers final transcript output exactly once.
+- [x] Whisper startup has no dependency on Moonshine-only installer state.
+- [x] FFI unsafe trait guarantees match actual ownership/threading.
+- [x] Native source/header changes reliably trigger rebuilds.
+- [x] Build CPU parallelism detection is portable.
+- [x] Frontend and docs describe actual Whisper behavior and verification.
+- [x] Real-CPU acceptance executes successfully and verifies actual native/model provenance.
+- [x] First-partial latency, final latency, RTF, CPU, true/high-water RSS, and overload/drop evidence are recorded for the exact accepted checkout SHA.
+- [x] Every task/subtask in the original Whisper TODO has been re-audited and reconciled.
+- [x] All required exact-head and exact-master gates pass (the final documentation-only closeout still receives a fresh local gate).
+- [x] Whisper local ASR can be declared production-complete for the qualified Linux x86_64 CPU path, with measured latency limits and no unresolved mandatory review finding.
 
 ### Progress evidence — 2026-10-07 initial remediation slice
 

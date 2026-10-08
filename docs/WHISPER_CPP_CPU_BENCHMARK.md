@@ -1,16 +1,16 @@
 # Whisper.cpp CPU Acceptance and Benchmark Record
 
-**Status:** Offline batch transcription passed. Nominal streaming acceptance exposed overload and is not qualified for realtime use pending cadence/runtime tuning.
+**Status:** Exact-master real-CPU acceptance passed with zero nominal-load drops using a five-second partial interval and 56-chunk Whisper queue. The first partial was delayed; see measured result and limitation below.
 **Canonical native source:** `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`.
 **Model artifact revision:** `5359861c739e955e79d9a303bcbc70fb988958b1`.
 
-The real-CPU acceptance completed on `master` at `1f78a43adaf4b3907aa82fc96215e4d353bccb8c`. The immutable workflow identity and raw measurements are recorded in [`WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`](evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md).
+The initial 300 ms baseline and final five-second acceptance are recorded in [`WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`](evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md). The final acceptance passed on exact `master` SHA `0628de3d0cd946d8d1c0c3fe89afce8f3253854c` (run `37744371559`).
 
 ## Measurement method
 
 The workflow runs a clean-profile install/delete/reinstall, then transcribes the pinned corpus with network access denied. It hashes the installed model and corpus and records repository/native-source identity. Linux high-water RSS uses `/proc/self/status` `VmHWM`; CPU utilization is process CPU time divided by measured phase wall time. The production pipeline is also fed 100 ms chunks at 100 ms intervals, followed by a deliberate bounded-queue overload attempt.
 
-## Results
+## Initial baseline results (300 ms cadence)
 
 | Measurement | Result |
 |---|---|
@@ -32,4 +32,25 @@ The workflow runs a clean-profile install/delete/reinstall, then transcribes the
 | Partial / endpoint silence / maximum utterance | 300 ms / 500 ms / 30 s |
 | Queue capacity | 8 x 100 ms = 800 ms |
 
-The workflow's green status establishes that install/delete/reinstall, model verification, and offline batch transcription passed. It does not establish realtime streaming performance. On this four-worker GitHub runner, the qualified 300 ms partial cadence re-transcribed the growing utterance too often: normal-cadence input dropped 87 chunks and the pipeline processed only 2.3 seconds of the 11-second corpus. The reported RTF is based on processed audio, not the full source duration. The five-second cadence and 40-chunk queue reduced nominal drops to 3 and increased processed audio to 10.7 seconds, but did not meet the no-drop criterion. Candidate code now uses a 56-chunk Whisper-only queue (5.6 seconds), pending another exact-source acceptance. Moonshine's eight-chunk queue remains unchanged.
+The workflow's green status establishes that install/delete/reinstall, model verification, and offline batch transcription passed. It does not establish realtime streaming performance. On this four-worker GitHub runner, the qualified 300 ms partial cadence re-transcribed the growing utterance too often: normal-cadence input dropped 87 chunks and the pipeline processed only 2.3 seconds of the 11-second corpus. The reported RTF is based on processed audio, not the full source duration. The five-second cadence and 40-chunk queue reduced nominal drops to 3 and increased processed audio to 10.7 seconds, but did not meet the no-drop criterion. The final code uses a 56-chunk Whisper-only queue (5.6 seconds); exact-source acceptance passed with zero nominal drops, as recorded below. Moonshine's eight-chunk queue remains unchanged.
+
+
+## Final candidate results (five-second cadence)
+
+On run `37744371559`, the workflow verified the exact model, native source, corpus, and zero nominal-load dropped chunks. The 11-second JFK clip was fully processed.
+
+| Measurement | Result |
+|---|---|
+| Repository SHA / workflow run / job | `0628de3d0cd946d8d1c0c3fe89afce8f3253854c` / `37744371559` / `113202252940` (success) |
+| Artifact ID / SHA-256 | `11535975002` / `63c24a708bd6b2c969cf96bdd80b6bd00b3855a6a95248d713f26a15fba1b32e` |
+| CPU / platform | AMD EPYC 7763 64-Core Processor; Linux x86_64; 4 available workers |
+| Batch wall / phase wall / CPU utilization | 3,354 / 3,473 ms / 386.06% |
+| Batch high-water RSS | 688,041,984 bytes |
+| First partial / first final | 8,219 / 16,986 ms |
+| Audio processed / inference wall / reported RTF | 11,000 / 9,623 ms / 0.87482446 |
+| Pipeline CPU / average utilization / high-water RSS | 38,166 ms / 224.20% / 707,805,184 bytes |
+| Nominal dropped chunks | 0 |
+| Overload | 64 attempted; 56 accepted; 8 dropped |
+| Cadence / queue / endpoint / maximum utterance | 5 s / 56 chunks (5.6 s) / 500 ms / 30 s |
+
+The five-second cadence met the measured no-drop criterion for this corpus and runner. The first partial arrived after 8.2 seconds and the final after 17.0 seconds, so partial feedback is sparse and slow. The benchmark supports the selected local CPU profile on the measured four-worker runner; it is not a latency guarantee for other CPUs or longer utterances.
