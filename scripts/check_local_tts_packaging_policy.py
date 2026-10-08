@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "src-tauri/src/ai/local_tts/manifest/catalog.rs"
 MANIFEST = ROOT / "src-tauri/src/ai/local_tts/manifest.rs"
 ENGINE = ROOT / "src-tauri/src/ai/local_tts/runtime/engine.rs"
+ENGINE_ARCHIVE = ROOT / "src-tauri/src/ai/local_tts/runtime/engine/archive.rs"
 CARGO = ROOT / "src-tauri/Cargo.toml"
 TAURI_CONFIG = ROOT / "src-tauri/tauri.conf.json"
 PACKAGE_JSON = ROOT / "package.json"
@@ -161,15 +162,19 @@ def check_platform_enum() -> None:
 
 def check_runtime_policy() -> None:
     text = ENGINE.read_text(encoding="utf-8")
+    archive_text = ENGINE_ARCHIVE.read_text(encoding="utf-8")
     for token in (
         "with_execution_providers([ep::CPU::default().build()])",
         "with_intra_threads(manifest.runtime.inference_threads as usize)",
         ".with_inter_threads(1)",
-        '"/lib/libonnxruntime.so.1.23.2"',
-        '"/lib/libonnxruntime.1.23.2.dylib"',
         "ort::init_from(library_file.path())",
     ):
         require_token(text, token, "Local TTS runtime engine")
+    for token in (
+        '"/lib/libonnxruntime.so.1.23.2"',
+        '"/lib/libonnxruntime.1.23.2.dylib"',
+    ):
+        require_token(archive_text, token, "Local TTS runtime archive")
     lowered = text.lower()
     for forbidden in ("cudaexecutionprovider", "coremlexecutionprovider", "tensorrtexecutionprovider"):
         if forbidden in lowered:

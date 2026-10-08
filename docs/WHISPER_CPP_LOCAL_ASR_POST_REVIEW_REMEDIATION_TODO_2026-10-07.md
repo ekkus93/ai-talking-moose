@@ -236,17 +236,19 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-710 — Bind acceptance evidence to actual native source and model
 
-- [ ] Record the exact repository commit SHA under test.
-- [ ] Read/record the actual `third_party/whisper.cpp` gitlink/native source revision independently of the manifest.
-- [ ] Read/record the canonical expected Whisper source revision.
-- [ ] Fail when actual and expected native source revisions differ.
-- [ ] Record the exact downloaded model SHA-256.
-- [ ] Record the exact downloaded model byte count.
-- [ ] Fail when model SHA/size differ from the canonical manifest.
-- [ ] Record the test-audio identity/hash where practical.
-- [ ] Emit machine-readable acceptance evidence containing all of the above.
-- [ ] Upload the evidence as a workflow artifact with immutable run/job identity.
-- [ ] Ensure human-readable summaries are generated from verified evidence rather than unverified manifest claims.
+- [x] Record the exact repository commit SHA under test.
+- [x] Read/record the actual `third_party/whisper.cpp` gitlink/native source revision independently of the manifest.
+- [x] Read/record the canonical expected Whisper source revision.
+- [x] Fail when actual and expected native source revisions differ.
+- [x] Record the exact downloaded model SHA-256.
+- [x] Record the exact downloaded model byte count.
+- [x] Fail when model SHA/size differ from the canonical manifest.
+- [x] Record the test-audio identity/hash where practical.
+- [x] Emit machine-readable acceptance evidence containing all of the above.
+- [x] Upload the evidence as a workflow artifact with immutable run/job identity.
+- [x] Ensure human-readable summaries are generated from verified evidence rather than unverified manifest claims.
+
+Implementation and static-policy checks are complete. Actual workflow execution and the resulting immutable artifact remain qualification evidence tracked under WPR-950.
 
 **Acceptance:** a reviewer can prove which repository source, whisper.cpp source, model, and test audio produced the acceptance result.
 
