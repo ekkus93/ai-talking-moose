@@ -239,7 +239,7 @@ jobs:
           assert pipeline["partial_interval_samples"] == 80000
           assert pipeline["endpoint_silence_samples"] == 8000
           assert pipeline["maximum_utterance_samples"] == 480000
-          assert pipeline["queue_capacity_chunks"] == 40
+          assert pipeline["queue_capacity_chunks"] == 56
           assert pipeline["partial_event_count"] >= 2
           assert pipeline["final_event_count"] == 1
           assert pipeline["first_partial_latency_ms"] is not None

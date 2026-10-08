@@ -44,3 +44,21 @@ The run qualified native source `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` and m
 | Queue capacity | 8 chunks, approximately 800 ms of audio |
 
 The batch path produced the expected transcript with networking denied. The streaming result is not a realtime pass: inference is synchronous on the worker, and each partial re-transcribes the accumulated utterance. Under this runner and the configured 300 ms cadence, the producer outpaced inference, most input was dropped, and the reported RTF describes the 2.3 seconds actually processed rather than the full 11-second source. This evidence requires cadence/runtime tuning and a new exact-source acceptance run before claiming nominal streaming performance. The bounded queue is overload protection; increasing it would only allow more latency to accumulate and is not justified by these data.
+
+## Follow-up tuning attempt
+
+The first tuning attempt ran on `master` at source SHA `b1ba066414c703c093d28ab920c83162d1e5b737` with a five-second partial cadence and a 40-chunk Whisper queue. Installation and offline batch transcription passed, but the workflow correctly failed its new zero-nominal-drop assertion.
+
+| Field | Value |
+|---|---|
+| Run / job / attempt | [37742220074](https://github.com/ekkus93/ai-talking-moose/actions/runs/37742220074) / `113195330780` / 1 (failed zero-drop validation) |
+| Artifact ID / name | `11534766514` / `whisper-real-cpu-37742220074-1-b1ba066414c703c093d28ab920c83162d1e5b737` |
+| Artifact ZIP SHA-256 | `429eb7a1887300b60ba5611eb5b3e591d997cf43959778731e9275fd1ceaf491` |
+| CPU / platform | Intel Xeon Platinum 8573C / Linux x86_64 / 4 available workers |
+| Nominal chunks dropped / processed audio | 3 / 10,700 ms of 11,000 ms |
+| First partial / first final latency | 9,653 / 20,374 ms |
+| Inference wall time / reported RTF | 14,132 ms / 1.3207968 |
+| Pipeline CPU time / average utilization / high-water RSS | 56,022 ms / 274.48% / 708,050,944 bytes |
+| Deliberate overload | 64 attempted; 40 accepted; 24 dropped |
+
+The five-second cadence substantially improved audio retention over the original 300 ms cadence (3 drops instead of 87), but the 40-chunk queue remained slightly too small. Candidate code now raises only Whisper's queue to 56 chunks (5.6 seconds); this setting is still unqualified and must pass a fresh exact-head CPU acceptance.

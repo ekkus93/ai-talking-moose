@@ -256,7 +256,7 @@ Whisper.cpp must consume the same local audio contract as Moonshine:
 - mono;
 - 16-bit little-endian PCM;
 - 100 ms chunks from `AudioCapture`;
-- bounded queue; Moonshine retains 8 chunks and Whisper uses its separately measured 40-chunk capacity.
+- bounded queue; Moonshine retains 8 chunks and Whisper uses its separately measured 56-chunk capacity.
 
 If the existing local pipeline queue is currently represented internally as `f32` for Moonshine, the Whisper engine may either:
 

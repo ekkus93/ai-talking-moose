@@ -27,9 +27,9 @@ use tracing::debug;
 /// dropped by `AudioCapture`, which owns the authoritative overload counter.
 pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 8;
 
-/// Whisper runs whole-utterance CPU inference for each partial. Keep up to four
+/// Whisper runs whole-utterance CPU inference for each partial. Keep up to 5.6
 /// seconds queued during that synchronous work so normal capture is not lost.
-pub const WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 40;
+pub const WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 56;
 
 pub const fn local_asr_queue_capacity(architecture: LocalAsrArchitecture) -> usize {
     match architecture {

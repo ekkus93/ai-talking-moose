@@ -215,7 +215,7 @@ P3 complete:
   - [x] partial interval increased to five seconds (80,000 samples), pending CPU acceptance evidence;
   - [x] endpoint silence threshold (measured setting: 500 ms);
   - [x] maximum utterance length (measured bound: 30 s);
-  - [x] Whisper queue increased to 40 x ~100 ms (4 seconds) based on measured multi-second synchronous inference; Moonshine remains at 8 chunks.
+  - [x] Whisper queue increased to 56 x ~100 ms (5.6 seconds) after the four-second queue still dropped 3 nominal-load chunks; Moonshine remains at 8 chunks.
 
 ## Verification gates
 
