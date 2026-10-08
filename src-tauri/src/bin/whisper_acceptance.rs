@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use talking_moose_lib::asr::whisper::acceptance::{
-    install_for_acceptance, transcribe_for_acceptance,
+    delete_for_acceptance, install_for_acceptance, transcribe_for_acceptance,
 };
 
 fn usage() -> &'static str {
     "usage:\n\
      whisper_acceptance install <model-root> <report-json>\n\
+     whisper_acceptance delete <model-root> <report-json>\n\
      whisper_acceptance transcribe <model-root> <corpus-wav> <report-json> [--require-network-denied]"
 }
 
@@ -25,6 +26,12 @@ async fn main() {
     let (model_root, corpus_wav, report_path, require_network_denied) =
         match (phase.as_str(), args.len()) {
             ("install", 3) => (
+                PathBuf::from(&args[1]),
+                None,
+                PathBuf::from(&args[2]),
+                false,
+            ),
+            ("delete", 3) => (
                 PathBuf::from(&args[1]),
                 None,
                 PathBuf::from(&args[2]),
@@ -64,6 +71,9 @@ async fn main() {
         )
         .await
         .and_then(|report| {
+            serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
+        }),
+        "delete" => delete_for_acceptance(&model_root).await.and_then(|report| {
             serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
         }),
         _ => {

@@ -1,10 +1,11 @@
 # Whisper.cpp Local ASR Pipeline
 
 **Status:** Current implementation notes for the Whisper.cpp local-ASR remediation.
-**Source scope:** production source through `f096cd2d932e7e3f500ac70d39a0cae772244c0d`.
+**Source scope:** current production behavior on `master`; the final qualification document records the exact source SHA.
 **Final qualification:** not complete until the post-review remediation TODO records successful exact-head ordinary CI, real-CPU acceptance, and exact-master closeout evidence.
 
 This document describes the current production pipeline behavior. It is not historical qualification evidence and must not be used by itself to close the remediation checklist.
+It supersedes implementation-state claims in `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md`; the dated document remains historical context.
 
 ## Provenance and runtime identity
 
@@ -38,6 +39,24 @@ Whisper model verification is streaming and bounded-memory:
 
 Descriptor retrieval from `get_asr_models()` uses blocking isolation before hashing installed model artifacts, so a full installed-model verification does not run directly on the Tokio/Tauri async command executor.
 
+## Whisper ASR error mapping
+
+Model verification has one explicit mapping boundary in `map_verification_error()`:
+
+| Verification result | Public `AsrErrorKind` |
+|---|---|
+| No installed model | `ModelNotInstalled` (handled directly by engine open) |
+| Size, SHA-256, magic, or installed-marker integrity mismatch | `ModelCorrupt` |
+| Invalid bundled manifest or filesystem access failure | `Internal` |
+| Native runtime not linked | `RuntimeUnavailable` |
+| Verified model path/native model load failure | `ModelLoadFailed` |
+| Invalid/non-finite PCM | `AudioInput` |
+| Native inference or segment extraction failure | `Inference` |
+| Audio after stop or other invalid lifecycle use | `InvalidState` |
+| Worker invariant/panic/join failure | `Internal` |
+
+Cancellation, download, HTTP, disk-space, and promotion failures belong to the explicit installer API and do not arise through Whisper engine startup; the mapper treats such variants reaching verification as `Internal`.
+
 ## Startup and dependency isolation
 
 `prepare_local_asr()` resolves mode-specific installer/runtime dependencies inside the selected ASR-mode branch. Whisper startup requires the Whisper installer plus shared local-ASR pipeline dependencies; it must not fail merely because a Moonshine-only installer dependency is unavailable.
@@ -70,7 +89,9 @@ The partial interval is a refresh cadence only; it is not finality. An active ut
 - explicit stop/finalization,
 - maximum utterance duration.
 
-A final update resets the active utterance state only after finalization has been delivered.
+`WhisperEngineConfig` exposes the partial interval, endpoint silence, maximum utterance, and RMS threshold as runtime configuration. Production currently selects its documented defaults above; focused tests override cadence to verify that changing it does not change finality.
+
+A final update resets the active utterance state only after the pipeline has applied the update and synchronously emitted its events. The worker then acknowledges delivery to the engine, which releases the utterance PCM and advances its identity.
 
 ## Conversation-layer finality contract
 

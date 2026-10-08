@@ -83,6 +83,21 @@ def validate_acceptance_contract(text: str) -> None:
     )
     require_contains(
         text,
+        '"$binary" delete "$model_root"',
+        "production installer deletion invocation",
+    )
+    require_contains(
+        text,
+        'initial_install["disposition"] == "installed"',
+        "clean-profile first-install assertion",
+    )
+    require_contains(
+        text,
+        'install["disposition"] == "installed"',
+        "delete-and-reinstall assertion",
+    )
+    require_contains(
+        text,
         "sudo unshare --net",
         "network-isolated transcription invocation",
     )
@@ -103,8 +118,43 @@ def validate_acceptance_contract(text: str) -> None:
     )
     require_contains(
         text,
-        "whisper-real-cpu-${{ github.sha }}",
-        "SHA-bound real-CPU evidence artifact name",
+        "hashlib.file_digest(model_file, \"sha256\")",
+        "independent streaming model SHA-256 verification",
+    )
+    require_contains(
+        text,
+        '"workflow_identity"',
+        "machine-readable immutable workflow run identity",
+    )
+    require_contains(
+        text,
+        'whisper_source_expected = manifest_value("WHISPER_SOURCE_COMMIT")',
+        "canonical source revision read independently of the install report",
+    )
+    require_contains(
+        text,
+        'assert whisper_source_actual == whisper_source_expected',
+        "actual gitlink versus canonical source assertion",
+    )
+    require_contains(
+        text,
+        'assert install["sha256"] == model_sha256_expected',
+        "model SHA versus canonical manifest assertion",
+    )
+    require_contains(
+        text,
+        'assert install["expected_bytes"] == model_bytes_expected',
+        "model byte count versus canonical manifest assertion",
+    )
+    require_contains(
+        text,
+        "whisper-real-cpu-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}",
+        "run-attempt and SHA-bound real-CPU evidence artifact name",
+    )
+    require_contains(
+        text,
+        'tail -n 80 "$log"',
+        "bounded phase failure diagnostics",
     )
     forbid_pattern(text, r"\b(?:curl|wget)\b", "ad hoc shell model download")
 

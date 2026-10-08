@@ -314,6 +314,9 @@ impl NativeWhisperApi {
         params.detect_language = false;
         params.suppress_blank = true;
 
+        // SAFETY: `model.ctx` is a live non-null context owned exclusively by this
+        // worker, `audio.as_ptr()` covers `n_samples` valid f32 values for the call,
+        // and params contains only the static language pointer or null optional fields.
         let ret = unsafe { whisper_full(model.ctx, params, audio.as_ptr(), n_samples) };
         if ret != 0 {
             return Err(FfiError::invalid_response(format!(
@@ -321,6 +324,8 @@ impl NativeWhisperApi {
             )));
         }
 
+        // SAFETY: `model.ctx` remains live and exclusively accessed on this worker;
+        // whisper_full completed successfully immediately above.
         let n_segments = unsafe { whisper_full_n_segments(model.ctx) };
         if n_segments < 0 {
             return Err(FfiError::invalid_response(
@@ -333,14 +338,21 @@ impl NativeWhisperApi {
             // SAFETY: a successful `whisper_full` leaves `n_segments` segments owned by
             // the context and valid until the next `whisper_full` call on the same
             // context. We read and copy all fields before returning.
+            // SAFETY: `i` is in `0..n_segments` returned by the successful inference,
+            // and the context is still live and unchanged since that inference.
             let text_ptr = unsafe { whisper_full_get_segment_text(model.ctx, i) };
             let text = if text_ptr.is_null() {
                 String::new()
             } else {
+                // SAFETY: whisper.cpp exposes each segment string as a library-owned,
+                // NUL-terminated C string valid until the next inference; it is copied
+                // before another inference can invalidate it.
                 unsafe { CStr::from_ptr(text_ptr) }
                     .to_string_lossy()
                     .into_owned()
             };
+            // SAFETY: `i` is a valid segment index from the completed inference and the
+            // context has not been inferred again or freed.
             let start_ms = unsafe { whisper_full_get_segment_t0(model.ctx, i) };
             let end_ms = unsafe { whisper_full_get_segment_t1(model.ctx, i) };
             let no_speech_prob = unsafe { whisper_full_get_segment_no_speech_prob(model.ctx, i) };
@@ -393,6 +405,9 @@ impl WhisperApi for NativeWhisperApi {
             // SAFETY: `model_path` remains alive for the duration of the call; `cparams`
             // is a by-value C struct with every field at the exact C width.
             let cparams = unsafe { whisper_context_default_params() };
+            // SAFETY: `model_path` is NUL-terminated and alive for this call; `cparams`
+            // matches the pinned C ABI. The returned pointer is checked for null before
+            // ownership is transferred into `WhisperModel`.
             let ctx = unsafe { whisper_init_from_file_with_params(model_path.as_ptr(), cparams) };
             if ctx.is_null() {
                 return Err(FfiError::invalid_response(

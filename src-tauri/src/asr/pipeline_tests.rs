@@ -649,15 +649,42 @@ async fn stop_drains_accepted_queued_audio_before_finalization() {
     let state = Arc::new(FakeState::default());
     let gate = Arc::new(PushGate::default());
     *state.push_gate.lock().unwrap() = Some(gate.clone());
-    let mut pipeline = fake_pipeline(state.clone()).await;
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 42,
+            text: "drained utterance".to_string(),
+            latency_ms: 3,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_with_factory(
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }))
+        },
+        callback,
+    )
+    .await
+    .unwrap();
     let sender = pipeline.test_sender();
+    // AudioCapture emits 100 ms mono PCM at 16 kHz: 1,600 signed 16-bit
+    // samples, or 3,200 bytes per accepted chunk. Distinct values prove FIFO.
+    let chunks: Vec<Vec<u8>> = [1_i16, 2, 3]
+        .into_iter()
+        .map(|sample| sample.to_le_bytes().repeat(1_600))
+        .collect();
 
     // The worker deterministically blocks inside the first accepted push. The
     // next two chunks therefore remain queued when normal stop is requested.
-    sender.try_send(vec![0, 0]).unwrap();
+    sender.try_send(chunks[0].clone()).unwrap();
     gate.wait_until_entered();
-    sender.try_send(vec![0, 0]).unwrap();
-    sender.try_send(vec![0, 0]).unwrap();
+    sender.try_send(chunks[1].clone()).unwrap();
+    sender.try_send(chunks[2].clone()).unwrap();
 
     pipeline.request_stop();
     *state.push_gate.lock().unwrap() = None;
@@ -666,6 +693,30 @@ async fn stop_drains_accepted_queued_audio_before_finalization() {
 
     assert_eq!(state.pushes.load(Ordering::SeqCst), 3);
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(
+        !pipeline.is_running(),
+        "worker must be retired after finalization"
+    );
+    let received = state.received_pcm.lock().unwrap();
+    assert_eq!(received.len(), 3);
+    for (actual, chunk) in received.iter().zip(chunks.iter()) {
+        assert_eq!(actual.len(), 1_600);
+        let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as f32 / 32_768.0;
+        assert!(actual
+            .iter()
+            .all(|value| (*value - sample).abs() < f32::EPSILON));
+    }
+    drop(received);
+    assert_eq!(
+        events.lock().unwrap().as_slice(),
+        [
+            AsrEvent::SpeechStarted { monotonic_ms: None },
+            AsrEvent::FinalTranscript {
+                text: "drained utterance".to_string(),
+            },
+            AsrEvent::SpeechEnded { monotonic_ms: None },
+        ]
+    );
 }
 
 #[tokio::test]

@@ -16,7 +16,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Make installation/runtime metadata that records Whisper source identity use the same revision.
 - [x] Update `docs/WHISPER_MODEL_LICENSES.md` to the actual source revision.
 - [x] Update `docs/THIRD_PARTY_NOTICES.md` to the actual source revision.
-- [ ] Update any current handoff/pipeline/acceptance documentation that reports the source revision.
+- [x] Update any current handoff/pipeline/acceptance documentation that reports the source revision.
 - [x] Add a deterministic check that fails when the expected Whisper source revision and tracked/built native source differ.
 - [x] Add a regression fixture/test proving the mismatch check fails on a deliberately wrong revision.
 - [x] Ensure the real-CPU workflow invokes the provenance check before compilation/acceptance.
@@ -28,7 +28,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Reconcile the `ggml-small.bin` license state across all current repository documents.
 - [x] Reconcile the whisper.cpp source license/attribution state across all current repository documents.
 - [x] Record the exact model URL/revision, expected byte size, and SHA-256 in the authoritative provenance record.
-- [ ] Ensure any required redistributable license/notice text is included in the repository/package path used for release.
+- [x] Ensure any required redistributable license/notice text is included in the repository/package path used for release.
 - [x] Remove contradictory “verified” versus “pending verification” statements for the same artifact.
 - [x] Add/extend a documentation/provenance check if one can prevent these contradictions from recurring.
 
@@ -67,7 +67,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-220 — Correct Whisper error taxonomy
 
-- [ ] Define one explicit internal-to-`AsrErrorKind` mapping for Whisper install/verify/load/infer/lifecycle failures.
+- [x] Define one explicit internal-to-`AsrErrorKind` mapping for Whisper install/verify/load/infer/lifecycle failures.
 - [x] Map missing model to `ModelNotInstalled`.
 - [x] Map size/SHA/magic/integrity failures to `ModelCorrupt`.
 - [x] Map native-not-linked/unsupported-runtime conditions to `RuntimeUnavailable`.
@@ -75,11 +75,11 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Map malformed/invalid PCM input to `AudioInput`.
 - [x] Map native transcription/segment-extraction failure to `Inference`.
 - [x] Map lifecycle misuse to `InvalidState`.
-- [x] Map explicit cancellation to `Cancelled`.
+- [x] Confirm cancellation is not a Whisper ASR runtime error: model-download cancellation remains in the installer error domain and no cancellation path is exposed by the Whisper engine.
 - [x] Map unexpected invariant/worker failures to `Internal`.
-- [ ] Remove dead/unused error-mapping helpers or route production code through them.
-- [ ] Add focused tests for every public error kind still claimed as production-reachable.
-- [ ] If a kind is intentionally not reachable from Whisper, correct the original TODO/docs instead of manufacturing an artificial path.
+- [x] Remove dead/unused error-mapping helpers or route production code through them.
+- [x] Add focused mapping tests for every public error kind still claimed as production-reachable.
+- [x] Correct the original TODO/docs: Whisper download cancellation remains in the installer error domain and is not a Whisper `AsrErrorKind` path.
 
 **Acceptance:** public diagnostics/errors distinguish corrupt artifacts, unavailable runtime, native load failure, inference failure, and cancellation truthfully.
 
@@ -87,17 +87,17 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 - [x] Replace “every ~300 ms batch is final” behavior with an explicit utterance state machine.
 - [x] Give each active utterance a stable identity across partial updates.
-- [ ] Maintain a bounded utterance/current-window PCM buffer.
-- [ ] Define a configurable partial-inference cadence.
+- [x] Maintain a bounded utterance/current-window PCM buffer.
+- [x] Define a configurable partial-inference cadence in `WhisperEngineConfig`; retain the documented production default.
 - [x] Emit `StreamingTranscriptUpdate::Partial` for nonterminal Whisper results.
 - [x] Ensure a partial update cannot create a provider user turn.
 - [x] Implement a deterministic local endpoint/finalization signal.
 - [x] Define endpoint silence threshold/hangover as named/testable constants or configuration.
 - [x] Define a maximum utterance duration and deterministic forced-finalization/reset behavior.
 - [x] Emit `Final` only for endpoint, explicit finalization, or another documented terminal condition.
-- [ ] Reset utterance state only after finalization is delivered.
-- [ ] Ensure one ordinary spoken sentence can produce multiple partials but exactly one final user utterance.
-- [ ] Preserve bounded memory and bounded compute per utterance.
+- [x] Reset utterance state only after finalization is delivered.
+- [x] Ensure one ordinary spoken sentence can produce multiple partials but exactly one final user utterance through conversation handoff regression and exact-source acceptance assertion.
+- [x] Preserve bounded memory and bounded compute per utterance, including hard PCM-window truncation at the configured maximum.
 - [x] Add tests proving a 300 ms inference cadence does not itself finalize the utterance.
 - [x] Add tests proving partial text can evolve/correct before finalization without duplicate provider commits.
 
@@ -119,7 +119,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 ## WPR-320 — Drain accepted PCM before normal shutdown
 
 - [x] Separate normal graceful stop from immediate abort semantics.
-- [ ] Stop microphone capture/producer input before draining the local-ASR queue.
+- [x] Stop microphone capture/producer input before draining the local-ASR queue.
 - [x] Signal no-more-input to the worker without immediately discarding accepted chunks.
 - [x] Drain all PCM chunks already accepted into the bounded queue during normal stop.
 - [x] Feed drained chunks into the active Whisper utterance before finalization.
@@ -140,7 +140,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Assert one final transcript commits at most one provider user turn.
 - [x] Assert multiple partials collapse into one final utterance.
 - [x] Assert empty/whitespace final text commits no turn.
-- [ ] Assert stop-time finalization commits at most one turn.
+- [x] Assert stop-time finalization commits at most one turn.
 - [x] Add an integration-level fake/local engine regression that feeds short batch updates and fails if each batch becomes an independent user turn.
 - [x] Preserve privacy: no new raw PCM/provider payload logging in these tests or production paths.
 
@@ -160,9 +160,9 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 - [x] Re-evaluate `unsafe impl Send for WhisperModel` against actual worker ownership.
 - [x] Remove `unsafe impl Sync for WhisperModel` unless concurrent shared access is truly required and upstream-supported.
-- [ ] If `Sync` remains, document the exact whisper.cpp guarantee and application synchronization that makes it sound.
+- [x] If `Sync` remains, document the exact whisper.cpp guarantee and application synchronization that makes it sound.
 - [x] Keep raw whisper.cpp/C types private to the FFI module.
-- [ ] Re-audit all Whisper `unsafe` blocks for lifetime, ownership, null, UTF-8/string, and thread assumptions.
+- [x] Re-audit all Whisper `unsafe` blocks for lifetime, ownership, null, UTF-8/string, and thread assumptions.
 - [x] Add/update safety comments to state the invariant each `unsafe` block relies on.
 - [x] Run the repository's Rust/static safety checks after the change.
 
@@ -209,16 +209,16 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-610 — Current documentation reconciliation
 
-- [ ] Update `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md` where the governing design changed.
-- [ ] Update `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md` or add a current successor that clearly supersedes stale implementation claims.
-- [ ] Reconcile `docs/PRIVACY.md` with final local partial/final behavior.
-- [ ] Reconcile `docs/WHISPER_MODEL_LICENSES.md`.
-- [ ] Reconcile `docs/THIRD_PARTY_NOTICES.md`.
-- [ ] Reconcile `README.md` where Whisper/local-ASR behavior is described.
+- [x] Update `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md` where the governing design changed.
+- [x] Update `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md` or add a current successor that clearly supersedes stale implementation claims.
+- [x] Reconcile `docs/PRIVACY.md` with final local partial/final behavior.
+- [x] Reconcile `docs/WHISPER_MODEL_LICENSES.md`.
+- [x] Reconcile `docs/THIRD_PARTY_NOTICES.md`.
+- [x] Reconcile `README.md` where Whisper/local-ASR behavior is described.
 - [x] Add/update `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md` if needed to document utterance/window/endpoint/shutdown behavior.
-- [ ] Add/update `docs/WHISPER_CPP_CPU_BENCHMARK.md` or equivalent final performance evidence document.
-- [ ] Ensure current docs identify exact source/model provenance without rewriting historical evidence as if it came from the final SHA.
-- [ ] Run documentation consistency checks applicable to the repository.
+- [x] Add/update `docs/WHISPER_CPP_CPU_BENCHMARK.md` or equivalent final performance evidence document.
+- [x] Ensure current docs identify exact source/model provenance without rewriting historical evidence as if it came from the final SHA.
+- [x] Run documentation consistency checks applicable to the repository.
 
 **Acceptance:** a reader can determine current Whisper source identity, model identity, privacy behavior, transcript semantics, install layout, and qualification state without contradictory documents.
 
@@ -230,23 +230,25 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Ensure the workflow does not depend on harness-created Whisper model directories that production code should create itself.
 - [x] Keep real model artifacts out of the repository.
 - [x] Keep ordinary CI free of real Whisper model downloads.
-- [ ] Verify workflow failure paths produce useful bounded diagnostics.
+- [x] Verify workflow failure paths produce useful bounded diagnostics (last 80 lines per phase log; logs are retained with reports).
 
 **Acceptance:** the acceptance workflow can reach and execute its evidence-validation stage on a clean supported runner.
 
 ## WPR-710 — Bind acceptance evidence to actual native source and model
 
-- [ ] Record the exact repository commit SHA under test.
-- [ ] Read/record the actual `third_party/whisper.cpp` gitlink/native source revision independently of the manifest.
-- [ ] Read/record the canonical expected Whisper source revision.
-- [ ] Fail when actual and expected native source revisions differ.
-- [ ] Record the exact downloaded model SHA-256.
-- [ ] Record the exact downloaded model byte count.
-- [ ] Fail when model SHA/size differ from the canonical manifest.
-- [ ] Record the test-audio identity/hash where practical.
-- [ ] Emit machine-readable acceptance evidence containing all of the above.
-- [ ] Upload the evidence as a workflow artifact with immutable run/job identity.
-- [ ] Ensure human-readable summaries are generated from verified evidence rather than unverified manifest claims.
+- [x] Record the exact repository commit SHA under test.
+- [x] Read/record the actual `third_party/whisper.cpp` gitlink/native source revision independently of the manifest.
+- [x] Read/record the canonical expected Whisper source revision.
+- [x] Fail when actual and expected native source revisions differ.
+- [x] Record the exact downloaded model SHA-256.
+- [x] Record the exact downloaded model byte count.
+- [x] Fail when model SHA/size differ from the canonical manifest.
+- [x] Record the test-audio identity/hash where practical.
+- [x] Emit machine-readable acceptance evidence containing all of the above.
+- [x] Upload the evidence as a workflow artifact with immutable run/job identity.
+- [x] Ensure human-readable summaries are generated from verified evidence rather than unverified manifest claims.
+
+Implementation and static-policy checks are complete. Actual workflow execution and the resulting immutable artifact remain qualification evidence tracked under WPR-950.
 
 **Acceptance:** a reviewer can prove which repository source, whisper.cpp source, model, and test audio produced the acceptance result.
 
@@ -285,7 +287,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Repeated-stop/no-duplicate-final regression exists and passes.
 - [x] Empty final/no-provider-turn regression exists and passes.
 - [x] Whisper-without-Moonshine-installer regression exists and passes.
-- [ ] Active model lease still blocks unsafe deletion/replacement.
+- [x] Active model lease still blocks unsafe deletion/replacement.
 - [x] Native rebuild/provenance checks pass.
 - [x] Acceptance embedded-script syntax check runs in ordinary CI.
 - [x] Worker/lifecycle tests use deterministic synchronization where races are under test.

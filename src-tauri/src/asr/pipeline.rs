@@ -66,6 +66,10 @@ pub trait PipelineEngine: Send {
     fn input_sample_rate_hz(&self) -> u32;
     fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError>;
     fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError>;
+
+    /// Called after the pipeline has applied updates and synchronously emitted
+    /// their events. Engines may release per-utterance state after final delivery.
+    fn updates_delivered(&mut self, _updates: &[StreamingTranscriptUpdate]) {}
 }
 
 impl PipelineEngine for MoonshineTinyEngine {
@@ -568,7 +572,7 @@ fn reap_cancelled_startup_worker(
 }
 
 fn apply_transcript_updates(
-    updates: Vec<StreamingTranscriptUpdate>,
+    updates: &[StreamingTranscriptUpdate],
     transcript_state: &mut TranscriptStateMachine,
     metrics: &Mutex<RuntimeMetrics>,
     event_callback: &LocalAsrPipelineEventCallback,
@@ -581,7 +585,7 @@ fn apply_transcript_updates(
         let emitted_events = transcript_state.apply(update.clone());
         metrics
             .lock()
-            .record_transcript_events(&update, &emitted_events, latency_ms);
+            .record_transcript_events(update, &emitted_events, latency_ms);
         for event in emitted_events {
             event_callback(event);
         }
@@ -638,7 +642,8 @@ fn run_worker(
 
         match inference_result {
             Ok(updates) => {
-                apply_transcript_updates(updates, &mut transcript_state, metrics, event_callback)
+                apply_transcript_updates(&updates, &mut transcript_state, metrics, event_callback);
+                engine.updates_delivered(&updates);
             }
             Err(error) => {
                 record_terminal_error(metrics, event_callback, &error);
@@ -653,7 +658,8 @@ fn run_worker(
         Ok(updates) => {
             metrics.lock().record_inference(0, stop_started.elapsed());
             if terminal_error.is_none() && !abort_requested.load(Ordering::SeqCst) {
-                apply_transcript_updates(updates, &mut transcript_state, metrics, event_callback);
+                apply_transcript_updates(&updates, &mut transcript_state, metrics, event_callback);
+                engine.updates_delivered(&updates);
             }
         }
         Err(stop_error) => {
