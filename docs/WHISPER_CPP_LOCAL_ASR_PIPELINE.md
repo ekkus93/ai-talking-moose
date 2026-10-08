@@ -1,9 +1,9 @@
 # Whisper.cpp Local ASR Pipeline
 
-**Status:** Current implementation notes. Initial Linux x86_64 CPU qualification passed on the historical source recorded below; post-qualification remediation is in progress.
-**Source scope:** current production behavior on `master`; this working tree includes unqualified follow-up changes.
-**Historical qualification:** run `37744371559`, job `113202252940`, checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`.
-**Open follow-up:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`; its changes require fresh exact-source ordinary CI and real-CPU acceptance.
+**Status:** Current production behavior has passed local gates, ordinary CI, and real-CPU acceptance on Linux x86_64.
+**Production source:** `29759a18d7c91c26113d33e16a55c6d7f80bdb0d`; exact acceptance checkout `cf3280ea1d4e91d298828e4935e3369f8cbd6be6` is a documentation-only descendant.
+**Initial qualification:** run `37744371559`, job `113202252940`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`.
+**Post-qualification review:** completed in `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`; evidence is in `docs/evidence/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_2026-10-08.md` (run `37756211710`, job `113241297405`).
 
 This document describes the current production pipeline behavior. Historical qualification evidence applies only to its recorded source checkout and does not qualify later source changes.
 It supersedes implementation-state claims in `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md`; the dated document remains historical context.
@@ -156,4 +156,4 @@ Human summaries must be generated from verified machine-readable evidence rather
 
 ## Follow-up qualification boundary
 
-The prior qualification remains valid as a historical result for its recorded checkout. It does not cover later fixes for stop-time event delivery, diagnostics, installed-model state classification, migration recovery, user cancellation, or native rebuild invalidation. The post-qualification TODO tracks these changes and must record a fresh exact-source run before current-source qualification claims are updated.
+The initial qualification remains a historical result for its recorded checkout. The follow-up fixes for stop-time event delivery, diagnostics, installed-model state classification, migration recovery, user cancellation, and native rebuild invalidation passed ordinary CI and a fresh exact-source real-CPU run; see the post-qualification evidence record.

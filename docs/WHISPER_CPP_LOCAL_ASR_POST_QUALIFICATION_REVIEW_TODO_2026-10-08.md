@@ -1,10 +1,13 @@
 # Whisper.cpp Local ASR Post-Qualification Review TODO
 
 **Date:** 2026-10-08
-**Status:** Implementation complete; exact-source ordinary CI passed, real-CPU acceptance remains open
+**Status:** Complete
 **Review baseline:** `master` at `0268fb2bd3af2e31d355d9064824129ba89c1887`
+**Production source:** `29759a18d7c91c26113d33e16a55c6d7f80bdb0d`
+**Acceptance checkout:** `cf3280ea1d4e91d298828e4935e3369f8cbd6be6` (documentation-only descendant)
 **Spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_SPEC_2026-10-08.md`
 **Prior accepted run:** `37744371559`, job `113202252940`, checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`
+**Follow-up evidence:** `docs/evidence/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_2026-10-08.md`; run `37756211710`, job `113241297405`, artifact ID `11540816318`.
 
 All items start open. Mark a subtask complete only after the current source and a named test, gate, or recorded artifact support it. The prior run remains historical evidence and does not close changes made after its source SHA. Work remains on `master` unless the user changes that instruction.
 
@@ -89,7 +92,7 @@ All items start open. Mark a subtask complete only after the current source and 
 - [x] Distinguish source revision, model revision, runtime availability, live metrics, retained snapshots, and peak RSS in public wording.
 - [x] Update frontend wording tests and applicable documentation/provenance checks.
 
-**Acceptance:** a reader can identify what passed on the prior source, what remains open now, and what the current application actually reports and permits.
+**Acceptance:** a reader can identify what passed on the prior source, what remained open before this follow-up closed, and what the current application reports and permits.
 
 ## WPQ-800 — Exact-source verification and closeout
 
@@ -98,9 +101,9 @@ All items start open. Mark a subtask complete only after the current source and 
 - [x] Run `npm run check:generated-backend-contract` when IPC/exported shapes change; no generated shape drift was produced.
 - [x] Run affected native build-policy gates; keep ordinary CI real-model-free.
 - [x] Verify ordinary CI passes at the production source SHA `29759a18d7c91c26113d33e16a55c6d7f80bdb0d` (push run `37754990128`).
-- [ ] After installer/runtime/stop source changes, run the manual real-CPU Whisper acceptance workflow at that exact source checkout.
-- [ ] Verify source/model/corpus hashes and bytes, clean install/delete/reinstall, network-denied transcription, partial/final counts, nominal drops, overload, CPU, RSS, latency, and RTF from the workflow artifact.
-- [ ] Record run/job/source SHA/artifact identity, artifact hash/bytes, and measured limits in `docs/evidence/`; retain the earlier run as a separate historical baseline.
-- [ ] Re-audit every item in this checklist against final code and evidence before changing Status to Complete.
+- [x] After installer/runtime/stop source changes, run the manual real-CPU Whisper acceptance workflow at that exact source checkout.
+- [x] Verify source/model/corpus hashes and bytes, clean install/delete/reinstall, network-denied transcription, partial/final counts, nominal drops, overload, CPU, RSS, latency, and RTF from the workflow artifact.
+- [x] Record run/job/source SHA/artifact identity, artifact hash/bytes, and measured limits in `docs/evidence/`; retain the earlier run as a separate historical baseline.
+- [x] Re-audit every item in this checklist against final code and evidence before changing Status to Complete.
 
 **Acceptance:** the final production source has passing ordinary gates and a successful exact-source real-CPU run; no new finding remains open or hidden by a historical checkbox.

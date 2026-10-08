@@ -1,7 +1,7 @@
 # Whisper.cpp Local ASR Post-Qualification Review Spec
 
 **Date:** 2026-10-08
-**Status:** Implementation underway; local code gates pass, exact-source ordinary CI and real-CPU qualification remain open
+**Status:** Complete; local code gates, exact-source ordinary CI, and real-CPU qualification passed
 **Review baseline:** `master` at `0268fb2bd3af2e31d355d9064824129ba89c1887`
 **Companion checklist:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`
 

@@ -1,7 +1,7 @@
 # Whisper.cpp Local ASR Qualification Evidence
 
-**Historical qualification status:** The final recorded run passed installation/reinstall, offline transcription, and zero nominal-load drops on its measured Linux x86_64 runner. This evidence applies only to checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`; subsequent production changes require fresh exact-source qualification.
-**Current follow-up:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`.
+**Historical qualification status:** The final initial-scope run passed installation/reinstall, offline transcription, and zero nominal-load drops on its measured Linux x86_64 runner. This evidence applies only to checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`.
+**Post-qualification changes:** Fresh ordinary CI and real-CPU acceptance passed on checkout `cf3280ea1d4e91d298828e4935e3369f8cbd6be6`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_2026-10-08.md`.
 
 ## Immutable workflow identity
 

@@ -1,6 +1,6 @@
 # Whisper.cpp Local ASR TODO
 
-Status: Original implementation scope complete and historically qualified. Follow-up findings are tracked in `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`; the prior run does not qualify follow-up source changes.
+Status: Original implementation scope and the post-qualification follow-up are complete. The follow-up's exact-source acceptance is recorded in `docs/evidence/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_2026-10-08.md`.
 Recorded: 2026-10-03
 Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 
