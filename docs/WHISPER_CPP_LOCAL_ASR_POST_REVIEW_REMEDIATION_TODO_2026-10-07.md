@@ -17,9 +17,9 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Update `docs/WHISPER_MODEL_LICENSES.md` to the actual source revision.
 - [x] Update `docs/THIRD_PARTY_NOTICES.md` to the actual source revision.
 - [ ] Update any current handoff/pipeline/acceptance documentation that reports the source revision.
-- [ ] Add a deterministic check that fails when the expected Whisper source revision and tracked/built native source differ.
-- [ ] Add a regression fixture/test proving the mismatch check fails on a deliberately wrong revision.
-- [ ] Ensure the real-CPU workflow invokes the provenance check before compilation/acceptance.
+- [x] Add a deterministic check that fails when the expected Whisper source revision and tracked/built native source differ.
+- [x] Add a regression fixture/test proving the mismatch check fails on a deliberately wrong revision.
+- [x] Ensure the real-CPU workflow invokes the provenance check before compilation/acceptance.
 
 **Acceptance:** one independently verifiable revision appears everywhere, and a mismatched gitlink/source tree cannot qualify.
 
@@ -30,20 +30,20 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Record the exact model URL/revision, expected byte size, and SHA-256 in the authoritative provenance record.
 - [ ] Ensure any required redistributable license/notice text is included in the repository/package path used for release.
 - [x] Remove contradictory “verified” versus “pending verification” statements for the same artifact.
-- [ ] Add/extend a documentation/provenance check if one can prevent these contradictions from recurring.
+- [x] Add/extend a documentation/provenance check if one can prevent these contradictions from recurring.
 
 **Acceptance:** current release-facing docs agree on source identity, model identity, and license state.
 
 ## WPR-200 — Clean-profile install and canonical model layout
 
-- [ ] Make the production Whisper installer create the required install root/parents itself.
-- [ ] Perform root creation before staging-directory creation.
-- [ ] Perform root creation before any disk-space probe that requires the path to exist.
-- [ ] Define one canonical on-disk model directory.
-- [ ] Prefer/implement `<app-data>/models/whisper/whisper-small/`, or explicitly update the governing spec if a different layout is chosen.
-- [ ] Keep model artifact and model-specific marker/metadata inside the canonical per-model directory where practical.
-- [ ] Define migration/compatibility behavior for an existing older `<app-data>/models/whisper/` layout if deployed profiles can contain it.
-- [ ] Add a test starting with no Whisper directory at all.
+- [x] Make the production Whisper installer create the required install root/parents itself.
+- [x] Perform root creation before staging-directory creation.
+- [x] Perform root creation before any disk-space probe that requires the path to exist.
+- [x] Define one canonical on-disk model directory.
+- [x] Prefer/implement `<app-data>/models/whisper/whisper-small/`, or explicitly update the governing spec if a different layout is chosen.
+- [x] Keep model artifact and model-specific marker/metadata inside the canonical per-model directory where practical.
+- [x] Define migration/compatibility behavior for an existing older `<app-data>/models/whisper/` layout if deployed profiles can contain it.
+- [x] Add a test starting with no Whisper directory at all.
 - [ ] Verify first install succeeds without test/workflow code pre-creating the Whisper model root.
 - [ ] Verify delete/reinstall remains correct after the layout change.
 
@@ -51,32 +51,32 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-210 — Bounded-memory, nonblocking installed-model verification
 
-- [ ] Replace whole-file `fs::read()` verification for Whisper model integrity with streaming reads.
-- [ ] Compute SHA-256 incrementally with a bounded buffer.
-- [ ] Validate exact byte count while streaming.
-- [ ] Preserve any required magic/header validation without loading the entire artifact.
-- [ ] Move full-file verification reached from `get_asr_models()` behind `spawn_blocking` or equivalent blocking isolation.
-- [ ] Ensure descriptor retrieval does not block a Tokio/Tauri async worker while hashing the model.
-- [ ] Add a small-fixture success test for streaming verification.
-- [ ] Add short/truncated artifact coverage.
-- [ ] Add oversized/wrong-size artifact coverage.
-- [ ] Add wrong-SHA/corrupt artifact coverage.
-- [ ] Verify memory use is bounded by the verification buffer rather than model size.
+- [x] Replace whole-file `fs::read()` verification for Whisper model integrity with streaming reads.
+- [x] Compute SHA-256 incrementally with a bounded buffer.
+- [x] Validate exact byte count while streaming.
+- [x] Preserve any required magic/header validation without loading the entire artifact.
+- [x] Move full-file verification reached from `get_asr_models()` behind `spawn_blocking` or equivalent blocking isolation.
+- [x] Ensure descriptor retrieval does not block a Tokio/Tauri async worker while hashing the model.
+- [x] Add a small-fixture success test for streaming verification.
+- [x] Add short/truncated artifact coverage.
+- [x] Add oversized/wrong-size artifact coverage.
+- [x] Add wrong-SHA/corrupt artifact coverage.
+- [x] Verify memory use is bounded by the verification buffer rather than model size.
 
 **Acceptance:** verification remains fail-closed without allocating approximately the entire model or blocking the async command executor.
 
 ## WPR-220 — Correct Whisper error taxonomy
 
 - [ ] Define one explicit internal-to-`AsrErrorKind` mapping for Whisper install/verify/load/infer/lifecycle failures.
-- [ ] Map missing model to `ModelNotInstalled`.
-- [ ] Map size/SHA/magic/integrity failures to `ModelCorrupt`.
-- [ ] Map native-not-linked/unsupported-runtime conditions to `RuntimeUnavailable`.
-- [ ] Map verified-model native load failure to `ModelLoadFailed`.
-- [ ] Map malformed/invalid PCM input to `AudioInput`.
-- [ ] Map native transcription/segment-extraction failure to `Inference`.
-- [ ] Map lifecycle misuse to `InvalidState`.
-- [ ] Map explicit cancellation to `Cancelled`.
-- [ ] Map unexpected invariant/worker failures to `Internal`.
+- [x] Map missing model to `ModelNotInstalled`.
+- [x] Map size/SHA/magic/integrity failures to `ModelCorrupt`.
+- [x] Map native-not-linked/unsupported-runtime conditions to `RuntimeUnavailable`.
+- [x] Map verified-model native load failure to `ModelLoadFailed`.
+- [x] Map malformed/invalid PCM input to `AudioInput`.
+- [x] Map native transcription/segment-extraction failure to `Inference`.
+- [x] Map lifecycle misuse to `InvalidState`.
+- [x] Map explicit cancellation to `Cancelled`.
+- [x] Map unexpected invariant/worker failures to `Internal`.
 - [ ] Remove dead/unused error-mapping helpers or route production code through them.
 - [ ] Add focused tests for every public error kind still claimed as production-reachable.
 - [ ] If a kind is intentionally not reachable from Whisper, correct the original TODO/docs instead of manufacturing an artificial path.
@@ -85,99 +85,99 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-300 — Whisper utterance state and partial/final semantics
 
-- [ ] Replace “every ~300 ms batch is final” behavior with an explicit utterance state machine.
-- [ ] Give each active utterance a stable identity across partial updates.
+- [x] Replace “every ~300 ms batch is final” behavior with an explicit utterance state machine.
+- [x] Give each active utterance a stable identity across partial updates.
 - [ ] Maintain a bounded utterance/current-window PCM buffer.
 - [ ] Define a configurable partial-inference cadence.
-- [ ] Emit `StreamingTranscriptUpdate::Partial` for nonterminal Whisper results.
-- [ ] Ensure a partial update cannot create a provider user turn.
-- [ ] Implement a deterministic local endpoint/finalization signal.
-- [ ] Define endpoint silence threshold/hangover as named/testable constants or configuration.
-- [ ] Define a maximum utterance duration and deterministic forced-finalization/reset behavior.
-- [ ] Emit `Final` only for endpoint, explicit finalization, or another documented terminal condition.
+- [x] Emit `StreamingTranscriptUpdate::Partial` for nonterminal Whisper results.
+- [x] Ensure a partial update cannot create a provider user turn.
+- [x] Implement a deterministic local endpoint/finalization signal.
+- [x] Define endpoint silence threshold/hangover as named/testable constants or configuration.
+- [x] Define a maximum utterance duration and deterministic forced-finalization/reset behavior.
+- [x] Emit `Final` only for endpoint, explicit finalization, or another documented terminal condition.
 - [ ] Reset utterance state only after finalization is delivered.
 - [ ] Ensure one ordinary spoken sentence can produce multiple partials but exactly one final user utterance.
 - [ ] Preserve bounded memory and bounded compute per utterance.
-- [ ] Add tests proving a 300 ms inference cadence does not itself finalize the utterance.
-- [ ] Add tests proving partial text can evolve/correct before finalization without duplicate provider commits.
+- [x] Add tests proving a 300 ms inference cadence does not itself finalize the utterance.
+- [x] Add tests proving partial text can evolve/correct before finalization without duplicate provider commits.
 
 **Acceptance:** Whisper transcript events have truthful streaming semantics and one logical user utterance is not fragmented into short final turns.
 
 ## WPR-310 — Deliver final updates produced during stop
 
-- [ ] Change the engine/pipeline stop/finalize contract so final transcript updates can be returned/emitted.
-- [ ] Forward stop-time Whisper updates through the normal transcript event path.
-- [ ] Preserve ordering: queued PCM -> final inference -> final event -> worker termination.
-- [ ] Make stop/finalize idempotent.
-- [ ] Ensure repeated stop cannot duplicate the final transcript.
-- [ ] Add a regression where the final utterance is shorter than the normal partial threshold/cadence.
-- [ ] Assert that the sub-threshold utterance is delivered exactly once on stop.
-- [ ] Add an empty/whitespace stop-flush case and ensure it creates no user turn.
+- [x] Change the engine/pipeline stop/finalize contract so final transcript updates can be returned/emitted.
+- [x] Forward stop-time Whisper updates through the normal transcript event path.
+- [x] Preserve ordering: queued PCM -> final inference -> final event -> worker termination.
+- [x] Make stop/finalize idempotent.
+- [x] Ensure repeated stop cannot duplicate the final transcript.
+- [x] Add a regression where the final utterance is shorter than the normal partial threshold/cadence.
+- [x] Assert that the sub-threshold utterance is delivered exactly once on stop.
+- [x] Add an empty/whitespace stop-flush case and ensure it creates no user turn.
 
 **Acceptance:** no valid final transcript generated by normal stop is silently discarded.
 
 ## WPR-320 — Drain accepted PCM before normal shutdown
 
-- [ ] Separate normal graceful stop from immediate abort semantics.
+- [x] Separate normal graceful stop from immediate abort semantics.
 - [ ] Stop microphone capture/producer input before draining the local-ASR queue.
-- [ ] Signal no-more-input to the worker without immediately discarding accepted chunks.
-- [ ] Drain all PCM chunks already accepted into the bounded queue during normal stop.
-- [ ] Feed drained chunks into the active Whisper utterance before finalization.
-- [ ] Finalize and deliver the utterance before worker exit.
-- [ ] Join/retire the worker only after drain/finalization is complete or a bounded terminal failure is recorded.
-- [ ] Release the model lease after worker termination/finalization.
-- [ ] If an emergency abort path is retained, document that it may discard audio and keep it distinct from normal conversation stop.
-- [ ] Add deterministic queue-drain tests using channels/barriers rather than sleep-only timing.
-- [ ] Test shutdown with multiple queued ~100 ms chunks pending.
-- [ ] Test stop racing with the worker after at least one chunk is accepted.
+- [x] Signal no-more-input to the worker without immediately discarding accepted chunks.
+- [x] Drain all PCM chunks already accepted into the bounded queue during normal stop.
+- [x] Feed drained chunks into the active Whisper utterance before finalization.
+- [x] Finalize and deliver the utterance before worker exit.
+- [x] Join/retire the worker only after drain/finalization is complete or a bounded terminal failure is recorded.
+- [x] Release the model lease after worker termination/finalization.
+- [x] If an emergency abort path is retained, document that it may discard audio and keep it distinct from normal conversation stop.
+- [x] Add deterministic queue-drain tests using channels/barriers rather than sleep-only timing.
+- [x] Test shutdown with multiple queued ~100 ms chunks pending.
+- [x] Test stop racing with the worker after at least one chunk is accepted.
 
 **Acceptance:** normal conversation stop does not lose microphone chunks that the local-ASR pipeline already accepted.
 
 ## WPR-330 — Conversation-layer finality contract
 
-- [ ] Document the local-ASR partial/final contract at the conversation/provider boundary.
-- [ ] Assert partial transcripts never commit provider user turns.
-- [ ] Assert one final transcript commits at most one provider user turn.
-- [ ] Assert multiple partials collapse into one final utterance.
-- [ ] Assert empty/whitespace final text commits no turn.
+- [x] Document the local-ASR partial/final contract at the conversation/provider boundary.
+- [x] Assert partial transcripts never commit provider user turns.
+- [x] Assert one final transcript commits at most one provider user turn.
+- [x] Assert multiple partials collapse into one final utterance.
+- [x] Assert empty/whitespace final text commits no turn.
 - [ ] Assert stop-time finalization commits at most one turn.
-- [ ] Add an integration-level fake/local engine regression that feeds short batch updates and fails if each batch becomes an independent user turn.
-- [ ] Preserve privacy: no new raw PCM/provider payload logging in these tests or production paths.
+- [x] Add an integration-level fake/local engine regression that feeds short batch updates and fails if each batch becomes an independent user turn.
+- [x] Preserve privacy: no new raw PCM/provider payload logging in these tests or production paths.
 
 **Acceptance:** the conversation layer is protected against recurrence of the 300 ms-finalization class of bug even if an engine regresses later.
 
 ## WPR-400 — Remove unrelated Moonshine dependency from Whisper startup
 
-- [ ] Refactor `prepare_local_asr()` so mode-specific installers/runtime dependencies are resolved inside the selected mode branch.
-- [ ] Ensure Whisper startup requires only Whisper plus shared local-ASR dependencies.
-- [ ] Ensure Moonshine startup remains unchanged in behavior.
-- [ ] Add a regression with Whisper dependencies available and Moonshine-specific installer state unavailable.
-- [ ] Assert Whisper preparation succeeds or fails only for Whisper/shared reasons in that scenario.
+- [x] Refactor `prepare_local_asr()` so mode-specific installers/runtime dependencies are resolved inside the selected mode branch.
+- [x] Ensure Whisper startup requires only Whisper plus shared local-ASR dependencies.
+- [x] Ensure Moonshine startup remains unchanged in behavior.
+- [x] Add a regression with Whisper dependencies available and Moonshine-specific installer state unavailable.
+- [x] Assert Whisper preparation succeeds or fails only for Whisper/shared reasons in that scenario.
 
 **Acceptance:** selecting Whisper cannot fail with a Moonshine-installer-unavailable error when Whisper's own dependencies are valid.
 
 ## WPR-410 — Tighten Whisper FFI safety contract
 
-- [ ] Re-evaluate `unsafe impl Send for WhisperModel` against actual worker ownership.
-- [ ] Remove `unsafe impl Sync for WhisperModel` unless concurrent shared access is truly required and upstream-supported.
+- [x] Re-evaluate `unsafe impl Send for WhisperModel` against actual worker ownership.
+- [x] Remove `unsafe impl Sync for WhisperModel` unless concurrent shared access is truly required and upstream-supported.
 - [ ] If `Sync` remains, document the exact whisper.cpp guarantee and application synchronization that makes it sound.
-- [ ] Keep raw whisper.cpp/C types private to the FFI module.
+- [x] Keep raw whisper.cpp/C types private to the FFI module.
 - [ ] Re-audit all Whisper `unsafe` blocks for lifetime, ownership, null, UTF-8/string, and thread assumptions.
-- [ ] Add/update safety comments to state the invariant each `unsafe` block relies on.
-- [ ] Run the repository's Rust/static safety checks after the change.
+- [x] Add/update safety comments to state the invariant each `unsafe` block relies on.
+- [x] Run the repository's Rust/static safety checks after the change.
 
 **Acceptance:** unsafe trait promises and FFI invariants are no broader than the actual production threading model.
 
 ## WPR-500 — Complete native rebuild invalidation
 
-- [ ] Enumerate all native Whisper/ggml source and header roots that affect the linked library.
-- [ ] Make `build.rs` emit `rerun-if-changed` coverage for relevant whisper headers.
-- [ ] Cover relevant whisper sources.
-- [ ] Cover relevant ggml headers.
-- [ ] Cover relevant ggml sources.
-- [ ] Cover relevant CMake/native build configuration.
-- [ ] Prefer deterministic recursive enumeration or a complete explicit manifest over a small handpicked subset.
-- [ ] Add a focused build-policy test/check if practical to detect omitted native source roots.
+- [x] Enumerate all native Whisper/ggml source and header roots that affect the linked library.
+- [x] Make `build.rs` emit `rerun-if-changed` coverage for relevant whisper headers.
+- [x] Cover relevant whisper sources.
+- [x] Cover relevant ggml headers.
+- [x] Cover relevant ggml sources.
+- [x] Cover relevant CMake/native build configuration.
+- [x] Prefer deterministic recursive enumeration or a complete explicit manifest over a small handpicked subset.
+- [x] Add a focused build-policy test/check if practical to detect omitted native source roots.
 
 **Acceptance:** changing any native source/header used by the build causes Cargo to rerun the native build/link configuration.
 
@@ -186,24 +186,24 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Remove `/proc/nproc` CPU-count probing.
 - [x] Use `std::thread::available_parallelism()` or an equivalent portable API.
 - [x] Preserve a safe nonzero fallback.
-- [ ] Preserve explicit operator/build override behavior if present.
-- [ ] Add a focused unit/helper test where practical.
+- [x] Preserve explicit operator/build override behavior if present.
+- [x] Add a focused unit/helper test where practical.
 
 **Acceptance:** native build parallelism no longer depends on a nonexistent Linux pseudo-file and does not silently default to 4 on normal Linux hosts.
 
 ## WPR-600 — Frontend correctness and wording
 
-- [ ] Keep Whisper Small visible as a local ASR option.
-- [ ] Keep install state visible.
-- [ ] Keep expected and installed byte counts visible.
-- [ ] Keep actual runtime/source revision visible.
-- [ ] Keep install/delete actions disabled when the active conversation/model lease makes mutation unsafe.
-- [ ] Update partial-transcript disclosure to match the remediated WPR-300 behavior exactly.
-- [ ] Remove generic Whisper wording that claims CRC32C verification when Whisper only uses SHA-256.
-- [ ] Use model-specific or algorithm-neutral verification text.
-- [ ] Preserve explicit disclosure that Whisper microphone audio remains local.
-- [ ] Preserve explicit disclosure that model download is user initiated.
-- [ ] Add/update frontend tests for state and wording.
+- [x] Keep Whisper Small visible as a local ASR option.
+- [x] Keep install state visible.
+- [x] Keep expected and installed byte counts visible.
+- [x] Keep actual runtime/source revision visible.
+- [x] Keep install/delete actions disabled when the active conversation/model lease makes mutation unsafe.
+- [x] Update partial-transcript disclosure to match the remediated WPR-300 behavior exactly.
+- [x] Remove generic Whisper wording that claims CRC32C verification when Whisper only uses SHA-256.
+- [x] Use model-specific or algorithm-neutral verification text.
+- [x] Preserve explicit disclosure that Whisper microphone audio remains local.
+- [x] Preserve explicit disclosure that model download is user initiated.
+- [x] Add/update frontend tests for state and wording.
 
 **Acceptance:** the settings UI neither understates nor invents Whisper behavior, provenance, or verification algorithms.
 
@@ -215,7 +215,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [ ] Reconcile `docs/WHISPER_MODEL_LICENSES.md`.
 - [ ] Reconcile `docs/THIRD_PARTY_NOTICES.md`.
 - [ ] Reconcile `README.md` where Whisper/local-ASR behavior is described.
-- [ ] Add/update `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md` if needed to document utterance/window/endpoint/shutdown behavior.
+- [x] Add/update `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md` if needed to document utterance/window/endpoint/shutdown behavior.
 - [ ] Add/update `docs/WHISPER_CPP_CPU_BENCHMARK.md` or equivalent final performance evidence document.
 - [ ] Ensure current docs identify exact source/model provenance without rewriting historical evidence as if it came from the final SHA.
 - [ ] Run documentation consistency checks applicable to the repository.
@@ -225,11 +225,11 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 ## WPR-700 — Repair real-CPU acceptance workflow
 
 - [x] Fix the malformed indentation in `.github/workflows/whisper-real-cpu-acceptance.yml` embedded Python validation.
-- [ ] Add an ordinary-CI/static check that extracts/parses/compiles the embedded acceptance validation code without downloading the real model.
-- [ ] Ensure the workflow remains manually/explicitly invoked and separate from ordinary CI.
-- [ ] Ensure the workflow does not depend on harness-created Whisper model directories that production code should create itself.
-- [ ] Keep real model artifacts out of the repository.
-- [ ] Keep ordinary CI free of real Whisper model downloads.
+- [x] Add an ordinary-CI/static check that extracts/parses/compiles the embedded acceptance validation code without downloading the real model.
+- [x] Ensure the workflow remains manually/explicitly invoked and separate from ordinary CI.
+- [x] Ensure the workflow does not depend on harness-created Whisper model directories that production code should create itself.
+- [x] Keep real model artifacts out of the repository.
+- [x] Keep ordinary CI free of real Whisper model downloads.
 - [ ] Verify workflow failure paths produce useful bounded diagnostics.
 
 **Acceptance:** the acceptance workflow can reach and execute its evidence-validation stage on a clean supported runner.
@@ -272,23 +272,23 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 
 ## WPR-800 — Regression coverage audit
 
-- [ ] Source-revision mismatch regression exists and passes.
-- [ ] Clean-profile install-root regression exists and passes.
-- [ ] Streaming verification success/corruption regressions exist and pass.
-- [ ] `ModelCorrupt` mapping regression exists and passes.
-- [ ] `RuntimeUnavailable` mapping regression exists and passes.
-- [ ] Stable utterance-ID/partial-update regression exists and passes.
-- [ ] “300 ms cadence is not finality” regression exists and passes.
-- [ ] Multiple partials -> one final regression exists and passes.
-- [ ] Sub-threshold stop flush regression exists and passes.
-- [ ] Accepted-queue drain on stop regression exists and passes.
-- [ ] Repeated-stop/no-duplicate-final regression exists and passes.
-- [ ] Empty final/no-provider-turn regression exists and passes.
-- [ ] Whisper-without-Moonshine-installer regression exists and passes.
+- [x] Source-revision mismatch regression exists and passes.
+- [x] Clean-profile install-root regression exists and passes.
+- [x] Streaming verification success/corruption regressions exist and pass.
+- [x] `ModelCorrupt` mapping regression exists and passes.
+- [x] `RuntimeUnavailable` mapping regression exists and passes.
+- [x] Stable utterance-ID/partial-update regression exists and passes.
+- [x] “300 ms cadence is not finality” regression exists and passes.
+- [x] Multiple partials -> one final regression exists and passes.
+- [x] Sub-threshold stop flush regression exists and passes.
+- [x] Accepted-queue drain on stop regression exists and passes.
+- [x] Repeated-stop/no-duplicate-final regression exists and passes.
+- [x] Empty final/no-provider-turn regression exists and passes.
+- [x] Whisper-without-Moonshine-installer regression exists and passes.
 - [ ] Active model lease still blocks unsafe deletion/replacement.
-- [ ] Native rebuild/provenance checks pass.
-- [ ] Acceptance embedded-script syntax check runs in ordinary CI.
-- [ ] Worker/lifecycle tests use deterministic synchronization where races are under test.
+- [x] Native rebuild/provenance checks pass.
+- [x] Acceptance embedded-script syntax check runs in ordinary CI.
+- [x] Worker/lifecycle tests use deterministic synchronization where races are under test.
 
 **Acceptance:** each reviewed failure class has a falsifiable regression that would fail if the old behavior returned.
 
