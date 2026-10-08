@@ -27,6 +27,17 @@ command -v git-lfs >/dev/null || git lfs version >/dev/null 2>&1 || fail "git-lf
 
 python3 "$repo_root/scripts/check_whisper_provenance.py"
 
+# Some workflows use a checkout without submodules. The notice staged below is
+# still required in every bundle, so materialize the exact gitlink before using
+# its license. Re-run provenance validation after checkout to verify the
+# materialized source against both the manifest and the tracked gitlink.
+if [[ ! -f "$repo_root/third_party/whisper.cpp/LICENSE" ]]; then
+  git -C "$repo_root" submodule update --init -- third_party/whisper.cpp
+fi
+[[ -f "$repo_root/third_party/whisper.cpp/LICENSE" ]] \
+  || fail "pinned whisper.cpp license was not materialized"
+python3 "$repo_root/scripts/check_whisper_provenance.py"
+
 IFS=$'\t' read -r runtime_release source_commit ort_version deployment_target ort_sha256 ort_bytes < <(python3 - "$manifest" "$arch" <<'PY'
 import json, sys
 manifest_path, arch = sys.argv[1:]
