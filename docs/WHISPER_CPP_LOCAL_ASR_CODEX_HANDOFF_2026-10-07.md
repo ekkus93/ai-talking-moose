@@ -1,11 +1,11 @@
 # Codex Handoff — Whisper.cpp Local ASR Post-Review Remediation
 
-**Date:** 2026-10-07  
-**Repository:** `ekkus93/ai-talking-moose`  
-**Branch:** `master`  
-**Pre-handoff source SHA reviewed:** `60883bdd71108bb223ca5a5663faaa6c75b6b82d`  
-**Authoritative remediation checklist:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md`  
-**Governing spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_SPEC_2026-10-07.md`  
+**Date:** 2026-10-07
+**Repository:** `ekkus93/ai-talking-moose`
+**Branch:** `master`
+**Pre-handoff source SHA reviewed:** `60883bdd71108bb223ca5a5663faaa6c75b6b82d`
+**Authoritative remediation checklist:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md`
+**Governing spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_SPEC_2026-10-07.md`
 **Original checklist to reconcile before closeout:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`
 
 This document hands the remaining Whisper.cpp local-ASR remediation to Codex. The handoff commit itself is documentation-only and therefore advances `master` beyond the pre-handoff SHA above. Always reload current `master` before doing work and bind any qualification evidence to the exact commit actually tested.
