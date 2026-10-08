@@ -309,6 +309,13 @@ pub struct WhisperModelInstaller {
     install_root: PathBuf,
     transport: Arc<dyn ModelDownloadTransport>,
     disk_space: Arc<dyn DiskSpaceProbe>,
+    verification: InstallArtifactVerification,
+}
+
+#[derive(Clone)]
+struct InstallArtifactVerification {
+    expected_bytes: u64,
+    expected_sha256: String,
 }
 
 struct StagingDirectory(PathBuf);
@@ -322,11 +329,29 @@ impl Drop for StagingDirectory {
 impl WhisperModelInstaller {
     pub fn new(install_root: impl Into<PathBuf>) -> Result<Self, WhisperModelInstallError> {
         let transport = Arc::new(ReqwestModelDownloadTransport::new()?);
-        Ok(Self {
-            install_root: install_root.into(),
+        Ok(Self::with_dependencies(
+            install_root.into(),
             transport,
-            disk_space: Arc::new(SystemDiskSpaceProbe),
-        })
+            Arc::new(SystemDiskSpaceProbe),
+            InstallArtifactVerification {
+                expected_bytes: manifest::WHISPER_MODEL_BYTES,
+                expected_sha256: manifest::WHISPER_MODEL_SHA256.to_string(),
+            },
+        ))
+    }
+
+    fn with_dependencies(
+        install_root: PathBuf,
+        transport: Arc<dyn ModelDownloadTransport>,
+        disk_space: Arc<dyn DiskSpaceProbe>,
+        verification: InstallArtifactVerification,
+    ) -> Self {
+        Self {
+            install_root,
+            transport,
+            disk_space,
+            verification,
+        }
     }
 
     pub fn model_path(&self) -> PathBuf {
@@ -375,11 +400,18 @@ impl WhisperModelInstaller {
         let metadata =
             fs::metadata(&model_path).map_err(|_| WhisperModelInstallError::corrupt_install())?;
         let file_size = metadata.len();
-        validate_installed_model_size(file_size, manifest::WHISPER_MODEL_BYTES)?;
+        validate_installed_model_size(file_size, self.verification.expected_bytes)?;
 
         // Full integrity verification: size, SHA-256, magic prefix. This is a
         // bounded streaming verification implemented in `manifest::verify_model`.
-        if manifest::verify_model(&model_path).is_err() {
+        if manifest::verify_model_against(
+            &model_path,
+            self.verification.expected_bytes,
+            &self.verification.expected_sha256,
+            manifest::WHISPER_MODEL_MAGIC,
+        )
+        .is_err()
+        {
             return Err(WhisperModelInstallError::corrupt_install());
         }
 
@@ -446,10 +478,10 @@ impl WhisperModelInstaller {
         // profiles do not fail merely because the canonical model directory was
         // not pre-created by a harness.
         match self.disk_space.available_bytes(&self.install_root) {
-            Ok(Some(available)) if available < manifest::WHISPER_MODEL_BYTES => {
+            Ok(Some(available)) if available < self.verification.expected_bytes => {
                 drop(guard);
                 return Err(WhisperModelInstallError::insufficient_disk_space(
-                    manifest::WHISPER_MODEL_BYTES,
+                    self.verification.expected_bytes,
                     available,
                 ));
             }
@@ -480,7 +512,12 @@ impl WhisperModelInstaller {
             progress_callback.as_ref().map(|cb| cb.clone());
 
         // Create the verifying file sink.
-        let mut sink = InstallerFileSink::create(&staging_file_path, callback)?;
+        let mut sink = InstallerFileSink::create(
+            &staging_file_path,
+            callback,
+            self.verification.expected_bytes,
+            self.verification.expected_sha256.clone(),
+        )?;
 
         // Download with the transport.
         let transport_result = self
@@ -522,7 +559,7 @@ impl WhisperModelInstaller {
                                 disposition: WhisperModelInstallDisposition::Installed,
                                 model_id: manifest::WHISPER_SMALL_ID.to_string(),
                                 revision: manifest::WHISPER_MODEL_REVISION.to_string(),
-                                installed_bytes: manifest::WHISPER_MODEL_BYTES,
+                                installed_bytes: self.verification.expected_bytes,
                                 model_path,
                             });
                         }

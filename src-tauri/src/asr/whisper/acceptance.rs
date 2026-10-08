@@ -29,7 +29,7 @@ use super::engine::{
 };
 use super::ffi::{path_to_cstring, NativeWhisperApi, WhisperApi};
 use super::installer::{
-    WhisperModelInstallCancellation, WhisperModelInstallDisposition,
+    WhisperModelInstallCancellation, WhisperModelInstallDisposition, WhisperModelInstallOutcome,
     WhisperModelInstallProgressCallback, WhisperModelInstaller,
 };
 use super::manifest::{
@@ -83,11 +83,154 @@ fn linux_default_route_present() -> bool {
 /// Probes for a denied network boundary. Returns true only when the default
 /// route is absent AND a short TCP connect to an unreachable address fails.
 fn network_denial_probe() -> bool {
-    if linux_default_route_present() {
-        return false;
+    network_denial_probe_with(linux_default_route_present(), || {
+        let address = SocketAddr::from(([1, 1, 1, 1], 443));
+        TcpStream::connect_timeout(&address, Duration::from_millis(500)).is_ok()
+    })
+}
+
+fn network_denial_probe_with(
+    default_route_present: bool,
+    connect_succeeded: impl FnOnce() -> bool,
+) -> bool {
+    !default_route_present && !connect_succeeded()
+}
+
+fn check_network_requirement(required: bool, probe_passed: bool) -> Result<(), String> {
+    if required && !probe_passed {
+        Err(
+            "real-corpus transcription acceptance requires an OS-level denied network boundary"
+                .to_string(),
+        )
+    } else {
+        Ok(())
     }
-    let address = SocketAddr::from(([1, 1, 1, 1], 443));
-    TcpStream::connect_timeout(&address, Duration::from_millis(500)).is_err()
+}
+
+fn validate_corpus_format(wav: &wav::WavSamples) -> Result<(), String> {
+    if wav.sample_rate != 16_000 {
+        return Err(format!(
+            "corpus sample rate {} is not 16000 Hz",
+            wav.sample_rate
+        ));
+    }
+    if wav.channels != 1 {
+        return Err(format!("corpus channel count {} is not mono", wav.channels));
+    }
+    if wav.bits_per_sample != 16 {
+        return Err(format!(
+            "corpus bits per sample {} is not 16-bit",
+            wav.bits_per_sample
+        ));
+    }
+    Ok(())
+}
+
+fn summarize_transcript_segments(
+    segments: &[super::ffi::WhisperSegment],
+) -> WhisperTranscriptReport {
+    let mut combined = String::new();
+    let mut segment_count = 0_u32;
+    for segment in segments {
+        let text = segment.text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        segment_count += 1;
+        if !combined.is_empty() {
+            combined.push(' ');
+        }
+        combined.push_str(text);
+    }
+    let transcription_ok = !combined.is_empty();
+    WhisperTranscriptReport {
+        duration_ms: 0,
+        no_speech_prob: 0.0,
+        num_segments: segment_count,
+        text: combined,
+        transcription_ok,
+    }
+}
+
+struct TranscribeReportContext {
+    generated_at_utc: String,
+    git_sha: Option<String>,
+    installed_bytes: u64,
+    corpus_path: String,
+    corpus_bytes: u64,
+    host_os: String,
+    host_arch: String,
+    host_cpu: Option<String>,
+    available_parallelism: usize,
+    network_denied_required: bool,
+    network_denial_probe_passed: bool,
+    pipeline: WhisperPipelineAcceptanceMetrics,
+    transcript: WhisperTranscriptReport,
+    transcribe_wall_ms: u64,
+    phase_wall_ms: u64,
+    process_cpu_time_ms: u64,
+    process_cpu_usage_percent: Option<f64>,
+    baseline_resident_memory_bytes: Option<u64>,
+    resident_memory_bytes: Option<u64>,
+    peak_resident_memory_bytes: Option<u64>,
+}
+
+fn build_transcribe_acceptance_report(
+    wav: &wav::WavSamples,
+    context: TranscribeReportContext,
+) -> WhisperTranscribeAcceptanceReport {
+    let status = if context.transcript.transcription_ok {
+        "pass"
+    } else {
+        "fail"
+    };
+    WhisperTranscribeAcceptanceReport {
+        schema_version: REPORT_SCHEMA_VERSION,
+        phase: "transcribe",
+        generated_at_utc: context.generated_at_utc,
+        git_sha: context.git_sha,
+        model_id: WHISPER_SMALL_ID.to_string(),
+        revision: WHISPER_MODEL_REVISION.to_string(),
+        source_commit: WHISPER_SOURCE_COMMIT.to_string(),
+        artifact_filename: MODEL_FILENAME.to_string(),
+        sha256: WHISPER_MODEL_SHA256.to_string(),
+        expected_bytes: WHISPER_MODEL_BYTES,
+        installed_bytes: context.installed_bytes,
+        corpus_path: context.corpus_path,
+        corpus_bytes: context.corpus_bytes,
+        sample_rate: wav.sample_rate,
+        channels: wav.channels,
+        bits_per_sample: wav.bits_per_sample,
+        sample_count: wav.samples.len() as u64,
+        duration_ms: context.transcript.duration_ms,
+        host_os: context.host_os,
+        host_arch: context.host_arch,
+        host_cpu: context.host_cpu,
+        available_parallelism: context.available_parallelism,
+        network_denied_required: context.network_denied_required,
+        network_denial_probe_passed: context.network_denial_probe_passed,
+        status: status.to_string(),
+        runtime: WhisperTranscribeRuntime {
+            whisper_native_linked: true,
+        },
+        pipeline: context.pipeline,
+        transcript: context.transcript,
+        transcribe_wall_ms: context.transcribe_wall_ms,
+        phase_wall_ms: context.phase_wall_ms,
+        process_cpu_time_ms: context.process_cpu_time_ms,
+        process_cpu_usage_percent: context.process_cpu_usage_percent,
+        baseline_resident_memory_bytes: context.baseline_resident_memory_bytes,
+        resident_memory_bytes: context.resident_memory_bytes,
+        peak_resident_memory_bytes: context.peak_resident_memory_bytes,
+    }
+}
+
+fn validate_transcription_report(report: &WhisperTranscribeAcceptanceReport) -> Result<(), String> {
+    if report.transcript.transcription_ok {
+        Ok(())
+    } else {
+        Err("Whisper transcription returned empty output".to_string())
+    }
 }
 
 fn write_report(path: &Path, report: &impl Serialize) -> Result<(), String> {
@@ -105,6 +248,32 @@ fn disposition_name(disposition: WhisperModelInstallDisposition) -> &'static str
     match disposition {
         WhisperModelInstallDisposition::Installed => "installed",
         WhisperModelInstallDisposition::AlreadyInstalled => "already-installed",
+    }
+}
+
+fn build_install_acceptance_report(
+    outcome: &WhisperModelInstallOutcome,
+    generated_at_utc: String,
+    git_sha: Option<String>,
+) -> WhisperInstallAcceptanceReport {
+    WhisperInstallAcceptanceReport {
+        schema_version: REPORT_SCHEMA_VERSION,
+        phase: "install",
+        generated_at_utc,
+        git_sha,
+        model_id: WHISPER_SMALL_ID.to_string(),
+        revision: WHISPER_MODEL_REVISION.to_string(),
+        source_commit: WHISPER_SOURCE_COMMIT.to_string(),
+        artifact_filename: MODEL_FILENAME.to_string(),
+        sha256: WHISPER_MODEL_SHA256.to_string(),
+        expected_bytes: WHISPER_MODEL_BYTES,
+        installed_bytes: outcome.installed_bytes,
+        disposition: disposition_name(outcome.disposition).to_string(),
+        magic: String::from_utf8(WHISPER_MODEL_MAGIC.to_vec())
+            .unwrap_or_else(|error| format!("invalid model magic: {error}")),
+        quantization: QUANTIZATION.to_string(),
+        license: LICENSE_STATE.to_string(),
+        production_installer_verified: true,
     }
 }
 
@@ -253,25 +422,7 @@ pub async fn install_for_acceptance(
         ));
     }
 
-    let report = WhisperInstallAcceptanceReport {
-        schema_version: REPORT_SCHEMA_VERSION,
-        phase: "install",
-        generated_at_utc: Utc::now().to_rfc3339(),
-        git_sha: git_sha(),
-        model_id: WHISPER_SMALL_ID.to_string(),
-        revision: WHISPER_MODEL_REVISION.to_string(),
-        source_commit: WHISPER_SOURCE_COMMIT.to_string(),
-        artifact_filename: MODEL_FILENAME.to_string(),
-        sha256: WHISPER_MODEL_SHA256.to_string(),
-        expected_bytes: WHISPER_MODEL_BYTES,
-        installed_bytes: outcome.installed_bytes,
-        disposition: disposition_name(outcome.disposition).to_string(),
-        magic: String::from_utf8(WHISPER_MODEL_MAGIC.to_vec())
-            .unwrap_or_else(|error| format!("invalid model magic: {error}")),
-        quantization: QUANTIZATION.to_string(),
-        license: LICENSE_STATE.to_string(),
-        production_installer_verified: true,
-    };
+    let report = build_install_acceptance_report(&outcome, Utc::now().to_rfc3339(), git_sha());
 
     write_report(report_path, &report)?;
     Ok(report)
@@ -420,12 +571,7 @@ pub async fn transcribe_for_acceptance(
     require_network_denied: bool,
 ) -> Result<WhisperTranscribeAcceptanceReport, String> {
     let network_denial_probe_passed = network_denial_probe();
-    if require_network_denied && !network_denial_probe_passed {
-        return Err(
-            "real-corpus transcription acceptance requires an OS-level denied network boundary"
-                .to_string(),
-        );
-    }
+    check_network_requirement(require_network_denied, network_denial_probe_passed)?;
 
     let installer = WhisperModelInstaller::new(model_root.to_path_buf())
         .map_err(|error| error.message.to_string())?;
@@ -473,21 +619,7 @@ pub async fn transcribe_for_acceptance(
         .unwrap_or(0);
 
     let wav = read_wav_f32(corpus_wav)?;
-    if wav.sample_rate != 16_000 {
-        return Err(format!(
-            "corpus sample rate {} is not 16000 Hz",
-            wav.sample_rate
-        ));
-    }
-    if wav.channels != 1 {
-        return Err(format!("corpus channel count {} is not mono", wav.channels));
-    }
-    if wav.bits_per_sample != 16 {
-        return Err(format!(
-            "corpus bits per sample {} is not 16-bit",
-            wav.bits_per_sample
-        ));
-    }
+    validate_corpus_format(&wav)?;
 
     let cpu_before = process_cpu_time_micros();
     let baseline_resident_memory_bytes = current_resident_memory_bytes();
@@ -543,24 +675,10 @@ pub async fn transcribe_for_acceptance(
         (high_water, sampled) => high_water.or(sampled),
     };
 
-    let mut combined = String::new();
-    let mut segment_count = 0;
-    for segment in &transcript.segments {
-        let text = segment.text.trim().to_string();
-        if text.is_empty() {
-            continue;
-        }
-        segment_count += 1;
-        if !combined.is_empty() {
-            combined.push(' ');
-        }
-        combined.push_str(&text);
-    }
-    let no_speech_prob = transcript.no_speech_prob;
-    let success = !combined.trim().is_empty();
-
     let duration_ms = sample_count_to_duration_ms(wav.samples.len(), wav.sample_rate);
-
+    let mut transcript_report = summarize_transcript_segments(&transcript.segments);
+    transcript_report.duration_ms = duration_ms;
+    transcript_report.no_speech_prob = transcript.no_speech_prob;
     // Release the direct FFI model lease before starting the production worker;
     // both paths intentionally serialize model-owned operations through the
     // install/runtime lease.
@@ -569,62 +687,36 @@ pub async fn transcribe_for_acceptance(
     let pipeline =
         production_pipeline_metrics(std::sync::Arc::new(installer), &wav.samples).await?;
 
-    let report = WhisperTranscribeAcceptanceReport {
-        schema_version: REPORT_SCHEMA_VERSION,
-        phase: "transcribe",
-        generated_at_utc: Utc::now().to_rfc3339(),
-        git_sha: git_sha(),
-        model_id: WHISPER_SMALL_ID.to_string(),
-        revision: WHISPER_MODEL_REVISION.to_string(),
-        source_commit: WHISPER_SOURCE_COMMIT.to_string(),
-        artifact_filename: MODEL_FILENAME.to_string(),
-        sha256: WHISPER_MODEL_SHA256.to_string(),
-        expected_bytes: WHISPER_MODEL_BYTES,
-        installed_bytes,
-        corpus_path: corpus_wav.to_string_lossy().to_string(),
-        corpus_bytes,
-        sample_rate: wav.sample_rate,
-        channels: wav.channels,
-        bits_per_sample: wav.bits_per_sample,
-        sample_count: wav.samples.len() as u64,
-        duration_ms,
-        host_os: std::env::consts::OS.to_string(),
-        host_arch: std::env::consts::ARCH.to_string(),
-        host_cpu: host_cpu(),
-        available_parallelism: std::thread::available_parallelism()
-            .map(std::num::NonZeroUsize::get)
-            .unwrap_or(1),
-        network_denied_required: require_network_denied,
-        network_denial_probe_passed,
-        status: if success {
-            "pass".to_string()
-        } else {
-            "fail".to_string()
+    let report = build_transcribe_acceptance_report(
+        &wav,
+        TranscribeReportContext {
+            generated_at_utc: Utc::now().to_rfc3339(),
+            git_sha: git_sha(),
+            installed_bytes,
+            corpus_path: corpus_wav.to_string_lossy().to_string(),
+            corpus_bytes,
+            host_os: std::env::consts::OS.to_string(),
+            host_arch: std::env::consts::ARCH.to_string(),
+            host_cpu: host_cpu(),
+            available_parallelism: std::thread::available_parallelism()
+                .map(std::num::NonZeroUsize::get)
+                .unwrap_or(1),
+            network_denied_required: require_network_denied,
+            network_denial_probe_passed,
+            pipeline,
+            transcript: transcript_report,
+            transcribe_wall_ms,
+            phase_wall_ms,
+            process_cpu_time_ms,
+            process_cpu_usage_percent,
+            baseline_resident_memory_bytes,
+            resident_memory_bytes,
+            peak_resident_memory_bytes,
         },
-        runtime: WhisperTranscribeRuntime {
-            whisper_native_linked: true,
-        },
-        pipeline,
-        transcript: WhisperTranscriptReport {
-            duration_ms,
-            no_speech_prob,
-            num_segments: segment_count as u32,
-            text: combined,
-            transcription_ok: success,
-        },
-        transcribe_wall_ms,
-        phase_wall_ms,
-        process_cpu_time_ms,
-        process_cpu_usage_percent,
-        baseline_resident_memory_bytes,
-        resident_memory_bytes,
-        peak_resident_memory_bytes,
-    };
+    );
 
     write_report(report_path, &report)?;
-    if !success {
-        return Err("Whisper transcription returned empty output".to_string());
-    }
+    validate_transcription_report(&report)?;
 
     Ok(report)
 }
@@ -639,7 +731,8 @@ fn sample_count_to_duration_ms(sample_count: usize, sample_rate: u32) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::write_delete_acceptance_report;
+    use super::*;
+    use crate::asr::whisper::ffi::WhisperSegment;
 
     #[test]
     fn delete_acceptance_writes_machine_readable_report() {
@@ -658,5 +751,276 @@ mod tests {
         assert_eq!(written["phase"], "delete");
         assert_eq!(written["removed"], true);
         assert_eq!(written["model_path"], model_path.display().to_string());
+    }
+
+    #[test]
+    fn network_denial_probe_policy_is_injected_and_short_circuits_route() {
+        let mut called = false;
+        assert!(!network_denial_probe_with(true, || {
+            called = true;
+            false
+        }));
+        assert!(!called);
+        assert!(network_denial_probe_with(false, || false));
+        assert!(!network_denial_probe_with(false, || true));
+    }
+
+    #[test]
+    fn network_requirement_only_rejects_when_denial_is_required() {
+        assert!(check_network_requirement(true, false).is_err());
+        assert!(check_network_requirement(true, true).is_ok());
+        assert!(check_network_requirement(false, false).is_ok());
+    }
+
+    #[test]
+    fn transcript_segments_trim_join_and_mark_empty_output_as_failure() {
+        let segment = |text: &str| WhisperSegment {
+            text: text.to_string(),
+            start_ms: 0,
+            end_ms: 1,
+            no_speech_prob: 0.2,
+        };
+        let report = summarize_transcript_segments(&[
+            segment("  hello "),
+            segment(" \n"),
+            segment("world  "),
+        ]);
+        assert_eq!(report.text, "hello world");
+        assert_eq!(report.num_segments, 2);
+        assert!(report.transcription_ok);
+        let empty = summarize_transcript_segments(&[segment("  "), segment("\n")]);
+        assert_eq!(empty.text, "");
+        assert_eq!(empty.num_segments, 0);
+        assert!(!empty.transcription_ok);
+    }
+
+    #[test]
+    fn install_acceptance_report_serializes_pinned_identity_and_installer_proof() {
+        let outcome = WhisperModelInstallOutcome {
+            disposition: WhisperModelInstallDisposition::Installed,
+            model_id: WHISPER_SMALL_ID.to_string(),
+            revision: WHISPER_MODEL_REVISION.to_string(),
+            installed_bytes: WHISPER_MODEL_BYTES,
+            model_path: Path::new("fixture/ggml-small.bin").to_path_buf(),
+        };
+        let report = build_install_acceptance_report(
+            &outcome,
+            "fixed-time".to_string(),
+            Some("abc".to_string()),
+        );
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["schema_version"], REPORT_SCHEMA_VERSION);
+        assert_eq!(json["model_id"], WHISPER_SMALL_ID);
+        assert_eq!(json["revision"], WHISPER_MODEL_REVISION);
+        assert_eq!(json["source_commit"], WHISPER_SOURCE_COMMIT);
+        assert_eq!(json["artifact_filename"], MODEL_FILENAME);
+        assert_eq!(json["expected_bytes"], WHISPER_MODEL_BYTES);
+        assert_eq!(json["installed_bytes"], WHISPER_MODEL_BYTES);
+        assert_eq!(json["disposition"], "installed");
+        assert_eq!(json["license"], LICENSE_STATE);
+        assert_eq!(json["production_installer_verified"], true);
+    }
+
+    #[test]
+    fn transcription_report_preserves_metrics_and_nullable_resource_fields() {
+        let report = WhisperTranscribeAcceptanceReport {
+            schema_version: REPORT_SCHEMA_VERSION,
+            phase: "transcribe",
+            generated_at_utc: "fixed-time".to_string(),
+            git_sha: None,
+            model_id: WHISPER_SMALL_ID.to_string(),
+            revision: WHISPER_MODEL_REVISION.to_string(),
+            source_commit: WHISPER_SOURCE_COMMIT.to_string(),
+            artifact_filename: MODEL_FILENAME.to_string(),
+            sha256: WHISPER_MODEL_SHA256.to_string(),
+            expected_bytes: WHISPER_MODEL_BYTES,
+            installed_bytes: WHISPER_MODEL_BYTES,
+            corpus_path: "fixture.wav".to_string(),
+            corpus_bytes: 48,
+            sample_rate: 16_000,
+            channels: 1,
+            bits_per_sample: 16,
+            sample_count: 8,
+            duration_ms: 1,
+            host_os: "linux".to_string(),
+            host_arch: "x86_64".to_string(),
+            host_cpu: None,
+            available_parallelism: 1,
+            network_denied_required: true,
+            network_denial_probe_passed: true,
+            status: "pass".to_string(),
+            runtime: WhisperTranscribeRuntime {
+                whisper_native_linked: true,
+            },
+            pipeline: WhisperPipelineAcceptanceMetrics {
+                partial_interval_samples: 1,
+                endpoint_silence_samples: 2,
+                maximum_utterance_samples: 3,
+                queue_capacity_chunks: 4,
+                partial_event_count: 1,
+                final_event_count: 1,
+                first_partial_latency_ms: Some(5),
+                first_final_latency_ms: Some(6),
+                processed_audio_ms: 7,
+                inference_wall_time_ms: 8,
+                real_time_factor: None,
+                process_cpu_time_ms: None,
+                average_cpu_utilization_percent: None,
+                peak_resident_memory_bytes: None,
+                nominal_dropped_chunks: 0,
+                overload_attempted_chunks: 0,
+                overload_accepted_chunks: 0,
+                overload_dropped_chunks: 0,
+            },
+            transcript: WhisperTranscriptReport {
+                duration_ms: 1,
+                no_speech_prob: 0.0,
+                num_segments: 1,
+                text: "hello".to_string(),
+                transcription_ok: true,
+            },
+            transcribe_wall_ms: 2,
+            phase_wall_ms: 3,
+            process_cpu_time_ms: 0,
+            process_cpu_usage_percent: None,
+            baseline_resident_memory_bytes: None,
+            resident_memory_bytes: None,
+            peak_resident_memory_bytes: None,
+        };
+        let json = serde_json::to_value(report).unwrap();
+        assert_eq!(json["transcript"]["text"], "hello");
+        assert_eq!(json["pipeline"]["processed_audio_ms"], 7);
+        assert_eq!(
+            json["pipeline"]["real_time_factor"],
+            serde_json::Value::Null
+        );
+        assert_eq!(json["host_cpu"], serde_json::Value::Null);
+        assert_eq!(json["resident_memory_bytes"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn transcription_report_builder_sets_status_from_empty_transcript_and_keeps_wav_metadata() {
+        let wav = wav::WavSamples {
+            samples: vec![0.0; 16],
+            sample_rate: 16_000,
+            channels: 1,
+            bits_per_sample: 16,
+        };
+        let mut transcript = summarize_transcript_segments(&[]);
+        transcript.duration_ms = sample_count_to_duration_ms(wav.samples.len(), wav.sample_rate);
+        let report = build_transcribe_acceptance_report(
+            &wav,
+            TranscribeReportContext {
+                generated_at_utc: "fixed-time".to_string(),
+                git_sha: None,
+                installed_bytes: WHISPER_MODEL_BYTES,
+                corpus_path: "fixture.wav".to_string(),
+                corpus_bytes: 76,
+                host_os: "test-os".to_string(),
+                host_arch: "test-arch".to_string(),
+                host_cpu: None,
+                available_parallelism: 1,
+                network_denied_required: true,
+                network_denial_probe_passed: true,
+                pipeline: WhisperPipelineAcceptanceMetrics {
+                    partial_interval_samples: 1,
+                    endpoint_silence_samples: 2,
+                    maximum_utterance_samples: 3,
+                    queue_capacity_chunks: 4,
+                    partial_event_count: 0,
+                    final_event_count: 0,
+                    first_partial_latency_ms: None,
+                    first_final_latency_ms: None,
+                    processed_audio_ms: 1,
+                    inference_wall_time_ms: 1,
+                    real_time_factor: None,
+                    process_cpu_time_ms: None,
+                    average_cpu_utilization_percent: None,
+                    peak_resident_memory_bytes: None,
+                    nominal_dropped_chunks: 0,
+                    overload_attempted_chunks: 0,
+                    overload_accepted_chunks: 0,
+                    overload_dropped_chunks: 0,
+                },
+                transcript,
+                transcribe_wall_ms: 1,
+                phase_wall_ms: 2,
+                process_cpu_time_ms: 0,
+                process_cpu_usage_percent: None,
+                baseline_resident_memory_bytes: None,
+                resident_memory_bytes: None,
+                peak_resident_memory_bytes: None,
+            },
+        );
+        assert_eq!(report.status, "fail");
+        assert_eq!(report.sample_count, 16);
+        assert_eq!(report.duration_ms, 1);
+        assert_eq!(report.corpus_bytes, 76);
+        assert!(report.runtime.whisper_native_linked);
+        assert_eq!(
+            validate_transcription_report(&report).unwrap_err(),
+            "Whisper transcription returned empty output"
+        );
+    }
+
+    #[test]
+    fn report_writer_creates_nested_directories_and_sanitizes_write_errors() {
+        let directory = tempfile::tempdir().unwrap();
+        let nested = directory.path().join("nested/reports/report.json");
+        write_report(&nested, &serde_json::json!({"ok": true})).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&fs::read(nested).unwrap()).unwrap()["ok"],
+            true
+        );
+
+        let parent_file = directory.path().join("not-a-directory");
+        fs::write(&parent_file, "private").unwrap();
+        let error = write_report(
+            &parent_file.join("report.json"),
+            &serde_json::json!({"text": "secret"}),
+        )
+        .unwrap_err();
+        assert_eq!(error, "could not create acceptance report directory");
+        assert!(!error.contains("secret"));
+    }
+
+    #[test]
+    fn report_writer_sanitizes_serialization_errors() {
+        struct FailingReport;
+        impl Serialize for FailingReport {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("private transcript sentinel"))
+            }
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let error =
+            write_report(&directory.path().join("report.json"), &FailingReport).unwrap_err();
+        assert_eq!(error, "could not serialize acceptance report");
+        assert!(!error.contains("private transcript sentinel"));
+    }
+
+    #[test]
+    fn caller_rejects_parseable_non_mono_corpus() {
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&40_u32.to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16_u32.to_le_bytes());
+        wav.extend_from_slice(&1_u16.to_le_bytes());
+        wav.extend_from_slice(&2_u16.to_le_bytes());
+        wav.extend_from_slice(&16_000_u32.to_le_bytes());
+        wav.extend_from_slice(&64_000_u32.to_le_bytes());
+        wav.extend_from_slice(&4_u16.to_le_bytes());
+        wav.extend_from_slice(&16_u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&4_u32.to_le_bytes());
+        wav.extend_from_slice(&[0, 0, 1, 0]);
+        let parsed = wav::parse_wav_f32(&wav).unwrap();
+        let error = validate_corpus_format(&parsed).unwrap_err();
+        assert_eq!(error, "corpus channel count 2 is not mono");
     }
 }

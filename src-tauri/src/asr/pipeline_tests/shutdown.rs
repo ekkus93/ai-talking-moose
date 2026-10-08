@@ -130,6 +130,99 @@ async fn sub_threshold_stop_final_crosses_normal_path_exactly_once() {
         ]
     );
 }
+
+#[tokio::test]
+async fn abort_discards_queued_chunks_delivers_inflight_update_and_suppresses_stop_final() {
+    let state = Arc::new(FakeState::default());
+    let gate = Arc::new(PushGate::default());
+    *state.push_gate.lock().unwrap() = Some(gate.clone());
+    state
+        .updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Partial {
+            segment_id: 11,
+            text: "in-flight partial".to_string(),
+            latency_ms: 2,
+        });
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 11,
+            text: "stop-time final".to_string(),
+            latency_ms: 3,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_with_factory(
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }))
+        },
+        callback,
+    )
+    .await
+    .unwrap();
+    let sender = pipeline.test_sender();
+    sender.try_send(vec![0, 0]).unwrap();
+    gate.wait_until_entered();
+    sender.try_send(vec![1, 0]).unwrap();
+    sender.try_send(vec![2, 0]).unwrap();
+
+    pipeline.request_abort();
+    *state.push_gate.lock().unwrap() = None;
+    gate.release();
+    pipeline.stop_and_join().await.unwrap();
+
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(!pipeline.is_running());
+    let delivered = events.lock().unwrap();
+    assert!(delivered.iter().any(|event| matches!(event,
+        LocalAsrPipelineEvent::PartialTranscript { text, .. } if text == "in-flight partial"
+    )));
+    assert!(!delivered.iter().any(|event| matches!(event,
+        LocalAsrPipelineEvent::FinalTranscript { text, .. } if text == "stop-time final"
+    )));
+}
+
+#[test]
+fn worker_abort_before_first_chunk_skips_queued_audio_and_stops_engine_once() {
+    let state = Arc::new(FakeState::default());
+    let mut engine = FakeEngine {
+        state: state.clone(),
+        sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+    };
+    // A preloaded queue makes this exercise the worker's abort check before
+    // its first receive, without depending on scheduling or sleeps.
+    let (tx, mut rx) = tokio::sync::mpsc::channel(2);
+    tx.try_send(vec![0, 0]).unwrap();
+    drop(tx);
+    let stop = AtomicBool::new(true);
+    let abort = AtomicBool::new(true);
+    let metrics = Mutex::new(crate::asr::runtime_metrics::RuntimeMetrics::new());
+    let delivery = Arc::new(LocalAsrEventDeliveryTracker::default());
+    let (callback, events) = callback_events();
+
+    super::super::run_worker(
+        &mut engine,
+        &mut rx,
+        &stop,
+        &abort,
+        &metrics,
+        &callback,
+        &delivery,
+    )
+    .unwrap();
+
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(events.lock().unwrap().is_empty());
+}
 #[tokio::test]
 async fn graceful_stop_waits_for_scheduled_final_delivery_acknowledgement() {
     let state = Arc::new(FakeState::default());

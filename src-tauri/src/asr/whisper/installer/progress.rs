@@ -4,8 +4,6 @@ use super::WhisperModelInstallError;
 use std::path::Path;
 use std::sync::Arc;
 
-use super::super::manifest::WHISPER_MODEL_BYTES;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WhisperModelInstallPhase {
     Downloading,
@@ -25,22 +23,29 @@ pub type WhisperModelInstallProgressCallback =
 pub(super) struct InstallerFileSink {
     inner: WhisperVerifyingFileSink,
     callback: Option<WhisperModelInstallProgressCallback>,
+    expected_bytes: u64,
 }
 
 impl InstallerFileSink {
     pub(super) fn create(
         path: &Path,
         callback: Option<WhisperModelInstallProgressCallback>,
+        expected_bytes: u64,
+        expected_sha256: impl Into<String>,
     ) -> Result<Self, WhisperModelInstallError> {
-        let inner = WhisperVerifyingFileSink::create(path)?;
+        let inner = WhisperVerifyingFileSink::create(path, expected_bytes, expected_sha256)?;
         if let Some(callback) = callback.as_ref() {
             callback(WhisperModelInstallProgress {
                 phase: WhisperModelInstallPhase::Downloading,
                 downloaded_bytes: 0,
-                total_bytes: WHISPER_MODEL_BYTES,
+                total_bytes: expected_bytes,
             });
         }
-        Ok(Self { inner, callback })
+        Ok(Self {
+            inner,
+            callback,
+            expected_bytes,
+        })
     }
 
     pub(super) fn finish(self) -> Result<(), WhisperModelInstallError> {
@@ -49,8 +54,8 @@ impl InstallerFileSink {
             if let Some(callback) = self.callback.as_ref() {
                 callback(WhisperModelInstallProgress {
                     phase: WhisperModelInstallPhase::Verifying,
-                    downloaded_bytes: WHISPER_MODEL_BYTES,
-                    total_bytes: WHISPER_MODEL_BYTES,
+                    downloaded_bytes: self.expected_bytes,
+                    total_bytes: self.expected_bytes,
                 });
             }
         }
@@ -65,7 +70,7 @@ impl DownloadSink for InstallerFileSink {
             callback(WhisperModelInstallProgress {
                 phase: WhisperModelInstallPhase::Downloading,
                 downloaded_bytes: self.inner.bytes_written,
-                total_bytes: WHISPER_MODEL_BYTES,
+                total_bytes: self.expected_bytes,
             });
         }
         Ok(())
@@ -77,7 +82,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn phase_order() {
-        assert!(std::mem::size_of::<WhisperModelInstallPhase>() > 0);
+    fn staging_file_creation_failure_is_reported_as_sanitized_io_error() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path_is_directory = directory.path().join("staging.bin");
+        std::fs::create_dir(&path_is_directory).expect("create conflicting directory");
+        let error = match InstallerFileSink::create(&path_is_directory, None, 1, "00") {
+            Ok(_) => panic!("file sink must reject a directory path"),
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, super::super::WhisperModelInstallErrorKind::Io);
+        assert_eq!(
+            error.message,
+            "The Whisper model installer could not create the staging file."
+        );
     }
 }

@@ -240,7 +240,7 @@ fn model_corrupt(message: impl Into<String>, retryable: bool) -> AsrError {
 ///
 /// Keeping the expectations injectable makes the integrity algorithm testable with
 /// tiny fixtures without weakening the production pins.
-fn verify_model_against(
+pub(super) fn verify_model_against(
     path: &Path,
     expected_bytes: u64,
     expected_sha256: &str,

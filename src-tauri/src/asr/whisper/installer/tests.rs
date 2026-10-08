@@ -1,4 +1,471 @@
 use super::*;
+use crate::asr::whisper::installer::disk::DiskSpaceProbe;
+use crate::asr::whisper::installer::transport::{DownloadSink, ModelDownloadTransport};
+use async_trait::async_trait;
+use ring::digest::{digest, SHA256};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[derive(Clone)]
+enum FakeTransportBehavior {
+    Complete,
+    FailBefore(WhisperModelInstallError),
+    FailAfterChunks(usize, WhisperModelInstallError),
+    CancelDuringAfterChunks(usize),
+    CancelAfterStream,
+}
+
+struct FakeTransport {
+    chunks: Vec<Vec<u8>>,
+    behavior: FakeTransportBehavior,
+    calls: AtomicUsize,
+    gate: Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>,
+}
+
+impl FakeTransport {
+    fn new(chunks: Vec<Vec<u8>>, behavior: FakeTransportBehavior) -> Self {
+        Self {
+            chunks,
+            behavior,
+            calls: AtomicUsize::new(0),
+            gate: None,
+        }
+    }
+}
+
+#[async_trait]
+impl ModelDownloadTransport for FakeTransport {
+    async fn stream(
+        &self,
+        _url: &str,
+        cancellation: &WhisperModelInstallCancellation,
+        sink: &mut dyn DownloadSink,
+    ) -> Result<(), WhisperModelInstallError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if let FakeTransportBehavior::FailBefore(error) = &self.behavior {
+            return Err(error.clone());
+        }
+        if let Some((entered, release)) = &self.gate {
+            entered.notify_one();
+            release.notified().await;
+        }
+        for (index, chunk) in self.chunks.iter().enumerate() {
+            sink.write_chunk(chunk)?;
+            let written_chunks = index + 1;
+            match &self.behavior {
+                FakeTransportBehavior::FailAfterChunks(count, error)
+                    if *count == written_chunks =>
+                {
+                    return Err(error.clone());
+                }
+                FakeTransportBehavior::CancelDuringAfterChunks(count)
+                    if *count == written_chunks =>
+                {
+                    cancellation.cancel();
+                    return Err(WhisperModelInstallError::cancelled());
+                }
+                _ => {}
+            }
+        }
+        if let FakeTransportBehavior::CancelAfterStream = &self.behavior {
+            cancellation.cancel();
+        }
+        Ok(())
+    }
+}
+
+struct FakeDiskSpaceProbe {
+    available: Option<u64>,
+    calls: AtomicUsize,
+}
+
+impl DiskSpaceProbe for FakeDiskSpaceProbe {
+    fn available_bytes(&self, _path: &Path) -> std::io::Result<Option<u64>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(self.available)
+    }
+}
+
+const FIXTURE_MODEL: &[u8] = b"lmgg-small-installer-fixture";
+
+fn fixture_installer(
+    root: &Path,
+    expected: &[u8],
+    transport: Arc<FakeTransport>,
+    available: Option<u64>,
+) -> (WhisperModelInstaller, Arc<FakeDiskSpaceProbe>) {
+    let expected_sha256 = digest(&SHA256, expected);
+    let expected_sha256 = expected_sha256
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let disk_space = Arc::new(FakeDiskSpaceProbe {
+        available,
+        calls: AtomicUsize::new(0),
+    });
+    let installer = WhisperModelInstaller::with_dependencies(
+        root.to_path_buf(),
+        transport,
+        disk_space.clone(),
+        InstallArtifactVerification {
+            expected_bytes: expected.len() as u64,
+            expected_sha256,
+        },
+    );
+    (installer, disk_space)
+}
+
+fn fixture_chunks(bytes: &[u8]) -> Vec<Vec<u8>> {
+    let split = bytes.len().min(7);
+    vec![bytes[..split].to_vec(), bytes[split..].to_vec()]
+}
+
+fn no_staged_or_promoted_artifacts(installer: &WhisperModelInstaller) {
+    assert!(!installer.model_path().exists());
+    assert!(!installer.marker_path().exists());
+    let entries: Vec<_> = fs::read_dir(&installer.install_root)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert!(entries.is_empty(), "unexpected install state: {entries:?}");
+}
+
+#[tokio::test]
+async fn fixture_install_promotes_model_and_verified_repeat_skips_transport() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+
+    let first = installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    assert_eq!(first.disposition, WhisperModelInstallDisposition::Installed);
+    assert_eq!(first.installed_bytes, FIXTURE_MODEL.len() as u64);
+    assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
+    let marker: InstallMarker =
+        serde_json::from_slice(&fs::read(installer.marker_path()).unwrap()).unwrap();
+    assert_eq!(marker, InstallMarker::new());
+    assert!(installer.verify_installed().unwrap().is_some());
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+
+    let second = installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    assert_eq!(
+        second.disposition,
+        WhisperModelInstallDisposition::AlreadyInstalled
+    );
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn verified_install_is_preserved_and_failed_replacement_transport_is_skipped() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let initial_transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (initial_installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        initial_transport,
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    initial_installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    let original_marker = fs::read(initial_installer.marker_path()).unwrap();
+
+    let failed_transport = Arc::new(FakeTransport::new(
+        fixture_chunks(b"replacement"),
+        FakeTransportBehavior::FailBefore(WhisperModelInstallError::network()),
+    ));
+    let (replacement_installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        failed_transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    let outcome = replacement_installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        outcome.disposition,
+        WhisperModelInstallDisposition::AlreadyInstalled
+    );
+    assert_eq!(failed_transport.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        fs::read(initial_installer.model_path()).unwrap(),
+        FIXTURE_MODEL
+    );
+    assert_eq!(
+        fs::read(initial_installer.marker_path()).unwrap(),
+        original_marker
+    );
+}
+
+#[tokio::test]
+async fn insufficient_space_fails_before_transport_starts() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, disk_space) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64 - 1),
+    );
+
+    let error = installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.kind,
+        WhisperModelInstallErrorKind::InsufficientDiskSpace
+    );
+    assert_eq!(disk_space.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+    no_staged_or_promoted_artifacts(&installer);
+}
+
+#[tokio::test]
+async fn cancelled_before_download_never_calls_transport() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    let mut cancellation = WhisperModelInstallCancellation::default();
+    cancellation.cancel();
+
+    let error = installer
+        .install(&mut cancellation, &None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.kind, WhisperModelInstallErrorKind::Cancelled);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+    no_staged_or_promoted_artifacts(&installer);
+}
+
+#[tokio::test]
+async fn transport_failures_clean_staging_and_preserve_error_categories() {
+    for (behavior, expected_kind) in [
+        (
+            FakeTransportBehavior::FailBefore(WhisperModelInstallError::network()),
+            WhisperModelInstallErrorKind::Network,
+        ),
+        (
+            FakeTransportBehavior::FailAfterChunks(1, WhisperModelInstallError::network()),
+            WhisperModelInstallErrorKind::Network,
+        ),
+        (
+            FakeTransportBehavior::FailBefore(WhisperModelInstallError::http(503)),
+            WhisperModelInstallErrorKind::Http,
+        ),
+    ] {
+        let temp = tempfile::TempDir::new().unwrap();
+        let transport = Arc::new(FakeTransport::new(fixture_chunks(FIXTURE_MODEL), behavior));
+        let (installer, _) = fixture_installer(
+            temp.path(),
+            FIXTURE_MODEL,
+            transport,
+            Some(FIXTURE_MODEL.len() as u64),
+        );
+
+        let error = installer
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.kind, expected_kind);
+        no_staged_or_promoted_artifacts(&installer);
+    }
+}
+
+#[tokio::test]
+async fn cancellation_during_stream_and_after_download_cleans_staging() {
+    for behavior in [
+        FakeTransportBehavior::CancelDuringAfterChunks(1),
+        FakeTransportBehavior::CancelAfterStream,
+    ] {
+        let temp = tempfile::TempDir::new().unwrap();
+        let transport = Arc::new(FakeTransport::new(fixture_chunks(FIXTURE_MODEL), behavior));
+        let (installer, _) = fixture_installer(
+            temp.path(),
+            FIXTURE_MODEL,
+            transport,
+            Some(FIXTURE_MODEL.len() as u64),
+        );
+
+        let error = installer
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.kind, WhisperModelInstallErrorKind::Cancelled);
+        no_staged_or_promoted_artifacts(&installer);
+    }
+}
+
+#[tokio::test]
+async fn size_and_sha256_failures_never_promote_fixture_artifacts() {
+    let mut overlong = FIXTURE_MODEL.to_vec();
+    overlong.push(b'!');
+    let same_size_wrong_content = {
+        let mut bytes = FIXTURE_MODEL.to_vec();
+        bytes[8] ^= 0x01;
+        bytes
+    };
+    for (download, expected_kind) in [
+        (
+            FIXTURE_MODEL[..FIXTURE_MODEL.len() - 1].to_vec(),
+            WhisperModelInstallErrorKind::SizeMismatch,
+        ),
+        (overlong, WhisperModelInstallErrorKind::SizeMismatch),
+        (
+            same_size_wrong_content,
+            WhisperModelInstallErrorKind::Sha256Mismatch,
+        ),
+    ] {
+        let temp = tempfile::TempDir::new().unwrap();
+        let transport = Arc::new(FakeTransport::new(
+            fixture_chunks(&download),
+            FakeTransportBehavior::Complete,
+        ));
+        let (installer, _) = fixture_installer(
+            temp.path(),
+            FIXTURE_MODEL,
+            transport,
+            Some(FIXTURE_MODEL.len() as u64),
+        );
+
+        let error = installer
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.kind, expected_kind);
+        no_staged_or_promoted_artifacts(&installer);
+    }
+}
+
+#[tokio::test]
+async fn promotion_failures_remove_partial_state_and_staging() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport,
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    fs::create_dir(installer.model_path()).unwrap();
+
+    let error = installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, WhisperModelInstallErrorKind::Promotion);
+    assert!(installer.model_path().is_dir());
+    assert!(!installer.marker_path().exists());
+    assert_eq!(fs::read_dir(installer.install_root).unwrap().count(), 1);
+
+    let marker_temp = tempfile::TempDir::new().unwrap();
+    let marker_transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (marker_installer, _) = fixture_installer(
+        marker_temp.path(),
+        FIXTURE_MODEL,
+        marker_transport,
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    fs::create_dir(marker_installer.marker_path()).unwrap();
+
+    let error = marker_installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, WhisperModelInstallErrorKind::Io);
+    assert!(!marker_installer.model_path().exists());
+    assert!(marker_installer.marker_path().is_dir());
+    assert_eq!(
+        fs::read_dir(marker_installer.install_root).unwrap().count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn concurrent_install_calls_download_and_promote_only_once() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let mut fake = FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    );
+    fake.gate = Some((entered.clone(), release.clone()));
+    let transport = Arc::new(fake);
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    let installer = Arc::new(installer);
+    let first_installer = installer.clone();
+    let first = tokio::spawn(async move {
+        first_installer
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+    });
+    entered.notified().await;
+    let second_installer = installer.clone();
+    let second = tokio::spawn(async move {
+        second_installer
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+    });
+    release.notify_one();
+
+    let dispositions = [
+        first.await.unwrap().unwrap().disposition,
+        second.await.unwrap().unwrap().disposition,
+    ];
+    assert!(dispositions.contains(&WhisperModelInstallDisposition::Installed));
+    assert!(dispositions.contains(&WhisperModelInstallDisposition::AlreadyInstalled));
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    assert!(installer.verify_installed().unwrap().is_some());
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+}
 
 #[test]
 fn ensure_install_root_creates_clean_profile_directory() {

@@ -1,5 +1,3 @@
-use super::super::manifest::WHISPER_MODEL_BYTES;
-use super::super::manifest::WHISPER_MODEL_SHA256;
 use super::transport::DownloadSink;
 use super::WhisperModelInstallError;
 use ring::digest::{Context as Sha256Context, SHA256};
@@ -10,11 +8,17 @@ use std::path::Path;
 pub(super) struct WhisperVerifyingFileSink {
     file: std::fs::File,
     pub(super) bytes_written: u64,
+    expected_bytes: u64,
+    expected_sha256: String,
     sha256: Sha256Context,
 }
 
 impl WhisperVerifyingFileSink {
-    pub(super) fn create(path: &Path) -> Result<Self, WhisperModelInstallError> {
+    pub(super) fn create(
+        path: &Path,
+        expected_bytes: u64,
+        expected_sha256: impl Into<String>,
+    ) -> Result<Self, WhisperModelInstallError> {
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -23,6 +27,8 @@ impl WhisperVerifyingFileSink {
         Ok(Self {
             file,
             bytes_written: 0,
+            expected_bytes,
+            expected_sha256: expected_sha256.into(),
             sha256: Sha256Context::new(&SHA256),
         })
     }
@@ -32,10 +38,10 @@ impl WhisperVerifyingFileSink {
             .flush()
             .and_then(|()| self.file.sync_all())
             .map_err(|_| WhisperModelInstallError::io("flush the staging file"))?;
-        if self.bytes_written != WHISPER_MODEL_BYTES {
+        if self.bytes_written != self.expected_bytes {
             return Err(WhisperModelInstallError::size_mismatch());
         }
-        if digest_hex(self.sha256.finish().as_ref()) != WHISPER_MODEL_SHA256 {
+        if digest_hex(self.sha256.finish().as_ref()) != self.expected_sha256 {
             return Err(WhisperModelInstallError::sha256_mismatch());
         }
         Ok(())
@@ -47,7 +53,7 @@ impl DownloadSink for WhisperVerifyingFileSink {
         let chunk_bytes =
             u64::try_from(chunk.len()).map_err(|_| WhisperModelInstallError::size_mismatch())?;
         let next_size = self.bytes_written.saturating_add(chunk_bytes);
-        if next_size > WHISPER_MODEL_BYTES {
+        if next_size > self.expected_bytes {
             return Err(WhisperModelInstallError::size_mismatch());
         }
         self.file
