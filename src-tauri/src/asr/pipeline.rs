@@ -11,12 +11,12 @@ use crate::audio::capture::AudioCapture;
 use crate::audio::resample::AudioResampler;
 use async_trait::async_trait;
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::error::TryRecvError;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, Notify};
 use tracing::debug;
 
 /// Hard bound for microphone chunks waiting on local Moonshine inference.
@@ -72,7 +72,47 @@ pub struct LocalAsrPipelineDiagnostics {
     pub peak_resident_memory_bytes: Option<u64>,
 }
 
-pub type LocalAsrPipelineEventCallback = Arc<dyn Fn(LocalAsrPipelineEvent) + Send + Sync>;
+pub type LocalAsrPipelineEventCallback =
+    Arc<dyn Fn(LocalAsrPipelineEvent, LocalAsrEventDeliveryAck) + Send + Sync>;
+
+#[derive(Default)]
+pub(crate) struct LocalAsrEventDeliveryTracker {
+    pending: AtomicUsize,
+    changed: Notify,
+}
+
+pub struct LocalAsrEventDeliveryAck {
+    tracker: Arc<LocalAsrEventDeliveryTracker>,
+}
+
+impl LocalAsrEventDeliveryTracker {
+    pub(crate) fn begin(self: &Arc<Self>) -> LocalAsrEventDeliveryAck {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        LocalAsrEventDeliveryAck {
+            tracker: self.clone(),
+        }
+    }
+
+    pub(crate) async fn wait_until_idle(&self) {
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if self.pending.load(Ordering::SeqCst) == 0 {
+                return;
+            }
+            changed.await;
+        }
+    }
+}
+
+impl Drop for LocalAsrEventDeliveryAck {
+    fn drop(&mut self) {
+        if self.tracker.pending.fetch_sub(1, Ordering::SeqCst) == 1 {
+            self.tracker.changed.notify_waiters();
+        }
+    }
+}
 
 pub trait PipelineEngine: Send {
     fn input_sample_rate_hz(&self) -> u32;
@@ -116,6 +156,7 @@ pub struct LocalAsrPipeline {
     stop_requested: Arc<AtomicBool>,
     abort_requested: Arc<AtomicBool>,
     metrics: Arc<Mutex<RuntimeMetrics>>,
+    event_delivery: Arc<LocalAsrEventDeliveryTracker>,
     worker: Option<JoinHandle<Result<(), AsrError>>>,
 }
 
@@ -306,15 +347,15 @@ impl LocalAsrPipeline {
     /// Safe to call repeatedly.
     pub async fn stop_and_join(&mut self) -> Result<(), AsrError> {
         self.request_stop();
-        let Some(worker) = self.worker.take() else {
-            self.running.store(false, Ordering::SeqCst);
-            return Ok(());
+        let result = if let Some(worker) = self.worker.take() {
+            tokio::task::spawn_blocking(move || worker.join())
+                .await
+                .map_err(|_| worker_join_error())?
+        } else {
+            Ok(Ok(()))
         };
-
-        let result = tokio::task::spawn_blocking(move || worker.join())
-            .await
-            .map_err(|_| worker_join_error())?;
         self.running.store(false, Ordering::SeqCst);
+        self.event_delivery.wait_until_idle().await;
         match result {
             Ok(worker_result) => worker_result,
             Err(_) => Err(worker_join_error()),
@@ -391,12 +432,14 @@ impl LocalAsrPipeline {
         let stop_requested = Arc::new(AtomicBool::new(false));
         let abort_requested = Arc::new(AtomicBool::new(false));
         let metrics = Arc::new(Mutex::new(RuntimeMetrics::new()));
+        let event_delivery = Arc::new(LocalAsrEventDeliveryTracker::default());
         let (ready_tx, ready_rx) = oneshot::channel::<Result<(), AsrError>>();
 
         let worker_running = running.clone();
         let worker_stop = stop_requested.clone();
         let worker_abort = abort_requested.clone();
         let worker_metrics = metrics.clone();
+        let worker_event_delivery = event_delivery.clone();
         let worker_callback = event_callback.clone();
         let worker = thread::Builder::new()
             .name(match architecture {
@@ -443,6 +486,7 @@ impl LocalAsrPipeline {
                     &worker_abort,
                     &worker_metrics,
                     &worker_callback,
+                    &worker_event_delivery,
                 );
                 worker_running.store(false, Ordering::SeqCst);
                 result
@@ -466,6 +510,7 @@ impl LocalAsrPipeline {
                     stop_requested,
                     abort_requested,
                     metrics,
+                    event_delivery,
                     worker: Some(startup_worker.take_worker()),
                 };
                 let diagnostics = pipeline.diagnostics();
@@ -596,6 +641,7 @@ fn apply_transcript_updates(
     transcript_state: &mut TranscriptStateMachine,
     metrics: &Mutex<RuntimeMetrics>,
     event_callback: &LocalAsrPipelineEventCallback,
+    event_delivery: &Arc<LocalAsrEventDeliveryTracker>,
 ) {
     for update in updates {
         let latency_ms = match &update {
@@ -607,7 +653,7 @@ fn apply_transcript_updates(
             .lock()
             .record_transcript_events(update, &emitted_events, latency_ms);
         for event in emitted_events {
-            event_callback(event);
+            event_callback(event, event_delivery.begin());
         }
     }
 }
@@ -619,6 +665,7 @@ fn run_worker(
     abort_requested: &AtomicBool,
     metrics: &Mutex<RuntimeMetrics>,
     event_callback: &LocalAsrPipelineEventCallback,
+    event_delivery: &Arc<LocalAsrEventDeliveryTracker>,
 ) -> Result<(), AsrError> {
     let mut terminal_error = None;
     let mut transcript_state = TranscriptStateMachine::default();
@@ -648,7 +695,7 @@ fn run_worker(
         let pcm = match decode_mono_i16_le(&bytes) {
             Ok(pcm) => pcm,
             Err(error) => {
-                record_terminal_error(metrics, event_callback, &error);
+                record_terminal_error(metrics, event_callback, event_delivery, &error);
                 terminal_error = Some(error);
                 break;
             }
@@ -662,11 +709,17 @@ fn run_worker(
 
         match inference_result {
             Ok(updates) => {
-                apply_transcript_updates(&updates, &mut transcript_state, metrics, event_callback);
+                apply_transcript_updates(
+                    &updates,
+                    &mut transcript_state,
+                    metrics,
+                    event_callback,
+                    event_delivery,
+                );
                 engine.updates_delivered(&updates);
             }
             Err(error) => {
-                record_terminal_error(metrics, event_callback, &error);
+                record_terminal_error(metrics, event_callback, event_delivery, &error);
                 terminal_error = Some(error);
                 break;
             }
@@ -678,13 +731,19 @@ fn run_worker(
         Ok(updates) => {
             metrics.lock().record_inference(0, stop_started.elapsed());
             if terminal_error.is_none() && !abort_requested.load(Ordering::SeqCst) {
-                apply_transcript_updates(&updates, &mut transcript_state, metrics, event_callback);
+                apply_transcript_updates(
+                    &updates,
+                    &mut transcript_state,
+                    metrics,
+                    event_callback,
+                    event_delivery,
+                );
                 engine.updates_delivered(&updates);
             }
         }
         Err(stop_error) => {
             if terminal_error.is_none() {
-                record_terminal_error(metrics, event_callback, &stop_error);
+                record_terminal_error(metrics, event_callback, event_delivery, &stop_error);
                 terminal_error = Some(stop_error);
             }
         }
@@ -712,12 +771,16 @@ fn decode_mono_i16_le(bytes: &[u8]) -> Result<Vec<f32>, AsrError> {
 fn record_terminal_error(
     metrics: &Mutex<RuntimeMetrics>,
     event_callback: &LocalAsrPipelineEventCallback,
+    event_delivery: &Arc<LocalAsrEventDeliveryTracker>,
     error: &AsrError,
 ) {
     metrics.lock().record_error(error);
-    event_callback(AsrEvent::Error {
-        error: error.clone(),
-    });
+    event_callback(
+        AsrEvent::Error {
+            error: error.clone(),
+        },
+        event_delivery.begin(),
+    );
 }
 
 fn invalid_state_error(message: &str) -> AsrError {

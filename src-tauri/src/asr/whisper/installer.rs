@@ -43,6 +43,7 @@ pub enum WhisperModelInstallErrorKind {
     Sha256Mismatch,
     Cancelled,
     CorruptInstall,
+    IncompatibleInstall,
     Promotion,
 }
 
@@ -138,6 +139,14 @@ impl WhisperModelInstallError {
             WhisperModelInstallErrorKind::CorruptInstall,
             "The installed Whisper model is incomplete or corrupt.",
             true,
+        )
+    }
+
+    pub fn incompatible_install() -> Self {
+        Self::new(
+            WhisperModelInstallErrorKind::IncompatibleInstall,
+            "The installed Whisper model metadata is incompatible with this application version.",
+            false,
         )
     }
 
@@ -301,6 +310,14 @@ pub struct WhisperModelInstaller {
     disk_space: Arc<dyn DiskSpaceProbe>,
 }
 
+struct StagingDirectory(PathBuf);
+
+impl Drop for StagingDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 impl WhisperModelInstaller {
     pub fn new(install_root: impl Into<PathBuf>) -> Result<Self, WhisperModelInstallError> {
         let transport = Arc::new(ReqwestModelDownloadTransport::new()?);
@@ -361,10 +378,27 @@ impl WhisperModelInstaller {
         verifier: F,
     ) -> Result<bool, WhisperModelInstallError>
     where
-        F: FnOnce(&Path) -> Result<(), WhisperModelInstallError>,
+        F: Fn(&Path) -> Result<(), WhisperModelInstallError>,
+    {
+        self.migrate_legacy_layout_with_verifier_and_copier(
+            legacy_root,
+            verifier,
+            |source, target| fs::copy(source, target),
+        )
+    }
+
+    fn migrate_legacy_layout_with_verifier_and_copier<F, C>(
+        &self,
+        legacy_root: &Path,
+        verifier: F,
+        copier: C,
+    ) -> Result<bool, WhisperModelInstallError>
+    where
+        F: Fn(&Path) -> Result<(), WhisperModelInstallError>,
+        C: FnOnce(&Path, &Path) -> std::io::Result<u64>,
     {
         let legacy_model = legacy_root.join(MODEL_FILENAME);
-        if self.model_path().exists() || !legacy_model.exists() {
+        if !path_is_regular_file(&legacy_model) {
             return Ok(false);
         }
 
@@ -372,21 +406,67 @@ impl WhisperModelInstaller {
         self.ensure_install_root()?;
 
         let model_path = self.model_path();
-        match fs::rename(&legacy_model, &model_path) {
-            Ok(()) => {}
-            Err(_) => {
-                fs::copy(&legacy_model, &model_path)
-                    .map_err(|_| WhisperModelInstallError::promotion())?;
-                fs::remove_file(&legacy_model)
-                    .map_err(|_| WhisperModelInstallError::promotion())?;
+        let marker_path = self.marker_path();
+        if fs::symlink_metadata(&model_path).is_ok() {
+            let canonical_marker_is_compatible = path_is_regular_file(&marker_path)
+                && fs::read_to_string(&marker_path)
+                    .ok()
+                    .and_then(|text| serde_json::from_str::<InstallMarker>(&text).ok())
+                    .is_some_and(|marker| marker.is_compatible());
+            if path_is_regular_file(&model_path)
+                && canonical_marker_is_compatible
+                && verifier(&model_path).is_ok()
+            {
+                return Ok(false);
             }
+            fs::remove_file(&model_path).map_err(|_| WhisperModelInstallError::promotion())?;
+        }
+        match fs::symlink_metadata(&marker_path) {
+            Ok(_) => {
+                fs::remove_file(&marker_path).map_err(|_| WhisperModelInstallError::promotion())?
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(WhisperModelInstallError::promotion()),
         }
 
-        fs::write(
-            self.marker_path(),
-            serde_json::to_string(&InstallMarker::new()).unwrap_or_default(),
-        )
-        .map_err(|_| WhisperModelInstallError::io("write the install marker"))?;
+        let staging_dir = self
+            .install_root
+            .join(format!("whisper_migration_{}", Uuid::new_v4()));
+        fs::create_dir(&staging_dir)
+            .map_err(|_| WhisperModelInstallError::io("create the migration staging directory"))?;
+        let staged_model = staging_dir.join(MODEL_FILENAME);
+        if copier(&legacy_model, &staged_model).is_err() {
+            let _ = fs::remove_dir_all(&staging_dir);
+            return Err(WhisperModelInstallError::promotion());
+        }
+        if let Err(error) = verifier(&staged_model) {
+            let _ = fs::remove_dir_all(&staging_dir);
+            return Err(error);
+        }
+        if fs::rename(&staged_model, &model_path).is_err() {
+            let _ = fs::remove_dir_all(&staging_dir);
+            return Err(WhisperModelInstallError::promotion());
+        }
+
+        let staged_marker = staging_dir.join(INSTALL_MARKER_FILE);
+        let marker_result = serde_json::to_string(&InstallMarker::new())
+            .map_err(|_| WhisperModelInstallError::io("serialize the install marker"))
+            .and_then(|text| {
+                fs::write(&staged_marker, text)
+                    .map_err(|_| WhisperModelInstallError::io("write the install marker"))
+            })
+            .and_then(|()| {
+                fs::rename(&staged_marker, &marker_path)
+                    .map_err(|_| WhisperModelInstallError::io("promote the install marker"))
+            });
+        if let Err(error) = marker_result {
+            let _ = fs::remove_file(&model_path);
+            let _ = fs::remove_dir_all(&staging_dir);
+            return Err(error);
+        }
+
+        let _ = fs::remove_dir_all(&staging_dir);
+        let _ = fs::remove_file(&legacy_model);
         let _ = fs::remove_file(legacy_root.join(INSTALL_MARKER_FILE));
         Ok(true)
     }
@@ -398,25 +478,33 @@ impl WhisperModelInstaller {
         let _ = self.migrate_legacy_layout()?;
 
         let model_path = self.model_path();
-        if !model_path.exists() {
-            return Ok(None);
+        match fs::symlink_metadata(&model_path) {
+            Ok(metadata) if metadata.file_type().is_file() => {}
+            Ok(_) => return Err(WhisperModelInstallError::corrupt_install()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err(WhisperModelInstallError::corrupt_install()),
         }
 
-        let marker: InstallMarker = match fs::read_to_string(self.marker_path()) {
+        let marker_path = self.marker_path();
+        if !path_is_regular_file(&marker_path) {
+            return Err(WhisperModelInstallError::corrupt_install());
+        }
+        let marker: InstallMarker = match fs::read_to_string(&marker_path) {
             Ok(text) => serde_json::from_str(&text)
                 .map_err(|_| WhisperModelInstallError::corrupt_install())?,
-            Err(_) => return Ok(None),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(WhisperModelInstallError::corrupt_install());
+            }
+            Err(_) => return Err(WhisperModelInstallError::corrupt_install()),
         };
         if !marker.is_compatible() {
-            return Ok(None);
+            return Err(WhisperModelInstallError::incompatible_install());
         }
 
         let metadata =
             fs::metadata(&model_path).map_err(|_| WhisperModelInstallError::corrupt_install())?;
         let file_size = metadata.len();
-        if file_size != manifest::WHISPER_MODEL_BYTES {
-            return Ok(None);
-        }
+        validate_installed_model_size(file_size, manifest::WHISPER_MODEL_BYTES)?;
 
         // Full integrity verification: size, SHA-256, magic prefix. This is a
         // bounded streaming verification implemented in `manifest::verify_model`.
@@ -509,6 +597,9 @@ impl WhisperModelInstaller {
             .join(format!("whisper_staging_{}", Uuid::new_v4()));
         fs::create_dir(&staging_dir_path)
             .map_err(|_| WhisperModelInstallError::io("create the staging directory"))?;
+        // Also clean up if the command future is dropped while network I/O is
+        // pending. Explicit cleanup below keeps the normal path eager.
+        let _staging_directory = StagingDirectory(staging_dir_path.clone());
 
         let staging_file_path = staging_dir_path.join(MODEL_FILENAME);
         let model_path = self.model_path();
@@ -530,34 +621,47 @@ impl WhisperModelInstaller {
 
         match transport_result {
             Ok(()) => {
-                if let Err(error) = sink.finish() {
+                if cancellation.is_cancelled() {
+                    fs::remove_dir_all(&staging_dir_path).ok();
+                    drop(guard);
+                    result = Err(WhisperModelInstallError::cancelled());
+                } else if let Err(error) = sink.finish() {
                     fs::remove_dir_all(&staging_dir_path).ok();
                     drop(guard);
                     result = Err(error);
+                } else if cancellation.is_cancelled() {
+                    fs::remove_dir_all(&staging_dir_path).ok();
+                    drop(guard);
+                    result = Err(WhisperModelInstallError::cancelled());
                 } else if fs::rename(&staging_file_path, &model_path).is_err() {
                     fs::remove_dir_all(&staging_dir_path).ok();
                     drop(guard);
                     result = Err(WhisperModelInstallError::promotion());
-                } else if fs::write(
-                    &marker_path,
-                    serde_json::to_string(&InstallMarker::new()).unwrap_or_default(),
-                )
-                .is_err()
-                {
+                } else if cancellation.is_cancelled() {
                     fs::remove_file(&model_path).ok();
                     fs::remove_dir_all(&staging_dir_path).ok();
                     drop(guard);
-                    result = Err(WhisperModelInstallError::io("write the install marker"));
+                    result = Err(WhisperModelInstallError::cancelled());
                 } else {
-                    fs::remove_dir_all(&staging_dir_path).ok();
-                    drop(guard);
-                    result = Ok(WhisperModelInstallOutcome {
-                        disposition: WhisperModelInstallDisposition::Installed,
-                        model_id: manifest::WHISPER_SMALL_ID.to_string(),
-                        revision: manifest::WHISPER_MODEL_REVISION.to_string(),
-                        installed_bytes: manifest::WHISPER_MODEL_BYTES,
-                        model_path,
-                    });
+                    match write_install_marker_staged(&staging_dir_path, &marker_path) {
+                        Ok(()) => {
+                            fs::remove_dir_all(&staging_dir_path).ok();
+                            drop(guard);
+                            result = Ok(WhisperModelInstallOutcome {
+                                disposition: WhisperModelInstallDisposition::Installed,
+                                model_id: manifest::WHISPER_SMALL_ID.to_string(),
+                                revision: manifest::WHISPER_MODEL_REVISION.to_string(),
+                                installed_bytes: manifest::WHISPER_MODEL_BYTES,
+                                model_path,
+                            });
+                        }
+                        Err(error) => {
+                            fs::remove_file(&model_path).ok();
+                            fs::remove_dir_all(&staging_dir_path).ok();
+                            drop(guard);
+                            result = Err(error);
+                        }
+                    }
                 }
             }
             Err(error) => {
@@ -580,6 +684,43 @@ impl WhisperModelInstaller {
         let _ = fs::remove_file(self.marker_path());
         Ok(())
     }
+}
+
+fn path_is_regular_file(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_file())
+}
+
+fn validate_installed_model_size(
+    actual_bytes: u64,
+    expected_bytes: u64,
+) -> Result<(), WhisperModelInstallError> {
+    if actual_bytes != expected_bytes {
+        return Err(WhisperModelInstallError::corrupt_install());
+    }
+    Ok(())
+}
+
+fn write_install_marker_staged(
+    staging_dir: &Path,
+    marker_path: &Path,
+) -> Result<(), WhisperModelInstallError> {
+    let staged_marker = staging_dir.join(INSTALL_MARKER_FILE);
+    let marker_text = serde_json::to_string(&InstallMarker::new())
+        .map_err(|_| WhisperModelInstallError::io("serialize the install marker"))?;
+    fs::write(&staged_marker, marker_text)
+        .map_err(|_| WhisperModelInstallError::io("write the install marker"))?;
+    match fs::symlink_metadata(marker_path) {
+        Ok(_) => fs::remove_file(marker_path)
+            .map_err(|_| WhisperModelInstallError::io("replace the install marker"))?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => {
+            return Err(WhisperModelInstallError::io(
+                "inspect the existing install marker",
+            ));
+        }
+    }
+    fs::rename(staged_marker, marker_path)
+        .map_err(|_| WhisperModelInstallError::io("promote the install marker"))
 }
 
 // --- Error mapping for the engine -----------------------------------------
@@ -622,7 +763,8 @@ pub(crate) fn map_whisper_failure(failure: WhisperFailure) -> AsrError {
         WhisperFailure::Verification(error) => match error.kind {
         WhisperModelInstallErrorKind::CorruptInstall
         | WhisperModelInstallErrorKind::SizeMismatch
-        | WhisperModelInstallErrorKind::Sha256Mismatch => (
+        | WhisperModelInstallErrorKind::Sha256Mismatch
+        | WhisperModelInstallErrorKind::IncompatibleInstall => (
             AsrErrorKind::ModelCorrupt,
             "The Whisper Small model is incomplete or corrupt. Reinstall it in Settings before starting local speech recognition. No microphone audio was sent to Google.".to_string(),
             true,
@@ -676,6 +818,92 @@ mod tests {
 
         assert!(root.is_dir());
         assert_eq!(installer.model_path(), root.join(MODEL_FILENAME));
+    }
+
+    #[test]
+    fn dropped_install_staging_guard_removes_partial_artifacts() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let staging = temp.path().join("whisper_staging_interrupted");
+        fs::create_dir(&staging).unwrap();
+        fs::write(staging.join(MODEL_FILENAME), b"partial").unwrap();
+
+        drop(StagingDirectory(staging.clone()));
+
+        assert!(!staging.exists());
+    }
+
+    #[test]
+    fn verify_installed_classifies_existing_wrong_size_as_corrupt() {
+        for artifact in [b"short".as_slice(), b"oversized".as_slice()] {
+            let temp = tempfile::TempDir::new().unwrap();
+            let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+            installer.ensure_install_root().unwrap();
+            fs::write(installer.model_path(), artifact).unwrap();
+            fs::write(
+                installer.marker_path(),
+                serde_json::to_string(&InstallMarker::new()).unwrap(),
+            )
+            .unwrap();
+
+            let error = installer.verify_installed().unwrap_err();
+            assert_eq!(error.kind, WhisperModelInstallErrorKind::CorruptInstall);
+            assert_eq!(
+                map_whisper_failure(WhisperFailure::Verification(error)).kind,
+                AsrErrorKind::ModelCorrupt
+            );
+        }
+    }
+
+    #[test]
+    fn existing_model_without_marker_is_corrupt_not_missing() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+        installer.ensure_install_root().unwrap();
+        fs::write(installer.model_path(), b"partial model").unwrap();
+
+        let error = installer.verify_installed().unwrap_err();
+        assert_eq!(error.kind, WhisperModelInstallErrorKind::CorruptInstall);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installed_model_symlink_is_corrupt_without_following_target() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+        installer.ensure_install_root().unwrap();
+        let target = temp.path().join("outside-model");
+        fs::write(&target, b"outside").unwrap();
+        symlink(&target, installer.model_path()).unwrap();
+
+        let error = installer.verify_installed().unwrap_err();
+
+        assert_eq!(error.kind, WhisperModelInstallErrorKind::CorruptInstall);
+        assert_eq!(fs::read(target).unwrap(), b"outside");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staged_marker_promotion_replaces_symlink_without_writing_through_it() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let staging = temp.path().join("stage");
+        fs::create_dir(&staging).unwrap();
+        let external_target = temp.path().join("outside-marker");
+        fs::write(&external_target, b"unchanged").unwrap();
+        let marker_path = temp.path().join(INSTALL_MARKER_FILE);
+        symlink(&external_target, &marker_path).unwrap();
+
+        write_install_marker_staged(&staging, &marker_path).unwrap();
+
+        assert_eq!(fs::read(external_target).unwrap(), b"unchanged");
+        assert!(path_is_regular_file(&marker_path));
+        assert!(
+            serde_json::from_str::<InstallMarker>(&fs::read_to_string(marker_path).unwrap())
+                .is_ok()
+        );
     }
 
     #[test]
@@ -760,6 +988,11 @@ mod tests {
         fs::create_dir_all(&new_root).unwrap();
         fs::write(legacy_root.join(MODEL_FILENAME), b"legacy").unwrap();
         fs::write(new_root.join(MODEL_FILENAME), b"canonical").unwrap();
+        fs::write(
+            new_root.join(INSTALL_MARKER_FILE),
+            serde_json::to_string(&InstallMarker::new()).unwrap(),
+        )
+        .unwrap();
 
         let installer = WhisperModelInstaller::new(&new_root).unwrap();
         let migrated = installer
@@ -771,6 +1004,101 @@ mod tests {
         assert_eq!(
             fs::read(legacy_root.join(MODEL_FILENAME)).unwrap(),
             b"legacy"
+        );
+    }
+
+    #[test]
+    fn legacy_migration_replaces_partial_canonical_and_is_retryable() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let legacy_root = temp.path().join("models").join("whisper");
+        let new_root = legacy_root.join("whisper-small");
+        fs::create_dir_all(&new_root).unwrap();
+        let legacy_model = legacy_root.join(MODEL_FILENAME);
+        fs::write(&legacy_model, b"verified legacy fixture").unwrap();
+        fs::write(new_root.join(MODEL_FILENAME), b"partial canonical").unwrap();
+
+        let installer = WhisperModelInstaller::new(&new_root).unwrap();
+        let migrated = installer
+            .migrate_legacy_layout_with_verifier(&legacy_root, |path| {
+                if fs::read(path).unwrap() == b"verified legacy fixture" {
+                    Ok(())
+                } else {
+                    Err(WhisperModelInstallError::corrupt_install())
+                }
+            })
+            .unwrap();
+
+        assert!(migrated);
+        assert_eq!(
+            fs::read(installer.model_path()).unwrap(),
+            b"verified legacy fixture"
+        );
+        assert!(!legacy_model.exists());
+    }
+
+    #[test]
+    fn legacy_migration_failure_retains_source_for_retry() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let legacy_root = temp.path().join("models").join("whisper");
+        let new_root = legacy_root.join("whisper-small");
+        fs::create_dir_all(&new_root).unwrap();
+        let legacy_model = legacy_root.join(MODEL_FILENAME);
+        fs::write(&legacy_model, b"verified fixture").unwrap();
+        let installer = WhisperModelInstaller::new(&new_root).unwrap();
+        let marker_path = installer.marker_path();
+        fs::create_dir(&marker_path).unwrap();
+
+        let failed = installer
+            .migrate_legacy_layout_with_verifier(&legacy_root, |_| Ok(()))
+            .unwrap_err();
+        assert_eq!(failed.kind, WhisperModelInstallErrorKind::Promotion);
+        assert!(legacy_model.exists());
+        assert!(!installer.model_path().exists());
+
+        fs::remove_dir(&marker_path).unwrap();
+        assert!(installer
+            .migrate_legacy_layout_with_verifier(&legacy_root, |_| Ok(()))
+            .unwrap());
+        assert_eq!(
+            fs::read(installer.model_path()).unwrap(),
+            b"verified fixture"
+        );
+    }
+
+    #[test]
+    fn interrupted_legacy_copy_is_cleaned_and_can_be_retried() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let legacy_root = temp.path().join("models").join("whisper");
+        let new_root = legacy_root.join("whisper-small");
+        fs::create_dir_all(&new_root).unwrap();
+        let legacy_model = legacy_root.join(MODEL_FILENAME);
+        fs::write(&legacy_model, b"verified source remains available").unwrap();
+        let installer = WhisperModelInstaller::new(&new_root).unwrap();
+
+        let failed = installer
+            .migrate_legacy_layout_with_verifier_and_copier(
+                &legacy_root,
+                |_| Ok(()),
+                |_source, target| {
+                    fs::write(target, b"partial copy")?;
+                    Err(std::io::Error::other("injected interrupted copy"))
+                },
+            )
+            .unwrap_err();
+        assert_eq!(failed.kind, WhisperModelInstallErrorKind::Promotion);
+        assert_eq!(
+            fs::read(&legacy_model).unwrap(),
+            b"verified source remains available"
+        );
+        assert!(!installer.model_path().exists());
+        assert!(fs::read_dir(&new_root).unwrap().next().is_none());
+
+        assert!(installer
+            .migrate_legacy_layout_with_verifier(&legacy_root, |_| Ok(()))
+            .unwrap());
+        assert_eq!(
+            fs::read(installer.model_path()).unwrap(),
+            b"verified source remains available"
         );
     }
 
@@ -839,6 +1167,7 @@ mod tests {
             WhisperModelInstallErrorKind::CorruptInstall,
             WhisperModelInstallErrorKind::SizeMismatch,
             WhisperModelInstallErrorKind::Sha256Mismatch,
+            WhisperModelInstallErrorKind::IncompatibleInstall,
         ] {
             let mapped = map_whisper_failure(WhisperFailure::Verification(
                 WhisperModelInstallError::new(kind, "integrity", true),

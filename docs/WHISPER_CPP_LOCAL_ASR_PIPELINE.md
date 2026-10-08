@@ -1,10 +1,11 @@
 # Whisper.cpp Local ASR Pipeline
 
-**Status:** Current implementation notes for the Whisper.cpp local-ASR remediation.
-**Source scope:** current production behavior on `master`; the final qualification document records the exact source SHA.
-**Final qualification:** not complete until the post-review remediation TODO records successful exact-head ordinary CI, real-CPU acceptance, and exact-master closeout evidence.
+**Status:** Current implementation notes. Initial Linux x86_64 CPU qualification passed on the historical source recorded below; post-qualification remediation is in progress.
+**Source scope:** current production behavior on `master`; this working tree includes unqualified follow-up changes.
+**Historical qualification:** run `37744371559`, job `113202252940`, checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`.
+**Open follow-up:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`; its changes require fresh exact-source ordinary CI and real-CPU acceptance.
 
-This document describes the current production pipeline behavior. It is not historical qualification evidence and must not be used by itself to close the remediation checklist.
+This document describes the current production pipeline behavior. Historical qualification evidence applies only to its recorded source checkout and does not qualify later source changes.
 It supersedes implementation-state claims in `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md`; the dated document remains historical context.
 
 ## Provenance and runtime identity
@@ -116,7 +117,8 @@ Normal stop is graceful:
 5. Finalize the utterance.
 6. Forward any final transcript through the normal transcript path.
 7. Join/retire the worker.
-8. Release the verified model lease with worker termination.
+8. Wait for every emitted event's conversation/provider delivery acknowledgement or terminal error disposition.
+9. Release the verified model lease with worker termination.
 
 Drop remains an emergency safety-net abort path. Abort may discard accepted queued audio because it runs without an async caller that can await graceful drain. This is intentionally distinct from normal conversation stop.
 
@@ -126,7 +128,7 @@ Stop/finalization is idempotent: repeated stop calls must not duplicate the fina
 
 Runtime diagnostics expose the selected local-ASR architecture, input sample rate, queue depth/capacity, running state, last error, first partial/final latency, last transcription latency, processed audio duration, inference wall time, real-time factor, process CPU time, average CPU utilization, baseline RSS, current RSS, and peak RSS where the operating system supports those metrics.
 
-Real-CPU performance and acceptance claims must come from the real-CPU Whisper acceptance workflow on the exact qualification SHA. Until that workflow is terminal-successful and its artifacts are recorded, this document is descriptive only and must not be treated as final P5 evidence.
+Real-CPU performance claims below apply only to the exact historical checkout in the qualification evidence. Changes to installer, runtime, or stop delivery require a successful manual acceptance workflow at the exact new source SHA before they can be described as qualified.
 
 ## Acceptance workflow contract
 
@@ -151,3 +153,7 @@ Acceptance evidence must record, at minimum:
 - partial interval, endpoint threshold, maximum utterance duration, and queue capacity.
 
 Human summaries must be generated from verified machine-readable evidence rather than unverified manifest claims.
+
+## Follow-up qualification boundary
+
+The prior qualification remains valid as a historical result for its recorded checkout. It does not cover later fixes for stop-time event delivery, diagnostics, installed-model state classification, migration recovery, user cancellation, or native rebuild invalidation. The post-qualification TODO tracks these changes and must record a fresh exact-source run before current-source qualification claims are updated.

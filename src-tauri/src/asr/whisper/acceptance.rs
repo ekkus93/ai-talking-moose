@@ -437,7 +437,7 @@ async fn production_pipeline_metrics(
 ) -> Result<WhisperPipelineAcceptanceMetrics, String> {
     let events = Arc::new(StdMutex::new(Vec::<AsrEvent>::new()));
     let callback_events = events.clone();
-    let callback = Arc::new(move |event: AsrEvent| {
+    let callback = Arc::new(move |event: AsrEvent, _ack| {
         callback_events
             .lock()
             .expect("acceptance event lock")
@@ -483,7 +483,7 @@ async fn production_pipeline_metrics(
     // exercise drop-newest rather than blocking or growing without bound.
     let overload_events = Arc::new(StdMutex::new(Vec::<AsrEvent>::new()));
     let overload_events_for_callback = overload_events.clone();
-    let overload_callback = Arc::new(move |event: AsrEvent| {
+    let overload_callback = Arc::new(move |event: AsrEvent, _ack| {
         overload_events_for_callback
             .lock()
             .expect("overload event lock")

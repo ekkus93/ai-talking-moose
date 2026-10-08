@@ -268,6 +268,7 @@ pub fn run() {
             get_asr_models,
             get_asr_diagnostics,
             install_asr_model,
+            cancel_whisper_asr_model_install,
             delete_asr_model,
             get_local_llm_models,
             get_local_llm_diagnostics,

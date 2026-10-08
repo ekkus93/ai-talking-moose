@@ -1,6 +1,7 @@
 # Whisper.cpp Local ASR Qualification Evidence
 
-**Qualification status:** Model installation and offline batch transcription passed. Streaming transcription did not meet nominal-load behavior: 87 input chunks were dropped, so production performance tuning remains open.
+**Historical qualification status:** The final recorded run passed installation/reinstall, offline transcription, and zero nominal-load drops on its measured Linux x86_64 runner. This evidence applies only to checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`; subsequent production changes require fresh exact-source qualification.
+**Current follow-up:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`.
 
 ## Immutable workflow identity
 

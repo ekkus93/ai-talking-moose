@@ -332,6 +332,10 @@ export const browserPreviewBridge = {
     };
   },
 
+  async cancelWhisperAsrModelInstall(): Promise<boolean> {
+    return false;
+  },
+
   async deleteAsrModel(
     mode: Exclude<AsrMode, "gemini_live_audio">,
   ): Promise<AsrModelDescriptor> {

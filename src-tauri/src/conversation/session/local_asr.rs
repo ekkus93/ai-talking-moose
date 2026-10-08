@@ -1,6 +1,7 @@
 use super::*;
 use crate::asr::pipeline::{
-    local_asr_queue_capacity, LocalAsrPipeline, LocalAsrPipelineEventCallback,
+    local_asr_queue_capacity, LocalAsrEventDeliveryAck, LocalAsrPipeline,
+    LocalAsrPipelineEventCallback,
 };
 use crate::asr::types::{LocalAsrArchitecture, LocalAsrRuntimeDiagnostics};
 use crate::asr::{AsrError, AsrErrorKind};
@@ -189,57 +190,15 @@ impl ConversationManager {
 
         self.local_asr_diagnostics.clear(asr_mode);
 
-        let manager_for_asr = self.clone();
-        let session_id_for_asr = session_id.clone();
-        let capture_for_asr = capture.clone();
-        let playback_for_asr = playback.clone();
-        let state_for_asr = state_callback.clone();
-        let provider_error_for_asr = provider_error_callback.clone();
-        let event_callback: LocalAsrPipelineEventCallback = Arc::new(move |event| {
-            let manager = manager_for_asr.clone();
-            let session_id = session_id_for_asr.clone();
-            let capture = capture_for_asr.clone();
-            let playback = playback_for_asr.clone();
-            let state_callback = state_for_asr.clone();
-            let provider_error_callback = provider_error_for_asr.clone();
-            tauri::async_runtime::spawn(async move {
-                match event {
-                    AsrEvent::Error { error } => {
-                        let cleaned = manager
-                            .shutdown_if_generation_current(
-                                generation,
-                                capture,
-                                playback,
-                                ConversationLifecycle::Failed,
-                            )
-                            .await;
-                        if cleaned {
-                            warn!(kind = ?error.kind, "Local ASR inference terminated");
-                            state_callback(CharacterState::Error);
-                        }
-                    }
-                    event => {
-                        if let Err(error) = manager
-                            .handle_local_asr_event(generation, &session_id, event)
-                            .await
-                        {
-                            let cleaned = manager
-                                .shutdown_if_generation_current(
-                                    generation,
-                                    capture,
-                                    playback,
-                                    ConversationLifecycle::Failed,
-                                )
-                                .await;
-                            if cleaned {
-                                provider_error_callback(error);
-                                state_callback(CharacterState::Error);
-                            }
-                        }
-                    }
-                }
-            });
-        });
+        let event_callback = local_asr_event_callback(
+            self.clone(),
+            generation,
+            session_id.clone(),
+            capture.clone(),
+            playback.clone(),
+            state_callback.clone(),
+            provider_error_callback.clone(),
+        );
 
         let pipeline_result = match asr_mode {
             AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => {
@@ -302,6 +261,69 @@ impl ConversationManager {
             }
         }
     }
+}
+
+pub(super) fn local_asr_event_callback(
+    manager: ConversationManager,
+    generation: u64,
+    session_id: String,
+    capture: Arc<SyncMutex<AudioCapture>>,
+    playback: Arc<AudioPlayback>,
+    state_callback: StateCallback,
+    provider_error_callback: ProviderErrorCallback,
+) -> LocalAsrPipelineEventCallback {
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(16);
+    tauri::async_runtime::spawn(async move {
+        while let Some((event, ack)) = event_rx.recv().await {
+            let mut ack = Some(ack);
+            match event {
+                AsrEvent::Error { error } => {
+                    // Error cleanup stops this same pipeline. Release its delivery
+                    // acknowledgement first so graceful stop cannot wait on itself.
+                    drop(ack.take());
+                    let cleaned = manager
+                        .shutdown_if_generation_current(
+                            generation,
+                            capture.clone(),
+                            playback.clone(),
+                            ConversationLifecycle::Failed,
+                        )
+                        .await;
+                    if cleaned {
+                        warn!(kind = ?error.kind, "Local ASR inference terminated");
+                        state_callback(CharacterState::Error);
+                    }
+                }
+                event => {
+                    if let Err(error) = manager
+                        .handle_local_asr_event(generation, &session_id, event)
+                        .await
+                    {
+                        // Provider handoff failed. Release before cleanup stops the
+                        // pipeline whose worker emitted this event.
+                        drop(ack.take());
+                        let cleaned = manager
+                            .shutdown_if_generation_current(
+                                generation,
+                                capture.clone(),
+                                playback.clone(),
+                                ConversationLifecycle::Failed,
+                            )
+                            .await;
+                        if cleaned {
+                            provider_error_callback(error);
+                            state_callback(CharacterState::Error);
+                        }
+                    }
+                }
+            }
+        }
+    });
+    Arc::new(move |event, ack: LocalAsrEventDeliveryAck| {
+        if let Err(error) = event_tx.blocking_send((event, ack)) {
+            drop(error.0 .1);
+        }
+    })
 }
 
 fn is_local_mode(mode: AsrMode) -> bool {

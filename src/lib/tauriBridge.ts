@@ -108,6 +108,11 @@ export const nativeTauriBridge = {
     return invoke<AsrModelDescriptor>("install_asr_model", { mode });
   },
 
+  async cancelWhisperAsrModelInstall(): Promise<boolean> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("cancel_whisper_asr_model_install");
+  },
+
   async deleteAsrModel(
     mode: Exclude<AsrMode, "gemini_live_audio">,
   ): Promise<AsrModelDescriptor> {

@@ -1,6 +1,6 @@
 # Whisper.cpp Local ASR TODO
 
-Status: Complete; implementation tasks and subtasks were re-audited. Real-CPU evidence and exact-master closeout are recorded in `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md`.
+Status: Original implementation scope complete and historically qualified. Follow-up findings are tracked in `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`; the prior run does not qualify follow-up source changes.
 Recorded: 2026-10-03
 Spec: `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`
 

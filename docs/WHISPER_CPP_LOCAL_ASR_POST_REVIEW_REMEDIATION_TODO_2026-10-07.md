@@ -5,6 +5,7 @@
 **Review baseline:** `master` at `b2525ef58e840e7ebc8d7beb64f8de211ffc9955`
 **Spec:** `docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_SPEC_2026-10-07.md`
 **Original TODO to reconcile at closeout:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`
+**Post-qualification follow-up:** `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`. The completed status and evidence below apply only to the dated source checkout; they do not qualify later production changes.
 
 This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remediation. A checkbox may be marked complete only when the current production source and test/evidence state satisfy the requirement. Existing checkmarks in the original Whisper TODO are not completion evidence for this remediation.
 
@@ -47,7 +48,7 @@ This checklist is authoritative for the 2026-10-07 Whisper.cpp post-review remed
 - [x] Verify first install succeeds without test/workflow code pre-creating the Whisper model root.
 - [x] Verify delete/reinstall remains correct after the layout change.
 
-The manual acceptance run verified install, delete, and reinstall at source SHA `0034e16ea17d23b8fc89c0f22a1722c1bbe7ae6d` (run `37731195815`, artifact `whisper-real-cpu-37731195815-1-0034e16ea17d23b8fc89c0f22a1722c1bbe7ae6d`). The subsequent `master` change only fixes WAV metadata chunk scanning; repeat full acceptance at the new SHA for final qualification.
+The initial manual run verified install, delete, and reinstall at source SHA `0034e16ea17d23b8fc89c0f22a1722c1bbe7ae6d` (run `37731195815`, artifact `whisper-real-cpu-37731195815-1-0034e16ea17d23b8fc89c0f22a1722c1bbe7ae6d`). Final historical qualification later passed at checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c` (run `37744371559`). Newer installer/source changes remain unqualified and are tracked in the 2026-10-08 follow-up.
 
 **Acceptance:** a clean application profile can install, verify, use, delete, and reinstall Whisper through production code alone.
 
@@ -310,7 +311,7 @@ Re-read final-source code before changing any checkbox in `docs/WHISPER_CPP_LOCA
 ### P1 reconciliation
 
 - [x] Re-verify manifest source revision.
-- [x] Re-verify installer clean-profile code and regression behavior; real-profile execution remains open under WPR-200.
+- [x] Re-verify installer clean-profile code and regression behavior; real-profile execution passed on run `37744371559` at checkout `0628de3d0cd946d8d1c0c3fe89afce8f3253854c`. Later migration/cancellation changes are tracked in the 2026-10-08 follow-up.
 - [x] Re-verify canonical model directory layout.
 - [x] Re-verify native source-change rebuild behavior.
 - [x] Re-verify FFI safety/threading claims.

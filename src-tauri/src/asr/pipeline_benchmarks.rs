@@ -86,7 +86,7 @@ async fn run_cpu_benchmark(architecture: MoonshineModelArchitecture) {
 
     let events = Arc::new(Mutex::new(Vec::<AsrEvent>::new()));
     let callback_events = events.clone();
-    let callback: LocalAsrPipelineEventCallback = Arc::new(move |event| {
+    let callback: LocalAsrPipelineEventCallback = Arc::new(move |event, _ack| {
         callback_events.lock().push(event);
     });
     let mut pipeline = match architecture {

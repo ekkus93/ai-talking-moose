@@ -93,7 +93,7 @@ fn callback_events() -> (
 ) {
     let events = Arc::new(StdMutex::new(Vec::new()));
     let callback_events = events.clone();
-    let callback: LocalAsrPipelineEventCallback = Arc::new(move |event| {
+    let callback: LocalAsrPipelineEventCallback = Arc::new(move |event, _ack| {
         callback_events.lock().unwrap().push(event);
     });
     (callback, events)
@@ -766,6 +766,53 @@ async fn sub_threshold_stop_final_crosses_normal_path_exactly_once() {
             AsrEvent::SpeechEnded { monotonic_ms: None },
         ]
     );
+}
+
+#[tokio::test]
+async fn graceful_stop_waits_for_scheduled_final_delivery_acknowledgement() {
+    let state = Arc::new(FakeState::default());
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 79,
+            text: "delayed final".to_string(),
+            latency_ms: 3,
+        });
+    let (ack_tx, mut ack_rx) = tokio::sync::mpsc::unbounded_channel();
+    let callback: LocalAsrPipelineEventCallback = Arc::new(move |event, ack| {
+        if matches!(event, AsrEvent::FinalTranscript { .. }) {
+            ack_tx.send(ack).unwrap();
+        }
+    });
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_with_factory(
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }))
+        },
+        callback,
+    )
+    .await
+    .unwrap();
+
+    pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    let stop = tokio::spawn(async move { pipeline.stop_and_join().await });
+    let final_ack = tokio::time::timeout(Duration::from_secs(2), ack_rx.recv())
+        .await
+        .expect("worker should schedule its stop-time final")
+        .expect("worker event channel should remain open");
+    assert!(
+        !stop.is_finished(),
+        "graceful stop must wait while the conversation handoff is pending"
+    );
+
+    drop(final_ack);
+    stop.await.unwrap().unwrap();
 }
 
 #[tokio::test]

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlertCircle,
   CheckCircle,
@@ -50,6 +56,7 @@ export const AsrSettingsPanel: React.FC = () => {
   >({});
   const [isLoading, setIsLoading] = useState(true);
   const [operationMode, setOperationMode] = useState<LocalAsrMode | null>(null);
+  const cancelRequestedMode = useRef<LocalAsrMode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadModels = useCallback(async () => {
@@ -126,20 +133,50 @@ export const AsrSettingsPanel: React.FC = () => {
     }));
     try {
       const model = await tauriBridge.installAsrModel(mode);
+      cancelRequestedMode.current = null;
       setModels((current) => replaceModel(current, model));
       setProgress((current) => ({ ...current, [mode]: undefined }));
     } catch (installError) {
       const message = String(installError);
-      setError(message);
-      setModels((current) =>
-        current.map((model) =>
-          model.mode === mode
-            ? { ...model, install_state: "failed", error_message: message }
-            : model,
-        ),
-      );
+      if (cancelRequestedMode.current === mode) {
+        cancelRequestedMode.current = null;
+        setError("Whisper model download canceled.");
+        setProgress((current) => ({ ...current, [mode]: undefined }));
+        setModels((current) =>
+          current.map((model) =>
+            model.mode === mode
+              ? {
+                  ...model,
+                  install_state: "not_installed",
+                  installed_bytes: null,
+                  error_message: null,
+                }
+              : model,
+          ),
+        );
+      } else {
+        setError(message);
+        setModels((current) =>
+          current.map((model) =>
+            model.mode === mode
+              ? { ...model, install_state: "failed", error_message: message }
+              : model,
+          ),
+        );
+      }
     } finally {
       setOperationMode(null);
+    }
+  };
+
+  const cancelWhisperInstall = async () => {
+    cancelRequestedMode.current = "whisper_small";
+    try {
+      const accepted = await tauriBridge.cancelWhisperAsrModelInstall();
+      if (!accepted) cancelRequestedMode.current = null;
+    } catch (cancelError) {
+      cancelRequestedMode.current = null;
+      setError(String(cancelError));
     }
   };
 
@@ -265,6 +302,17 @@ export const AsrSettingsPanel: React.FC = () => {
             )}
 
             <div className="flex gap-2">
+              {mode === "whisper_small" &&
+                operationMode === mode &&
+                modelProgress && (
+                  <button
+                    type="button"
+                    onClick={() => void cancelWhisperInstall()}
+                    className="px-2 py-1 border border-black rounded font-bold disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-black"
+                  >
+                    Cancel download
+                  </button>
+                )}
               {model.install_state === "installed" ? (
                 <button
                   type="button"

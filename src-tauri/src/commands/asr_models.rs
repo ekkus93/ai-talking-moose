@@ -21,6 +21,34 @@ use tauri::{Emitter, Runtime, State};
 
 const MODEL_PROGRESS_EVENT: &str = "moose://asr/model-progress";
 
+struct WhisperInstallRegistration {
+    slot: Arc<parking_lot::Mutex<Option<Arc<WhisperModelInstallCancellation>>>>,
+    cancellation: Arc<WhisperModelInstallCancellation>,
+}
+
+impl Drop for WhisperInstallRegistration {
+    fn drop(&mut self) {
+        let mut active = self.slot.lock();
+        if active
+            .as_ref()
+            .is_some_and(|registered| Arc::ptr_eq(registered, &self.cancellation))
+        {
+            *active = None;
+        }
+    }
+}
+
+fn cancel_active_whisper_install(
+    slot: &parking_lot::Mutex<Option<Arc<WhisperModelInstallCancellation>>>,
+) -> bool {
+    if let Some(cancellation) = slot.lock().clone() {
+        cancellation.cancel();
+        true
+    } else {
+        false
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AsrModelProgressEvent {
     pub mode: AsrMode,
@@ -134,8 +162,15 @@ pub(super) fn whisper_descriptor(
         Ok(None) => {
             descriptor.install_state = AsrModelInstallState::NotInstalled;
         }
-        Err(_) => {
-            descriptor.install_state = AsrModelInstallState::Corrupt;
+        Err(error) => {
+            descriptor.install_state = if error.kind
+                == crate::asr::whisper::installer::WhisperModelInstallErrorKind::IncompatibleInstall
+            {
+                AsrModelInstallState::Incompatible
+            } else {
+                AsrModelInstallState::Corrupt
+            };
+            descriptor.error_message = Some(error.message);
         }
     }
     descriptor
@@ -145,9 +180,37 @@ pub(super) async fn load_whisper_descriptor(
     installer: Arc<WhisperModelInstaller>,
     active: bool,
 ) -> Result<AsrModelDescriptor, String> {
-    tokio::task::spawn_blocking(move || whisper_descriptor(installer.as_ref(), active))
+    run_whisper_descriptor_blocking(move || whisper_descriptor(installer.as_ref(), active)).await
+}
+
+async fn run_whisper_descriptor_blocking<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    tokio::task::spawn_blocking(work)
         .await
         .map_err(|_| "Whisper model verification worker terminated unexpectedly.".to_string())
+}
+
+#[cfg(test)]
+mod blocking_verification_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn whisper_descriptor_verification_runs_off_the_async_worker() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let installer = Arc::new(WhisperModelInstaller::new(temp.path()).unwrap());
+        let async_thread = std::thread::current().id();
+        let verification_thread = run_whisper_descriptor_blocking(move || {
+            let _descriptor = whisper_descriptor(installer.as_ref(), false);
+            std::thread::current().id()
+        })
+        .await
+        .unwrap();
+
+        assert_ne!(verification_thread, async_thread);
+    }
 }
 
 fn model_is_in_use(
@@ -297,10 +360,22 @@ async fn install_whisper<R: Runtime>(
             );
         });
 
-    let mut cancellation = WhisperModelInstallCancellation::default();
+    let cancellation = Arc::new(WhisperModelInstallCancellation::default());
+    {
+        let mut active = state.whisper_install_cancellation.lock();
+        if active.is_some() {
+            return Err("A Whisper model installation is already active.".to_string());
+        }
+        *active = Some(cancellation.clone());
+    }
+    let _registration = WhisperInstallRegistration {
+        slot: state.whisper_install_cancellation.clone(),
+        cancellation: cancellation.clone(),
+    };
+    let mut cancellation_for_install = cancellation.as_ref().clone();
     let outcome = state
         .whisper_installer
-        .install(&mut cancellation, &Some(progress))
+        .install(&mut cancellation_for_install, &Some(progress))
         .await
         .map_err(|error| error.message)?;
 
@@ -309,6 +384,11 @@ async fn install_whisper<R: Runtime>(
     descriptor.installed_bytes = Some(outcome.installed_bytes);
     descriptor.revision = outcome.revision;
     Ok(descriptor)
+}
+
+#[tauri::command]
+pub fn cancel_whisper_asr_model_install(state: State<'_, AppState>) -> bool {
+    cancel_active_whisper_install(&state.whisper_install_cancellation)
 }
 
 #[tauri::command]
@@ -349,6 +429,24 @@ mod tests {
     }
 
     #[test]
+    fn whisper_install_cancellation_targets_only_the_registered_install() {
+        let slot = Arc::new(parking_lot::Mutex::new(None));
+        assert!(!cancel_active_whisper_install(&slot));
+
+        let cancellation = Arc::new(WhisperModelInstallCancellation::default());
+        *slot.lock() = Some(cancellation.clone());
+        assert!(cancel_active_whisper_install(&slot));
+        assert!(cancellation.is_cancelled());
+
+        let registration = WhisperInstallRegistration {
+            slot: slot.clone(),
+            cancellation: cancellation.clone(),
+        };
+        drop(registration);
+        assert!(!cancel_active_whisper_install(&slot));
+    }
+
+    #[test]
     fn local_modes_map_to_distinct_model_architectures() {
         assert_eq!(
             architecture_for_mode(AsrMode::MoonshineTinyStreaming).unwrap(),
@@ -375,6 +473,17 @@ mod tests {
         assert_eq!(descriptor.expected_bytes, 51_441_771);
         assert_eq!(descriptor.runtime_release, "v0.1.3");
         assert!(!descriptor.active);
+    }
+
+    #[test]
+    fn whisper_descriptor_reports_existing_truncated_model_as_corrupt() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+        std::fs::write(installer.model_path(), b"truncated").unwrap();
+
+        let descriptor = whisper_descriptor(&installer, false);
+        assert_eq!(descriptor.install_state, AsrModelInstallState::Corrupt);
+        assert!(descriptor.error_message.is_some());
     }
 
     #[test]

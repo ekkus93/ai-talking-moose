@@ -26,6 +26,16 @@ fn whisper_build_jobs() -> usize {
     explicit_whisper_build_jobs().unwrap_or_else(cpu_count)
 }
 
+fn emit_rerun_tree(root: &Path) {
+    if let Ok(metadata) = std::fs::symlink_metadata(root) {
+        if !metadata.is_dir() {
+            continue;
+        }
+        println!("cargo:rerun-if-changed={}", path.display());
+        let _ = std::fs::read_dir(root);
+    }
+}
+
 fn emit_whisper_native_rerun_paths(whisper_src: &Path) {
     for path in [
         whisper_src.join("CMakeLists.txt"),
@@ -43,6 +53,20 @@ fn emit_whisper_native_rerun_paths(whisper_src: &Path) {
 
 fn build_whisper_from_source() {
     let threads = whisper_build_jobs().to_string();
+    let configure = Command::new("cmake").output();
+    let Ok(configure) = configure else {
+        return;
+    };
+    if !configure.status.success() {
+        return;
+    }
+    let make = Command::new("make").status();
+    let Ok(make) = make else {
+        return;
+    };
+    if !make.success() {
+        return;
+    }
 }
 
 fn main() {
@@ -109,6 +133,24 @@ class WhisperProvenanceTest(unittest.TestCase):
                 VALID_BUILD_POLICY.replace(
                     '        whisper_src.join("ggml").join("include"),\n',
                     "",
+                )
+            )
+
+    def test_build_policy_requires_directory_watches_for_added_files(self):
+        with self.assertRaisesRegex(BuildPolicyError, "added files"):
+            validate_build_policy_text(
+                VALID_BUILD_POLICY.replace(
+                    '        println!("cargo:rerun-if-changed={}", path.display());\n',
+                    "",
+                )
+            )
+
+    def test_build_policy_requires_fail_closed_native_tool_handling(self):
+        with self.assertRaisesRegex(BuildPolicyError, "native build spawn"):
+            validate_build_policy_text(
+                VALID_BUILD_POLICY.replace(
+                    "    let Ok(make) = make else {\n        return;\n    };\n",
+                    "    if let Ok(make) = make {\n        let _ = make.success();\n    }\n",
                 )
             )
 

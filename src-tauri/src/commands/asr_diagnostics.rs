@@ -1,4 +1,6 @@
-use super::asr_models::{architecture_for_mode, load_descriptor, model_in_use, whisper_descriptor};
+use super::asr_models::{
+    architecture_for_mode, load_descriptor, load_whisper_descriptor, model_in_use,
+};
 use crate::app::state::AppState;
 use crate::asr::pipeline::local_asr_queue_capacity;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
@@ -145,12 +147,31 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
     }
     if selected_mode == AsrMode::WhisperSmall {
         let active = model_in_use(state.inner(), selected_mode);
-        let descriptor = whisper_descriptor(state.whisper_installer.as_ref(), active);
+        let descriptor = load_whisper_descriptor(state.whisper_installer.clone(), active).await?;
+        let (runtime, local_dropped_chunks) =
+            if state.conversation_mgr.active_asr_mode() == Some(selected_mode) {
+                (
+                    state
+                        .conversation_mgr
+                        .local_asr_lifecycle()
+                        .diagnostics()
+                        .await,
+                    dropped_chunks,
+                )
+            } else if let Some((runtime, snapshot_dropped_chunks)) = state
+                .conversation_mgr
+                .last_local_asr_diagnostics(selected_mode)
+            {
+                (Some(runtime), snapshot_dropped_chunks)
+            } else {
+                (None, 0)
+            };
+
         return Ok(compose_asr_diagnostics(
             selected_mode,
             Some(&descriptor),
-            None,
-            dropped_chunks,
+            runtime,
+            local_dropped_chunks,
             capture_diagnostics.sample_rate_hz,
         ));
     }
@@ -322,5 +343,58 @@ mod tests {
             WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
         );
         assert_eq!(diagnostics.first_partial_latency_ms, None);
+    }
+
+    #[test]
+    fn whisper_diagnostics_preserve_live_and_snapshot_metrics() {
+        let descriptor = descriptor(AsrMode::WhisperSmall);
+        let runtime = LocalAsrRuntimeDiagnostics {
+            input_sample_rate_hz: 16_000,
+            streaming: true,
+            metrics_snapshot: false,
+            queue_depth: 4,
+            queue_capacity: WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            first_partial_latency_ms: Some(8_219),
+            first_final_latency_ms: Some(16_986),
+            process_cpu_time_ms: Some(38_166),
+            resident_memory_bytes: Some(688_041_984),
+            peak_resident_memory_bytes: Some(707_805_184),
+            ..LocalAsrRuntimeDiagnostics::default()
+        };
+
+        let live = compose_asr_diagnostics(
+            AsrMode::WhisperSmall,
+            Some(&descriptor),
+            Some(runtime.clone()),
+            2,
+            Some(16_000),
+        );
+        assert!(live.streaming);
+        assert!(!live.metrics_snapshot);
+        assert_eq!(live.queue_depth, 4);
+        assert_eq!(live.queue_capacity, WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+        assert_eq!(live.dropped_chunks, 2);
+        assert_eq!(live.first_partial_latency_ms, Some(8_219));
+        assert_eq!(live.first_final_latency_ms, Some(16_986));
+        assert_eq!(live.process_cpu_time_ms, Some(38_166));
+        assert_eq!(live.resident_memory_bytes, Some(688_041_984));
+        assert_eq!(live.peak_resident_memory_bytes, Some(707_805_184));
+
+        let mut snapshot = runtime;
+        snapshot.streaming = false;
+        snapshot.metrics_snapshot = true;
+        snapshot.queue_depth = 0;
+        let stopped = compose_asr_diagnostics(
+            AsrMode::WhisperSmall,
+            Some(&descriptor),
+            Some(snapshot),
+            7,
+            Some(16_000),
+        );
+        assert!(!stopped.streaming);
+        assert!(stopped.metrics_snapshot);
+        assert_eq!(stopped.queue_depth, 0);
+        assert_eq!(stopped.dropped_chunks, 7);
+        assert_eq!(stopped.first_final_latency_ms, Some(16_986));
     }
 }

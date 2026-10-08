@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AsrSettingsPanel } from "../components/Settings/AsrSettingsPanel";
 import { frontendDefaultSettings } from "../lib/backendContract";
@@ -133,5 +133,45 @@ describe("AsrSettingsPanel accessibility", () => {
       screen.getByText("Verifying SHA-256 and install metadata…"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/CRC32C/)).not.toBeInTheDocument();
+  });
+
+  it("lets the user cancel an active Whisper model download", async () => {
+    vi.spyOn(tauriBridge, "getAsrModels").mockResolvedValue([
+      tiny,
+      small,
+      { ...whisper, install_state: "not_installed", installed_bytes: null },
+    ]);
+    let rejectInstall: ((reason?: unknown) => void) | undefined;
+    vi.spyOn(tauriBridge, "installAsrModel").mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectInstall = reject;
+        }),
+    );
+    const cancelInstall = vi
+      .spyOn(tauriBridge, "cancelWhisperAsrModelInstall")
+      .mockResolvedValue(true);
+    render(<AsrSettingsPanel />);
+
+    const downloadButtons = await screen.findAllByRole("button", {
+      name: "Download",
+    });
+    await act(async () => {
+      fireEvent.click(downloadButtons[0]);
+    });
+    await screen.findByRole("button", { name: "Cancel download" });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel download" }));
+      await Promise.resolve();
+    });
+    expect(cancelInstall).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      rejectInstall?.(new Error("The Whisper model download was cancelled."));
+    });
+    expect(
+      await screen.findByText("Whisper model download canceled."),
+    ).toBeInTheDocument();
   });
 });

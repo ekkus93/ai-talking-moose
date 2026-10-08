@@ -72,6 +72,22 @@ def validate_build_policy_text(text: str) -> None:
     for snippet in REQUIRED_NATIVE_RERUN_SNIPPETS:
         require_contains(text, snippet, "Whisper native rerun root")
 
+    require_pattern(
+        text,
+        r"if\s+!metadata\.is_dir\(\)\s*\{\s*continue;\s*\}\s*println!\(\s*\"cargo:rerun-if-changed=\{\}\"\s*,\s*path\.display\(\)\s*\)",
+        "Cargo rerun tracking for each native directory to detect added files",
+    )
+    require_pattern(
+        text,
+        r"let\s+Ok\(configure\)\s*=\s*configure\s+else\s*\{.*?return;\s*\};.*?if\s*!configure\.status\.success\(\)\s*\{.*?return;\s*\}",
+        "fail-closed CMake spawn and status handling",
+    )
+    require_pattern(
+        text,
+        r"let\s+Ok\(make\)\s*=\s*make\s+else\s*\{.*?return;\s*\};.*?if\s*!make\.success\(\)\s*\{.*?return;\s*\}",
+        "fail-closed native build spawn and status handling",
+    )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()

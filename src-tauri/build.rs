@@ -200,6 +200,7 @@ fn emit_rerun_tree(root: &Path) {
         if !metadata.is_dir() {
             continue;
         }
+        println!("cargo:rerun-if-changed={}", path.display());
         let Ok(entries) = std::fs::read_dir(&path) else {
             continue;
         };
@@ -261,10 +262,13 @@ fn build_whisper_from_source() {
             "-DCMAKE_CXX_FLAGS=-fPIC",
         ])
         .output();
-    if let Ok(configure) = configure {
-        if !configure.status.success() {
-            return;
-        }
+    let Ok(configure) = configure else {
+        warn_whisper_build_failure("CMake configuration could not start");
+        return;
+    };
+    if !configure.status.success() {
+        warn_whisper_build_failure("CMake configuration failed");
+        return;
     }
 
     let threads = whisper_build_jobs().to_string();
@@ -274,15 +278,22 @@ fn build_whisper_from_source() {
         .arg(&threads)
         .arg("whisper")
         .status();
-    if let Ok(make) = make {
-        if !make.success() {
-            return;
-        }
+    let Ok(make) = make else {
+        warn_whisper_build_failure("native build tool could not start");
+        return;
+    };
+    if !make.success() {
+        warn_whisper_build_failure("native build failed");
+        return;
     }
 
     if has_whisper_runtime(&build_dir) {
         emit_whisper_link(&build_dir);
     }
+}
+
+fn warn_whisper_build_failure(reason: &str) {
+    println!("cargo:warning=Whisper native build {reason}; local Whisper ASR is unavailable.");
 }
 
 fn main() {
