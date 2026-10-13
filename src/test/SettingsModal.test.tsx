@@ -87,6 +87,15 @@ describe("SettingsModal Component", () => {
     expect(screen.getByText("Dry Wit & Deadpan")).toBeInTheDocument();
   });
 
+  it("closes the Control Panel when Done is clicked", () => {
+    render(<SettingsModal />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(useMooseStore.getState().isSettingsOpen).toBe(false);
+    expect(screen.queryByTestId("settings-modal")).not.toBeInTheDocument();
+  });
+
   it("updates every behavior and personality control in runtime settings", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Behavior"));

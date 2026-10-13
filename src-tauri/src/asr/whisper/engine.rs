@@ -335,7 +335,7 @@ fn transcript_text(segments: &[WhisperSegment]) -> String {
     segments
         .iter()
         .map(|segment| segment.text.trim())
-        .filter(|text| !text.is_empty())
+        .filter(|text| !text.is_empty() && !text.eq_ignore_ascii_case("[BLANK_AUDIO]"))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -471,5 +471,17 @@ mod tests {
             },
         ];
         assert_eq!(transcript_text(&segments), "hello world");
+    }
+
+    #[test]
+    fn transcript_text_drops_whisper_blank_audio_marker() {
+        let segments = vec![WhisperSegment {
+            text: "[BLANK_AUDIO]".to_string(),
+            start_ms: 0,
+            end_ms: 200,
+            no_speech_prob: 1.0,
+        }];
+
+        assert!(transcript_text(&segments).is_empty());
     }
 }

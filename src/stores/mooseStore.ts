@@ -211,6 +211,7 @@ interface MooseStoreState {
   setMouthShape: (mouth: MouthShape) => void;
   setBlinking: (blinking: boolean) => void;
   showSpeechBubble: (text: string, durationMs?: number) => void;
+  showPersistentSpeechBubble: (text: string) => void;
   hideSpeechBubble: () => void;
   setInputLevel: (level: number) => void;
   setOutputLevel: (level: number) => void;
@@ -294,6 +295,16 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
       speechBubbleText: text,
       speechBubbleVisible: true,
       speechBubbleTimer: timer,
+    });
+  },
+
+  showPersistentSpeechBubble: (text) => {
+    const currentTimer = get().speechBubbleTimer;
+    if (currentTimer) clearTimeout(currentTimer);
+    set({
+      speechBubbleText: text,
+      speechBubbleVisible: true,
+      speechBubbleTimer: null,
     });
   },
 
@@ -557,7 +568,7 @@ export const useMooseStore = create<MooseStoreState>((set, get) => ({
         set({ mouthShape: mouth });
       });
       await register<string>("moose://speech-bubble", (text) => {
-        if (text.trim()) get().showSpeechBubble(text);
+        if (text.trim()) get().showPersistentSpeechBubble(text);
         else get().hideSpeechBubble();
       });
       await register<string>("moose://transcript/user", (text) => {

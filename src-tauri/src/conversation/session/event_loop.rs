@@ -1,7 +1,9 @@
 use super::{ConversationEventLoopContext, ConversationLifecycle, ConversationManager};
 use crate::ai::types::{LiveServerEvent, ToolCallResponse};
 use crate::character::state::CharacterState;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
@@ -26,6 +28,7 @@ impl ConversationManager {
         } = context;
         info!(session_id = %session_id, "Conversation event loop started");
         let mut terminal_failed = false;
+        let speech_bubble_revision = Arc::new(AtomicU64::new(0));
 
         while let Some(event) = server_ev_rx.recv().await {
             if !self.is_in_conversation.load(Ordering::SeqCst)
@@ -65,6 +68,7 @@ impl ConversationManager {
                     }
                 }
                 LiveServerEvent::ModelTranscript(update) => {
+                    speech_bubble_revision.fetch_add(1, Ordering::SeqCst);
                     if update.is_final {
                         transcript_callback(
                             session_id.clone(),
@@ -107,6 +111,7 @@ impl ConversationManager {
                     }
                 }
                 LiveServerEvent::Interrupted => {
+                    speech_bubble_revision.fetch_add(1, Ordering::SeqCst);
                     playback.flush();
                     transcript_callback(
                         session_id.clone(),
@@ -144,6 +149,28 @@ impl ConversationManager {
                         );
                         state_callback(CharacterState::Listening);
                     }
+
+                    let bubble_revision = speech_bubble_revision.load(Ordering::SeqCst);
+                    let current_revision = speech_bubble_revision.clone();
+                    let playback = playback.clone();
+                    let manager = self.clone();
+                    let bubble_callback = speech_bubble_callback.clone();
+                    tauri::async_runtime::spawn(async move {
+                        while manager.is_in_conversation.load(Ordering::SeqCst)
+                            && manager.generation.load(Ordering::SeqCst) == generation
+                            && current_revision.load(Ordering::SeqCst) == bubble_revision
+                            && (playback.is_playing() || playback.queue_length() > 0)
+                        {
+                            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+                        }
+
+                        if manager.is_in_conversation.load(Ordering::SeqCst)
+                            && manager.generation.load(Ordering::SeqCst) == generation
+                            && current_revision.load(Ordering::SeqCst) == bubble_revision
+                        {
+                            bubble_callback(String::new());
+                        }
+                    });
                 }
                 LiveServerEvent::ToolCall { id, name, args } => {
                     // Tool names are provider-controlled. The router records the registered
@@ -202,6 +229,8 @@ impl ConversationManager {
             .await;
 
         if cleaned {
+            speech_bubble_revision.fetch_add(1, Ordering::SeqCst);
+            speech_bubble_callback(String::new());
             if terminal_failed {
                 error!("Conversation session terminated with a provider/audio error");
                 state_callback(CharacterState::Error);

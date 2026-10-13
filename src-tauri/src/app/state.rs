@@ -617,7 +617,6 @@ impl AppState {
                 speech_synthesizer,
                 settings.local_tts_voice.clone(),
                 settings.speaking_rate,
-                settings.pitch,
             ))
         } else {
             self.get_live_provider()

@@ -419,6 +419,27 @@ describe("mooseStore State Management", () => {
     cleanup();
   });
 
+  it("keeps backend speech bubbles visible until the backend clears them", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(tauriBridge, "listenEvent").mockImplementation(
+      async (eventName: string, handler: (payload: unknown) => void) => {
+        if (eventName === "moose://speech-bubble")
+          handler("A long spoken response");
+        return () => {};
+      },
+    );
+
+    const cleanup = await useMooseStore.getState().initEventListeners();
+    vi.advanceTimersByTime(60_000);
+
+    expect(useMooseStore.getState().speechBubbleVisible).toBe(true);
+    expect(useMooseStore.getState().speechBubbleText).toBe(
+      "A long spoken response",
+    );
+    expect(useMooseStore.getState().speechBubbleTimer).toBeNull();
+    cleanup();
+  });
+
   it("opens versioned onboarding even when an API key already exists", async () => {
     const settings = await tauriBridge.getSettings();
     vi.spyOn(tauriBridge, "getSettings").mockResolvedValue(settings);

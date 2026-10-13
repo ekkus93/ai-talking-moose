@@ -10,6 +10,42 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+const MAX_LOCAL_TTS_RESPONSE_CHARS: usize = 350;
+
+fn prepare_local_tts_response(text: &str) -> String {
+    let compact = text
+        .chars()
+        .filter(|character| !character.is_control() || character.is_whitespace())
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let characters = compact.chars().collect::<Vec<_>>();
+    if characters.len() <= MAX_LOCAL_TTS_RESPONSE_CHARS {
+        return compact;
+    }
+
+    let prefix = characters
+        .iter()
+        .take(MAX_LOCAL_TTS_RESPONSE_CHARS)
+        .copied()
+        .collect::<String>();
+    let sentence_end = prefix
+        .char_indices()
+        .filter(|(_, character)| matches!(character, '.' | '!' | '?'))
+        .map(|(index, character)| index + character.len_utf8())
+        .rfind(|end| *end >= MAX_LOCAL_TTS_RESPONSE_CHARS / 2);
+    let end = sentence_end.unwrap_or_else(|| prefix.rfind(' ').unwrap_or(prefix.len()));
+    let bounded = prefix[..end].trim_end();
+    if bounded.is_empty() {
+        String::new()
+    } else if bounded.ends_with('.') || bounded.ends_with('!') || bounded.ends_with('?') {
+        bounded.to_string()
+    } else {
+        format!("{bounded}.")
+    }
+}
+
 /// One-turn local conversation adapter for the existing conversation lifecycle. Local ASR
 /// supplies finalized transcripts; this session generates a local text response and local audio.
 pub struct LocalConversationProvider {
@@ -17,7 +53,6 @@ pub struct LocalConversationProvider {
     speech_synthesizer: Arc<dyn SpeechSynthesizer>,
     voice_name: String,
     speaking_rate: f32,
-    pitch: f32,
 }
 
 impl LocalConversationProvider {
@@ -26,14 +61,12 @@ impl LocalConversationProvider {
         speech_synthesizer: Arc<dyn SpeechSynthesizer>,
         voice_name: String,
         speaking_rate: f32,
-        pitch: f32,
     ) -> Self {
         Self {
             text_model,
             speech_synthesizer,
             voice_name,
             speaking_rate,
-            pitch,
         }
     }
 }
@@ -53,7 +86,6 @@ impl RealtimeConversationProvider for LocalConversationProvider {
             speech_synthesizer: self.speech_synthesizer.clone(),
             voice_name: self.voice_name.clone(),
             speaking_rate: self.speaking_rate,
-            pitch: self.pitch,
             generation: Arc::new(AtomicU64::new(0)),
             active_synthesis: Arc::new(Mutex::new(None)),
             closed: false,
@@ -68,7 +100,6 @@ struct LocalConversationSession {
     speech_synthesizer: Arc<dyn SpeechSynthesizer>,
     voice_name: String,
     speaking_rate: f32,
-    pitch: f32,
     generation: Arc<AtomicU64>,
     active_synthesis: Arc<Mutex<Option<CancellationToken>>>,
     closed: bool,
@@ -93,20 +124,22 @@ impl LiveSession for LocalConversationSession {
         let system_instruction = self.config.system_instruction.clone();
         let voice_name = self.voice_name.clone();
         let speaking_rate = self.speaking_rate;
-        let pitch = self.pitch;
         let prompt = text.to_string();
 
         tauri::async_runtime::spawn(async move {
             let generated = text_model
                 .generate(TextRequest {
                     prompt,
-                    system_instruction,
+                    system_instruction: Some(format!(
+                        "{}\n\nKeep replies brief (about 60 words), in plain spoken English, without markdown.",
+                        system_instruction.unwrap_or_default()
+                    )),
                     temperature: Some(0.85),
-                    max_tokens: Some(192),
+                    max_tokens: Some(100),
                 })
                 .await;
             let response = match generated {
-                Ok(response) => response.text.trim().to_string(),
+                Ok(response) => prepare_local_tts_response(&response.text),
                 Err(error) => {
                     let _ = event_sender.send(LiveServerEvent::Error(error)).await;
                     return;
@@ -130,7 +163,9 @@ impl LiveSession for LocalConversationSession {
                         text: response,
                         voice_name: Some(voice_name),
                         speaking_rate: Some(speaking_rate),
-                        pitch: Some(pitch),
+                        // KittenTTS has no pitch control. The saved pitch belongs to Google TTS
+                        // and must not make Local conversation synthesis fail validation.
+                        pitch: None,
                     },
                     &cancellation,
                 )
@@ -179,5 +214,94 @@ impl LiveSession for LocalConversationSession {
             cancellation.cancel();
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai::types::{AudioStreamData, TextResponse};
+    use crate::tools::policy::ToolDeclaration;
+    use std::sync::Mutex as StdMutex;
+
+    struct ReplyModel;
+
+    #[async_trait]
+    impl TextModel for ReplyModel {
+        async fn generate(&self, _request: TextRequest) -> Result<TextResponse, ProviderError> {
+            Ok(TextResponse {
+                text: "Hello there.".to_string(),
+                finish_reason: None,
+            })
+        }
+    }
+
+    struct RequestCapture(Arc<StdMutex<Option<TtsRequest>>>);
+
+    #[async_trait]
+    impl SpeechSynthesizer for RequestCapture {
+        async fn synthesize(&self, request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
+            *self.0.lock().unwrap() = Some(request);
+            Ok(AudioStreamData {
+                pcm_bytes: vec![1, 2],
+                sample_rate: 24_000,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn local_conversation_does_not_apply_google_pitch_to_kittentts() {
+        let request_capture = Arc::new(StdMutex::new(None));
+        let provider = LocalConversationProvider::new(
+            Arc::new(ReplyModel),
+            Arc::new(RequestCapture(request_capture.clone())),
+            "Leo".to_string(),
+            0.95,
+        );
+        let (event_sender, mut events) = mpsc::channel(8);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "local".to_string(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: Vec::<ToolDeclaration>::new(),
+                },
+                event_sender,
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
+        session.send_text_turn("Hi Moose.").await.unwrap();
+
+        loop {
+            match events.recv().await {
+                Some(LiveServerEvent::TurnComplete) => break,
+                Some(_) => {}
+                None => panic!("local conversation closed before synthesis completed"),
+            }
+        }
+
+        let request = request_capture.lock().unwrap().clone().unwrap();
+        assert_eq!(request.voice_name.as_deref(), Some("Leo"));
+        assert_eq!(request.speaking_rate, Some(0.95));
+        assert_eq!(request.pitch, None);
+    }
+
+    #[test]
+    fn local_tts_response_is_bounded_and_plain_text() {
+        let response = format!("{}\n{}", "Hello there.".repeat(50), "extra");
+
+        let prepared = prepare_local_tts_response(&response);
+
+        assert!(prepared.chars().count() <= MAX_LOCAL_TTS_RESPONSE_CHARS);
+        assert!(!prepared.contains('\n'));
+        assert!(prepared.ends_with('.'));
     }
 }

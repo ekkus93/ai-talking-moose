@@ -7,7 +7,7 @@ use crate::app::wake_word::runtime::WakeWordRuntimePhase;
 use crate::app::wake_word_composition::WakeWordApplicationRuntime;
 use crate::audio::playback::AudioPlayback;
 use crate::audio::speech::{synthesize_and_queue_cancellable, StandaloneSpeechController};
-use crate::character::state::CharacterState;
+use crate::character::state::{transition_character_state, CharacterState};
 use crate::commands::presentation::{clear_speech_bubble, transition_and_emit};
 use std::sync::Arc;
 use std::time::Duration;
@@ -244,6 +244,7 @@ fn surface_standalone_playback<R: Runtime>(
     app: &tauri::AppHandle<R>,
     text: &str,
 ) -> Result<bool, String> {
+    recover_character_error_for_standalone_speech(&state.character_state)?;
     let wake_word_suspended = suspend_wake_word_for_standalone_talking(&state.wake_word_runtime)?;
     if let Err(error) = transition_and_emit(&state.character_state, app, CharacterState::Talking) {
         if wake_word_suspended {
@@ -253,6 +254,19 @@ fn surface_standalone_playback<R: Runtime>(
     }
     let _ = app.emit("moose://speech-bubble", text);
     Ok(wake_word_suspended)
+}
+
+/// A user-requested standalone utterance is an explicit recovery action after a
+/// prior conversation failure. Clear the terminal Error presentation before
+/// attempting to enter Talking so queued audio is not discarded by the state
+/// machine.
+fn recover_character_error_for_standalone_speech(
+    character_state: &parking_lot::RwLock<CharacterState>,
+) -> Result<(), String> {
+    if *character_state.read() == CharacterState::Error {
+        transition_character_state(character_state, CharacterState::Idle)?;
+    }
+    Ok(())
 }
 
 /// Authoritative standalone speech invocation for ambient remarks, character
@@ -512,6 +526,27 @@ mod tests {
 
         assert!(!playback.completed_without_cancellation().await);
         assert!(playback.with_current(|| ()).is_none());
+    }
+
+    #[test]
+    fn standalone_speech_recovers_error_state_before_talking() {
+        let character_state = parking_lot::RwLock::new(CharacterState::Error);
+
+        recover_character_error_for_standalone_speech(&character_state).unwrap();
+
+        assert_eq!(*character_state.read(), CharacterState::Idle);
+        assert!(character_state
+            .read()
+            .can_transition_to(&CharacterState::Talking));
+    }
+
+    #[test]
+    fn standalone_speech_recovery_leaves_non_error_state_unchanged() {
+        let character_state = parking_lot::RwLock::new(CharacterState::Listening);
+
+        recover_character_error_for_standalone_speech(&character_state).unwrap();
+
+        assert_eq!(*character_state.read(), CharacterState::Listening);
     }
 
     #[test]
