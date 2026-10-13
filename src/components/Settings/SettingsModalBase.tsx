@@ -62,6 +62,10 @@ export const SettingsModal: React.FC = () => {
   // a half-typed API key, drop the result of an in-flight connection test, and
   // reset the voice-audition debounce.
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [openaiKeyInput, setOpenaiKeyInput] = useState("");
+  const [hasOpenaiKey, setHasOpenaiKey] = useState(false);
+  const [openaiKeyError, setOpenaiKeyError] = useState<string | null>(null);
+  const [serverStatus, setServerStatus] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<AiTabTestResult | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isAuditioning, setIsAuditioning] = useState(false);
@@ -79,6 +83,10 @@ export const SettingsModal: React.FC = () => {
       loadDevices();
       loadGoogleTtsVoices();
       loadMemories();
+      void tauriBridge
+        .hasOpenaiApiKey()
+        .then(setHasOpenaiKey)
+        .catch(() => setOpenaiKeyError("Could not read OpenAI credential status."));
       setGoogleModelsStatus("loading");
       void tauriBridge
         .getGoogleModels()
@@ -202,6 +210,14 @@ export const SettingsModal: React.FC = () => {
               googleModelsStatus={googleModelsStatus}
               apiKeyInput={apiKeyInput}
               setApiKeyInput={setApiKeyInput}
+              openaiKeyInput={openaiKeyInput}
+              setOpenaiKeyInput={setOpenaiKeyInput}
+              hasOpenaiKey={hasOpenaiKey}
+              setHasOpenaiKey={setHasOpenaiKey}
+              openaiKeyError={openaiKeyError}
+              setOpenaiKeyError={setOpenaiKeyError}
+              serverStatus={serverStatus}
+              setServerStatus={setServerStatus}
               testResult={testResult}
               setTestResult={setTestResult}
               isTesting={isTesting}

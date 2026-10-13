@@ -18,6 +18,14 @@ interface AiTabProps {
   googleModelsStatus: "loading" | "ready" | "error";
   apiKeyInput: string;
   setApiKeyInput: (value: string) => void;
+  openaiKeyInput: string;
+  setOpenaiKeyInput: (value: string) => void;
+  hasOpenaiKey: boolean;
+  setHasOpenaiKey: (value: boolean) => void;
+  openaiKeyError: string | null;
+  setOpenaiKeyError: (value: string | null) => void;
+  serverStatus: string | null;
+  setServerStatus: (value: string | null) => void;
   testResult: AiTabTestResult | null;
   setTestResult: (value: AiTabTestResult | null) => void;
   isTesting: boolean;
@@ -29,6 +37,14 @@ export const AiTab: React.FC<AiTabProps> = ({
   googleModelsStatus,
   apiKeyInput,
   setApiKeyInput,
+  openaiKeyInput,
+  setOpenaiKeyInput,
+  hasOpenaiKey,
+  setHasOpenaiKey,
+  openaiKeyError,
+  setOpenaiKeyError,
+  serverStatus,
+  setServerStatus,
   testResult,
   setTestResult,
   isTesting,
@@ -44,8 +60,8 @@ export const AiTab: React.FC<AiTabProps> = ({
 
   if (!settings) return null;
 
-  const localTalkSelected =
-    settings.text_provider === "local" &&
+  const standardTalkSelected =
+    settings.text_provider !== "google" &&
     settings.asr_mode !== "gemini_live_audio";
   const liveModels = googleModels.filter((model) =>
     model.capabilities.includes("live_audio"),
@@ -64,6 +80,45 @@ export const AiTab: React.FC<AiTabProps> = ({
   const selectTextProvider = (provider: TextProvider) => {
     if (provider === settings.text_provider) return;
     void updateSettingsPatch({ text_provider: provider });
+  };
+
+  const handleSaveOpenaiKey = async () => {
+    const key = openaiKeyInput.trim();
+    if (!key) return;
+    setOpenaiKeyError(null);
+    try {
+      await tauriBridge.setOpenaiApiKey(key);
+      setOpenaiKeyInput("");
+      setHasOpenaiKey(true);
+    } catch {
+      setOpenaiKeyError("Could not securely store the OpenAI key.");
+    }
+  };
+
+  const handleClearOpenaiKey = async () => {
+    setOpenaiKeyError(null);
+    try {
+      await tauriBridge.clearOpenaiApiKey();
+      setHasOpenaiKey(false);
+    } catch {
+      setOpenaiKeyError("Could not clear the OpenAI key.");
+    }
+  };
+
+  const handleTestServer = async (provider: "ollama" | "llama_server") => {
+    setServerStatus("Checking loopback server and selected model…");
+    try {
+      const state = await tauriBridge.testLocalTextServer(provider);
+      setServerStatus(
+        state === "model_ready"
+          ? "Connected: selected model is available."
+          : state === "unreachable"
+            ? "Server is unreachable on the configured loopback address."
+            : "Server reachable, but the selected model is not available.",
+      );
+    } catch {
+      setServerStatus("Could not check the selected local server.");
+    }
   };
 
   const handleSaveApiKey = async () => {
@@ -159,6 +214,32 @@ export const AiTab: React.FC<AiTabProps> = ({
               </span>
             </span>
           </label>
+          {(
+            [
+              ["openai", "OpenAI — cloud", "Sends prompts to OpenAI with your own key."],
+              ["ollama", "Ollama — loopback", "Connects to an already-running local Ollama server."],
+              ["llama_server", "llama-server — loopback", "Connects to an already-running local llama.cpp server."],
+            ] as const
+          ).map(([id, label, description]) => (
+            <label
+              key={id}
+              className="flex items-start gap-2 p-2 border border-gray-400 rounded cursor-pointer"
+            >
+              <input
+                type="radio"
+                name="text-provider"
+                value={id}
+                checked={settings.text_provider === id}
+                onChange={() => selectTextProvider(id)}
+              />
+              <span>
+                <span className="font-bold">{label}</span>
+                <span className="block text-[10px] text-gray-700">
+                  {description}
+                </span>
+              </span>
+            </label>
+          ))}
         </fieldset>
 
         {settings.text_provider === "local" ? (
@@ -170,7 +251,7 @@ export const AiTab: React.FC<AiTabProps> = ({
               });
             }}
           />
-        ) : (
+        ) : settings.text_provider === "google" ? (
           <div>
             <label
               htmlFor="settings-text-model"
@@ -216,6 +297,124 @@ export const AiTab: React.FC<AiTabProps> = ({
               )}
             </select>
           </div>
+        ) : (
+          <div className="space-y-3">
+            <label htmlFor="external-text-model" className="block font-bold">
+              {settings.text_provider === "openai"
+                ? "OpenAI model ID"
+                : settings.text_provider === "ollama"
+                  ? "Ollama model ID"
+                  : "llama-server model ID"}
+            </label>
+            <input
+              id="external-text-model"
+              key={settings.text_provider}
+              defaultValue={
+                settings.text_provider === "openai"
+                  ? settings.openai_text_model
+                  : settings.text_provider === "ollama"
+                    ? settings.ollama_text_model
+                    : settings.llama_server_text_model
+              }
+              maxLength={128}
+              onBlur={(event) => {
+                const value = event.target.value.trim();
+                if (!value) return;
+                const field =
+                  settings.text_provider === "openai"
+                    ? "openai_text_model"
+                    : settings.text_provider === "ollama"
+                      ? "ollama_text_model"
+                      : "llama_server_text_model";
+                void updateSettingsPatch({ [field]: value });
+              }}
+              className="w-full p-1.5 border border-black rounded bg-white"
+            />
+            {settings.text_provider !== "openai" && (
+              <>
+                <label htmlFor="external-server-url" className="block font-bold">
+                  HTTP loopback server (explicit port required)
+                </label>
+                <input
+                  id="external-server-url"
+                  key={settings.text_provider + "-server"}
+                  defaultValue={
+                    settings.text_provider === "ollama"
+                      ? settings.ollama_server_address
+                      : settings.llama_server_address
+                  }
+                  onBlur={(event) => {
+                    const value = event.target.value.trim();
+                    const field =
+                      settings.text_provider === "ollama"
+                        ? "ollama_server_address"
+                        : "llama_server_address";
+                    void updateSettingsPatch({ [field]: value });
+                  }}
+                  className="w-full p-1.5 border border-black rounded bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleTestServer(
+                      settings.text_provider === "ollama"
+                        ? "ollama"
+                        : "llama_server",
+                    )
+                  }
+                  className="px-2 py-1 border border-black rounded font-bold"
+                >
+                  Check Server and Model
+                </button>
+                {serverStatus && (
+                  <p role="status" className="text-[10px]">
+                    {serverStatus}
+                  </p>
+                )}
+              </>
+            )}
+            {settings.text_provider === "openai" && (
+              <div className="space-y-2">
+                <label htmlFor="settings-openai-api-key" className="block font-bold">
+                  OpenAI API key (BYOK)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="settings-openai-api-key"
+                    type="password"
+                    autoComplete="off"
+                    value={openaiKeyInput}
+                    onChange={(event) => setOpenaiKeyInput(event.target.value)}
+                    placeholder="Enter API key"
+                    className="flex-1 p-1.5 border border-black rounded"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveOpenaiKey()}
+                    className="px-2 py-1 bg-black text-white rounded font-bold"
+                  >
+                    Save Key
+                  </button>
+                </div>
+                {hasOpenaiKey ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleClearOpenaiKey()}
+                    className="px-2 py-1 border border-black rounded font-bold"
+                  >
+                    Remove Saved OpenAI Key
+                  </button>
+                ) : (
+                  <p className="text-[10px]">No OpenAI key is configured.</p>
+                )}
+                {openaiKeyError && <p role="alert">{openaiKeyError}</p>}
+                <p className="text-[10px] text-gray-700">
+                  macOS stores the key in Keychain. Linux retains it only until
+                  this app exits; the key is never written to Settings or SQLite.
+                </p>
+              </div>
+            )}
+          </div>
         )}
       </section>
 
@@ -225,17 +424,17 @@ export const AiTab: React.FC<AiTabProps> = ({
       >
         <div>
           <h4 id="voice-conversation-heading" className="font-bold">
-            {localTalkSelected
-              ? "Talk Conversation — Local"
+            {standardTalkSelected
+              ? "Talk Conversation — selected text and standalone speech"
               : "Talk Conversation — Google Gemini Live"}
           </h4>
           <p className="text-[10px] text-gray-700">
-            {localTalkSelected
-              ? "Local ASR, Local text, and KittenTTS run on this computer after their models are installed."
-              : "Google Gemini Live sends active-conversation audio or text to Google, based on the selected ASR and text providers."}
+            {standardTalkSelected
+              ? "Non-Live Talk uses the selected text provider and standalone TTS; audio recognition stays on this computer. Cloud providers receive the selected text content."
+              : "Gemini Live is a separate Google cloud-audio mode and may send microphone audio to Google."}
           </p>
         </div>
-        {!localTalkSelected && (
+        {!standardTalkSelected && (
           <>
             <label
               htmlFor="settings-live-model"
@@ -378,10 +577,11 @@ export const AiTab: React.FC<AiTabProps> = ({
           and verified. Model installation itself uses the network.
         </p>
         <p className="text-[10px] text-gray-800">
-          Local-first Talk keeps microphone audio, transcripts, generated text,
-          and speech on this computer after model installation. Google receives
-          content only when a Google provider or Gemini Live audio ASR is
-          selected.
+          Local-first Talk keeps text and speech on this computer when both
+          the text and TTS providers are Local. OpenAI and Google text or TTS
+          send content to their respective cloud services when selected.
+          Ollama and llama-server use only your configured loopback server.
+          Gemini Live is a separate Google cloud-audio mode.
         </p>
       </section>
     </div>
