@@ -240,7 +240,10 @@ mod provider_error_tests {
             (TextProvider::LlamaServer, "\"llama_server\""),
         ] {
             assert_eq!(serde_json::to_string(&provider).unwrap(), encoded);
-            assert_eq!(serde_json::from_str::<TextProvider>(encoded).unwrap(), provider);
+            assert_eq!(
+                serde_json::from_str::<TextProvider>(encoded).unwrap(),
+                provider
+            );
         }
         assert_eq!(TextProvider::default(), TextProvider::Local);
     }

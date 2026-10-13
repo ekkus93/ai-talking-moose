@@ -19,8 +19,11 @@ static SETTINGS_RUNTIME_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
 /// Server addresses are data, not arbitrary request URLs. Resolve the effective
 /// destination again when constructing each HTTP request and disable redirects.
 pub(crate) fn validate_loopback_server_address(address: &str) -> Result<(), String> {
-    let invalid = || "Server address must be an HTTP loopback host with an explicit port and no path, credentials, query, or fragment".to_string();
-    if address.trim() != address || address.contains('\\') || address.chars().any(char::is_control) {
+    let invalid = || {
+        "Server address must be an HTTP loopback host with an explicit port and no path, credentials, query, or fragment".to_string()
+    };
+    if address.trim() != address || address.contains('\\') || address.chars().any(char::is_control)
+    {
         return Err(invalid());
     }
     let url = reqwest::Url::parse(address).map_err(|_| invalid())?;
@@ -37,8 +40,12 @@ pub(crate) fn validate_loopback_server_address(address: &str) -> Result<(), Stri
     }
     // Check the unnormalized spelling too: path traversal and encoded hosts
     // must not be admitted merely because URL parsing normalized them away.
-    let canonical = format!("http://{}:{}", url.host_str().ok_or_else(invalid)?, url.port().ok_or_else(invalid)?);
-    if address != canonical && address != format!("{canonical}/") {
+    let canonical = format!(
+        "http://{}:{}",
+        url.host_str().ok_or_else(invalid)?,
+        url.port().ok_or_else(invalid)?
+    );
+    if url.port() == Some(0) || (address != canonical && address != format!("{canonical}/")) {
         return Err(invalid());
     }
     Ok(())
@@ -93,7 +100,10 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
     for (name, model_id) in [
         ("OpenAI text model", settings.openai_text_model.as_str()),
         ("Ollama text model", settings.ollama_text_model.as_str()),
-        ("llama-server text model", settings.llama_server_text_model.as_str()),
+        (
+            "llama-server text model",
+            settings.llama_server_text_model.as_str(),
+        ),
         ("system TTS voice", settings.system_tts_voice.as_str()),
     ] {
         bounded_identifier(name, model_id, 128)?;
@@ -381,18 +391,34 @@ mod tests {
 
     #[test]
     fn provider_addresses_and_model_ids_are_validated_at_backend_boundary() {
-        for address in ["http://localhost:11434", "http://[::1]:8080", "http://127.0.0.1:1234/"] {
-            assert!(validate_loopback_server_address(address).is_ok(), "{address}");
+        for address in [
+            "http://localhost:11434",
+            "http://[::1]:8080",
+            "http://127.0.0.1:1234/",
+        ] {
+            assert!(
+                validate_loopback_server_address(address).is_ok(),
+                "{address}"
+            );
         }
         for address in [
-            "https://localhost:11434", "http://example.com:11434",
-            "http://localhost", "http://localhost:0",
-            "http://user@localhost:9000", "http://localhost:9000/v1",
-            "http://localhost:9000/a/..", "http://localhost:9000/?key=x",
-            "http://localhost:9000/#x", "http://127.0.0.2:11434",
-            "http://0.0.0.0:11434", " http://localhost:9000",
+            "https://localhost:11434",
+            "http://example.com:11434",
+            "http://localhost",
+            "http://localhost:0",
+            "http://user@localhost:9000",
+            "http://localhost:9000/v1",
+            "http://localhost:9000/a/..",
+            "http://localhost:9000/?key=x",
+            "http://localhost:9000/#x",
+            "http://127.0.0.2:11434",
+            "http://0.0.0.0:11434",
+            " http://localhost:9000",
         ] {
-            assert!(validate_loopback_server_address(address).is_err(), "{address}");
+            assert!(
+                validate_loopback_server_address(address).is_err(),
+                "{address}"
+            );
         }
         let mut settings = AppSettings::default();
         settings.openai_text_model = String::new();
