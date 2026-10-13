@@ -1,5 +1,6 @@
 use crate::ai::google::{GoogleAuth, GoogleTextModel};
 use crate::ai::local::{global_local_model_installer, LocalTextModel};
+use crate::ai::openai::OpenAiTextModel;
 use crate::ai::traits::TextModel;
 use crate::ai::types::TextProvider;
 use crate::app::state::{AppSettings, AppState};
@@ -42,7 +43,11 @@ impl AppState {
                 global_local_model_installer(),
                 settings.local_text_model.clone(),
             )),
-            TextProvider::Openai | TextProvider::Ollama | TextProvider::LlamaServer => {
+            TextProvider::Openai => Box::new(OpenAiTextModel::new(
+                self.secrets.get_openai_api_key().unwrap_or_default(),
+                settings.openai_text_model.clone(),
+            )),
+            TextProvider::Ollama | TextProvider::LlamaServer => {
                 Box::new(crate::ai::unavailable::UnavailableTextModel)
             }
         }
