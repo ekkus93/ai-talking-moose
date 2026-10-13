@@ -20,9 +20,10 @@ fn prepare_local_tts_response(text: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
+    let compact = strip_leading_delivery_cue(&compact);
     let characters = compact.chars().collect::<Vec<_>>();
     if characters.len() <= MAX_LOCAL_TTS_RESPONSE_CHARS {
-        return compact;
+        return compact.to_string();
     }
 
     let prefix = characters
@@ -43,6 +44,28 @@ fn prepare_local_tts_response(text: &str) -> String {
         bounded.to_string()
     } else {
         format!("{bounded}.")
+    }
+}
+
+fn strip_leading_delivery_cue(text: &str) -> &str {
+    let Some(after_open) = text.strip_prefix('[') else {
+        return text;
+    };
+    let Some(close_index) = after_open.find(']') else {
+        return text;
+    };
+    let cue = after_open[..close_index].trim().to_ascii_lowercase();
+    let is_delivery_cue = cue.len() <= 80
+        && [
+            "voice", "speaking", "speak ", "whisper", "tone", "delivery", "deadpan", "cheerful",
+            "laugh", "sigh", "chuckle",
+        ]
+        .iter()
+        .any(|marker| cue.contains(marker));
+    if is_delivery_cue {
+        after_open[close_index + 1..].trim_start()
+    } else {
+        text
     }
 }
 
@@ -131,7 +154,7 @@ impl LiveSession for LocalConversationSession {
                 .generate(TextRequest {
                     prompt,
                     system_instruction: Some(format!(
-                        "{}\n\nKeep replies brief (about 60 words), in plain spoken English, without markdown.",
+                        "{}\n\nKeep replies brief (about 60 words), in plain spoken English, without markdown. Output only the words Moose should say; do not include voice labels, stage directions, sound cues, or bracketed delivery notes.",
                         system_instruction.unwrap_or_default()
                     )),
                     temperature: Some(0.85),
@@ -303,5 +326,21 @@ mod tests {
         assert!(prepared.chars().count() <= MAX_LOCAL_TTS_RESPONSE_CHARS);
         assert!(!prepared.contains('\n'));
         assert!(prepared.ends_with('.'));
+    }
+
+    #[test]
+    fn local_tts_response_removes_leading_voice_cue() {
+        assert_eq!(
+            prepare_local_tts_response("[Moose-esque voice] Ah, how can I help?"),
+            "Ah, how can I help?"
+        );
+    }
+
+    #[test]
+    fn local_tts_response_preserves_bracketed_spoken_content() {
+        assert_eq!(
+            prepare_local_tts_response("[sic], that's exactly what I meant."),
+            "[sic], that's exactly what I meant."
+        );
     }
 }
