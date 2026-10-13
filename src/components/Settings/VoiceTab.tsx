@@ -15,7 +15,9 @@ interface VoiceTabProps {
 const providerLabel = (provider: TtsProvider): string =>
   provider === "google"
     ? "Google Gemini TTS — cloud"
-    : "Local KittenTTS — on this computer";
+    : provider === "system"
+      ? "System Voices — macOS only"
+      : "Local KittenTTS — on this computer";
 
 export const VoiceTab: React.FC<VoiceTabProps> = ({
   isAuditioning,
@@ -67,7 +69,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
   const selectedVoice =
     settings.tts_provider === "google"
       ? settings.google_tts_voice
-      : settings.local_tts_voice;
+      : settings.tts_provider === "system"
+        ? settings.system_tts_voice
+        : settings.local_tts_voice;
   const selectedVoiceAvailable =
     selectedProvider?.voices.some((voice) => voice.id === selectedVoice) ??
     false;
@@ -80,7 +84,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
       ? "Download and verify the Local KittenTTS model before auditioning a Local voice."
       : settings.tts_provider === "google" && !hasApiKey
         ? "Google TTS requires a saved Google API key in AI & Models."
-        : null;
+        : settings.tts_provider === "system"
+          ? "System voice synthesis is not yet available in this build."
+          : null;
 
   const selectProvider = async (provider: TtsProvider) => {
     if (provider === settings.tts_provider) return;

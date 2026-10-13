@@ -30,6 +30,55 @@ fn new_settings_use_the_platform_asr_default_and_local_text() {
     assert!(!settings.idle_banter_seed_topics.is_empty());
 }
 
+#[test]
+fn old_provider_settings_migrate_and_preserve_unrecognized_additive_fields() {
+    let mut value = serde_json::to_value(AppSettings {
+        text_provider: TextProvider::Google,
+        google_text_model: "gemini-3.6-flash".into(),
+        tts_provider: TtsProvider::Google,
+        google_tts_voice: "Kore".into(),
+        ..Default::default()
+    }).unwrap();
+    let fields = value.as_object_mut().unwrap();
+    fields.insert("settings_version".into(), serde_json::json!(7));
+    for name in [
+        "openai_text_model", "ollama_text_model", "ollama_server_address",
+        "llama_server_text_model", "llama_server_address", "system_tts_voice",
+    ] {
+        fields.remove(name);
+    }
+    fields.insert("future_display_hint".into(), serde_json::json!({"enabled": true}));
+    let (s, migrated) = AppSettings::from_persisted_json(&value.to_string()).unwrap();
+    assert!(migrated);
+    assert_eq!(s.text_provider, TextProvider::Google);
+    assert_eq!(s.google_text_model, "gemini-3.6-flash");
+    assert_eq!(s.tts_provider, TtsProvider::Google);
+    assert_eq!(s.google_tts_voice, "Kore");
+    assert_eq!(s.openai_text_model, "gpt-4.1-mini");
+    assert_eq!(s.ollama_server_address, "http://127.0.0.1:11434");
+    assert_eq!(s.system_tts_voice, "system_default");
+    assert_eq!(serde_json::to_value(&s).unwrap()["future_display_hint"]["enabled"], true);
+}
+
+#[test]
+fn external_provider_values_round_trip_without_changing_defaults() {
+    for provider in [TextProvider::Openai, TextProvider::Ollama, TextProvider::LlamaServer] {
+        let original = AppSettings {
+            text_provider: provider,
+            tts_provider: TtsProvider::System,
+            ollama_text_model: "test:latest".into(),
+            ..Default::default()
+        };
+        let (s, migrated) = AppSettings::from_persisted_json(&serde_json::to_string(&original).unwrap()).unwrap();
+        assert!(!migrated);
+        assert_eq!(s.text_provider, provider);
+        assert_eq!(s.tts_provider, TtsProvider::System);
+        assert_eq!(s.ollama_text_model, "test:latest");
+    }
+    assert_eq!(AppSettings::default().text_provider, TextProvider::Local);
+    assert_eq!(AppSettings::default().tts_provider, TtsProvider::Local);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn persisted_moonshine_selection_migrates_to_whisper_on_linux() {

@@ -29,8 +29,8 @@ export interface ProviderError {
   retryable: boolean;
 }
 
-export type TextProvider = "google" | "local";
-export type TtsProvider = "google" | "local";
+export type TextProvider = "google" | "local" | "openai" | "ollama" | "llama_server";
+export type TtsProvider = "google" | "local" | "system";
 
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
@@ -378,6 +378,7 @@ export interface AppSettings {
   tts_provider: TtsProvider;
   google_tts_voice: string;
   local_tts_voice: string;
+  system_tts_voice: string;
   live_voice: string;
   speaking_rate: number;
   pitch: number;
@@ -386,6 +387,11 @@ export interface AppSettings {
   live_model: string;
   google_text_model: string;
   local_text_model: string;
+  openai_text_model: string;
+  ollama_text_model: string;
+  ollama_server_address: string;
+  llama_server_text_model: string;
+  llama_server_address: string;
   google_tts_model: string;
   local_tts_model: string;
 

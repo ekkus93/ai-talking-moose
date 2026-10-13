@@ -35,6 +35,12 @@ pub(crate) fn validate_loopback_server_address(address: &str) -> Result<(), Stri
     {
         return Err(invalid());
     }
+    // Check the unnormalized spelling too: path traversal and encoded hosts
+    // must not be admitted merely because URL parsing normalized them away.
+    let canonical = format!("http://{}:{}", url.host_str().ok_or_else(invalid)?, url.port().ok_or_else(invalid)?);
+    if address != canonical && address != format!("{canonical}/") {
+        return Err(invalid());
+    }
     Ok(())
 }
 
@@ -374,6 +380,34 @@ mod tests {
     }
 
     #[test]
+    fn provider_addresses_and_model_ids_are_validated_at_backend_boundary() {
+        for address in ["http://localhost:11434", "http://[::1]:8080", "http://127.0.0.1:1234/"] {
+            assert!(validate_loopback_server_address(address).is_ok(), "{address}");
+        }
+        for address in [
+            "https://localhost:11434", "http://example.com:11434",
+            "http://localhost", "http://localhost:0",
+            "http://user@localhost:9000", "http://localhost:9000/v1",
+            "http://localhost:9000/a/..", "http://localhost:9000/?key=x",
+            "http://localhost:9000/#x", "http://127.0.0.2:11434",
+            "http://0.0.0.0:11434", " http://localhost:9000",
+        ] {
+            assert!(validate_loopback_server_address(address).is_err(), "{address}");
+        }
+        let mut settings = AppSettings::default();
+        settings.openai_text_model = String::new();
+        assert!(validate_app_settings(&settings).is_err());
+        settings.openai_text_model = "gpt-4.1-mini".into();
+        settings.ollama_text_model = "bad\nmodel".into();
+        assert!(validate_app_settings(&settings).is_err());
+        settings.ollama_text_model = "example:latest".into();
+        settings.ollama_server_address = "https://elsewhere.example".into();
+        assert!(validate_app_settings(&settings).is_err());
+        settings.ollama_server_address = "http://localhost:11434".into();
+        assert!(validate_app_settings(&settings).is_ok());
+    }
+
+    #[test]
     fn persisted_settings_are_classified_and_user_preferences_have_runtime_consumers() {
         let user_consumers = [
             ("asr_mode", "conversation start selects local or Gemini ASR"),
@@ -407,6 +441,7 @@ mod tests {
             ("tts_provider", "standalone TTS provider selection"),
             ("google_tts_voice", "Google standalone speech selection"),
             ("local_tts_voice", "Local standalone speech selection"),
+            ("system_tts_voice", "macOS system voice selection"),
             ("live_voice", "Gemini Live session voice selection"),
             ("speaking_rate", "standalone TTS request"),
             ("pitch", "standalone TTS request"),
@@ -414,6 +449,11 @@ mod tests {
             ("live_model", "Gemini Live session configuration"),
             ("google_text_model", "Google text model construction"),
             ("local_text_model", "Local model catalog selection"),
+            ("openai_text_model", "OpenAI model choice"),
+            ("ollama_text_model", "Ollama model choice"),
+            ("ollama_server_address", "Ollama server selection"),
+            ("llama_server_text_model", "llama-server model choice"),
+            ("llama_server_address", "llama-server server selection"),
             ("google_tts_model", "Google speech synthesizer construction"),
             ("local_tts_model", "Local speech model selection"),
             ("active_app_observation", "desktop observation privacy gate"),
