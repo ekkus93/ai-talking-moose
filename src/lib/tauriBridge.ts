@@ -228,6 +228,21 @@ export const nativeTauriBridge = {
     return invoke<boolean>("has_google_api_key");
   },
 
+  async setOpenaiApiKey(apiKey: string): Promise<void> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("set_openai_api_key", { apiKey });
+  },
+
+  async clearOpenaiApiKey(): Promise<void> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("clear_openai_api_key");
+  },
+
+  async hasOpenaiApiKey(): Promise<boolean> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("has_openai_api_key");
+  },
+
   async testAiConnection(): Promise<ConnectionTestResult> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<ConnectionTestResult>("test_ai_connection");

@@ -452,6 +452,15 @@ export const browserPreviewBridge = {
     return true;
   },
 
+  // Preview never retains or echoes credentials.
+  async setOpenaiApiKey(_apiKey: string): Promise<void> {},
+
+  async clearOpenaiApiKey(): Promise<void> {},
+
+  async hasOpenaiApiKey(): Promise<boolean> {
+    return false;
+  },
+
   async testAiConnection(): Promise<ConnectionTestResult> {
     return { success: true, message: "Mock API connection successful!" };
   },

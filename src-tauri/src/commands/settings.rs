@@ -260,6 +260,29 @@ pub fn has_google_api_key(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(state.secrets.has_google_api_key())
 }
 
+/// The OpenAI credential is independent of the Google credential and never
+/// becomes part of serialized AppSettings, SQLite, or frontend storage.
+#[tauri::command]
+pub fn set_openai_api_key(api_key: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.secrets.set_openai_api_key(api_key)
+}
+
+#[tauri::command]
+pub fn clear_openai_api_key(state: State<'_, AppState>) -> Result<(), String> {
+    state.secrets.clear_openai_api_key()?;
+    // Clean up any untrusted legacy database value without touching Google.
+    state
+        .db
+        .delete_setting("openai_api_key")
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn has_openai_api_key(state: State<'_, AppState>) -> Result<bool, String> {
+    Ok(state.secrets.has_openai_api_key())
+}
+
 #[tauri::command]
 pub async fn test_ai_connection(
     state: State<'_, AppState>,

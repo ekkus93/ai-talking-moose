@@ -19,6 +19,18 @@ impl SecretBackend for RejectWriteBackend {
     fn delete_google_api_key(&self) -> Result<(), String> {
         Ok(())
     }
+
+    fn read_openai_api_key(&self) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    fn write_openai_api_key(&self, _key: &str) -> Result<(), String> {
+        Err("injected secure-store write failure".to_string())
+    }
+
+    fn delete_openai_api_key(&self) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 #[test]
