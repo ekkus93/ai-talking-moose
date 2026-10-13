@@ -6,6 +6,7 @@ use crate::ai::types::{ProviderError, ProviderErrorKind, TextRequest, TextRespon
 use crate::app::settings_policy::validate_loopback_server_address;
 use async_trait::async_trait;
 use reqwest::{redirect::Policy, Client, StatusCode};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
@@ -35,7 +36,8 @@ impl LoopbackTextServer {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum LoopbackReadiness {
     Unreachable,
     ReachableButModelUnavailable,

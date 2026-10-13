@@ -461,6 +461,12 @@ export const browserPreviewBridge = {
     return false;
   },
 
+  async testLocalTextServer(
+    _provider: "ollama" | "llama_server",
+  ): Promise<"unreachable" | "reachable_but_model_unavailable" | "model_ready"> {
+    return "unreachable";
+  },
+
   async testAiConnection(): Promise<ConnectionTestResult> {
     return { success: true, message: "Mock API connection successful!" };
   },

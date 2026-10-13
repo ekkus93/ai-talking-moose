@@ -288,6 +288,7 @@ pub fn run() {
             set_openai_api_key,
             clear_openai_api_key,
             has_openai_api_key,
+            test_local_text_server,
             test_ai_connection,
             list_audio_devices,
             get_microphone_permission,

@@ -2,9 +2,10 @@ use crate::ai::google::{
     validate_live_model, GoogleAuth, GoogleLiveProvider, GoogleModelDescriptor,
     GoogleTtsVoiceDescriptor, GOOGLE_MODELS, GOOGLE_TTS_VOICES,
 };
+use crate::ai::loopback::{LoopbackReadiness, LoopbackTextModel, LoopbackTextServer};
 use crate::ai::traits::RealtimeConversationProvider;
 use crate::ai::tts_catalog::{tts_catalog, TtsCatalog};
-use crate::ai::types::LiveSessionConfig;
+use crate::ai::types::{LiveSessionConfig, TextProvider};
 use crate::app::runtime_preferences::apply_changed_runtime_preferences;
 use crate::app::settings_policy::{
     conversation_restart_required, persist_and_apply_settings, settings_runtime_lock,
@@ -281,6 +282,32 @@ pub fn clear_openai_api_key(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub fn has_openai_api_key(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(state.secrets.has_openai_api_key())
+}
+
+/// A connection check never launches a service or downloads model weights.
+#[tauri::command]
+pub async fn test_local_text_server(
+    provider: TextProvider,
+    state: State<'_, AppState>,
+) -> Result<LoopbackReadiness, String> {
+    if state.conversation_mgr.is_active() {
+        return Err("Stop the active conversation before checking server readiness".to_string());
+    }
+    let settings = state.settings_snapshot();
+    let model = match provider {
+        TextProvider::Ollama => LoopbackTextModel::new(
+            LoopbackTextServer::Ollama,
+            settings.ollama_server_address,
+            settings.ollama_text_model,
+        ),
+        TextProvider::LlamaServer => LoopbackTextModel::new(
+            LoopbackTextServer::LlamaServer,
+            settings.llama_server_address,
+            settings.llama_server_text_model,
+        ),
+        _ => return Err("Select Ollama or llama-server for a loopback readiness check".to_string()),
+    };
+    Ok(model.check_readiness().await)
 }
 
 #[tauri::command]
