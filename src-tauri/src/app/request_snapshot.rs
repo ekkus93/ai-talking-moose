@@ -1,5 +1,6 @@
 use crate::ai::google::{GoogleAuth, GoogleTextModel};
 use crate::ai::local::{global_local_model_installer, LocalTextModel};
+use crate::ai::loopback::{LoopbackTextModel, LoopbackTextServer};
 use crate::ai::openai::OpenAiTextModel;
 use crate::ai::traits::TextModel;
 use crate::ai::types::TextProvider;
@@ -47,9 +48,16 @@ impl AppState {
                 self.secrets.get_openai_api_key().unwrap_or_default(),
                 settings.openai_text_model.clone(),
             )),
-            TextProvider::Ollama | TextProvider::LlamaServer => {
-                Box::new(crate::ai::unavailable::UnavailableTextModel)
-            }
+            TextProvider::Ollama => Box::new(LoopbackTextModel::new(
+                LoopbackTextServer::Ollama,
+                settings.ollama_server_address.clone(),
+                settings.ollama_text_model.clone(),
+            )),
+            TextProvider::LlamaServer => Box::new(LoopbackTextModel::new(
+                LoopbackTextServer::LlamaServer,
+                settings.llama_server_address.clone(),
+                settings.llama_server_text_model.clone(),
+            )),
         }
     }
 }

@@ -1,6 +1,7 @@
 pub mod fake;
 pub mod google;
 pub mod local;
+pub mod loopback;
 pub mod openai;
 pub mod local_tts;
 pub mod traits;
