@@ -30,11 +30,7 @@ export interface ProviderError {
 }
 
 export type TextProvider =
-  | "google"
-  | "local"
-  | "openai"
-  | "ollama"
-  | "llama_server";
+  "google" | "local" | "openai" | "ollama" | "llama_server";
 export type TtsProvider = "google" | "local" | "system";
 
 export type MouthShape = "closed" | "small" | "medium" | "wide";
