@@ -44,6 +44,9 @@ export const AiTab: React.FC<AiTabProps> = ({
 
   if (!settings) return null;
 
+  const localTalkSelected =
+    settings.text_provider === "local" &&
+    settings.asr_mode !== "gemini_live_audio";
   const liveModels = googleModels.filter((model) =>
     model.capabilities.includes("live_audio"),
   );
@@ -222,53 +225,63 @@ export const AiTab: React.FC<AiTabProps> = ({
       >
         <div>
           <h4 id="voice-conversation-heading" className="font-bold">
-            Voice Conversation — Google Gemini Live
+            {localTalkSelected
+              ? "Talk Conversation — Local"
+              : "Talk Conversation — Google Gemini Live"}
           </h4>
           <p className="text-[10px] text-gray-700">
-            Voice sessions remain cloud-based in this phase. Choosing Local text
-            above does not change the Gemini Live voice provider.
+            {localTalkSelected
+              ? "Local ASR, Local text, and KittenTTS run on this computer after their models are installed."
+              : "Google Gemini Live sends active-conversation audio or text to Google, based on the selected ASR and text providers."}
           </p>
         </div>
-        <label htmlFor="settings-live-model" className="block mb-1 font-bold">
-          Realtime Live Voice Model
-        </label>
-        <select
-          id="settings-live-model"
-          value={settings.live_model}
-          disabled={modelSelectorsDisabled}
-          aria-busy={googleModelsStatus === "loading"}
-          onChange={(event) => {
-            if (!modelSelectorsDisabled) {
-              void updateSettingsPatch({
-                live_model: event.target.value,
-              });
-            }
-          }}
-          className="w-full p-1.5 border border-black rounded bg-white font-bold disabled:opacity-60"
-        >
-          {googleModelsStatus === "loading" ? (
-            <option value={settings.live_model}>
-              Current: {settings.live_model} (loading catalog…)
-            </option>
-          ) : googleModelsStatus === "error" ? (
-            <option value={settings.live_model}>
-              Current: {settings.live_model} (catalog unavailable)
-            </option>
-          ) : (
-            <>
-              {!liveModelAvailable && (
+        {!localTalkSelected && (
+          <>
+            <label
+              htmlFor="settings-live-model"
+              className="block mb-1 font-bold"
+            >
+              Realtime Live Voice Model
+            </label>
+            <select
+              id="settings-live-model"
+              value={settings.live_model}
+              disabled={modelSelectorsDisabled}
+              aria-busy={googleModelsStatus === "loading"}
+              onChange={(event) => {
+                if (!modelSelectorsDisabled) {
+                  void updateSettingsPatch({
+                    live_model: event.target.value,
+                  });
+                }
+              }}
+              className="w-full p-1.5 border border-black rounded bg-white font-bold disabled:opacity-60"
+            >
+              {googleModelsStatus === "loading" ? (
                 <option value={settings.live_model} disabled>
-                  Unavailable: {settings.live_model}
+                  Current: {settings.live_model} (loading catalog…)
                 </option>
+              ) : googleModelsStatus === "error" ? (
+                <option value={settings.live_model}>
+                  Current: {settings.live_model} (catalog unavailable)
+                </option>
+              ) : (
+                <>
+                  {!liveModelAvailable && (
+                    <option value={settings.live_model} disabled>
+                      Unavailable: {settings.live_model}
+                    </option>
+                  )}
+                  {liveModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.display_name} ({model.id})
+                    </option>
+                  ))}
+                </>
               )}
-              {liveModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.display_name} ({model.id})
-                </option>
-              ))}
-            </>
-          )}
-        </select>
+            </select>
+          </>
+        )}
       </section>
 
       <section
@@ -280,9 +293,10 @@ export const AiTab: React.FC<AiTabProps> = ({
             Google Cloud Credential
           </h4>
           <p className="text-[10px] text-gray-700">
-            {settings.text_provider === "local"
-              ? "Not required for Local text generation. It is still required for Gemini Live voice and Google TTS."
-              : "Required for Gemini text generation, Gemini Live voice, and Google TTS."}
+            {settings.text_provider === "local" &&
+            settings.asr_mode !== "gemini_live_audio"
+              ? "Not required for Local-first Talk or Local text. Google TTS still requires it when selected."
+              : "Required for the selected Google conversation or text provider, and for Google TTS."}
           </p>
         </div>
 
@@ -364,9 +378,10 @@ export const AiTab: React.FC<AiTabProps> = ({
           and verified. Model installation itself uses the network.
         </p>
         <p className="text-[10px] text-gray-800">
-          Gemini Live voice remains cloud-based. Google TTS also receives the
-          final reply text for speech, including replies generated by a Local
-          text model.
+          Local-first Talk keeps microphone audio, transcripts, generated text,
+          and speech on this computer after model installation. Google receives
+          content only when a Google provider or Gemini Live audio ASR is
+          selected.
         </p>
       </section>
     </div>

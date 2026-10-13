@@ -7,10 +7,11 @@ Local LLM V1 adds CPU-friendly **text generation** alongside Google Gemini. It c
 - typed `send_text_message` replies;
 - ambient remarks;
 - explicit Local-model self-test generation.
+- local-first Talk replies when local ASR and Local text are selected.
 
-It does **not** replace the V1 spoken-conversation provider. Gemini Live remains the realtime voice provider, including for finalized transcripts produced by local Moonshine ASR. Google TTS also remains a separate cloud speech-output path when selected.
+Local-first spoken conversations use local ASR, Local text generation, and KittenTTS through the existing conversation lifecycle. Gemini Live remains available when the user explicitly selects Google text generation or Gemini Live audio ASR. Google TTS remains available for standalone speech when selected.
 
-The design deliberately separates text-provider choice from ASR, realtime voice, and TTS so a Local text selection cannot silently redefine those privacy boundaries.
+Talk selects its conversation pipeline from the saved provider choices. Local-first mode requires local ASR, Local text, and KittenTTS; Google Live is selected only when Google text generation or Gemini Live audio ASR is selected.
 
 ## Provider selection
 
@@ -19,7 +20,7 @@ The design deliberately separates text-provider choice from ASR, realtime voice,
 - `local` — `LocalTextModel` backed by the app-owned Local runtime;
 - `google` — `GoogleTextModel` backed by the configured Gemini text model.
 
-Fresh profiles default to **Local** with `smollm2-360m-instruct-q4-k-m` selected. Selection does not install or download the model. Profiles created before the text-provider selector continue to migrate explicitly to Google so an upgrade does not silently change an existing user's text provider.
+Fresh profiles default to **Local** text generation with `smollm2-360m-instruct-q4-k-m` selected and **Local** TTS with KittenTTS selected. Profiles with no saved provider choice migrate to Local; a saved Google selection remains unchanged. Selection does not install or download either model.
 
 Ambient and typed-message call sites continue to depend on the provider-neutral `TextModel` trait. They do not contain provider-specific fallback branches.
 
@@ -109,42 +110,31 @@ There are two distinct Local-model network phases:
 
 Real CPU acceptance proves generation after installation while the process is in a denied-network namespace. The Local generation path does not construct the Google REST client, Gemini Live WebSocket, or installer request.
 
-Local text generation does **not** imply that the whole application is offline:
+Local providers do not imply that every app capability is offline:
 
-- Gemini Live voice remains cloud-based in V1;
-- Moonshine Tiny/Small keep microphone PCM local, but finalized transcript text is still handed to Gemini Live for spoken conversation;
-- Google TTS receives text when Google TTS is used;
+- Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected;
+- local Moonshine/Whisper ASR keeps microphone PCM local, and local Talk conversations hand finalized transcripts to the selected Local text model;
+- Google TTS receives text when Google TTS is used for standalone speech;
 - Google text generation is available when the user explicitly selects the Google text provider.
 
 These boundaries are documented in `docs/PRIVACY.md` and must stay synchronized with Settings/onboarding copy.
 
 ## Voice architecture and deferred seam
 
-Current V1 voice path:
+Local-first Talk path:
 
 ```text
-Microphone
-   |
-   +--> Gemini Live Cloud Audio -------------------------+
-   |                                                     |
-   +--> Moonshine local ASR --> finalized transcript ----+--> Gemini Live
-                                                          |
-                                                          v
-                                                   response audio
-                                                          |
-                                                          v
-                                                   Rust playback
+Microphone -> Moonshine/Whisper local ASR -> Local TextModel -> KittenTTS -> Rust playback
 ```
 
-Local text selection is intentionally absent from that path.
+The local provider emits a completed text response followed by synthesized PCM through the existing lifecycle. It does not stream generated text or invoke provider tools. Interruption suppresses stale output and cancels active TTS synthesis.
 
-A later fully local voice phase may introduce an explicit seam such as:
+Google Live path (explicit selection):
 
-```text
-Microphone -> Moonshine ASR -> Local TextModel -> speech synthesizer -> playback
+Microphone -> Gemini Live -> Rust playback
 ```
 
-That is **deferred work**, not a hidden fallback or partially enabled V1 path. It will require an explicit conversation-provider/lifecycle design so interruption, streaming, tool calls, memory, TTS privacy, and error semantics remain coherent.
+Selecting Local never downloads missing text/TTS models and never falls back to Google. Talk reports an explicit Local model installation/runtime error until the selected models are installed.
 
 ## Packaging and licensing
 

@@ -235,6 +235,21 @@ pub(super) fn model_in_use(state: &AppState, mode: AsrMode) -> bool {
     )
 }
 
+fn ensure_mode_supported(mode: AsrMode) -> Result<(), String> {
+    if cfg!(target_os = "linux")
+        && matches!(
+            mode,
+            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
+        )
+    {
+        return Err("Moonshine speech recognition is available only in the macOS app.".to_string());
+    }
+    if cfg!(target_os = "macos") && mode == AsrMode::WhisperSmall {
+        return Err("Whisper Small is available only in the Linux app.".to_string());
+    }
+    Ok(())
+}
+
 fn ensure_model_mutation_allowed(state: &AppState, mode: AsrMode) -> Result<(), String> {
     if model_in_use(state, mode) {
         let display_name = if mode == AsrMode::WhisperSmall {
@@ -265,22 +280,35 @@ async fn acquire_model_mutation_guard(
 
 #[tauri::command]
 pub async fn get_asr_models(state: State<'_, AppState>) -> Result<Vec<AsrModelDescriptor>, String> {
-    let tiny_active = model_in_use(state.inner(), AsrMode::MoonshineTinyStreaming);
-    let small_active = model_in_use(state.inner(), AsrMode::MoonshineSmallStreaming);
-    let whisper_active = model_in_use(state.inner(), AsrMode::WhisperSmall);
-    let tiny = load_descriptor(
-        state.moonshine_installer.clone(),
-        MoonshineModelArchitecture::TinyStreaming,
-        tiny_active,
-    );
-    let small = load_descriptor(
-        state.moonshine_installer.clone(),
-        MoonshineModelArchitecture::SmallStreaming,
-        small_active,
-    );
-    let whisper = load_whisper_descriptor(state.whisper_installer.clone(), whisper_active);
-    let (tiny, small, whisper) = tokio::try_join!(tiny, small, whisper)?;
-    Ok(vec![tiny, small, whisper])
+    #[cfg(target_os = "linux")]
+    {
+        let whisper_active = model_in_use(state.inner(), AsrMode::WhisperSmall);
+        let whisper =
+            load_whisper_descriptor(state.whisper_installer.clone(), whisper_active).await?;
+        Ok(vec![whisper])
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let tiny_active = model_in_use(state.inner(), AsrMode::MoonshineTinyStreaming);
+        let small_active = model_in_use(state.inner(), AsrMode::MoonshineSmallStreaming);
+        let tiny = load_descriptor(
+            state.moonshine_installer.clone(),
+            MoonshineModelArchitecture::TinyStreaming,
+            tiny_active,
+        );
+        let small = load_descriptor(
+            state.moonshine_installer.clone(),
+            MoonshineModelArchitecture::SmallStreaming,
+            small_active,
+        );
+        let (tiny, small) = tokio::try_join!(tiny, small)?;
+        Ok(vec![tiny, small])
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = state;
+        Ok(Vec::new())
+    }
 }
 
 #[tauri::command]
@@ -289,6 +317,7 @@ pub async fn install_asr_model<R: Runtime>(
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
 ) -> Result<AsrModelDescriptor, String> {
+    ensure_mode_supported(mode)?;
     let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
 
     if mode == AsrMode::WhisperSmall {
@@ -396,6 +425,7 @@ pub async fn delete_asr_model(
     mode: AsrMode,
     state: State<'_, AppState>,
 ) -> Result<AsrModelDescriptor, String> {
+    ensure_mode_supported(mode)?;
     let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
 
     if mode == AsrMode::WhisperSmall {

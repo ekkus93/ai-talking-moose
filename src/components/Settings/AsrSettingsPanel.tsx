@@ -385,21 +385,24 @@ export const AsrSettingsPanel: React.FC = () => {
 
       <fieldset className="space-y-3">
         <legend className="sr-only">Choose speech recognition mode</legend>
-        {renderLocalModel(
-          "moonshine_tiny_streaming",
-          "Moonshine Tiny Streaming",
-          "Default. Fast local English speech recognition with the smallest CPU and disk footprint.",
-        )}
-        {renderLocalModel(
-          "moonshine_small_streaming",
-          "Moonshine Small Streaming",
-          "Higher-capacity local English speech recognition with a larger model and CPU footprint.",
-        )}
-        {renderLocalModel(
-          "whisper_small",
-          "Whisper Small",
-          "Local English recognition with in-utterance partial updates and local endpointing; supports wake-word activation. A final user turn is emitted only when the utterance ends (silence, the bounded maximum duration, or explicit stop). The model is downloaded only when you explicitly press Download.",
-        )}
+        {modelsByMode.has("moonshine_tiny_streaming") &&
+          renderLocalModel(
+            "moonshine_tiny_streaming",
+            "Moonshine Tiny Streaming",
+            "Default. Fast local English speech recognition with the smallest CPU and disk footprint.",
+          )}
+        {modelsByMode.has("moonshine_small_streaming") &&
+          renderLocalModel(
+            "moonshine_small_streaming",
+            "Moonshine Small Streaming",
+            "Higher-capacity local English speech recognition with a larger model and CPU footprint.",
+          )}
+        {modelsByMode.has("whisper_small") &&
+          renderLocalModel(
+            "whisper_small",
+            "Whisper Small",
+            "Local English recognition with in-utterance partial updates and local endpointing; supports wake-word activation. A final user turn is emitted only when the utterance ends (silence, the bounded maximum duration, or explicit stop). The model is downloaded only when you explicitly press Download.",
+          )}
 
         <div
           className={`border rounded p-3 ${settings.asr_mode === "gemini_live_audio" ? "border-black border-2" : "border-gray-400"}`}
@@ -438,8 +441,9 @@ export const AsrSettingsPanel: React.FC = () => {
         ) : (
           <p>
             <strong>Local mode selected:</strong> microphone PCM stays on this
-            computer. Only finalized transcript text is sent to Gemini so the
-            Moose can generate a reply.
+            computer. Finalized transcript text is handled by the selected
+            conversation provider. Local text is the default; Google is used
+            only when you select a Google conversation option.
           </p>
         )}
         <p>

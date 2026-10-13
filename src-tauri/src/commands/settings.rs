@@ -181,6 +181,18 @@ pub async fn update_settings<R: Runtime>(
 
     new_settings = normalize_settings_update(new_settings)?;
 
+    #[cfg(target_os = "linux")]
+    if matches!(
+        new_settings.asr_mode,
+        crate::asr::AsrMode::MoonshineTinyStreaming | crate::asr::AsrMode::MoonshineSmallStreaming
+    ) {
+        return Err("Moonshine speech recognition is available only in the macOS app.".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    if new_settings.asr_mode == crate::asr::AsrMode::WhisperSmall {
+        return Err("Whisper Small is available only in the Linux app.".to_string());
+    }
+
     let previous = state.settings.read().clone();
     validate_changed_audio_devices(&previous, &new_settings)?;
     let restart_required = conversation_restart_required(&previous, &new_settings);

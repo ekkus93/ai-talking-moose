@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MooseWindow } from "../windows/MooseWindow";
 import { useMooseStore } from "../stores/mooseStore";
 import { tauriBridge } from "../lib/tauriBridge";
+import { frontendDefaultSettings } from "../lib/backendContract";
 
 vi.mock("../components/Moose/MooseController", () => ({
   MooseController: () => <div data-testid="moose-controller" />,
@@ -43,6 +44,7 @@ describe("MooseWindow focused keyboard shortcuts", () => {
       isMuted: false,
       isConversationActive: false,
       hasApiKey: true,
+      settings: frontendDefaultSettings(),
       isSettingsOpen: false,
       isOnboardingOpen: false,
       isTranscriptOpen: false,
@@ -117,14 +119,19 @@ describe("MooseWindow focused keyboard shortcuts", () => {
 
   it("updates the title-bar AI badge immediately after saving a key", async () => {
     useMooseStore.setState({ hasApiKey: false });
+    useMooseStore.setState((state) => ({
+      settings: state.settings
+        ? { ...state.settings, text_provider: "google" }
+        : null,
+    }));
     vi.spyOn(tauriBridge, "setGoogleApiKey").mockResolvedValue(undefined);
     render(<MooseWindow />);
 
-    expect(screen.getByText("AI: NO KEY")).toBeInTheDocument();
+    expect(screen.getByText("GOOGLE: NO KEY")).toBeInTheDocument();
     await useMooseStore.getState().saveGoogleApiKey("AIzaSyBadgeKey");
 
     await waitFor(() =>
-      expect(screen.getByText("AI: READY")).toBeInTheDocument(),
+      expect(screen.getByText("GOOGLE READY")).toBeInTheDocument(),
     );
   });
 

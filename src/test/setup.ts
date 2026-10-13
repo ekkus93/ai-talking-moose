@@ -82,7 +82,7 @@ const mockWakeWordDiagnostics = (): WakeWordDiagnostics => ({
   last_error: null,
 });
 
-const mockAsrModels: AsrModelDescriptor[] = [
+const mockMoonshineAsrModels: AsrModelDescriptor[] = [
   {
     id: "moonshine-tiny-streaming-en",
     display_name: "Moonshine Tiny Streaming (English)",
@@ -108,6 +108,28 @@ const mockAsrModels: AsrModelDescriptor[] = [
     error_message: null,
   },
 ];
+
+const mockWhisperAsrModels: AsrModelDescriptor[] = [
+  {
+    id: "whisper-small-en",
+    display_name: "Whisper Small (English)",
+    mode: "whisper_small",
+    install_state: "not_installed",
+    revision: "5359861c739e955e79d9a303bcbc70fb988958b1",
+    runtime_release: "pinned-whisper-cpp",
+    installed_bytes: null,
+    expected_bytes: 487_601_967,
+    active: false,
+    error_message: null,
+  },
+];
+
+const mockAsrModels =
+  process.platform === "linux" ? mockWhisperAsrModels : mockMoonshineAsrModels;
+const defaultMockAsrMode = frontendDefaultSettings().asr_mode;
+const defaultMockAsrModel =
+  mockAsrModels.find((model) => model.mode === defaultMockAsrMode) ??
+  mockAsrModels[0];
 
 const mockLocalModels: LocalModelDescriptor[] = [
   {
@@ -217,11 +239,11 @@ const dispatchTauriCommand = async (
   if (cmd === "delete_asr_model") return modelForMode(args?.mode);
   if (cmd === "get_asr_diagnostics") {
     return {
-      selected_mode: "moonshine_tiny_streaming",
-      engine_name: "Moonshine Tiny Streaming (English)",
-      model_id: "moonshine-tiny-streaming-en",
-      model_revision: "quantized_26_07_30",
-      install_state: "not_installed",
+      selected_mode: defaultMockAsrModel.mode,
+      engine_name: defaultMockAsrModel.display_name,
+      model_id: defaultMockAsrModel.id,
+      model_revision: defaultMockAsrModel.revision,
+      install_state: defaultMockAsrModel.install_state,
       input_sample_rate_hz: 16_000,
       streaming: false,
       metrics_snapshot: false,

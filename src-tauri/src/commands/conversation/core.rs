@@ -162,7 +162,7 @@ async fn start_conversation_with_optional_wake_handoff<R: Runtime + 'static>(
         resolve_wake_after_start_failure(state, "character_preparation");
         return Err(error_value);
     }
-    let provider = state.get_live_provider();
+    let provider = state.get_conversation_provider_for(&settings);
     let tool_router = state.tool_router.clone();
 
     let system_instruction = build_conversation_system_instruction(state, settings.memory_enabled);

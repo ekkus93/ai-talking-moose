@@ -11,9 +11,9 @@
 **Talking Moose AI** lives directly on your desktop inside a deliberately retro-styled Macintosh window. Rather than being a corporate support chatbot, the Moose is a dry-witted, humorous desktop character.
 
 - **Real-time spoken conversation:** Click the Moose to start a voice conversation.
-- **Local or cloud speech recognition:** Moonshine Tiny/Small and Whisper Small provide local ASR; their partial transcripts stay local and only finalized non-empty text may be sent to Gemini Live. Whisper model download is explicit and can be canceled in Settings. Gemini Live audio is available as an explicitly selected cloud mode.
+- **Local or cloud speech recognition:** Moonshine Tiny/Small and Whisper Small provide local ASR; partial transcripts stay local and finalized text goes to the selected conversation provider. Local is the default; Gemini Live audio is an explicit cloud mode.
 - **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
-- **Local-first text generation:** New profiles use the Local text provider by default. SmolLM2 360M is selected but is never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains an optional text provider.
+- **Local-first AI:** New profiles use Local text, Local TTS, and platform-local ASR by default. SmolLM2 360M and KittenTTS are selected but never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains optional.
 - **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS or Local KittenTTS. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification.
 - **Ambient reactions:** When explicitly enabled, the Moose can react to permitted local computer events.
 - **Retro visuals:** Low-resolution integer-scaled pixel art with amplitude-driven mouth animation.
@@ -126,7 +126,7 @@ Cargo dependencies are resolved automatically by Cargo when running the Rust bui
 
 ## Local KittenTTS Quick Start
 
-Local KittenTTS is the V1 on-device standalone speech provider. It is separate from Gemini Live voice conversations. Gemini Live remains cloud-native live audio even when standalone speech is set to Local.
+Local KittenTTS is used for local-first Talk responses and standalone speech. Local Talk uses local ASR, Local text generation, and KittenTTS. Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected.
 
 Local KittenTTS behavior:
 
@@ -161,7 +161,7 @@ Supported V1 Local text models:
 
 Those measurements came from the canonical Linux x86_64 real-CPU acceptance run on an AMD EPYC host and are **not performance guarantees** for another computer. They are runtime/usability measurements, not a semantic-quality benchmark. SmolLM2 remains the recommended Local default because it had materially lower disk/RAM/CPU cost in that acceptance run. See `docs/LOCAL_LLM_CPU_ACCEPTANCE_20260902.md`.
 
-A Google AI Studio API key is **not required for Local text generation**. It is still required when you select Google text generation, for the V1 Gemini Live spoken-conversation provider, and for Google TTS. Local Moonshine and Whisper ASR only make speech recognition local; finalized local ASR transcripts still go to Gemini Live for spoken conversation in this phase.
+A Google AI Studio API key is **not required for Local-first Talk, Local text generation, or Local TTS**. It is required when you select Google text generation, Gemini Live audio ASR, or Google TTS. Local Moonshine and Whisper ASR keep microphone PCM local, and local Talk sends finalized transcripts only to the selected Local text model.
 
 Local generation does not silently fall back to Google or Fake. A missing, corrupt, incompatible, or failed Local model produces an explicit failure.
 

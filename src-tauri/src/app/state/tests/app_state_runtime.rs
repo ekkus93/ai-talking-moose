@@ -112,6 +112,7 @@ async fn configured_local_text_with_unknown_model_fails_without_cloud_fallback()
 #[tokio::test]
 async fn configured_google_tts_without_secret_fails_auth_instead_of_using_fake_speech() {
     let state = AppState::new_for_tests().unwrap();
+    state.settings.write().tts_provider = crate::ai::types::TtsProvider::Google;
     let error = state
         .get_speech_synthesizer()
         .synthesize(TtsRequest {

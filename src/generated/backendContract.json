@@ -1,7 +1,7 @@
 {
   "settings": {
-    "settings_version": 5,
-    "asr_mode": "moonshine_tiny_streaming",
+    "settings_version": 7,
+    "asr_mode": "whisper_small",
     "wake_word_enabled": false,
     "wake_word_phrase": "Hey, Moose",
     "launch_at_login": false,
@@ -38,7 +38,7 @@
     "input_device": null,
     "output_device": null,
     "volume": 1.0,
-    "tts_provider": "google",
+    "tts_provider": "local",
     "google_tts_voice": "Fenrir",
     "local_tts_voice": "Luna",
     "live_voice": "Fenrir",
@@ -836,8 +836,8 @@
       "needs_acknowledgement": false
     },
     "AppSettings": {
-      "settings_version": 5,
-      "asr_mode": "moonshine_tiny_streaming",
+      "settings_version": 7,
+      "asr_mode": "whisper_small",
       "wake_word_enabled": false,
       "wake_word_phrase": "Hey, Moose",
       "launch_at_login": false,
@@ -874,7 +874,7 @@
       "input_device": "Contract input device",
       "output_device": "Contract output device",
       "volume": 1.0,
-      "tts_provider": "google",
+      "tts_provider": "local",
       "google_tts_voice": "Fenrir",
       "local_tts_voice": "Luna",
       "live_voice": "Fenrir",

@@ -7,6 +7,7 @@ mod diagnostics;
 pub mod installer;
 pub(crate) mod runtime;
 mod text_model;
+mod voice;
 
 pub use catalog::{
     local_model_entry, validate_local_model_catalog, LocalModelCatalogEntry,
@@ -22,3 +23,4 @@ pub use installer::{
 pub use runtime::types::{LocalRuntimeDiagnostics, LocalRuntimeErrorKind, LocalRuntimePhase};
 pub(crate) use runtime::LocalRuntimeManager;
 pub use text_model::LocalTextModel;
+pub use voice::LocalConversationProvider;

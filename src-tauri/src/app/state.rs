@@ -3,7 +3,7 @@ use crate::ai::google::{
     GoogleAuth, GoogleLiveProvider, GoogleSpeechSynthesizer, DEFAULT_LIVE_MODEL,
     DEFAULT_TEXT_MODEL, DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE,
 };
-use crate::ai::local::{LocalRuntimeManager, DEFAULT_LOCAL_TEXT_MODEL_ID};
+use crate::ai::local::{LocalConversationProvider, LocalRuntimeManager, DEFAULT_LOCAL_TEXT_MODEL_ID};
 use crate::ai::local_tts::{
     LocalSpeechSynthesizer, LocalTtsRuntimeManager, DEFAULT_LOCAL_TTS_MODEL_ID,
     DEFAULT_LOCAL_TTS_VOICE,
@@ -104,7 +104,7 @@ pub struct AppSettings {
     pub verbosity: f32,
 }
 
-pub const CURRENT_SETTINGS_VERSION: u32 = 5;
+pub const CURRENT_SETTINGS_VERSION: u32 = 7;
 
 #[derive(Debug, Error)]
 pub enum PersistedSettingsError {
@@ -132,7 +132,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             settings_version: CURRENT_SETTINGS_VERSION,
-            asr_mode: AsrMode::MoonshineTinyStreaming,
+            asr_mode: AsrMode::default(),
 
             wake_word_enabled: false,
             wake_word_phrase: DEFAULT_WAKE_PHRASE.to_string(),
@@ -157,15 +157,14 @@ impl Default for AppSettings {
             input_device: None,
             output_device: None,
             volume: 1.0,
-            tts_provider: TtsProvider::Google,
+            tts_provider: TtsProvider::Local,
             google_tts_voice: DEFAULT_TTS_VOICE.to_string(),
             local_tts_voice: DEFAULT_LOCAL_TTS_VOICE.to_string(),
             live_voice: DEFAULT_TTS_VOICE.to_string(),
             speaking_rate: 0.95,
             pitch: -1.5,
 
-            // P12 real-CPU acceptance selected Local text as the new-profile default.
-            // Existing pre-selector profiles still migrate explicitly to Google below.
+            // Local providers are the default for profiles without an explicit selection.
             text_provider: TextProvider::Local,
             live_model: DEFAULT_LIVE_MODEL.to_string(),
             google_text_model: DEFAULT_TEXT_MODEL.to_string(),
@@ -191,8 +190,8 @@ impl Default for AppSettings {
 impl AppSettings {
     /// Deserialize persisted settings while preserving the behavior of installations
     /// created before an ASR selector or explicit text-provider selector existed.
-    /// New profiles default to local Moonshine ASR while legacy profiles without an
-    /// ASR selector migrate to Gemini Live audio because that was their only microphone path.
+    /// New profiles use the local ASR runtime supported by their platform. Legacy profiles
+    /// without an ASR selector migrate to Gemini Live audio because that was their only path.
     pub fn from_persisted_json(json: &str) -> Result<(Self, bool), PersistedSettingsError> {
         let value: serde_json::Value = serde_json::from_str(json)?;
         if let Some(persisted_version) = value
@@ -277,13 +276,19 @@ impl AppSettings {
                 }
                 Err(error) => return Err(PersistedSettingsError::Invalid(error)),
             };
+        let unsupported_asr_mode = cfg!(target_os = "linux")
+            && matches!(
+                settings.asr_mode,
+                AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
+            );
         if !had_asr_mode {
             settings.asr_mode = AsrMode::GeminiLiveAudio;
+        } else if unsupported_asr_mode {
+            settings.asr_mode = AsrMode::default();
         }
         if !had_text_provider {
-            // Existing installations were Google text users. Never reinterpret an old
-            // profile as Local merely because the new selector did not exist yet.
-            settings.text_provider = TextProvider::Google;
+            // Profiles without an explicit provider inherit the Local-first default.
+            settings.text_provider = TextProvider::Local;
         }
         if !had_google_text_model {
             if let Some(legacy_text_model) = legacy_text_model {
@@ -291,8 +296,8 @@ impl AppSettings {
             }
         }
         if !had_tts_provider {
-            // Existing profiles predate Local TTS and therefore used Google standalone TTS.
-            settings.tts_provider = TtsProvider::Google;
+            // Profiles without a provider selection inherit today's Local-first default.
+            settings.tts_provider = TtsProvider::Local;
         }
         if !had_google_tts_model {
             if let Some(legacy_tts_model) = legacy_tts_model {
@@ -337,6 +342,7 @@ impl AppSettings {
         Ok((
             settings,
             !had_asr_mode
+                || unsupported_asr_mode
                 || had_legacy_microphone_permission
                 || !had_current_version
                 || wake_word_migrated
@@ -589,6 +595,33 @@ impl AppState {
     pub fn get_live_provider(&self) -> Arc<dyn RealtimeConversationProvider> {
         let key = self.secrets.get_google_api_key().unwrap_or_default();
         Arc::new(GoogleLiveProvider::new(GoogleAuth::new(key)))
+    }
+
+    pub fn get_conversation_provider_for(
+        &self,
+        settings: &AppSettings,
+    ) -> Arc<dyn RealtimeConversationProvider> {
+        if settings.text_provider == TextProvider::Local
+            && settings.asr_mode != AsrMode::GeminiLiveAudio
+        {
+            let text_model = Arc::from(self.get_text_model_for(settings));
+            let speech_synthesizer: Arc<dyn SpeechSynthesizer> = Arc::new(
+                LocalSpeechSynthesizer::new(
+                    self.local_tts_runtime.clone(),
+                    settings.local_tts_model.clone(),
+                    settings.local_tts_voice.clone(),
+                ),
+            );
+            Arc::new(LocalConversationProvider::new(
+                text_model,
+                speech_synthesizer,
+                settings.local_tts_voice.clone(),
+                settings.speaking_rate,
+                settings.pitch,
+            ))
+        } else {
+            self.get_live_provider()
+        }
     }
 }
 

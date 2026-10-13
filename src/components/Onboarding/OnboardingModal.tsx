@@ -185,9 +185,9 @@ export const OnboardingModal: React.FC = () => {
             <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-800 space-y-1.5">
               <p>
                 <strong>Moonshine Tiny Streaming:</strong> processes microphone
-                audio locally, so microphone audio stays on this computer. Only
-                finalized transcript text is sent to Gemini for the Moose&apos;s
-                reply. It is the smallest local model.
+                audio locally, so microphone audio stays on this computer.
+                Local-first Talk sends the finalized transcript to the selected
+                Local text model. It is the smallest local model.
               </p>
               <p>
                 <strong>Moonshine Small Streaming:</strong> the same local-audio
@@ -198,10 +198,10 @@ export const OnboardingModal: React.FC = () => {
                 <strong>Whisper Small:</strong> local English recognition that
                 batches microphone PCM into short transcription windows —
                 microphone PCM stays on this computer. Partial transcripts may
-                be updated in batched intervals; only finalized transcript text
-                is sent to Gemini for the Moose&apos;s reply. The whisper-small
-                model is downloaded only when you explicitly choose it in AI
-                &amp; Models Settings.
+                be updated in batched intervals; finalized transcript text is
+                processed by the selected conversation provider. The
+                whisper-small model is downloaded only when you explicitly
+                choose it in AI &amp; Models Settings.
               </p>
               <p>
                 <strong>Gemini Live Cloud Audio:</strong> sends microphone audio
@@ -282,16 +282,15 @@ export const OnboardingModal: React.FC = () => {
               <span>Gemini AI Studio Key</span>
             </div>
             <p className="text-gray-900 leading-snug text-[11px]">
-              New profiles use Local text generation by default for typed
-              replies and ambient remarks. The selected Local text model is not
-              downloaded automatically; install it explicitly from AI &amp;
-              Models Settings before Local generation can run.
+              New profiles use Local text generation by default for Talk, typed
+              replies, and ambient remarks. The selected Local text and speech
+              models are not downloaded automatically; install them explicitly
+              from AI &amp; Models and Voice &amp; Audio Settings.
             </p>
             <p className="text-gray-900 leading-snug text-[11px]">
-              A Google AI Studio API key is optional for Local text generation,
-              but is still required for Google text generation, the Gemini
-              conversation provider used for spoken replies (including Moonshine
-              local ASR transcripts), and Google TTS.
+              A Google AI Studio API key is optional for Local-first Talk. It is
+              required for Google text generation, Gemini Live audio ASR, or
+              Google TTS when those cloud options are selected.
             </p>
             <div className="flex gap-1.5 p-2 bg-white border border-black rounded text-[10px] text-gray-800">
               <Shield

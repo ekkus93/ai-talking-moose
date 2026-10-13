@@ -76,7 +76,10 @@ fn enabled_input_device_change_without_startup_config_enters_loading_without_lis
 #[test]
 fn enable_from_disabled_restarts_listener_with_pending_settings() {
     let state = AppState::new_for_tests().unwrap();
-    let previous = AppSettings::default();
+    let previous = AppSettings {
+        asr_mode: AsrMode::MoonshineTinyStreaming,
+        ..Default::default()
+    };
     let next = AppSettings {
         wake_word_enabled: true,
         ..previous.clone()

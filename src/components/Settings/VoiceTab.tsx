@@ -200,8 +200,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </h4>
           <p className="text-[10px] text-gray-700">
             This provider speaks typed replies, ambient remarks, canned
-            reactions, and voice auditions. It does not change Gemini Live
-            conversations.
+            reactions, and voice auditions. Local-first Talk uses KittenTTS.
           </p>
         </div>
 

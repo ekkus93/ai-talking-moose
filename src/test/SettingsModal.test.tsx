@@ -144,18 +144,41 @@ describe("SettingsModal Component", () => {
   });
 
   it("offers explicit local and cloud ASR modes with privacy copy", async () => {
+    const availableModes = (await tauriBridge.getAsrModels()).map(
+      (model) => model.mode,
+    );
+    expect(availableModes).toContain(
+      process.platform === "linux"
+        ? "whisper_small"
+        : "moonshine_tiny_streaming",
+    );
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Speech Recognition"));
 
-    const tiny = await screen.findByRole("radio", {
-      name: /Moonshine Tiny Streaming/,
-    });
-    expect(tiny).toBeChecked();
+    if (process.platform === "linux") {
+      expect(
+        await screen.findByRole("radio", { name: /Whisper Small/ }),
+      ).toBeChecked();
+      expect(
+        screen.queryByRole("radio", { name: /Moonshine Tiny Streaming/ }),
+      ).not.toBeInTheDocument();
+    } else {
+      const tiny = await screen.findByRole("radio", {
+        name: /Moonshine Tiny Streaming/,
+      });
+      expect(tiny).toBeChecked();
+    }
+    if (process.platform !== "linux") {
+      expect(
+        screen.getByRole("radio", { name: /Moonshine Small Streaming/ }),
+      ).not.toBeChecked();
+    } else {
+      expect(
+        screen.queryByRole("radio", { name: /Moonshine Small Streaming/ }),
+      ).not.toBeInTheDocument();
+    }
     expect(
-      screen.getByRole("radio", { name: /Moonshine Small Streaming/ }),
-    ).not.toBeChecked();
-    expect(
-      screen.getByText(/Only finalized transcript text is sent to Gemini/i),
+      screen.getByText(/Finalized transcript text is handled by the selected/i),
     ).toBeInTheDocument();
 
     fireEvent.click(
@@ -216,7 +239,16 @@ describe("SettingsModal Component", () => {
     fireEvent.change(liveSelect, {
       target: { value: "unexpected-live-model" },
     });
-    expect(updateSpy).toHaveBeenCalledTimes(writeBaseline);
+    expect(
+      updateSpy.mock.calls
+        .slice(writeBaseline)
+        .every(([saved]) =>
+          saved
+            ? saved.live_model === settings.live_model &&
+              saved.google_text_model === settings.google_text_model
+            : false,
+        ),
+    ).toBe(true);
 
     resolveModels(frontendGoogleModels());
     await waitFor(() => expect(liveSelect).not.toBeDisabled());
@@ -263,7 +295,14 @@ describe("SettingsModal Component", () => {
         name: `Unavailable: ${settings.google_text_model}`,
       }),
     ).toBeDisabled();
-    expect(updateSpy).not.toHaveBeenCalled();
+    expect(
+      updateSpy.mock.calls.every(([saved]) =>
+        saved
+          ? saved.live_model === settings.live_model &&
+            saved.google_text_model === settings.google_text_model
+          : false,
+      ),
+    ).toBe(true);
   });
 
   it("defaults to Local text without auto-downloading and manages the selected model explicitly", async () => {
@@ -335,18 +374,16 @@ describe("SettingsModal Component", () => {
     );
 
     expect(
-      await screen.findByText(/Not required for Local text generation/i),
+      await screen.findByText(/Not required for Local-first Talk/i),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Voice Conversation — Google Gemini Live/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Talk Conversation — Local/i)).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Choosing Local text above does not change the Gemini Live voice provider/i,
+        /Local ASR, Local text, and KittenTTS run on this computer/i,
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Google TTS also receives the final reply text/i),
+      screen.getByText(/Local-first Talk keeps microphone audio/i),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toBeInTheDocument();
   });
@@ -354,6 +391,7 @@ describe("SettingsModal Component", () => {
   it("uses the backend-derived Google catalog in the standalone voice selector", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Voice & Audio"));
+    fireEvent.click(screen.getByRole("radio", { name: /Google Gemini/i }));
 
     const voiceSelect = await screen.findByLabelText("Google Standalone Voice");
     await waitFor(() =>

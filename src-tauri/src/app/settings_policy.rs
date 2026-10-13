@@ -267,7 +267,7 @@ mod tests {
         let (settings, migrated) =
             AppSettings::from_persisted_json(&serde_json::to_string(&current).unwrap()).unwrap();
         assert!(!migrated);
-        assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+        assert_eq!(settings.asr_mode, AppSettings::default().asr_mode);
 
         let mut legacy = serde_json::to_value(AppSettings::default()).unwrap();
         let object = legacy.as_object_mut().unwrap();

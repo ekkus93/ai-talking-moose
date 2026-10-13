@@ -24,7 +24,9 @@ describe("OnboardingModal ASR privacy", () => {
     fireEvent.click(screen.getByText("Next: Voice"));
 
     expect(screen.getByText(/Current mode:/)).toHaveTextContent(
-      "Moonshine Tiny Streaming",
+      process.platform === "linux"
+        ? "Whisper Small"
+        : "Moonshine Tiny Streaming",
     );
     expect(
       screen.getByText(/processes microphone audio locally/i),
@@ -98,11 +100,11 @@ describe("OnboardingModal P11 onboarding controls", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /selected Local text model is not downloaded automatically/i,
+        /selected Local text and speech models are not downloaded automatically/i,
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/optional for Local text generation/i),
+      screen.getByText(/optional for Local-first Talk/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/never stored in the app settings database/i),

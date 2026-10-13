@@ -3,16 +3,19 @@ use std::sync::Arc;
 use tempfile::NamedTempFile;
 
 #[test]
-fn new_settings_default_to_moonshine_tiny_and_local_text() {
+fn new_settings_use_the_platform_asr_default_and_local_text() {
     let settings = AppSettings::default();
     assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
+    #[cfg(target_os = "macos")]
     assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+    #[cfg(target_os = "linux")]
+    assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
     assert!(!settings.wake_word_enabled);
     assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
     assert_eq!(settings.text_provider, TextProvider::Local);
     assert_eq!(settings.google_text_model, DEFAULT_TEXT_MODEL);
     assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
-    assert_eq!(settings.tts_provider, TtsProvider::Google);
+    assert_eq!(settings.tts_provider, TtsProvider::Local);
     assert_eq!(settings.google_tts_model, DEFAULT_TTS_MODEL);
     assert_eq!(settings.google_tts_voice, DEFAULT_TTS_VOICE);
     assert_eq!(settings.local_tts_model, DEFAULT_LOCAL_TTS_MODEL_ID);
@@ -25,6 +28,21 @@ fn new_settings_default_to_moonshine_tiny_and_local_text() {
     assert_eq!(settings.idle_banter_initial_delay_minutes, 60);
     assert_eq!(settings.idle_banter_repeat_interval_minutes, 30);
     assert!(!settings.idle_banter_seed_topics.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn persisted_moonshine_selection_migrates_to_whisper_on_linux() {
+    let original = AppSettings {
+        asr_mode: AsrMode::MoonshineSmallStreaming,
+        wake_word_enabled: true,
+        ..Default::default()
+    };
+    let (settings, migrated) =
+        AppSettings::from_persisted_json(&serde_json::to_string(&original).unwrap()).unwrap();
+    assert!(migrated);
+    assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
+    assert!(settings.wake_word_enabled);
 }
 
 #[test]
@@ -102,6 +120,9 @@ fn missing_wake_word_fields_default_disabled_and_preserve_unrelated_settings() {
     assert!(migrated);
     assert!(!settings.wake_word_enabled);
     assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
+    #[cfg(target_os = "linux")]
+    assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
+    #[cfg(target_os = "macos")]
     assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
     assert_eq!(settings.tts_provider, TtsProvider::Local);
     assert_eq!(settings.local_tts_voice, "Bella");
@@ -131,7 +152,7 @@ fn wake_word_phrase_normalizes_or_fails_safely() {
 }
 
 #[test]
-fn version_two_text_settings_migrate_to_google_without_persisting_fake_provider() {
+fn version_two_text_settings_migrate_to_local_without_persisting_fake_provider() {
     let mut value = serde_json::to_value(AppSettings::default()).unwrap();
     let object = value.as_object_mut().unwrap();
     object.insert("settings_version".to_string(), serde_json::json!(2));
@@ -148,7 +169,7 @@ fn version_two_text_settings_migrate_to_google_without_persisting_fake_provider(
         AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
     assert!(migrated);
     assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
-    assert_eq!(settings.text_provider, TextProvider::Google);
+    assert_eq!(settings.text_provider, TextProvider::Local);
     assert_eq!(settings.google_text_model, "gemini-3.6-flash");
     assert_eq!(settings.local_text_model, DEFAULT_LOCAL_TEXT_MODEL_ID);
     assert!(!settings.wake_word_enabled);
@@ -157,7 +178,7 @@ fn version_two_text_settings_migrate_to_google_without_persisting_fake_provider(
     let normalized = serde_json::to_value(settings).unwrap();
     assert!(normalized.get("provider").is_none());
     assert!(normalized.get("text_model").is_none());
-    assert_eq!(normalized["text_provider"], "google");
+    assert_eq!(normalized["text_provider"], "local");
 }
 
 #[test]
@@ -267,7 +288,7 @@ fn version_three_tts_settings_migrate_once_to_split_google_local_and_live_owners
         AppSettings::from_persisted_json(&serde_json::to_string(&value).unwrap()).unwrap();
     assert!(migrated);
     assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
-    assert_eq!(settings.tts_provider, TtsProvider::Google);
+    assert_eq!(settings.tts_provider, TtsProvider::Local);
     assert_eq!(settings.google_tts_model, DEFAULT_TTS_MODEL);
     assert_eq!(settings.google_tts_voice, "Puck");
     assert_eq!(settings.live_voice, "Puck");
@@ -465,8 +486,16 @@ fn current_settings_keep_selected_asr_mode() {
     let json = serde_json::to_string(&original).unwrap();
 
     let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
-    assert!(!migrated);
-    assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
+    #[cfg(target_os = "linux")]
+    {
+        assert!(migrated);
+        assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        assert!(!migrated);
+        assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
+    }
 }
 
 #[test]

@@ -256,6 +256,7 @@ fn only_final_live_transcript_roles_are_persistable() {
 #[test]
 fn missing_moonshine_tiny_model_fails_before_microphone_capture() {
     let mut app_state = AppState::new_for_tests().unwrap();
+    app_state.settings.write().asr_mode = AsrMode::MoonshineTinyStreaming;
     app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
     let capture = app_state.audio_capture.clone();
 

@@ -495,7 +495,7 @@ fn listener_start_validates_pending_settings_instead_of_persisted_settings() {
     let state = AppState::new_for_tests().unwrap();
     assert_eq!(
         state.settings.read().asr_mode,
-        AsrMode::MoonshineTinyStreaming
+        AppSettings::default().asr_mode
     );
     let pending = AppSettings {
         wake_word_enabled: true,

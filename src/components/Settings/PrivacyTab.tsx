@@ -130,14 +130,14 @@ export const PrivacyTab: React.FC = () => {
         ) : settings.asr_mode === "whisper_small" ? (
           <p>
             - Whisper Small local ASR is selected: microphone PCM stays on this
-            computer; only finalized transcript text is sent to Gemini for a
-            reply.
+            computer; finalized transcript text is processed by the selected
+            conversation provider. Local is the default.
           </p>
         ) : (
           <p>
             - Moonshine local ASR is selected: microphone PCM stays on this
-            computer; only finalized transcript text is sent to Gemini for a
-            reply.
+            computer; finalized transcript text is processed by the selected
+            conversation provider. Local is the default.
           </p>
         )}
         <p>

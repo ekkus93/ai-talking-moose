@@ -2,6 +2,7 @@
 
 **Original Google voice decision:** 2026-08-22
 **KittenTTS closeout update:** 2026-09-12
+**Local-first Talk update:** 2026-10-13
 **Human Local voice audition worksheet:** `docs/LOCAL_TTS_HUMAN_VOICE_AUDITION_2026-09-14.md`
 **Automated ASR voice audition proxy:** `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md`
 **Local ASR-proxy default decision:** 2026-09-14 — Luna, owner-approved ASR proxy
@@ -13,10 +14,10 @@ Talking Moose V1 now has three separate voice ownership domains. Do not collapse
 | Domain | Setting | Provider path | Notes |
 | --- | --- | --- | --- |
 | Google standalone TTS | `google_tts_voice` | Google Gemini TTS REST request | Used for typed replies, ambient remarks, canned reactions, and voice auditions when `tts_provider = google`. |
-| Local standalone TTS | `local_tts_voice` | Local KittenTTS runtime | Used for the same standalone speech surfaces when `tts_provider = local`. Requires installed and verified Local TTS assets. |
-| Gemini Live conversation voice | `live_voice` | Google Gemini Live WebSocket session | Used for live spoken conversations. Changing it is conversation-restart-sensitive and independent of standalone TTS voice settings. |
+| Local Talk and standalone TTS | `local_tts_voice` | Local KittenTTS runtime | Used for local-first Talk replies and standalone speech when `tts_provider = local`. Requires installed and verified Local TTS assets. |
+| Gemini Live conversation voice | `live_voice` | Google Gemini Live WebSocket session | Used when Google text generation or Gemini Live audio ASR is selected. Changing it is conversation-restart-sensitive and independent of standalone TTS voice settings. |
 
-The provider selector chooses the standalone TTS provider. It does not change Gemini Live voice conversations. Gemini Live remains cloud-native live audio in V1.
+The provider selector chooses the standalone TTS provider. Local-first Talk independently uses KittenTTS; selecting Google standalone TTS does not switch Talk to Google. Gemini Live remains available as an explicit cloud conversation path.
 
 ## Google standalone default
 

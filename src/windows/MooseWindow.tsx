@@ -24,6 +24,7 @@ export const MooseWindow: React.FC = () => {
     outputLevel,
     isMuted,
     isConversationActive,
+    settings,
     hasApiKey,
     conversationError,
     isSettingsOpen,
@@ -39,6 +40,18 @@ export const MooseWindow: React.FC = () => {
     initEventListeners,
     showSpeechBubble,
   } = useMooseStore();
+
+  const googleProviderSelected =
+    settings?.text_provider === "google" ||
+    settings?.asr_mode === "gemini_live_audio" ||
+    settings?.tts_provider === "google";
+  const credentialStatus = googleProviderSelected
+    ? hasApiKey
+      ? "GOOGLE READY"
+      : "GOOGLE: NO KEY"
+    : settings
+      ? "LOCAL MODE"
+      : "AI: CHECK SETTINGS";
 
   useEffect(() => {
     let disposed = false;
@@ -250,23 +263,29 @@ export const MooseWindow: React.FC = () => {
             <button
               onClick={() => toggleSettings(true)}
               className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 ${
-                hasApiKey
+                googleProviderSelected && hasApiKey
                   ? "bg-green-100 text-green-900 border-green-800"
-                  : "bg-amber-100 text-amber-900 border-amber-800"
+                  : googleProviderSelected
+                    ? "bg-amber-100 text-amber-900 border-amber-800"
+                    : "bg-gray-100 text-gray-900 border-gray-700"
               }`}
               aria-label={
-                hasApiKey
+                googleProviderSelected && hasApiKey
                   ? "Gemini API key configured; open Settings"
-                  : "Gemini API key missing; open Settings"
+                  : googleProviderSelected
+                    ? "Google API key missing for a selected cloud provider; open Settings"
+                    : "Local providers selected; a Google API key is optional; open Settings"
               }
               title={
-                hasApiKey
+                googleProviderSelected && hasApiKey
                   ? "Google Gemini API Key Active (Click to Configure)"
-                  : "No Google Gemini API Key - Click to Setup"
+                  : googleProviderSelected
+                    ? "A selected Google provider needs a key (Click to Configure)"
+                    : "Local providers selected; Google API Key optional (Click to Configure)"
               }
             >
               <Key className="w-2.5 h-2.5" />
-              <span>{hasApiKey ? "AI: READY" : "AI: NO KEY"}</span>
+              <span>{credentialStatus}</span>
             </button>
           </div>
 

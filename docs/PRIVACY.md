@@ -16,18 +16,18 @@ Talking Moose supports four ASR choices:
 
 | ASR choice | Microphone audio | Transcript text |
 | --- | --- | --- |
-| Moonshine Tiny Streaming | Processed locally | Finalized user text may be sent to Gemini Live for the Moose's conversational response |
-| Moonshine Small Streaming | Processed locally | Finalized user text may be sent to Gemini Live for the Moose's conversational response |
-| Local Whisper.cpp Small | Processed locally on the host | Finalized user text may be sent to Gemini Live for the Moose's conversational response |
+| Moonshine Tiny Streaming | Processed locally | Local-first Talk uses the selected Local text model; Google is used only when explicitly selected |
+| Moonshine Small Streaming | Processed locally | Local-first Talk uses the selected Local text model; Google is used only when explicitly selected |
+| Local Whisper.cpp Small | Processed locally on the host | Local-first Talk uses the selected Local text model; Google is used only when explicitly selected |
 | Google Gemini Live Audio | Streamed to Google during the active conversation | Google processes the corresponding conversation content |
 
-Moonshine and local Whisper.cpp make **speech recognition local**; they do not make the realtime conversation LLM or Google-generated voice response local. Local partial transcript updates stay on the host. Only finalized non-empty user text may be sent to Gemini Live for the response.
+Moonshine and local Whisper.cpp keep speech recognition local. Local-first Talk also keeps finalized transcript text, generation, and generated speech local after selected models are installed. Selecting Google text generation or Gemini Live audio ASR explicitly opts into the cloud conversation path. Local partial transcript updates stay on the host.
 
 Local Whisper.cpp uses a pinned whisper.cpp source commit and a user-downloaded, SHA-verified `ggml-small` model file. Whisper microphone audio remains local. Whisper installation is explicit and separate from conversation start; an active Whisper installation can be canceled from Settings.
 
 If the selected Whisper model is absent, corrupt, unsupported, or fails at runtime, local ASR fails explicitly. It does not fall back to Gemini Live, Moonshine, Fake, or any other cloud provider.
 
-Moonshine Tiny Streaming is the default for a new profile. The model is downloaded only after an explicit user action; selecting a missing model is not permission to download it or switch to cloud ASR automatically.
+The platform's local ASR mode is the default for a new profile. Models are downloaded only after an explicit user action; selecting a missing model is not permission to download it or switch to cloud ASR automatically.
 
 ## 3. Text-generation privacy
 
@@ -38,14 +38,14 @@ V1 has an independent text-provider setting for typed replies and ambient remark
 | Local | Remains on the computer for text generation | Pinned GGUF through the app-owned llama.cpp runtime | None required after installation |
 | Google Gemini | Sent to Google as required for the selected Gemini text request | Google service | HTTPS request to Google |
 
-A fresh profile defaults to **Local** text generation with SmolLM2 360M selected. The selection is not an installed-state claim and does not trigger a download. If the selected Local model is absent, corrupt, incompatible, or fails at runtime, text generation fails explicitly. It does not call Google and does not manufacture Fake success.
+A fresh profile defaults to **Local** text generation with SmolLM2 360M and **Local** TTS with KittenTTS selected. These selections are not installed-state claims and do not trigger downloads. If a selected Local model is absent, corrupt, incompatible, or fails at runtime, the operation fails explicitly; it does not call Google or manufacture Fake success. Talk uses local ASR, Local text generation, and KittenTTS by default. Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected.
 
 Local text generation has a separate, explicit installation network phase. **Download & Verify** makes an HTTPS request to the pinned catalog artifact URL, writes to staging, enforces the exact expected byte count, verifies SHA-256, and atomically promotes the artifact. After installation, the Local generation path does not need network I/O; the real CPU acceptance harness proves generation with network denied.
 
 Local text does **not** make the entire Moose offline:
 
-- Gemini Live remains the V1 spoken-conversation provider even when Text Generation is Local.
-- Moonshine keeps microphone PCM local, but finalized Moonshine transcript text is still sent to Gemini Live for spoken conversation in this phase.
+- Local-first Talk uses local ASR, the selected Local text model, and KittenTTS.
+- Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected.
 - Google TTS receives text when Google TTS is used.
 - Selecting the Google text provider sends text-generation requests to Google.
 
@@ -74,7 +74,7 @@ Local KittenTTS has a separate installation network phase. **Download & Verify**
 
 Local TTS diagnostics may expose operational metadata such as provider, selected model ID, selected voice ID, install state, expected/installed bytes, runtime phase, sample rate, inference thread count, sanitized error category, timings, and real-time factor. Diagnostics must not expose utterance text, raw PCM/audio bytes, credentials, credential-bearing URLs, arbitrary filesystem paths, or raw native/provider error payloads.
 
-Gemini Live remains cloud-native live audio in V1. Selecting Local KittenTTS affects standalone speech output only; it does not make live spoken conversations local.
+Local Talk synthesizes replies with KittenTTS and does not require network access after its models are installed. Gemini Live remains a separate opt-in cloud conversation path.
 
 ## 5. Fresh-profile defaults
 

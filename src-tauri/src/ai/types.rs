@@ -26,8 +26,8 @@ pub enum TextProvider {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TtsProvider {
-    #[default]
     Google,
+    #[default]
     Local,
 }
 
@@ -245,7 +245,7 @@ mod provider_error_tests {
                 provider
             );
         }
-        assert_eq!(TtsProvider::default(), TtsProvider::Google);
+        assert_eq!(TtsProvider::default(), TtsProvider::Local);
     }
 
     #[test]
