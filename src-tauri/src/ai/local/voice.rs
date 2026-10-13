@@ -20,7 +20,7 @@ fn prepare_local_tts_response(text: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    let compact = strip_leading_delivery_cue(&compact);
+    let compact = strip_outer_quotes(strip_leading_meta_cue(&compact));
     let characters = compact.chars().collect::<Vec<_>>();
     if characters.len() <= MAX_LOCAL_TTS_RESPONSE_CHARS {
         return compact.to_string();
@@ -47,26 +47,55 @@ fn prepare_local_tts_response(text: &str) -> String {
     }
 }
 
-fn strip_leading_delivery_cue(text: &str) -> &str {
-    let Some(after_open) = text.strip_prefix('[') else {
-        return text;
-    };
-    let Some(close_index) = after_open.find(']') else {
-        return text;
-    };
-    let cue = after_open[..close_index].trim().to_ascii_lowercase();
-    let is_delivery_cue = cue.len() <= 80
-        && [
-            "voice", "speaking", "speak ", "whisper", "tone", "delivery", "deadpan", "cheerful",
-            "laugh", "sigh", "chuckle",
-        ]
-        .iter()
-        .any(|marker| cue.contains(marker));
-    if is_delivery_cue {
-        after_open[close_index + 1..].trim_start()
+fn strip_leading_meta_cue(text: &str) -> &str {
+    let text = if let Some(after_open) = text.strip_prefix('[') {
+        if let Some(close_index) = after_open.find(']') {
+            let cue = after_open[..close_index].trim().to_ascii_lowercase();
+            let is_delivery_cue = cue.len() <= 80
+                && [
+                    "voice", "speaking", "speak ", "whisper", "tone", "delivery", "deadpan",
+                    "cheerful", "laugh", "sigh", "chuckle",
+                ]
+                .iter()
+                .any(|marker| cue.contains(marker));
+            if is_delivery_cue {
+                after_open[close_index + 1..].trim_start()
+            } else {
+                text
+            }
+        } else {
+            text
+        }
     } else {
         text
+    };
+
+    let lowercase = text.to_ascii_lowercase();
+    for label in [
+        "the moose says:",
+        "moose says:",
+        "moose:",
+        "joke:",
+        "a joke:",
+        "answer:",
+        "response:",
+        "reply:",
+    ] {
+        if lowercase.starts_with(label) {
+            return text[label.len()..].trim_start();
+        }
     }
+
+    text
+}
+
+fn strip_outer_quotes(text: &str) -> &str {
+    for quote in ['"', '\''] {
+        if text.starts_with(quote) && text.ends_with(quote) && text.len() >= 2 {
+            return text[quote.len_utf8()..text.len() - quote.len_utf8()].trim();
+        }
+    }
+    text
 }
 
 /// One-turn local conversation adapter for the existing conversation lifecycle. Local ASR
@@ -333,6 +362,26 @@ mod tests {
         assert_eq!(
             prepare_local_tts_response("[Moose-esque voice] Ah, how can I help?"),
             "Ah, how can I help?"
+        );
+    }
+
+    #[test]
+    fn local_tts_response_removes_speaker_prefix_and_outer_quotes() {
+        assert_eq!(
+            prepare_local_tts_response(
+                "Moose says: \"Ah, nice! Love watching you riff on those flicks.\""
+            ),
+            "Ah, nice! Love watching you riff on those flicks."
+        );
+    }
+
+    #[test]
+    fn local_tts_response_removes_joke_label() {
+        assert_eq!(
+            prepare_local_tts_response(
+                "Joke: What do you call a moose with no legs? He's no longer a moose"
+            ),
+            "What do you call a moose with no legs? He's no longer a moose"
         );
     }
 
