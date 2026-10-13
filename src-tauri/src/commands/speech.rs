@@ -106,6 +106,14 @@ fn standalone_tts_snapshot(
             pitch: None,
             output_device: settings.output_device.clone(),
         },
+        TtsProvider::System => StandaloneTtsSettingsSnapshot {
+            provider: TtsProvider::System,
+            model_id: String::new(),
+            voice_id: voice_override.unwrap_or_else(|| settings.system_tts_voice.clone()),
+            speaking_rate: settings.speaking_rate,
+            pitch: None,
+            output_device: settings.output_device.clone(),
+        },
     }
 }
 
@@ -135,6 +143,7 @@ fn synthesizer_for_snapshot(
             snapshot.model_id.clone(),
             snapshot.voice_id.clone(),
         )),
+        TtsProvider::System => Box::new(crate::ai::unavailable::UnavailableSpeechSynthesizer),
     }
 }
 

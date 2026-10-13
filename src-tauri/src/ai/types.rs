@@ -21,6 +21,9 @@ pub enum TextProvider {
     Google,
     #[default]
     Local,
+    Openai,
+    Ollama,
+    LlamaServer,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +32,7 @@ pub enum TtsProvider {
     Google,
     #[default]
     Local,
+    System,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +234,14 @@ mod provider_error_tests {
             serde_json::to_string(&TextProvider::Local).unwrap(),
             "\"local\""
         );
+        for (provider, encoded) in [
+            (TextProvider::Openai, "\"openai\""),
+            (TextProvider::Ollama, "\"ollama\""),
+            (TextProvider::LlamaServer, "\"llama_server\""),
+        ] {
+            assert_eq!(serde_json::to_string(&provider).unwrap(), encoded);
+            assert_eq!(serde_json::from_str::<TextProvider>(encoded).unwrap(), provider);
+        }
         assert_eq!(TextProvider::default(), TextProvider::Local);
     }
 
@@ -238,6 +250,7 @@ mod provider_error_tests {
         for (provider, encoded) in [
             (TtsProvider::Google, "\"google\""),
             (TtsProvider::Local, "\"local\""),
+            (TtsProvider::System, "\"system\""),
         ] {
             assert_eq!(serde_json::to_string(&provider).unwrap(), encoded);
             assert_eq!(

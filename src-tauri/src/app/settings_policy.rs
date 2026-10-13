@@ -16,6 +16,28 @@ use tokio::sync::Mutex as AsyncMutex;
 
 static SETTINGS_RUNTIME_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
 
+/// Server addresses are data, not arbitrary request URLs. Resolve the effective
+/// destination again when constructing each HTTP request and disable redirects.
+pub(crate) fn validate_loopback_server_address(address: &str) -> Result<(), String> {
+    let invalid = || "Server address must be an HTTP loopback host with an explicit port and no path, credentials, query, or fragment".to_string();
+    if address.trim() != address || address.contains('\\') || address.chars().any(char::is_control) {
+        return Err(invalid());
+    }
+    let url = reqwest::Url::parse(address).map_err(|_| invalid())?;
+    if url.scheme() != "http"
+        || !matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+        || url.port().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 /// Serialize settings commits with conversation startup.
 ///
 /// Settings that change ASR/provider/audio ownership use this same lock at both
@@ -62,6 +84,19 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
     validate_tts_model(&settings.google_tts_model)?;
     validate_local_tts_model(&settings.local_tts_model)?;
     validate_local_tts_voice(&settings.local_tts_voice)?;
+    for (name, model_id) in [
+        ("OpenAI text model", settings.openai_text_model.as_str()),
+        ("Ollama text model", settings.ollama_text_model.as_str()),
+        ("llama-server text model", settings.llama_server_text_model.as_str()),
+        ("system TTS voice", settings.system_tts_voice.as_str()),
+    ] {
+        bounded_identifier(name, model_id, 128)?;
+        if model_id.chars().any(char::is_control) || model_id.trim() != model_id {
+            return Err(format!("{name} contains invalid characters"));
+        }
+    }
+    validate_loopback_server_address(&settings.ollama_server_address)?;
+    validate_loopback_server_address(&settings.llama_server_address)?;
     optional_device_id("input device ID", settings.input_device.as_deref())?;
     optional_device_id("output device ID", settings.output_device.as_deref())?;
 

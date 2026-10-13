@@ -42,6 +42,9 @@ impl AppState {
                 global_local_model_installer(),
                 settings.local_text_model.clone(),
             )),
+            TextProvider::Openai | TextProvider::Ollama | TextProvider::LlamaServer => {
+                Box::new(crate::ai::unavailable::UnavailableTextModel)
+            }
         }
     }
 }

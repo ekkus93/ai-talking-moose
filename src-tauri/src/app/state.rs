@@ -38,6 +38,7 @@ use crate::tools::builtin::BuiltinTools;
 use crate::tools::router::ToolRouter;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -77,6 +78,7 @@ pub struct AppSettings {
     pub tts_provider: TtsProvider,
     pub google_tts_voice: String,
     pub local_tts_voice: String,
+    pub system_tts_voice: String,
     pub live_voice: String,
     pub speaking_rate: f32,
     pub pitch: f32,
@@ -86,6 +88,11 @@ pub struct AppSettings {
     pub live_model: String,
     pub google_text_model: String,
     pub local_text_model: String,
+    pub openai_text_model: String,
+    pub ollama_text_model: String,
+    pub ollama_server_address: String,
+    pub llama_server_text_model: String,
+    pub llama_server_address: String,
     pub google_tts_model: String,
     pub local_tts_model: String,
 
@@ -102,9 +109,14 @@ pub struct AppSettings {
     pub absurd: f32,
     pub helpful: f32,
     pub verbosity: f32,
+
+    // Preserve additive settings introduced by future compatible builds. Unknown
+    // data is not interpreted as credentials or runtime configuration.
+    #[serde(flatten)]
+    pub future_settings: BTreeMap<String, serde_json::Value>,
 }
 
-pub const CURRENT_SETTINGS_VERSION: u32 = 7;
+pub const CURRENT_SETTINGS_VERSION: u32 = 8;
 
 #[derive(Debug, Error)]
 pub enum PersistedSettingsError {
@@ -160,6 +172,7 @@ impl Default for AppSettings {
             tts_provider: TtsProvider::Local,
             google_tts_voice: DEFAULT_TTS_VOICE.to_string(),
             local_tts_voice: DEFAULT_LOCAL_TTS_VOICE.to_string(),
+            system_tts_voice: "system_default".to_string(),
             live_voice: DEFAULT_TTS_VOICE.to_string(),
             speaking_rate: 0.95,
             pitch: -1.5,
@@ -169,6 +182,11 @@ impl Default for AppSettings {
             live_model: DEFAULT_LIVE_MODEL.to_string(),
             google_text_model: DEFAULT_TEXT_MODEL.to_string(),
             local_text_model: DEFAULT_LOCAL_TEXT_MODEL_ID.to_string(),
+            openai_text_model: "gpt-4.1-mini".to_string(),
+            ollama_text_model: "llama3.2".to_string(),
+            ollama_server_address: "http://127.0.0.1:11434".to_string(),
+            llama_server_text_model: "default".to_string(),
+            llama_server_address: "http://127.0.0.1:8080".to_string(),
             google_tts_model: DEFAULT_TTS_MODEL.to_string(),
             local_tts_model: DEFAULT_LOCAL_TTS_MODEL_ID.to_string(),
 
@@ -183,6 +201,7 @@ impl Default for AppSettings {
             absurd: 0.65,
             helpful: 0.35,
             verbosity: 0.30,
+            future_settings: BTreeMap::new(),
         }
     }
 }
@@ -240,6 +259,10 @@ impl AppSettings {
         let had_local_tts_model = value.get("local_tts_model").is_some();
         let had_local_tts_voice = value.get("local_tts_voice").is_some();
         let had_live_voice = value.get("live_voice").is_some();
+        let had_external_fields = [
+            "openai_text_model", "ollama_text_model", "ollama_server_address",
+            "llama_server_text_model", "llama_server_address", "system_tts_voice",
+        ].iter().all(|field| value.get(*field).is_some());
         let legacy_tts_model = value
             .get("tts_model")
             .and_then(serde_json::Value::as_str)
@@ -252,6 +275,18 @@ impl AppSettings {
         let had_legacy_tts_voice = legacy_tts_voice.is_some();
 
         let mut settings: Self = serde_json::from_value(value)?;
+        // Drop obsolete compatibility aliases (including the old fake provider).
+        // Preserve other unknown additive fields across read/write cycles.
+        for legacy in ["provider", "text_model", "tts_model", "tts_voice", "microphone_permission_granted"] {
+            settings.future_settings.remove(legacy);
+        }
+        // Credentials must never be migrated into the plain-text settings store.
+        settings.future_settings.retain(|key, _| {
+            let name = key.to_ascii_lowercase();
+            !name.contains("secret") && !name.contains("password")
+                && !name.contains("credential") && !name.contains("api_key")
+                && !name.contains("token")
+        });
         let wake_word_migrated = !had_wake_word_enabled
             || !had_wake_word_phrase
             || settings.wake_word_enabled != wake_word_settings.enabled
@@ -355,6 +390,7 @@ impl AppSettings {
                 || !had_local_tts_model
                 || !had_local_tts_voice
                 || !had_live_voice
+                || !had_external_fields
                 || had_legacy_provider
                 || had_legacy_text_model
                 || had_legacy_tts_model
@@ -589,6 +625,7 @@ impl AppState {
                 settings.local_tts_model.clone(),
                 settings.local_tts_voice.clone(),
             )),
+            TtsProvider::System => Box::new(crate::ai::unavailable::UnavailableSpeechSynthesizer),
         }
     }
 
@@ -601,21 +638,32 @@ impl AppState {
         &self,
         settings: &AppSettings,
     ) -> Arc<dyn RealtimeConversationProvider> {
-        if settings.text_provider == TextProvider::Local
+        if settings.text_provider != TextProvider::Google
             && settings.asr_mode != AsrMode::GeminiLiveAudio
         {
             let text_model = Arc::from(self.get_text_model_for(settings));
-            let speech_synthesizer: Arc<dyn SpeechSynthesizer> = Arc::new(
-                LocalSpeechSynthesizer::new(
+            let speech_synthesizer: Arc<dyn SpeechSynthesizer> = match settings.tts_provider {
+                TtsProvider::Local => Arc::new(LocalSpeechSynthesizer::new(
                     self.local_tts_runtime.clone(),
                     settings.local_tts_model.clone(),
                     settings.local_tts_voice.clone(),
-                ),
-            );
+                )),
+                TtsProvider::Google => Arc::new(GoogleSpeechSynthesizer::new(
+                    GoogleAuth::new(self.secrets.get_google_api_key().unwrap_or_default()),
+                    settings.google_tts_model.clone(),
+                    settings.google_tts_voice.clone(),
+                )),
+                TtsProvider::System => Arc::new(crate::ai::unavailable::UnavailableSpeechSynthesizer),
+            };
+            let selected_voice = match settings.tts_provider {
+                TtsProvider::Local => &settings.local_tts_voice,
+                TtsProvider::Google => &settings.google_tts_voice,
+                TtsProvider::System => &settings.system_tts_voice,
+            };
             Arc::new(LocalConversationProvider::new(
                 text_model,
                 speech_synthesizer,
-                settings.local_tts_voice.clone(),
+                selected_voice.clone(),
                 settings.speaking_rate,
             ))
         } else {
