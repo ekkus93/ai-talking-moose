@@ -19,6 +19,7 @@ mod transport;
 use crate::asr::types::{AsrError, AsrErrorKind};
 use delete::delete_model_path;
 use disk::{DiskSpaceProbe, SystemDiskSpaceProbe};
+use integrity::{StagingFileFactory, SystemStagingFileFactory};
 use progress::InstallerFileSink;
 use transport::{ModelDownloadTransport, ReqwestModelDownloadTransport};
 
@@ -310,6 +311,7 @@ pub struct WhisperModelInstaller {
     transport: Arc<dyn ModelDownloadTransport>,
     disk_space: Arc<dyn DiskSpaceProbe>,
     verification: InstallArtifactVerification,
+    staging_file_factory: Arc<dyn StagingFileFactory>,
 }
 
 #[derive(Clone)]
@@ -346,11 +348,28 @@ impl WhisperModelInstaller {
         disk_space: Arc<dyn DiskSpaceProbe>,
         verification: InstallArtifactVerification,
     ) -> Self {
+        Self::with_staging_file_factory(
+            install_root,
+            transport,
+            disk_space,
+            verification,
+            Arc::new(SystemStagingFileFactory),
+        )
+    }
+
+    fn with_staging_file_factory(
+        install_root: PathBuf,
+        transport: Arc<dyn ModelDownloadTransport>,
+        disk_space: Arc<dyn DiskSpaceProbe>,
+        verification: InstallArtifactVerification,
+        staging_file_factory: Arc<dyn StagingFileFactory>,
+    ) -> Self {
         Self {
             install_root,
             transport,
             disk_space,
             verification,
+            staging_file_factory,
         }
     }
 
@@ -517,6 +536,7 @@ impl WhisperModelInstaller {
             callback,
             self.verification.expected_bytes,
             self.verification.expected_sha256.clone(),
+            self.staging_file_factory.as_ref(),
         )?;
 
         // Download with the transport.

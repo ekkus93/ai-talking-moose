@@ -2,11 +2,34 @@ use super::transport::DownloadSink;
 use super::WhisperModelInstallError;
 use ring::digest::{Context as Sha256Context, SHA256};
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::Path;
 
+pub(super) trait StagingFile: Write + Send {
+    fn sync_all(&mut self) -> io::Result<()>;
+}
+
+impl StagingFile for std::fs::File {
+    fn sync_all(&mut self) -> io::Result<()> {
+        std::fs::File::sync_all(self)
+    }
+}
+
+pub(super) trait StagingFileFactory: Send + Sync {
+    fn create_new(&self, path: &Path) -> io::Result<Box<dyn StagingFile>>;
+}
+
+pub(super) struct SystemStagingFileFactory;
+
+impl StagingFileFactory for SystemStagingFileFactory {
+    fn create_new(&self, path: &Path) -> io::Result<Box<dyn StagingFile>> {
+        let file = OpenOptions::new().write(true).create_new(true).open(path)?;
+        Ok(Box::new(file))
+    }
+}
+
 pub(super) struct WhisperVerifyingFileSink {
-    file: std::fs::File,
+    file: Box<dyn StagingFile>,
     pub(super) bytes_written: u64,
     expected_bytes: u64,
     expected_sha256: String,
@@ -18,11 +41,10 @@ impl WhisperVerifyingFileSink {
         path: &Path,
         expected_bytes: u64,
         expected_sha256: impl Into<String>,
+        file_factory: &dyn StagingFileFactory,
     ) -> Result<Self, WhisperModelInstallError> {
-        let file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
+        let file = file_factory
+            .create_new(path)
             .map_err(|_| WhisperModelInstallError::io("create the staging file"))?;
         Ok(Self {
             file,
@@ -45,6 +67,11 @@ impl WhisperVerifyingFileSink {
             return Err(WhisperModelInstallError::sha256_mismatch());
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(super) fn sha256_so_far(&self) -> String {
+        digest_hex(self.sha256.clone().finish().as_ref())
     }
 }
 

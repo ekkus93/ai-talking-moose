@@ -1,4 +1,4 @@
-use super::integrity::WhisperVerifyingFileSink;
+use super::integrity::{StagingFileFactory, WhisperVerifyingFileSink};
 use super::transport::DownloadSink;
 use super::WhisperModelInstallError;
 use std::path::Path;
@@ -32,8 +32,10 @@ impl InstallerFileSink {
         callback: Option<WhisperModelInstallProgressCallback>,
         expected_bytes: u64,
         expected_sha256: impl Into<String>,
+        file_factory: &dyn StagingFileFactory,
     ) -> Result<Self, WhisperModelInstallError> {
-        let inner = WhisperVerifyingFileSink::create(path, expected_bytes, expected_sha256)?;
+        let inner =
+            WhisperVerifyingFileSink::create(path, expected_bytes, expected_sha256, file_factory)?;
         if let Some(callback) = callback.as_ref() {
             callback(WhisperModelInstallProgress {
                 phase: WhisperModelInstallPhase::Downloading,
@@ -86,7 +88,13 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let path_is_directory = directory.path().join("staging.bin");
         std::fs::create_dir(&path_is_directory).expect("create conflicting directory");
-        let error = match InstallerFileSink::create(&path_is_directory, None, 1, "00") {
+        let error = match InstallerFileSink::create(
+            &path_is_directory,
+            None,
+            1,
+            "00",
+            &super::super::integrity::SystemStagingFileFactory,
+        ) {
             Ok(_) => panic!("file sink must reject a directory path"),
             Err(error) => error,
         };

@@ -5,6 +5,9 @@ use async_trait::async_trait;
 use ring::digest::{digest, SHA256};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[path = "tests/io_failures.rs"]
+mod io_failures;
+
 #[derive(Clone)]
 enum FakeTransportBehavior {
     Complete,
