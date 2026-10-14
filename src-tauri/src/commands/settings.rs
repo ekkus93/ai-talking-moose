@@ -122,6 +122,11 @@ fn generate_output_test_tone(sample_rate_hz: u32, duration_ms: u32) -> Vec<i16> 
 }
 
 fn normalize_settings_update(mut new_settings: AppSettings) -> Result<AppSettings, String> {
+    // Never downgrade an unknown newer settings schema from live IPC. Startup
+    // migration already fails closed for future versions; writes must agree.
+    if new_settings.settings_version > crate::app::state::CURRENT_SETTINGS_VERSION {
+        return Err("Settings were written by a newer app version; update this app before changing them.".to_string());
+    }
     // IPC sends complete AppSettings with flattened, unrecognized fields. Never
     // let credential-like aliases or nested values reach SQLite or runtime state.
     new_settings.sanitize_future_settings();
@@ -478,6 +483,23 @@ mod tests {
             crate::ai::types::TtsProvider::Local
         );
         assert_eq!(normalized.talkativeness, 0.73);
+    }
+
+    #[test]
+    fn live_settings_update_rejects_unknown_future_schema_before_downgrade() {
+        let current = crate::app::state::CURRENT_SETTINGS_VERSION;
+        let mut settings = AppSettings::default();
+        settings.settings_version = current + 1;
+        settings.text_provider = TextProvider::Openai;
+        let error = normalize_settings_update(settings).unwrap_err();
+        assert!(error.contains("newer app version"));
+
+        let mut old_settings = AppSettings::default();
+        old_settings.settings_version = current.saturating_sub(1);
+        assert_eq!(
+            normalize_settings_update(old_settings).unwrap().settings_version,
+            current
+        );
     }
 
     #[test]
