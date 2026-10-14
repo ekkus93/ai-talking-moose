@@ -484,6 +484,26 @@ mod tests {
         assert_eq!(snapshot.pitch, Some(-2.5));
     }
 
+    #[test]
+    fn system_snapshot_preserves_saved_voice_without_google_pitch_or_fallback() {
+        let state = AppState::new_for_tests().unwrap();
+        {
+            let mut settings = state.settings.write();
+            settings.tts_provider = TtsProvider::System;
+            settings.system_tts_voice = "com.apple.voice.test".to_string();
+            settings.google_tts_voice = "Puck".to_string();
+            settings.speaking_rate = 1.2;
+            settings.pitch = 12.0;
+        }
+        let snapshot = standalone_tts_snapshot(&state, None);
+        assert_eq!(snapshot.provider, TtsProvider::System);
+        assert_eq!(snapshot.voice_id, "com.apple.voice.test");
+        assert_eq!(snapshot.model_id, "");
+        assert_eq!(snapshot.speaking_rate, 1.2);
+        assert_eq!(snapshot.pitch, None);
+        assert!(ensure_snapshot_provider(&snapshot, TtsProvider::Google).is_err());
+    }
+
     #[tokio::test]
     async fn zero_playable_audio_fails_identically_for_every_standalone_speech_path() {
         for (path, voice_override) in [
