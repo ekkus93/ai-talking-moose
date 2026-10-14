@@ -47,8 +47,11 @@ impl SystemPcmAccumulator {
         }
         self.pcm_bytes.reserve(frames * 2);
         for frame in samples.chunks_exact(channels) {
-            let mono = frame.iter().copied().sum::<f32>() / channels as f32;
-            let i16_sample = (mono.clamp(-1.0, 1.0) * f32::from(i16::MAX)).round() as i16;
+            // Accumulate in f64: finite but extreme f32 channels can overflow
+            // a f32 sum before opposing channels cancel each other out.
+            let mono = frame.iter().map(|sample| f64::from(*sample)).sum::<f64>()
+                / channels as f64;
+            let i16_sample = (mono.clamp(-1.0, 1.0) * f64::from(i16::MAX)).round() as i16;
             self.pcm_bytes.extend_from_slice(&i16_sample.to_le_bytes());
         }
         Ok(())
@@ -117,6 +120,33 @@ mod tests {
             i16::from_le_bytes([audio.pcm_bytes[2], audio.pcm_bytes[3]]),
             32767
         );
+    }
+
+    #[test]
+    fn extreme_finite_channels_cancel_without_float_overflow() {
+        let mut pcm = SystemPcmAccumulator::new(24_000).unwrap();
+        pcm.append_interleaved_f32(
+            &[f32::MAX, f32::MAX, -f32::MAX, -f32::MAX],
+            4,
+        )
+        .unwrap();
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 24_000);
+        assert_eq!(output.pcm_bytes, 0_i16.to_le_bytes());
+    }
+
+    #[test]
+    fn cumulative_duration_limit_rejects_extra_frames_without_corrupting_audio() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        pcm.append_interleaved_f32(&vec![0.0; 8_000 * 20], 1)
+            .unwrap();
+        pcm.append_interleaved_f32(&vec![0.0; 8_000 * 25], 1)
+            .unwrap();
+        assert_eq!(
+            pcm.append_interleaved_f32(&[0.0], 1).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
+        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * 45 * 2);
     }
 
     #[test]
