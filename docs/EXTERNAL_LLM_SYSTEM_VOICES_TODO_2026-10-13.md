@@ -46,7 +46,7 @@ OpenAI Responses parsing now rejects unexpected non-message output items (includ
 
 ### OpenAI negative parser qualification — 2026-10-14
 
-Commit `ab402a49116273180d1bdf9dacd6de288e0eeabb` adds explicit regression cases rejecting unrequested Responses tool-call items, refusal parts, and non-text output. Exact-head Rust quality, Rust tests, and generated backend-contract CI passed in run `38557444569` (2026-10-14). This is focused ELSV-200 parser evidence, not completion of OpenAI credential, transport, routing, or platform acceptance. ELSV-200 and ELSV-900 remain unchecked.
+Commit `ab402a49116273180d1bdf9dacd6de288e0eeabb` adds explicit regression cases rejecting unrequested Responses tool-call items, refusal parts, and non-text output. Exact-head Rust quality, Rust tests, and generated backend-contract CI passed in run `38557444569` (2026-10-14). A second regression on `45dce71cd214e27f788ad4901d32bbdf34549d68` rejects a response that mixes valid assistant text with an unrequested tool call; exact-head Rust quality, Rust tests, and generated-contract CI passed in run `38558738133` (2026-10-14). This is focused ELSV-200 parser evidence, not completion of OpenAI credential, transport, routing, or platform acceptance. ELSV-200 and ELSV-900 remain unchecked.
 
 ## ELSV-100 — Settings and IPC foundations
 

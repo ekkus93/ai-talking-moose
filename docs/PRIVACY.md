@@ -16,12 +16,12 @@ Talking Moose supports four ASR choices:
 
 | ASR choice | Microphone audio | Transcript text |
 | --- | --- | --- |
-| Moonshine Tiny Streaming | Processed locally | Local-first Talk uses the selected Local text model; Google is used only when explicitly selected |
-| Moonshine Small Streaming | Processed locally | Local-first Talk uses the selected Local text model; Google is used only when explicitly selected |
-| Local Whisper.cpp Small | Processed locally on the host | Local-first Talk uses the selected Local text model; Google is used only when explicitly selected |
+| Moonshine Tiny Streaming | Processed locally | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
+| Moonshine Small Streaming | Processed locally | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
+| Local Whisper.cpp Small | Processed locally on the host | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
 | Google Gemini Live Audio | Streamed to Google during the active conversation | Google processes the corresponding conversation content |
 
-Moonshine and local Whisper.cpp keep speech recognition local. Local-first Talk also keeps finalized transcript text, generation, and generated speech local after selected models are installed. Selecting Google text generation or Gemini Live audio ASR explicitly opts into the cloud conversation path. Local partial transcript updates stay on the host.
+Moonshine and local Whisper.cpp keep speech recognition local. Local-first Talk also keeps finalized transcript text, generation, and generated speech local after selected models are installed. Selecting Google or OpenAI text generation explicitly sends finalized transcript text to that cloud provider; selecting Ollama or llama-server sends it to the configured loopback server. Only explicit Gemini Live audio ASR streams microphone audio to Google. Local partial transcript updates stay on the host.
 
 Local Whisper.cpp uses a pinned whisper.cpp source commit and a user-downloaded, SHA-verified `ggml-small` model file. Whisper microphone audio remains local. Whisper installation is explicit and separate from conversation start; an active Whisper installation can be canceled from Settings.
 
