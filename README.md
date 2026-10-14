@@ -27,7 +27,7 @@
 - **Desktop shell/backend:** Tauri 2, Rust, Tokio, CPAL, Rusqlite, Tokio-Tungstenite
 - **Speech recognition:** Local Moonshine streaming ASR and local Whisper Small batch ASR, plus optional Gemini Live cloud audio
 - **Text generation:** Provider-neutral `TextModel` routing for built-in Local, Google Gemini, OpenAI Responses, Ollama, and llama-server.
-- **Voice conversation:** Gemini Live is a separate cloud audio path; non-Live Talk with local ASR and non-Google text composes the selected text and standalone TTS providers.
+- **Voice conversation:** Gemini Live is a separate cloud audio path; non-Live Talk with local ASR composes the selected text and standalone TTS providers, including Google text without a Gemini Live audio connection.
 - **Standalone speech output:** Provider-neutral Google Gemini TTS or Local KittenTTS routing for typed replies, ambient remarks, canned reactions, and auditions. Local KittenTTS uses the Rust-owned CPU runtime and adapts 24 kHz PCM into the existing audio playback/mouth-animation path.
 - **Persistence:** SQLite for local application data; independent Google and OpenAI keys in macOS Keychain or session-only Linux memory.
 
