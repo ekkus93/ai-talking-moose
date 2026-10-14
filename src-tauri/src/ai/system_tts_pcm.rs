@@ -49,8 +49,7 @@ impl SystemPcmAccumulator {
         for frame in samples.chunks_exact(channels) {
             // Accumulate in f64: finite but extreme f32 channels can overflow
             // a f32 sum before opposing channels cancel each other out.
-            let mono = frame.iter().map(|sample| f64::from(*sample)).sum::<f64>()
-                / channels as f64;
+            let mono = frame.iter().map(|sample| f64::from(*sample)).sum::<f64>() / channels as f64;
             let i16_sample = (mono.clamp(-1.0, 1.0) * f64::from(i16::MAX)).round() as i16;
             self.pcm_bytes.extend_from_slice(&i16_sample.to_le_bytes());
         }
@@ -125,11 +124,8 @@ mod tests {
     #[test]
     fn extreme_finite_channels_cancel_without_float_overflow() {
         let mut pcm = SystemPcmAccumulator::new(24_000).unwrap();
-        pcm.append_interleaved_f32(
-            &[f32::MAX, f32::MAX, -f32::MAX, -f32::MAX],
-            4,
-        )
-        .unwrap();
+        pcm.append_interleaved_f32(&[f32::MAX, f32::MAX, -f32::MAX, -f32::MAX], 4)
+            .unwrap();
         let output = pcm.finish().unwrap();
         assert_eq!(output.sample_rate, 24_000);
         assert_eq!(output.pcm_bytes, 0_i16.to_le_bytes());
