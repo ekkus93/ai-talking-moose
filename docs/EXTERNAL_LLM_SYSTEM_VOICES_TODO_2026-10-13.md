@@ -78,6 +78,21 @@ The attempted loopback adapter test-module split left `src-tauri/src/ai/loopback
 
 These tests cover a small part of ELSV-300/600 only. Attempts to remove the orphaned loopback test file, fix the Ollama `:latest` comparison, and sanitize future fields during live settings updates were rejected by source-write safety checks. None of those three changes has landed. All checklist items remain open pending their complete named acceptance evidence.
 
+### Source-write recovery, credential sanitation, and macOS PCM groundwork — 2026-10-14
+
+Ralph Bridge v0.6.1 accepted and verified direct-to-`master` changes that were previously rejected:
+
+- `8a5d17b5de290a8a593641e18a5e7713d17894a1`: removed unreferenced `src-tauri/src/ai/loopback/tests.rs` using `delete_files`.
+- `e772fba27c014653586c24d24bcba407a1876e47`: narrowly matched canonical Ollama `:latest` only for untagged configured models, while preserving exact explicit-tag and llama-server identity; added parser regressions.
+- `46e4eadf85b6d6d4d5b74512de35128304a4a551`: shared recursive future-settings credential sanitizer now runs during both persisted migration and live settings IPC normalization, with nested-alias and round-trip regression tests.
+- `a8e7d0d8b99eece51d4a1690c46148731da54d02`: added fake-server readiness checks for the Ollama alias and strict explicit-tag/llama-server negatives.
+- `6069d1184d8a016f4455960abdae6ed2cda72503`: added bounded float-to-mono 16-bit PCM conversion with sample-rate preservation and negative tests as a platform-neutral component for future AVSpeechSynthesizer buffer integration.
+- `b875e38938726a69606ef54a9a26543fc20d64fe`: applied Rust formatting corrections.
+- `ff64451e3ea34144c4f9c8a02d7e8c91430baed8`: addressed Rust 1.99 Clippy `manual_is_multiple_of` in the PCM helper.
+- `7e18991ea47a37cffc1a40424d9cf966810c60fe`: added exact saved-system-voice ID resolution with explicit System Default and missing-voice rejection.
+
+**Qualification is not yet complete.** Earlier exact-head Rust quality CI `38603840804` failed a Clippy lint and was corrected afterward. The later CI for `7e18991` was queued when this evidence was written. Reinspect the exact resulting SHA and its Rust tests, Clippy, and generated-contract jobs before checking any acceptance item. The native macOS AVSpeechSynthesizer buffer callbacks, main-run-loop integration, dynamic installed-voice catalog, Control Panel enablement, physical Mac audition, and full `check:all` remain outstanding; System TTS intentionally stays unavailable rather than falling back.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
