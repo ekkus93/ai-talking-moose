@@ -29,10 +29,7 @@ fn native_pcm_formats_produce_identical_mono_playback_and_preserve_rate() {
 
     let mut integer_planar = SystemPcmAccumulator::new(44_100).unwrap();
     integer_planar
-        .append_planar_i32(&[
-            &[0, 1_073_741_824],
-            &[0, 1_073_741_824],
-        ])
+        .append_planar_i32(&[&[0, 1_073_741_824], &[0, 1_073_741_824]])
         .unwrap();
     outputs.push(integer_planar.finish().unwrap());
 
