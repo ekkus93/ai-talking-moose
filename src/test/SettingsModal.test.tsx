@@ -399,6 +399,19 @@ describe("SettingsModal Component", () => {
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toBeInTheDocument();
   });
 
+  it("discloses unavailable system voices without offering a nonfunctional selection", () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("Voice & Audio"));
+
+    expect(
+      screen.getByRole("radio", { name: /System Voices — unavailable/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/macOS system speech is pending qualification/i),
+    ).toBeInTheDocument();
+    expect(useMooseStore.getState().settings?.tts_provider).toBe("local");
+  });
+
   it("uses the backend-derived Google catalog in the standalone voice selector", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Voice & Audio"));
