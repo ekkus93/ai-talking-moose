@@ -18,8 +18,9 @@ async fn fake_catalog(
             LoopbackTextServer::Ollama => "/api/tags",
             LoopbackTextServer::LlamaServer => "/v1/models",
         };
-        assert!(String::from_utf8_lossy(&buffer[..size])
-            .starts_with(&format!("GET {path} HTTP/1.1")));
+        assert!(
+            String::from_utf8_lossy(&buffer[..size]).starts_with(&format!("GET {path} HTTP/1.1"))
+        );
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
             payload.len()
