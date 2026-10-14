@@ -412,6 +412,20 @@ describe("SettingsModal Component", () => {
     expect(useMooseStore.getState().settings?.tts_provider).toBe("local");
   });
 
+  it("shows all five explicit text providers", () => {
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("AI & Models"));
+    for (const name of [
+      /Local — on this computer/i,
+      /Google Gemini — cloud/i,
+      /OpenAI — cloud/i,
+      /Ollama — loopback/i,
+      /llama-server — loopback/i,
+    ]) {
+      expect(screen.getByRole("radio", { name })).toBeInTheDocument();
+    }
+  });
+
   it("uses the backend-derived Google catalog in the standalone voice selector", async () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Voice & Audio"));
