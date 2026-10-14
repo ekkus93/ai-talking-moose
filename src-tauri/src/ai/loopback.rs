@@ -139,7 +139,7 @@ impl LoopbackTextModel {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
                 }
                 value["message"]["content"].as_str()
-            },
+            }
             LoopbackTextServer::LlamaServer => {
                 if value["choices"][0]["message"]["role"].as_str() != Some("assistant") {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
@@ -312,7 +312,9 @@ mod tests {
             )
             .is_err());
         assert!(ollama
-            .text_from_json(&json!({"done":false,"message":{"role":"assistant","content":"partial"}}))
+            .text_from_json(
+                &json!({"done":false,"message":{"role":"assistant","content":"partial"}})
+            )
             .is_err());
         for bad in [
             json!({"done":true,"message":{"role":"user","content":"echoed prompt"}}),
