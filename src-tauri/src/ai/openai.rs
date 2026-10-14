@@ -219,6 +219,10 @@ mod tests {
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "status":"incomplete", "content":[{"type":"output_text", "text":"truncated"}]}]}),
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "status":"in_progress", "content":[{"type":"output_text", "text":"partial"}]}]}),
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "status":null, "content":[{"type":"output_text", "text":"unrecognized"}]}]}),
+            json!({"status":"completed", "output":[{"type":"function_call", "name":"unexpected_tool", "arguments":"{}"}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"safe"}, {"type":"refusal", "refusal":"Cannot help"}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"refusal", "refusal":"Cannot help"}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_image", "image_url":"data:image/png;base64,AAAA"}]}]}),
         ] {
             assert_eq!(
                 OpenAiTextModel::output_text(&bad).unwrap_err().kind,
