@@ -103,7 +103,10 @@ impl SystemPcmAccumulator {
         }
         self.pcm_bytes.reserve(frames * 2);
         for frame in 0..frames {
-            let sum: i64 = channels.iter().map(|channel| i64::from(channel[frame])).sum();
+            let sum: i64 = channels
+                .iter()
+                .map(|channel| i64::from(channel[frame]))
+                .sum();
             let sample = (sum as f64 / channels.len() as f64).round() as i16;
             self.pcm_bytes.extend_from_slice(&sample.to_le_bytes());
         }
