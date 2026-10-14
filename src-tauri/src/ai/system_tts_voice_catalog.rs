@@ -1,6 +1,6 @@
 //! Validate OS-supplied voice identifiers before presenting a macOS voice catalog.
-use crate::ai::tts_catalog::TtsVoiceDescriptor;
 use crate::ai::system_tts_selection::SYSTEM_DEFAULT_VOICE_ID;
+use crate::ai::tts_catalog::TtsVoiceDescriptor;
 use std::collections::HashSet;
 
 pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoiceDescriptor> {
