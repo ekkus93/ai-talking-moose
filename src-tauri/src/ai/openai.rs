@@ -243,6 +243,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalid_generation_parameters_fail_before_network_io() {
+        let model = OpenAiTextModel::new("dummy".into(), "gpt-4.1-mini".into());
+        for prompt in ["", "   "] {
+            assert_eq!(
+                model.generate(sample(prompt)).await.unwrap_err().kind,
+                ProviderErrorKind::Setup
+            );
+        }
+        for temperature in [f32::NAN, f32::INFINITY, -0.1, 2.1] {
+            let mut request = sample("hello");
+            request.temperature = Some(temperature);
+            assert_eq!(
+                model.generate(request).await.unwrap_err().kind,
+                ProviderErrorKind::Setup
+            );
+        }
+        for budget in [0, 4097, u32::MAX] {
+            let mut request = sample("hello");
+            request.max_tokens = Some(budget);
+            assert_eq!(
+                model.generate(request).await.unwrap_err().kind,
+                ProviderErrorKind::Setup
+            );
+        }
+        let invalid_model = OpenAiTextModel::new("dummy".into(), "../invalid".into());
+        assert_eq!(
+            invalid_model.generate(sample("hello")).await.unwrap_err().kind,
+            ProviderErrorKind::Setup
+        );
+        let mut request = sample("hello");
+        request.prompt = "x".repeat(MAX_PROMPT_BYTES + 1);
+        assert_eq!(
+            model.generate(request).await.unwrap_err().kind,
+            ProviderErrorKind::Setup
+        );
+    }
+
+    #[tokio::test]
     async fn fake_http_responses_validate_shape_auth_and_failure_isolation() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use tokio::net::TcpListener;
