@@ -245,6 +245,18 @@ fn scrub_sensitive_future_settings(value: &mut serde_json::Value) {
 }
 
 impl AppSettings {
+    /// Remove credential-shaped unknown fields recursively before any settings write.
+    /// The same policy applies to migration and live frontend IPC updates.
+    pub(crate) fn sanitize_future_settings(&mut self) {
+        self.future_settings.retain(|key, value| {
+            if is_sensitive_future_settings_key(key) {
+                return false;
+            }
+            scrub_sensitive_future_settings(value);
+            true
+        });
+    }
+
     /// Deserialize persisted settings while preserving the behavior of installations
     /// created before an ASR selector or explicit text-provider selector existed.
     /// New profiles use the local ASR runtime supported by their platform. Legacy profiles
@@ -322,13 +334,7 @@ impl AppSettings {
         // credentials nested inside otherwise harmless additive settings.
         // Detect removals so startup rewrites the sanitized JSON to SQLite.
         let original_future_settings = settings.future_settings.clone();
-        settings.future_settings.retain(|key, value| {
-            if is_sensitive_future_settings_key(key) {
-                return false;
-            }
-            scrub_sensitive_future_settings(value);
-            true
-        });
+        settings.sanitize_future_settings();
         let scrubbed_future_settings = settings.future_settings != original_future_settings;
         let wake_word_migrated = !had_wake_word_enabled
             || !had_wake_word_phrase

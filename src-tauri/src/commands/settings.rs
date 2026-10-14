@@ -122,6 +122,9 @@ fn generate_output_test_tone(sample_rate_hz: u32, duration_ms: u32) -> Vec<i16> 
 }
 
 fn normalize_settings_update(mut new_settings: AppSettings) -> Result<AppSettings, String> {
+    // IPC sends complete AppSettings with flattened, unrecognized fields. Never
+    // let credential-like aliases or nested values reach SQLite or runtime state.
+    new_settings.sanitize_future_settings();
     new_settings.settings_version = crate::app::state::CURRENT_SETTINGS_VERSION;
     // Window-title observation remains unsupported in V1. Treat the serialized field
     // as compatibility metadata and never allow a settings write to enable it.
@@ -475,6 +478,42 @@ mod tests {
             crate::ai::types::TtsProvider::Local
         );
         assert_eq!(normalized.talkativeness, 0.73);
+    }
+
+    #[test]
+    fn live_settings_update_scrubs_nested_future_credentials_without_losing_preferences() {
+        let mut settings = AppSettings::default();
+        settings.future_settings.insert(
+            "openaiKey".into(),
+            serde_json::json!("credential-canary"),
+        );
+        settings.future_settings.insert(
+            "future_display_hint".into(),
+            serde_json::json!({
+                "enabled": true,
+                "theme": "dark",
+                "api-key": "credential-canary",
+                "children": [
+                    {"refreshToken": "credential-canary", "font": "large"},
+                    {"extra": {"authHeader": "credential-canary", "mode": "local"}}
+                ]
+            }),
+        );
+        let normalized = normalize_settings_update(settings).unwrap();
+        let json = serde_json::to_value(&normalized).unwrap();
+        assert!(!json.to_string().contains("credential-canary"));
+        assert!(json.get("openaiKey").is_none());
+        assert_eq!(json["future_display_hint"]["enabled"], true);
+        assert_eq!(json["future_display_hint"]["theme"], "dark");
+        assert_eq!(json["future_display_hint"]["children"][0]["font"], "large");
+        assert_eq!(
+            json["future_display_hint"]["children"][1]["extra"]["mode"],
+            "local"
+        );
+        let (reloaded, migrated) =
+            AppSettings::from_persisted_json(&json.to_string()).unwrap();
+        assert!(!migrated, "clean IPC settings must not be re-migrated");
+        assert_eq!(reloaded.future_settings, normalized.future_settings);
     }
 
     #[test]
