@@ -88,3 +88,37 @@ async fn local_chat_adapters_send_exact_provider_specific_json() {
         server.await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn ollama_untagged_generation_accepts_latest_identity() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buf = [0u8; 4096];
+        let count = socket.read(&mut buf).await.unwrap();
+        assert!(String::from_utf8_lossy(&buf[..count]).starts_with("POST /api/chat HTTP/1.1"));
+        let payload = r#"{"done":true,"model":"llama3.2:latest","message":{"role":"assistant","content":"alias works"}}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+            payload.len()
+        );
+        socket.write_all(response.as_bytes()).await.unwrap();
+    });
+    let model = LoopbackTextModel::new(
+        LoopbackTextServer::Ollama,
+        base_url,
+        "llama3.2".into(),
+    );
+    let answer = model
+        .generate(TextRequest {
+            prompt: "say hello".into(),
+            system_instruction: None,
+            temperature: None,
+            max_tokens: Some(32),
+        })
+        .await
+        .unwrap();
+    assert_eq!(answer.text, "alias works");
+    server.await.unwrap();
+}
