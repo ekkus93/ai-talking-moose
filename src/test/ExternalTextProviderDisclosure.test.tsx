@@ -34,9 +34,9 @@ describe("external text provider disclosure and Live isolation", () => {
     "%s with local ASR exposes only its own provider controls",
     (provider, modelLabel, configLabel) => {
       renderProvider(provider);
-      const displayName = provider === "llama_server" ? "llama-server" : provider;
+      const name = provider === "llama_server" ? "llama-server" : provider;
       const providerRadio = screen.getByRole("radio", {
-        name: new RegExp(displayName, "i"),
+        name: new RegExp(name, "i"),
       });
       expect(providerRadio).toBeChecked();
       expect(screen.getByLabelText(modelLabel)).toBeInTheDocument();
@@ -59,10 +59,11 @@ describe("external text provider disclosure and Live isolation", () => {
     },
   );
 
-  it("explicit Gemini Live ASR overrides standalone text controls only for Talk", () => {
+  it("Gemini Live keeps its own audio controls", () => {
     renderProvider("ollama", true);
     expect(screen.getByLabelText("Ollama model ID")).toBeInTheDocument();
-    expect(screen.getByLabelText("Realtime Live Voice Model")).toBeInTheDocument();
+    const liveModel = screen.getByLabelText("Realtime Live Voice Model");
+    expect(liveModel).toBeInTheDocument();
     expect(
       screen.getByText(/Gemini Live is a separate Google cloud-audio mode/i),
     ).toBeInTheDocument();
