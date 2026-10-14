@@ -15,3 +15,13 @@ it("shows System voice as unavailable", () => {
     screen.getByRole("radio", { name: /System Voices — unavailable/i }),
   ).toBeDisabled();
 });
+
+it("preserves a saved system provider", () => {
+  useMooseStore.setState({
+    isSettingsOpen: true,
+    settings: { ...frontendDefaultSettings(), tts_provider: "system" },
+  });
+  render(<SettingsModal />);
+  fireEvent.click(screen.getByText("Voice & Audio"));
+  expect(screen.getByRole("radio", { name: /System Voices — unavailable/i })).toBeChecked();
+});
