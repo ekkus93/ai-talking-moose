@@ -429,8 +429,10 @@ mod tests {
                 "{address}"
             );
         }
-        let mut settings = AppSettings::default();
-        settings.openai_text_model = String::new();
+        let mut settings = AppSettings {
+            openai_text_model: String::new(),
+            ..Default::default()
+        };
         assert!(validate_app_settings(&settings).is_err());
         settings.openai_text_model = "gpt-4.1 mini".into();
         assert!(validate_app_settings(&settings).is_err());
