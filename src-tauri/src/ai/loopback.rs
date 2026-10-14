@@ -684,4 +684,5 @@ mod tests {
             assert!(!error.message.contains("unfinished"));
             server.await.unwrap();
         }
-    }}
+    }
+}
