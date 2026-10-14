@@ -88,6 +88,28 @@ impl SystemPcmAccumulator {
         Ok(())
     }
 
+    /// Append native planar signed 16-bit PCM without allocating float samples.
+    pub fn append_planar_i16(&mut self, channels: &[&[i16]]) -> Result<(), ProviderError> {
+        let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
+        if channels.is_empty() || channels.len() > MAX_CHANNELS {
+            return Err(invalid());
+        }
+        let frames = channels[0].len();
+        let remaining = (self.sample_rate_hz as usize)
+            .saturating_mul(MAX_DURATION_SECONDS)
+            .saturating_sub(self.pcm_bytes.len() / 2);
+        if frames > remaining || channels.iter().any(|channel| channel.len() != frames) {
+            return Err(invalid());
+        }
+        self.pcm_bytes.reserve(frames * 2);
+        for frame in 0..frames {
+            let sum: i64 = channels.iter().map(|channel| i64::from(channel[frame])).sum();
+            let sample = (sum as f64 / channels.len() as f64).round() as i16;
+            self.pcm_bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        Ok(())
+    }
+
     pub fn finish(self) -> Result<AudioStreamData, ProviderError> {
         if self.pcm_bytes.is_empty() {
             return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
