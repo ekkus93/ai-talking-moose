@@ -1,9 +1,7 @@
 //! Explicit fail-closed adapters for provider choices whose runtime is not yet built.
 //! Never substitute another model or voice when a selected provider is unavailable.
 use crate::ai::traits::SpeechSynthesizer;
-use crate::ai::types::{
-    AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest,
-};
+use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
 use async_trait::async_trait;
 
 pub(crate) struct UnavailableSpeechSynthesizer;
