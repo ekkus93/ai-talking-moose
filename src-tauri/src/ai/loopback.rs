@@ -128,9 +128,7 @@ impl LoopbackTextModel {
     fn text_from_json(&self, value: &Value) -> Result<TextResponse, ProviderError> {
         // An echoed user/tool message is not a generated assistant reply.
         // When the server supplies a model identity, it must be the selected one.
-        if value.get("model").is_some()
-            && value["model"].as_str() != Some(self.model.as_str())
-        {
+        if value.get("model").is_some() && value["model"].as_str() != Some(self.model.as_str()) {
             return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
         }
         let text = match self.kind {
