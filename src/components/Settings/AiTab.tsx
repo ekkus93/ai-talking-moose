@@ -60,9 +60,9 @@ export const AiTab: React.FC<AiTabProps> = ({
 
   if (!settings) return null;
 
-  const standardTalkSelected =
-    settings.text_provider !== "google" &&
-    settings.asr_mode !== "gemini_live_audio";
+  // The backend chooses Gemini Live only for Gemini Live audio ASR.
+  // Google text with local ASR still uses non-Live Talk and standalone TTS.
+  const standardTalkSelected = settings.asr_mode !== "gemini_live_audio";
   const liveModels = googleModels.filter((model) =>
     model.capabilities.includes("live_audio"),
   );
@@ -179,8 +179,8 @@ export const AiTab: React.FC<AiTabProps> = ({
             Text Generation
           </h4>
           <p className="text-[10px] text-gray-700">
-            This provider is used for typed replies and unsolicited ambient
-            remarks.
+            This provider is used for typed replies, unsolicited ambient
+            remarks, and non-Live Talk when local ASR is selected.
           </p>
         </div>
 
@@ -550,8 +550,8 @@ export const AiTab: React.FC<AiTabProps> = ({
           </button>
         </div>
         <p className="text-[10px] text-gray-700">
-          Your key is stored in the operating system secure credential store and
-          is never returned to this settings screen.
+          macOS stores your key in Keychain. Linux holds it only in memory
+          until this app exits. The key is never returned to this settings screen.
         </p>
         {hasApiKey ? (
           <button
