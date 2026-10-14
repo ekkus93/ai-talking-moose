@@ -245,7 +245,9 @@ export const nativeTauriBridge = {
 
   async testLocalTextServer(
     provider: "ollama" | "llama_server",
-  ): Promise<"unreachable" | "reachable_but_model_unavailable" | "model_ready"> {
+  ): Promise<
+    "unreachable" | "reachable_but_model_unavailable" | "model_ready"
+  > {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke("test_local_text_server", { provider });
   },
