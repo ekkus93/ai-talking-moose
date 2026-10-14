@@ -25,3 +25,6 @@ mod loopback_request_contract_tests;
 
 #[cfg(test)]
 mod system_tts_acceptance_tests;
+
+#[cfg(test)]
+mod system_tts_pcm_contract_tests;
