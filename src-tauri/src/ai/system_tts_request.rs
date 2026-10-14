@@ -15,7 +15,9 @@ pub fn validate_system_tts_request(
             return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
         }
     }
-    if request.pitch.is_some_and(|pitch| !pitch.is_finite()) {
+    // The system adapter has not qualified pitch control. Reject rather than
+    // silently accepting a Google-only preference that would have no effect.
+    if request.pitch.is_some() {
         return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
     }
     let voice = request.voice_name.as_deref().unwrap_or("system_default");
@@ -57,6 +59,11 @@ mod tests {
         request.pitch = Some(f32::INFINITY);
         assert!(validate_system_tts_request(&request, &[]).is_err());
         request.pitch = Some(0.0);
+        assert_eq!(
+            validate_system_tts_request(&request, &[]).unwrap_err().kind,
+            ProviderErrorKind::Setup
+        );
+        request.pitch = None;
         assert!(validate_system_tts_request(&request, &[]).is_ok());
     }
 }
