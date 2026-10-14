@@ -56,6 +56,41 @@ impl SystemPcmAccumulator {
         Ok(())
     }
 
+    /// Append native AVAudioPCMBuffer-style planar float channels without an
+    /// intermediate interleaved allocation. All channels must have the same
+    /// frame count. Validate the entire chunk before mutating accumulated PCM.
+    pub fn append_planar_f32(
+        &mut self,
+        channel_samples: &[&[f32]],
+    ) -> Result<(), ProviderError> {
+        let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
+        if channel_samples.is_empty() || channel_samples.len() > MAX_CHANNELS {
+            return Err(invalid());
+        }
+        let frames = channel_samples[0].len();
+        if channel_samples.iter().any(|channel| {
+            channel.len() != frames || channel.iter().any(|sample| !sample.is_finite())
+        }) {
+            return Err(invalid());
+        }
+        let used_frames = self.pcm_bytes.len() / 2;
+        let max_frames = (self.sample_rate_hz as usize) * MAX_DURATION_SECONDS;
+        if frames > max_frames.saturating_sub(used_frames) {
+            return Err(invalid());
+        }
+        self.pcm_bytes.reserve(frames * 2);
+        for index in 0..frames {
+            let mono = channel_samples
+                .iter()
+                .map(|channel| f64::from(channel[index]))
+                .sum::<f64>()
+                / channel_samples.len() as f64;
+            let i16_sample = (mono.clamp(-1.0, 1.0) * f64::from(i16::MAX)).round() as i16;
+            self.pcm_bytes.extend_from_slice(&i16_sample.to_le_bytes());
+        }
+        Ok(())
+    }
+
     pub fn finish(self) -> Result<AudioStreamData, ProviderError> {
         if self.pcm_bytes.is_empty() {
             return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
@@ -143,6 +178,42 @@ mod tests {
             ProviderErrorKind::Protocol
         );
         assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * 45 * 2);
+    }
+
+    #[test]
+    fn planar_native_channels_downmix_without_interleaving_or_rate_changes() {
+        let mut pcm = SystemPcmAccumulator::new(48_000).unwrap();
+        pcm.append_planar_f32(&[&[1.0, 0.25], &[-1.0, 0.75]])
+            .unwrap();
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 48_000);
+        let samples: Vec<i16> = output
+            .pcm_bytes
+            .chunks_exact(2)
+            .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]))
+            .collect();
+        assert_eq!(samples, [0, 16384]);
+    }
+
+    #[test]
+    fn malformed_planar_chunk_is_rejected_atomically() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        pcm.append_planar_f32(&[&[0.25]]).unwrap();
+        let invalid_channels: Vec<&[f32]> = vec![&[0.0]; MAX_CHANNELS + 1];
+        for chunk in [
+            vec![],
+            vec![&[0.0][..], &[0.0, 0.0][..]],
+            vec![&[f32::NAN][..]],
+            vec![&[f32::INFINITY][..]],
+            invalid_channels,
+        ] {
+            assert_eq!(
+                pcm.append_planar_f32(&chunk).unwrap_err().kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        pcm.append_planar_f32(&[&[0.5]]).unwrap();
+        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 4);
     }
 
     #[test]
