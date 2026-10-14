@@ -464,11 +464,7 @@ mod tests {
             TextProvider::Ollama,
             TextProvider::LlamaServer,
         ] {
-            for tts_provider in [
-                TtsProvider::Local,
-                TtsProvider::Google,
-                TtsProvider::System,
-            ] {
+            for tts_provider in [TtsProvider::Local, TtsProvider::Google, TtsProvider::System] {
                 settings.text_provider = text_provider;
                 settings.tts_provider = tts_provider;
                 let json = serde_json::to_string(&settings).unwrap();
@@ -478,7 +474,10 @@ mod tests {
                 assert_eq!(decoded.tts_provider, tts_provider);
                 assert_eq!(decoded.openai_text_model, settings.openai_text_model);
                 assert_eq!(decoded.ollama_text_model, settings.ollama_text_model);
-                assert_eq!(decoded.llama_server_text_model, settings.llama_server_text_model);
+                assert_eq!(
+                    decoded.llama_server_text_model,
+                    settings.llama_server_text_model
+                );
                 assert_eq!(decoded.system_tts_voice, settings.system_tts_voice);
             }
         }
