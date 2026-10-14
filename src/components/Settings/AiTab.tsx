@@ -224,12 +224,12 @@ export const AiTab: React.FC<AiTabProps> = ({
               [
                 "ollama",
                 "Ollama — loopback",
-                "Connects to an already-running local Ollama server.",
+                "Sends text to an independently managed loopback Ollama server, which may keep its own logs.",
               ],
               [
                 "llama_server",
                 "llama-server — loopback",
-                "Connects to an already-running local llama.cpp server.",
+                "Sends text to an independently managed loopback llama.cpp server, which may keep its own logs.",
               ],
             ] as const
           ).map(([id, label, description]) => (
@@ -253,6 +253,10 @@ export const AiTab: React.FC<AiTabProps> = ({
             </label>
           ))}
         </fieldset>
+        <p className="text-[10px] text-gray-700">
+          A selected provider failure is reported without switching models or
+          sending the request to another provider.
+        </p>
 
         {settings.text_provider === "local" ? (
           <LocalLlmSettingsPanel
