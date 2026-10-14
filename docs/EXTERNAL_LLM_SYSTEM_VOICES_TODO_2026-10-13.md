@@ -14,6 +14,12 @@ The loopback adapter now rejects non-finite/out-of-range temperatures and zero-t
 
 System voices are **not implemented**: the Rust TTS catalog and Voice & Audio selector still expose Google/Local only, and `TtsProvider::System` currently resolves to an unavailable synthesizer. ELSV-500 and the physical Mac audition remain open. Preserve this fail-closed behavior until the actual macOS buffer-synthesis and playback path is qualified.
 
+### Qualification update — 2026-10-14
+
+Scoped frontend CI passed on `57458245f2119d20ef8db180701e537d02b7d824` (run `38502627142`). Scoped Rust quality, Rust tests, and generated-contract CI passed on `f4ad9f800ecfc839c8c1e72e5ef41317d4e16905` (run `38503061659`). Changes include provider disclosure and state handling, explicit disabled System voice UI, stricter llama-server assistant-response validation, and OpenAI missing-key isolation testing. The attempted OpenAI 429 fake-server test was reverted and is not qualified evidence.
+
+These are scoped checks, not the complete ELSV acceptance matrix or physical macOS audition. Do not mark the following items complete on this evidence alone.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
