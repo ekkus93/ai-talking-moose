@@ -35,6 +35,14 @@ const setTextProviderForTest = (provider: "google" | "local") => {
   }));
 };
 
+const setGoogleLiveForTest = () => {
+  useMooseStore.setState((state) => ({
+    settings: state.settings
+      ? { ...state.settings, text_provider: "google", asr_mode: "gemini_live_audio" }
+      : null,
+  }));
+};
+
 describe("SettingsModal Component", () => {
   beforeEach(() => {
     useMooseStore.setState({
@@ -207,7 +215,7 @@ describe("SettingsModal Component", () => {
   });
 
   it("preserves model selections and blocks writes while the Google catalog is loading", async () => {
-    setTextProviderForTest("google");
+    setGoogleLiveForTest();
     let resolveModels: (
       models: ReturnType<typeof frontendGoogleModels>,
     ) => void = () => undefined;
@@ -265,7 +273,7 @@ describe("SettingsModal Component", () => {
   });
 
   it("shows a persisted Google model as unavailable after catalog resolution without rewriting it", async () => {
-    setTextProviderForTest("google");
+    setGoogleLiveForTest();
     const settings = frontendDefaultSettings();
     vi.spyOn(tauriBridge, "getGoogleModels").mockResolvedValue([
       {
@@ -449,8 +457,18 @@ describe("SettingsModal Component", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows only current capability-filtered Gemini model options", async () => {
+  it("keeps Google text on non-Live Talk when local ASR is selected", () => {
     setTextProviderForTest("google");
+    render(<SettingsModal />);
+    fireEvent.click(screen.getByText("AI & Models"));
+
+    expect(screen.getByLabelText("Gemini Text & Ambient Remark Model")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Realtime Live Voice Model")).not.toBeInTheDocument();
+    expect(screen.getByText(/Talk Conversation — selected text/i)).toBeInTheDocument();
+  });
+
+  it("shows only current capability-filtered Gemini model options", async () => {
+    setGoogleLiveForTest();
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("AI & Models"));
 
@@ -551,13 +569,13 @@ describe("SettingsModal Component", () => {
     fireEvent.click(screen.getByText("AI & Models"));
 
     const keyField = screen.getByLabelText(/Google Gemini API Key/i);
-    fireEvent.change(keyField, { target: { value: "AIzaSyPartialDraft" } });
+    fireEvent.change(keyField, { target: { value: "test-google-partial-draft" } });
 
     fireEvent.click(screen.getByText("Privacy"));
     fireEvent.click(screen.getByText("AI & Models"));
 
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toHaveValue(
-      "AIzaSyPartialDraft",
+      "test-google-partial-draft",
     );
   });
 
@@ -567,7 +585,7 @@ describe("SettingsModal Component", () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("AI & Models"));
     fireEvent.change(screen.getByLabelText(/Google Gemini API Key/i), {
-      target: { value: "AIzaSySettingsKey" },
+      target: { value: "test-google-settings-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Save Key/i }));
 
