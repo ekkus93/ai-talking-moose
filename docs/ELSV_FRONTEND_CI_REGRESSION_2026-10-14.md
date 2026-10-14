@@ -23,6 +23,6 @@ Fix the test setup rather than weakening product routing. For the three Live-sel
 
 Run the focused SettingsModal frontend tests, then the full frontend quality gate. Verify the exact new commit head through Ralph Bridge and require CI success before claiming this is fixed. Do not mark ELSV-400 or ELSV-600 accepted solely from these tests.
 
-## Tool write limitation
+## Resolution and exact-head evidence
 
-An attempted atomic `commit_files` update of the existing SettingsModal test file was rejected by tool safety checks before the bridge accepted a commit. This diagnosis is not a source fix.
+The three legacy tests now select Google text plus `gemini_live_audio` ASR, while a separate negative test verifies that Google text with local ASR hides Live controls. The correction is committed on `master` at `32928314562b42e85a1727ee859192df92c5a48d`. The frontend quality workflow run `38521509616` passed on that exact SHA. Rust, macOS, and the full ELSV acceptance matrix were not covered by this frontend-scoped workflow.
