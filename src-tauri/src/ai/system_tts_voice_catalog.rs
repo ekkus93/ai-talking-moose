@@ -22,7 +22,10 @@ pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoi
                 && voice
                     .style
                     .as_ref()
-                    .is_none_or(|style| style.len() <= MAX_VOICE_STYLE_BYTES && !style.chars().any(char::is_control))
+                    .is_none_or(|style| {
+                        style.len() <= MAX_VOICE_STYLE_BYTES
+                            && !style.chars().any(char::is_control)
+                    })
                 && seen.insert(voice.id.clone())
         })
         .collect()
@@ -69,5 +72,31 @@ mod tests {
             style: None,
         };
         assert_eq!(normalize_installed_voices(vec![bad_style, valid]).len(), 1);
+    }
+    #[test]
+    fn oversized_metadata_and_padded_identifiers_do_not_poison_later_valid_voices() {
+        let voice = |id: &str, display_name: String, style: Option<String>| TtsVoiceDescriptor {
+            id: id.into(),
+            display_name,
+            style,
+        };
+        let accepted = voice(
+            "com.apple.voice.valid",
+            "Readable Voice".into(),
+            Some("en-US".into()),
+        );
+        let voices = vec![
+            voice(" padded.id", "Padded".into(), None),
+            voice("trailing.id ", "Padded".into(), None),
+            voice("com.apple.voice.valid", "x".repeat(MAX_VOICE_NAME_BYTES + 1), None),
+            voice(
+                "com.apple.voice.valid",
+                "Readable Voice".into(),
+                Some("x".repeat(MAX_VOICE_STYLE_BYTES + 1)),
+            ),
+            accepted.clone(),
+            accepted.clone(),
+        ];
+        assert_eq!(normalize_installed_voices(voices), vec![accepted]);
     }
 }
