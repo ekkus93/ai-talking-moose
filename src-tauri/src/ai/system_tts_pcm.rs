@@ -270,8 +270,14 @@ mod tests {
         let output = pcm.finish().unwrap();
         assert_eq!(output.sample_rate, 8_000);
         assert_eq!(output.pcm_bytes.len(), 4);
-        assert_eq!(i16::from_le_bytes([output.pcm_bytes[0], output.pcm_bytes[1]]), -1);
-        assert_eq!(i16::from_le_bytes([output.pcm_bytes[2], output.pcm_bytes[3]]), i16::MIN);
+        assert_eq!(
+            i16::from_le_bytes([output.pcm_bytes[0], output.pcm_bytes[1]]),
+            -1
+        );
+        assert_eq!(
+            i16::from_le_bytes([output.pcm_bytes[2], output.pcm_bytes[3]]),
+            i16::MIN
+        );
     }
 
     #[test]
