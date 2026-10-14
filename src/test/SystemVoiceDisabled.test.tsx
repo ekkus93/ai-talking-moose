@@ -30,7 +30,9 @@ it("preserves a saved system provider", () => {
   expect(
     screen.getByRole("radio", { name: /System Voices — unavailable/i }),
   ).toBeChecked();
-  expect(screen.getByRole("radio", { name: /System Voices — unavailable/i })).toBeDisabled();
+  expect(
+    screen.getByRole("radio", { name: /System Voices — unavailable/i }),
+  ).toBeDisabled();
   expect(
     screen.getByText(/Saved macOS system voice: com.apple.voice.unavailable/),
   ).toBeInTheDocument();

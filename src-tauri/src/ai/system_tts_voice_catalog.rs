@@ -58,5 +58,11 @@ mod tests {
             style: Some("en\nUS".into()),
         };
         assert!(normalize_installed_voices(vec![bad_style.clone()]).is_empty());
+        let valid = TtsVoiceDescriptor {
+            id: bad_style.id.clone(),
+            display_name: "Valid".into(),
+            style: None,
+        };
+        assert_eq!(normalize_installed_voices(vec![bad_style, valid]).len(), 1);
     }
 }
