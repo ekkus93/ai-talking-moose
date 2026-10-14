@@ -15,6 +15,9 @@ pub fn validate_system_tts_request(
             return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
         }
     }
+    if request.pitch.is_some_and(|pitch| !pitch.is_finite()) {
+        return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
+    }
     let voice = request.voice_name.as_deref().unwrap_or("system_default");
     let voices =
         crate::ai::system_tts_voice_catalog::normalize_installed_voices(installed.to_vec());
