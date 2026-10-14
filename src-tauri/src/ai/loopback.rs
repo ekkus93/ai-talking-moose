@@ -125,6 +125,14 @@ impl LoopbackTextModel {
             .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Protocol))
     }
 
+    fn has_tool_calls(message: &Value) -> bool {
+        match message.get("tool_calls") {
+            None | Some(Value::Null) => false,
+            Some(Value::Array(calls)) => !calls.is_empty(),
+            _ => true,
+        }
+    }
+
     fn text_from_json(&self, value: &Value) -> Result<TextResponse, ProviderError> {
         // An echoed user/tool message is not a generated assistant reply.
         // When the server supplies a model identity, it must be the selected one.
@@ -134,9 +142,7 @@ impl LoopbackTextModel {
         let text = match self.kind {
             LoopbackTextServer::Ollama => {
                 if value["message"]["role"].as_str() != Some("assistant")
-                    || value["message"]
-                        .get("tool_calls")
-                        .is_some_and(|calls| !calls.is_null())
+                    || Self::has_tool_calls(&value["message"])
                 {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
                 }
@@ -149,9 +155,7 @@ impl LoopbackTextModel {
                     .as_array()
                     .is_none_or(|choices| choices.len() != 1)
                     || value["choices"][0]["message"]["role"].as_str() != Some("assistant")
-                    || value["choices"][0]["message"]
-                        .get("tool_calls")
-                        .is_some_and(|calls| !calls.is_null())
+                    || Self::has_tool_calls(&value["choices"][0]["message"])
                 {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
                 }
@@ -320,6 +324,21 @@ mod tests {
             "compatible reply"
         );
         assert!(ollama.text_from_json(&compatible).is_err());
+        // Some adapters emit an empty tool_calls list on plain text replies.
+        assert!(ollama
+            .text_from_json(&json!({
+                "done": true,
+                "message": {"role": "assistant", "content": "text", "tool_calls": []}
+            }))
+            .is_ok());
+        assert!(llama
+            .text_from_json(&json!({
+                "choices": [{
+                    "message": {"role": "assistant", "content": "text", "tool_calls": []},
+                    "finish_reason": "stop"
+                }]
+            }))
+            .is_ok());
         for malformed in [
             json!({"choices": []}),
             json!({"choices": [
