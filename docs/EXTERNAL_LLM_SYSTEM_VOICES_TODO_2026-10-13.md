@@ -63,6 +63,10 @@ The persisted-settings sanitizer now canonicalizes camelCase, snake_case, and hy
 
 The above is scoped evidence only. Full routing qualification, macOS voice implementation and physical audition remain outstanding. Attempts to commit the Ollama `:latest` adapter correction and live-settings credential scrub remain blocked by source-write safety checks; neither change has landed.
 
+### Source-write boundary follow-up — 2026-10-14
+
+The attempted loopback adapter test-module split left `src-tauri/src/ai/loopback/tests.rs` **unreferenced** at `1bf54ae8a4907ab0726f41dd27e38bd379c05801`: writes to the existing `loopback.rs` module and two deletion attempts were rejected by source-write safety checks. Exact-head Rust CI `38588283369` passed, but this does not compile or qualify the staged test file. Recovery and required cleanup are documented in `docs/ELSV_SOURCE_WRITE_RECOVERY_2026-10-14.md`. Neither the Ollama `:latest` fix nor live-settings credential scrub has landed; keep ELSV-100/300 unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
