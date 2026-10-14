@@ -74,6 +74,8 @@ The attempted loopback adapter test-module split left `src-tauri/src/ai/loopback
 - `e3edbf6ceeb2731fb65706406da59becdcaff738`: added a frontend test showing that an unreachable Ollama server does not change the selected provider; exact-head CI `38596419876` passed.
 - `f77ecc91ddab6ae166367dc94904e65698dbec9d`: expanded readiness coverage to a reachable server with a missing selected model; exact-head CI `38597007400` passed.
 
+- `5b7b653368a9e1019982bd1ee1846934bea02269`: added frontend regression tests for Local standalone TTS remaining selected with each external text provider. Exact-head frontend CI `38597469033` passed. The workflow's Rust, macOS, and canonical `check:all` jobs were skipped by its scope classifier.
+
 These tests cover a small part of ELSV-300/600 only. Attempts to remove the orphaned loopback test file, fix the Ollama `:latest` comparison, and sanitize future fields during live settings updates were rejected by source-write safety checks. None of those three changes has landed. All checklist items remain open pending their complete named acceptance evidence.
 
 ## ELSV-100 — Settings and IPC foundations
