@@ -145,7 +145,9 @@ impl LoopbackTextModel {
             LoopbackTextServer::LlamaServer => {
                 // We request a single text response, never tool invocations or
                 // alternative completions that cannot be attributed to a reply.
-                if value["choices"].as_array().is_none_or(|choices| choices.len() != 1)
+                if value["choices"]
+                    .as_array()
+                    .is_none_or(|choices| choices.len() != 1)
                     || value["choices"][0]["message"]["role"].as_str() != Some("assistant")
                     || value["choices"][0]["message"]
                         .get("tool_calls")
