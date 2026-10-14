@@ -12,3 +12,6 @@ pub mod unavailable;
 pub use fake::*;
 pub use traits::*;
 pub use types::*;
+
+#[cfg(test)]
+mod loopback_integration_tests;
