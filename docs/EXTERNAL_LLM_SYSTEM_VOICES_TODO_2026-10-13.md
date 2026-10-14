@@ -44,6 +44,10 @@ Fresh-profile Local text and Local TTS defaults were asserted by `src/test/Exter
 
 OpenAI Responses parsing now rejects unexpected non-message output items (including unrequested tool calls) and non-text message parts (including refusals) instead of silently extracting partial text (`360286e6cd49e0c24638c30caf66af0b034577ee`). Exact-head Rust quality, Rust tests, and generated-contract CI passed in run `38556133913`. A focused negative parser regression test for this new behavior is still outstanding, so ELSV-200 remains unchecked.
 
+### OpenAI negative parser qualification — 2026-10-14
+
+Commit `ab402a49116273180d1bdf9dacd6de288e0eeabb` adds explicit regression cases rejecting unrequested Responses tool-call items, refusal parts, and non-text output. Exact-head Rust quality, Rust tests, and generated backend-contract CI passed in run `38557444569` (2026-10-14). This is focused ELSV-200 parser evidence, not completion of OpenAI credential, transport, routing, or platform acceptance. ELSV-200 and ELSV-900 remain unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
