@@ -54,5 +54,6 @@ mod tests {
         assert!(resolve_installed_system_voice("", &installed).is_err());
         assert!(resolve_installed_system_voice(&"x".repeat(129), &installed).is_err());
         assert!(resolve_installed_system_voice("invalid\tvoice", &installed).is_err());
+        assert!(resolve_installed_system_voice("com.apple.voice.test\r", &installed).is_err());
     }
 }
