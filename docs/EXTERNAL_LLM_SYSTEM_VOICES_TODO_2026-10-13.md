@@ -72,6 +72,10 @@ The persisted-settings sanitizer now canonicalizes camelCase, snake_case, and hy
 
 **Acceptance:** selected OpenAI text works with a saved key and failures cannot send the same request to another provider.
 
+### Ollama untagged model identity follow-up — 2026-10-14
+
+The configured default Ollama model ID is `llama3.2`, while Ollama can report its canonical tag as `llama3.2:latest` in `/api/tags` and `/api/chat`. The current adapter compares reported identities with strict equality in both readiness and generation; this may incorrectly report a ready default model as unavailable or reject its valid reply. Resolve only the exact untagged-to-`:latest` Ollama alias, keep explicit tags and llama-server IDs strict, and add both parser and fake-server readiness regressions. A prepared source-write attempt was rejected by the write-safety boundary; **no code fix or passing test is claimed**.
+
 ## ELSV-300 — Ollama and llama-server adapters
 
 - [ ] Implement backend-only loopback-address validation for each configured server, including port, URL component, redirect, and effective-destination checks.
