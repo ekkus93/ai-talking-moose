@@ -79,9 +79,15 @@ mod tests {
         request.speaking_rate = Some(4.0);
         assert!(validate_system_tts_request(&request, &[]).is_ok());
         request.speaking_rate = Some(4.1);
-        assert_eq!(validate_system_tts_request(&request, &[]).unwrap_err().kind, ProviderErrorKind::Setup);
+        assert_eq!(
+            validate_system_tts_request(&request, &[]).unwrap_err().kind,
+            ProviderErrorKind::Setup
+        );
         request.speaking_rate = None;
         request.text.push('x');
-        assert_eq!(validate_system_tts_request(&request, &[]).unwrap_err().kind, ProviderErrorKind::Protocol);
+        assert_eq!(
+            validate_system_tts_request(&request, &[]).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
     }
 }
