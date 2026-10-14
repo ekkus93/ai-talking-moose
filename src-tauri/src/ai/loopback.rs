@@ -98,6 +98,15 @@ impl LoopbackTextModel {
         }
     }
 
+    /// An untagged Ollama selection refers to Ollama's canonical :latest tag.
+    /// Tagged Ollama selections and all llama-server identifiers remain exact.
+    fn reported_model_matches(&self, reported: &str) -> bool {
+        reported == self.model
+            || (self.kind == LoopbackTextServer::Ollama
+                && !self.model.contains(':')
+                && reported == format!("{}:latest", self.model))
+    }
+
     fn classify_status(status: StatusCode) -> ProviderError {
         let kind = match status.as_u16() {
             400 | 404 | 422 => ProviderErrorKind::Model,
@@ -136,7 +145,11 @@ impl LoopbackTextModel {
     fn text_from_json(&self, value: &Value) -> Result<TextResponse, ProviderError> {
         // An echoed user/tool message is not a generated assistant reply.
         // When the server supplies a model identity, it must be the selected one.
-        if value.get("model").is_some() && value["model"].as_str() != Some(self.model.as_str()) {
+        if value.get("model").is_some()
+            && !value["model"]
+                .as_str()
+                .is_some_and(|reported| self.reported_model_matches(reported))
+        {
             return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
         }
         let text = match self.kind {
@@ -223,7 +236,7 @@ impl LoopbackTextModel {
                     }
                     LoopbackTextServer::LlamaServer => entry["id"].as_str(),
                 };
-                candidate == Some(self.model.as_str())
+                candidate.is_some_and(|reported| self.reported_model_matches(reported))
             })
         });
         if available {
@@ -302,6 +315,51 @@ impl TextModel for LoopbackTextModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn untagged_ollama_alias_is_exactly_latest_and_never_weakens_llama_server() {
+        let ollama = LoopbackTextModel::new(
+            LoopbackTextServer::Ollama,
+            "http://127.0.0.1:11434".into(),
+            "llama3.2".into(),
+        );
+        assert!(ollama.reported_model_matches("llama3.2"));
+        assert!(ollama.reported_model_matches("llama3.2:latest"));
+        for other in ["llama3.2:q4", "llama3.2:latest-extra", "other:latest", ""] {
+            assert!(!ollama.reported_model_matches(other));
+        }
+        let explicitly_tagged = LoopbackTextModel::new(
+            LoopbackTextServer::Ollama,
+            "http://127.0.0.1:11434".into(),
+            "llama3.2:q4".into(),
+        );
+        assert!(explicitly_tagged.reported_model_matches("llama3.2:q4"));
+        assert!(!explicitly_tagged.reported_model_matches("llama3.2:latest"));
+        let llama_server = LoopbackTextModel::new(
+            LoopbackTextServer::LlamaServer,
+            "http://127.0.0.1:8080".into(),
+            "llama3.2".into(),
+        );
+        assert!(!llama_server.reported_model_matches("llama3.2:latest"));
+        assert!(ollama
+            .text_from_json(&json!({
+                "model": "llama3.2:latest",
+                "done": true,
+                "message": {"role": "assistant", "content": "ready"}
+            }))
+            .is_ok());
+        assert_eq!(
+            explicitly_tagged
+                .text_from_json(&json!({
+                    "model": "llama3.2:latest",
+                    "done": true,
+                    "message": {"role": "assistant", "content": "wrong tag"}
+                }))
+                .unwrap_err()
+                .kind,
+            ProviderErrorKind::Protocol
+        );
+    }
 
     #[test]
     fn response_parsers_are_provider_specific_and_fail_closed() {
