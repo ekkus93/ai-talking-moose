@@ -15,3 +15,6 @@ pub use types::*;
 
 #[cfg(test)]
 mod loopback_integration_tests;
+
+#[cfg(test)]
+mod loopback_request_contract_tests;
