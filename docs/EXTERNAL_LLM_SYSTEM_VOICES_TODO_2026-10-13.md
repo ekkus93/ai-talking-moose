@@ -42,6 +42,8 @@ These commits are partial progress on ELSV-200/300/600; they do not satisfy thei
 
 Fresh-profile Local text and Local TTS defaults were asserted by `src/test/ExternalProviderDefaults.test.ts` (exact-head frontend CI `38554805135`, passed on `52292722ec506540ee380c161681a2b5609be6cb`). The Voice & Audio panel's disabled System Voices option was asserted by `src/test/SystemVoiceDisabled.test.tsx` (frontend CI `38554984333`, passed on `5c66eaef22e5673bcca86c1ee6856e2e26e53b16`). Backend unavailable-System TTS now has an explicit no-fallback test in `src-tauri/src/ai/unavailable.rs` (Rust CI `38555219055`, passed on `c0156739bfd1ff079ea3e49794d7792761a76723`). These are regression guards for incomplete functionality, not System TTS implementation or physical Mac acceptance. ELSV-500 and ELSV-900 remain open.
 
+OpenAI Responses parsing now rejects unexpected non-message output items (including unrequested tool calls) and non-text message parts (including refusals) instead of silently extracting partial text (`360286e6cd49e0c24638c30caf66af0b034577ee`). Exact-head Rust quality, Rust tests, and generated-contract CI passed in run `38556133913`. A focused negative parser regression test for this new behavior is still outstanding, so ELSV-200 remains unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
