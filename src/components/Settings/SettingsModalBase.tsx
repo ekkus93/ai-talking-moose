@@ -86,7 +86,9 @@ export const SettingsModal: React.FC = () => {
       void tauriBridge
         .hasOpenaiApiKey()
         .then(setHasOpenaiKey)
-        .catch(() => setOpenaiKeyError("Could not read OpenAI credential status."));
+        .catch(() =>
+          setOpenaiKeyError("Could not read OpenAI credential status."),
+        );
       setGoogleModelsStatus("loading");
       void tauriBridge
         .getGoogleModels()
