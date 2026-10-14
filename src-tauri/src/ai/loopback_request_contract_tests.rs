@@ -50,12 +50,12 @@ async fn local_chat_adapters_send_exact_provider_specific_json() {
             assert_eq!(body["messages"].as_array().unwrap().len(), 2);
             match kind {
                 LoopbackTextServer::Ollama => {
-                    assert_eq!(body["options"]["temperature"], 0.4);
+                    assert!((body["options"]["temperature"].as_f64().unwrap() - 0.4).abs() < 1e-6);
                     assert_eq!(body["options"]["num_predict"], 24);
                     assert!(body.get("max_tokens").is_none());
                 }
                 LoopbackTextServer::LlamaServer => {
-                    assert_eq!(body["temperature"], 0.4);
+                    assert!((body["temperature"].as_f64().unwrap() - 0.4).abs() < 1e-6);
                     assert_eq!(body["max_tokens"], 24);
                     assert!(body.get("options").is_none());
                 }
