@@ -126,7 +126,7 @@ Cargo dependencies are resolved automatically by Cargo when running the Rust bui
 
 ## Local KittenTTS Quick Start
 
-Local KittenTTS is used for local-first Talk responses and standalone speech. Local Talk uses local ASR, Local text generation, and KittenTTS. Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected.
+Local KittenTTS is used for local-first Talk responses and standalone speech. Local Talk uses local ASR, Local text generation, and KittenTTS. Gemini Live is used only when Gemini Live audio ASR is explicitly selected. With local ASR, Talk uses the selected text model and standalone TTS provider.
 
 Local KittenTTS behavior:
 
