@@ -28,6 +28,16 @@ The exact-head CI run `38517544143` on `a0f90a935b9861c36446205473130bc4ba3f393f
 
 The new `src/test/ExternalTextProviderDisclosure.test.tsx` covers OpenAI, Ollama, and llama-server conditional settings with local ASR, and confirms that explicit Gemini Live ASR keeps its separate Live controls. Its initial CI failed formatting on `e297b73`, then a duplicate Live-disclosure text assertion on `4fc85af`. Both were corrected without relaxing lint, format, or test gates. The exact-head frontend quality workflow **passed** on `93bc7c11c655e53ea62dd69684e8d542837be353` (run `38538281410`, 2026-10-14). This is frontend-scoped evidence only: Rust quality/tests, full `check:all`, macOS system voices, physical audition, and ELSV-900 remain unqualified. Keep checklist items unchecked until all named acceptance conditions are met.
 
+### Ralph Bridge v0.6.1 source-write recovery and focused CI — 2026-10-14
+
+The connected Ralph Bridge reported version `0.6.1`, build `bf1740f60dcececb42c4cf2df5931689a809ef00`, with working repository reads and exact-head direct-to-`master` writes. The prior generic safety-check refusal did not recur on the following verified writes:
+
+- `bfcc71d8733a92c945eb86b6ad42f2e621cfe80b`: OpenAI Responses parser rejects an individually incomplete/in-progress assistant message even when its outer response status is completed; three negative regression cases added. The run on this SHA (`38549211807`) was superseded and cancelled, so it is **not** Rust qualification evidence.
+- `b4a56b398b6370a8f79e40b4567ca1e52a204c42`: the local-server readiness UI now binds results to the selected provider/model/address and ignores older overlapping requests; focused frontend tests added. CI run `38549715898` failed only at Prettier formatting of the new test (typecheck and lint reached successfully).
+- `a4fb23f3aa5fee212d261878476b5d5cf781e33b`: formatted that test. Exact-head frontend quality CI `38549978526` passed, including the frontend quality gate.
+
+These commits are partial progress on ELSV-200/300/600; they do not satisfy their full acceptance criteria. The exact-head Rust verification after the latest frontend commits, full `check:all`, routing matrix, macOS implementation, and physical Mac audition remain outstanding. Keep the implementation checklist unchecked until the complete named evidence exists.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
