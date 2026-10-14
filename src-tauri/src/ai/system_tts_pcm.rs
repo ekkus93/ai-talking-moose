@@ -113,6 +113,35 @@ impl SystemPcmAccumulator {
         Ok(())
     }
 
+    /// Append native planar signed 32-bit PCM without unbounded intermediate
+    /// buffers. Downmix in i64 to avoid overflow at extreme sample values.
+    pub fn append_planar_i32(&mut self, channels: &[&[i32]]) -> Result<(), ProviderError> {
+        let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
+        if channels.is_empty() || channels.len() > MAX_CHANNELS {
+            return Err(invalid());
+        }
+        let frames = channels[0].len();
+        let remaining = (self.sample_rate_hz as usize)
+            .saturating_mul(MAX_DURATION_SECONDS)
+            .saturating_sub(self.pcm_bytes.len() / 2);
+        if frames > remaining || channels.iter().any(|channel| channel.len() != frames) {
+            return Err(invalid());
+        }
+        self.pcm_bytes.reserve(frames * 2);
+        for frame in 0..frames {
+            let sum: i64 = channels
+                .iter()
+                .map(|channel| i64::from(channel[frame]))
+                .sum();
+            let mean = sum as f64 / channels.len() as f64;
+            let sample = (mean / 2_147_483_648.0 * 32_768.0)
+                .round()
+                .clamp(-32_768.0, 32_767.0) as i16;
+            self.pcm_bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        Ok(())
+    }
+
     /// Append native interleaved signed 16-bit PCM with bounded duration.
     /// Reject malformed chunks before changing the accumulated audio.
     pub fn append_interleaved_i16(
