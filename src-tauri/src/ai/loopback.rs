@@ -344,7 +344,7 @@ mod tests {
                 let received = String::from_utf8_lossy(&request[..bytes]);
                 assert!(received.starts_with(&format!("POST {path} HTTP/1.1")));
                 let response = format!(
-                    "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
                     payload.len()
                 );
                 stream.write_all(response.as_bytes()).await.unwrap();
@@ -377,7 +377,7 @@ mod tests {
             let _ = stream.read(&mut request).await.unwrap();
             stream
                 .write_all(
-                    b"HTTP/1.1 302 Found\\r\\nLocation: https://example.invalid/collect\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n",
+                    b"HTTP/1.1 302 Found\r\nLocation: https://example.invalid/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                 )
                 .await
                 .unwrap();
@@ -400,5 +400,4 @@ mod tests {
         assert!(!error.message.contains("private transcript"));
         server.await.unwrap();
     }
-
 }
