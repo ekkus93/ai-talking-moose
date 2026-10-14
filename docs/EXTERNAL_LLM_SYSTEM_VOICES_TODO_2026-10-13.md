@@ -1,10 +1,18 @@
 # External LLM Providers and System Voices — TODO
 
 **Date:** 2026-10-13<br>
-**Status:** Proposed; no implementation started<br>
+**Status:** Implementation in progress; acceptance and platform qualification outstanding<br>
 **Specification:** `docs/EXTERNAL_LLM_SYSTEM_VOICES_SPEC_2026-10-13.md`
 
 Check an item only after its implementation and named evidence exist. Keep the app-owned Local defaults and no-fallback rule throughout.
+
+## Implementation checkpoint — 2026-10-14
+
+The checklist remains intentionally unchecked until its full named acceptance evidence exists. Current `master` contains initial implementation in `src-tauri/src/ai/openai.rs`, `src-tauri/src/ai/loopback.rs`, `src-tauri/src/app/request_snapshot.rs`, `src-tauri/src/app/state.rs`, `src-tauri/src/secrets/store.rs`, and `src/components/Settings/AiTab.tsx`. These provide provider enum/settings scaffolding, independent OpenAI secret handling, text adapters, snapshot routing, and initial conditional UI. This is **not** evidence that all ELSV-100/200/300/400/600 acceptance tests pass.
+
+The loopback adapter now rejects non-finite/out-of-range temperatures and zero-token requests before network I/O, with fake-server path/response and redirect-denial tests (commits `083c528`, `d133d96`, `9b54b31`). The earlier exact-head CI on `d133d96` found a Rust formatting failure; rustfmt corrections for the loopback adapter, module order, and settings command have since landed. OpenAI/secret-store formatting and full exact-head CI still require qualification. Do not mark verification complete based on partial or cancelled runs.
+
+System voices are **not implemented**: the Rust TTS catalog and Voice & Audio selector still expose Google/Local only, and `TtsProvider::System` currently resolves to an unavailable synthesizer. ELSV-500 and the physical Mac audition remain open. Preserve this fail-closed behavior until the actual macOS buffer-synthesis and playback path is qualified.
 
 ## ELSV-100 — Settings and IPC foundations
 
