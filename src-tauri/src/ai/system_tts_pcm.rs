@@ -399,9 +399,7 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            pcm.append_planar_i32(&[&[0], &[0, 1]])
-                .unwrap_err()
-                .kind,
+            pcm.append_planar_i32(&[&[0], &[0, 1]]).unwrap_err().kind,
             ProviderErrorKind::Protocol
         );
         pcm.append_planar_i32(&[&[0]]).unwrap();
