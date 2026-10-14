@@ -113,6 +113,33 @@ impl SystemPcmAccumulator {
         Ok(())
     }
 
+    /// Append native interleaved signed 16-bit PCM with bounded duration.
+    /// Reject malformed chunks before changing the accumulated audio.
+    pub fn append_interleaved_i16(
+        &mut self,
+        samples: &[i16],
+        channels: usize,
+    ) -> Result<(), ProviderError> {
+        let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
+        if channels == 0 || channels > MAX_CHANNELS || !samples.len().is_multiple_of(channels) {
+            return Err(invalid());
+        }
+        let frames = samples.len() / channels;
+        let remaining = (self.sample_rate_hz as usize)
+            .saturating_mul(MAX_DURATION_SECONDS)
+            .saturating_sub(self.pcm_bytes.len() / 2);
+        if frames > remaining {
+            return Err(invalid());
+        }
+        self.pcm_bytes.reserve(frames * 2);
+        for frame in samples.chunks_exact(channels) {
+            let sum: i64 = frame.iter().map(|sample| i64::from(*sample)).sum();
+            let mono = (sum as f64 / channels as f64).round() as i16;
+            self.pcm_bytes.extend_from_slice(&mono.to_le_bytes());
+        }
+        Ok(())
+    }
+
     pub fn finish(self) -> Result<AudioStreamData, ProviderError> {
         if self.pcm_bytes.is_empty() {
             return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
@@ -290,6 +317,36 @@ mod tests {
             i16::from_le_bytes([output.pcm_bytes[2], output.pcm_bytes[3]]),
             i16::MIN
         );
+    }
+
+    #[test]
+    fn interleaved_i16_downmixes_and_preserves_sample_rate() {
+        let mut pcm = SystemPcmAccumulator::new(44_100).unwrap();
+        pcm.append_interleaved_i16(&[i16::MAX, i16::MIN, 10, 20], 2)
+            .unwrap();
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 44_100);
+        assert_eq!(output.pcm_bytes, [-1_i16, 15_i16].map(i16::to_le_bytes).concat());
+    }
+
+    #[test]
+    fn interleaved_i16_invalid_chunks_leave_accumulated_audio_intact() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        pcm.append_interleaved_i16(&[100], 1).unwrap();
+        for (samples, channels) in [
+            (vec![1], 0),
+            (vec![1], 2),
+            (vec![1; MAX_CHANNELS + 1], MAX_CHANNELS + 1),
+            (vec![0; 8_000 * (MAX_DURATION_SECONDS + 1)], 1),
+        ] {
+            assert_eq!(
+                pcm.append_interleaved_i16(&samples, channels)
+                    .unwrap_err()
+                    .kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        assert_eq!(pcm.finish().unwrap().pcm_bytes, 100_i16.to_le_bytes());
     }
 
     #[test]
