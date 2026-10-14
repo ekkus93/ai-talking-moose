@@ -26,10 +26,10 @@
 - **Frontend:** React 18, TypeScript, Tailwind CSS, Lucide icons, Zustand
 - **Desktop shell/backend:** Tauri 2, Rust, Tokio, CPAL, Rusqlite, Tokio-Tungstenite
 - **Speech recognition:** Local Moonshine streaming ASR and local Whisper Small batch ASR, plus optional Gemini Live cloud audio
-- **Text generation:** Provider-neutral `TextModel` routing; Local uses pinned llama.cpp/ggml through Rust, while Google Gemini remains selectable through the REST API
-- **Voice conversation:** Google Gemini Live over WebSockets; Local text and Local standalone TTS selection do not replace the V1 live conversation provider
+- **Text generation:** Provider-neutral `TextModel` routing for built-in Local, Google Gemini, OpenAI Responses, Ollama, and llama-server.
+- **Voice conversation:** Gemini Live is a separate cloud audio path; non-Live Talk with local ASR and non-Google text composes the selected text and standalone TTS providers.
 - **Standalone speech output:** Provider-neutral Google Gemini TTS or Local KittenTTS routing for typed replies, ambient remarks, canned reactions, and auditions. Local KittenTTS uses the Rust-owned CPU runtime and adapts 24 kHz PCM into the existing audio playback/mouth-animation path.
-- **Persistence:** SQLite for local application data and the platform secure credential store for the Google API key
+- **Persistence:** SQLite for local application data; independent Google and OpenAI keys in macOS Keychain or session-only Linux memory.
 
 Google model IDs and capabilities are centralized in the Rust Google configuration layer rather than duplicated throughout the frontend. Local GGUF identities, revisions, hashes, sizes, licenses, template hints, and runtime bounds are centralized in `src-tauri/src/ai/local/catalog.rs`. Local KittenTTS model/runtime artifact identities, hashes, sizes, licenses, platform manifests, and CPU-thread policy are centralized under `src-tauri/src/ai/local_tts/`. See `docs/LOCAL_LLM_ARCHITECTURE.md`, `docs/LOCAL_LLM_CATALOG.md`, `docs/VOICE_SELECTION.md`, and `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`.
 
