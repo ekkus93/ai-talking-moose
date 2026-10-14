@@ -421,4 +421,44 @@ mod tests {
         assert!(!error.message.contains("private transcript"));
         server.await.unwrap();
     }
+    #[tokio::test]
+    async fn fake_ollama_readiness_requires_an_exact_model_match() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        for (catalog, expected) in [
+            (
+                r#"{"models":[{"name":"different-model"}]}"#,
+                LoopbackReadiness::ReachableButModelUnavailable,
+            ),
+            (
+                r#"{"models":[{"name":"selected-model"}]}"#,
+                LoopbackReadiness::ModelReady,
+            ),
+            (
+                r#"{"models":"malformed"}"#,
+                LoopbackReadiness::ReachableButModelUnavailable,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let base_url = format!("http://{}", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0u8; 4096];
+                let count = stream.read(&mut request).await.unwrap();
+                assert!(String::from_utf8_lossy(&request[..count])
+                    .starts_with("GET /api/tags HTTP/1.1"));
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{catalog}",
+                    catalog.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let model =
+                LoopbackTextModel::new(LoopbackTextServer::Ollama, base_url, "selected-model".into());
+            assert_eq!(model.check_readiness().await, expected);
+            server.await.unwrap();
+        }
+    }
+
 }
