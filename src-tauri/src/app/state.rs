@@ -638,8 +638,7 @@ impl AppState {
         &self,
         settings: &AppSettings,
     ) -> Arc<dyn RealtimeConversationProvider> {
-        if settings.text_provider != TextProvider::Google
-            && settings.asr_mode != AsrMode::GeminiLiveAudio
+        if settings.asr_mode != AsrMode::GeminiLiveAudio
         {
             let text_model = Arc::from(self.get_text_model_for(settings));
             let speech_synthesizer: Arc<dyn SpeechSynthesizer> = match settings.tts_provider {
