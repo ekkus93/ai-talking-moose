@@ -19,13 +19,9 @@ pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoi
                 && !voice.display_name.trim().is_empty()
                 && voice.display_name.len() <= MAX_VOICE_NAME_BYTES
                 && !voice.display_name.chars().any(char::is_control)
-                && voice
-                    .style
-                    .as_ref()
-                    .is_none_or(|style| {
-                        style.len() <= MAX_VOICE_STYLE_BYTES
-                            && !style.chars().any(char::is_control)
-                    })
+                && voice.style.as_ref().is_none_or(|style| {
+                    style.len() <= MAX_VOICE_STYLE_BYTES && !style.chars().any(char::is_control)
+                })
                 && seen.insert(voice.id.clone())
         })
         .collect()
@@ -88,7 +84,11 @@ mod tests {
         let voices = vec![
             voice(" padded.id", "Padded".into(), None),
             voice("trailing.id ", "Padded".into(), None),
-            voice("com.apple.voice.valid", "x".repeat(MAX_VOICE_NAME_BYTES + 1), None),
+            voice(
+                "com.apple.voice.valid",
+                "x".repeat(MAX_VOICE_NAME_BYTES + 1),
+                None,
+            ),
             voice(
                 "com.apple.voice.valid",
                 "Readable Voice".into(),
