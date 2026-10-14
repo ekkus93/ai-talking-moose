@@ -383,7 +383,7 @@ describe("SettingsModal Component", () => {
     );
 
     expect(
-      await screen.findByText(/Not required for Local-first Talk/i),
+      await screen.findByText(/Not required for the selected text provider or standalone TTS/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Talk Conversation — selected text/i),
