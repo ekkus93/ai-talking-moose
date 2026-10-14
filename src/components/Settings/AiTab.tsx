@@ -57,6 +57,7 @@ export const AiTab: React.FC<AiTabProps> = ({
     clearGoogleApiKey,
     hasApiKey,
   } = useMooseStore();
+  const serverCheckSequence = React.useRef(0);
 
   if (!settings) return null;
 
@@ -79,6 +80,7 @@ export const AiTab: React.FC<AiTabProps> = ({
 
   const selectTextProvider = (provider: TextProvider) => {
     if (provider === settings.text_provider) return;
+    serverCheckSequence.current += 1;
     setServerStatus(null);
     void updateSettingsPatch({ text_provider: provider });
   };
@@ -107,10 +109,34 @@ export const AiTab: React.FC<AiTabProps> = ({
   };
 
   const handleTestServer = async (provider: "ollama" | "llama_server") => {
+    const requested = useMooseStore.getState().settings;
+    if (!requested || requested.text_provider !== provider) return;
+    const address =
+      provider === "ollama"
+        ? requested.ollama_server_address
+        : requested.llama_server_address;
+    const model =
+      provider === "ollama"
+        ? requested.ollama_text_model
+        : requested.llama_server_text_model;
+    const sequence = ++serverCheckSequence.current;
+    const isCurrent = () => {
+      const current = useMooseStore.getState().settings;
+      return (
+        sequence === serverCheckSequence.current &&
+        current?.text_provider === provider &&
+        (provider === "ollama"
+          ? current.ollama_server_address
+          : current.llama_server_address) === address &&
+        (provider === "ollama"
+          ? current.ollama_text_model
+          : current.llama_server_text_model) === model
+      );
+    };
     setServerStatus("Checking loopback server and selected model…");
     try {
       const state = await tauriBridge.testLocalTextServer(provider);
-      if (useMooseStore.getState().settings?.text_provider !== provider) return;
+      if (!isCurrent()) return;
       setServerStatus(
         state === "model_ready"
           ? "Connected: selected model is available."
@@ -119,7 +145,7 @@ export const AiTab: React.FC<AiTabProps> = ({
             : "Server reachable, but the selected model is not available.",
       );
     } catch {
-      if (useMooseStore.getState().settings?.text_provider === provider) {
+      if (isCurrent()) {
         setServerStatus("Could not check the selected local server.");
       }
     }
@@ -340,6 +366,8 @@ export const AiTab: React.FC<AiTabProps> = ({
               onBlur={(event) => {
                 const value = event.target.value.trim();
                 if (!value) return;
+                serverCheckSequence.current += 1;
+                setServerStatus(null);
                 const field =
                   settings.text_provider === "openai"
                     ? "openai_text_model"
@@ -368,6 +396,8 @@ export const AiTab: React.FC<AiTabProps> = ({
                   }
                   onBlur={(event) => {
                     const value = event.target.value.trim();
+                    serverCheckSequence.current += 1;
+                    setServerStatus(null);
                     const field =
                       settings.text_provider === "ollama"
                         ? "ollama_server_address"
