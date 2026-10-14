@@ -68,3 +68,51 @@ async fn localhost_catalog_is_pinned_to_ipv4_loopback() {
         LoopbackReadiness::ModelReady
     );
 }
+
+#[tokio::test]
+async fn truncated_generation_is_rejected_at_the_http_boundary() {
+    use super::traits::TextModel;
+    use super::types::{ProviderErrorKind, TextRequest};
+
+    for (kind, path, payload) in [
+        (
+            LoopbackTextServer::Ollama,
+            "/api/chat",
+            r#"{"done":true,"done_reason":"length","model":"selected-model","message":{"role":"assistant","content":"unfinished"}}"#,
+        ),
+        (
+            LoopbackTextServer::LlamaServer,
+            "/v1/chat/completions",
+            r#"{"choices":[{"message":{"role":"assistant","content":"unfinished"},"finish_reason":"length"}]}"#,
+        ),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buffer = [0u8; 4096];
+            let size = stream.read(&mut buffer).await.unwrap();
+            assert!(
+                String::from_utf8_lossy(&buffer[..size])
+                    .starts_with(&format!("POST {path} HTTP/1.1"))
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
+                payload.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let model = LoopbackTextModel::new(kind, base_url, "selected-model".into());
+        let error = model
+            .generate(TextRequest {
+                prompt: "Say a complete sentence".into(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(16),
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Protocol);
+        server.await.unwrap();
+    }
+}
