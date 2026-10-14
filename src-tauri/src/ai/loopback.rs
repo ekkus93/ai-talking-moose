@@ -589,4 +589,101 @@ mod tests {
             server.await.unwrap();
         }
     }
+
+    #[tokio::test]
+    async fn fake_llama_server_readiness_requires_exact_selected_model() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        for (catalog, expected) in [
+            (
+                r#"{"data":[{"id":"another-model"}]}"#,
+                LoopbackReadiness::ReachableButModelUnavailable,
+            ),
+            (
+                r#"{"data":[{"id":"selected-model"}]}"#,
+                LoopbackReadiness::ModelReady,
+            ),
+            (
+                r#"{"data":[{"id":"selected-model:latest"}]}"#,
+                LoopbackReadiness::ReachableButModelUnavailable,
+            ),
+            (
+                r#"{"data":{"id":"selected-model"}}"#,
+                LoopbackReadiness::ReachableButModelUnavailable,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let base_url = format!("http://{}", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0u8; 4096];
+                let count = stream.read(&mut request).await.unwrap();
+                assert!(String::from_utf8_lossy(&request[..count])
+                    .starts_with("GET /v1/models HTTP/1.1"));
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{catalog}",
+                    catalog.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let model = LoopbackTextModel::new(
+                LoopbackTextServer::LlamaServer,
+                base_url,
+                "selected-model".into(),
+            );
+            assert_eq!(model.check_readiness().await, expected);
+            server.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn fake_server_rejects_truncated_or_mismatched_generation_without_retry() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        for (kind, payload) in [
+            (
+                LoopbackTextServer::Ollama,
+                r#"{"done":true,"done_reason":"length","model":"selected-model","message":{"role":"assistant","content":"unfinished"}}"#,
+            ),
+            (
+                LoopbackTextServer::LlamaServer,
+                r#"{"choices":[{"message":{"role":"assistant","content":"unfinished"},"finish_reason":"length"}]}"#,
+            ),
+            (
+                LoopbackTextServer::Ollama,
+                r#"{"done":true,"model":"unexpected-model","message":{"role":"assistant","content":"wrong model"}}"#,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let base_url = format!("http://{}", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0u8; 4096];
+                let count = stream.read(&mut request).await.unwrap();
+                assert!(String::from_utf8_lossy(&request[..count]).starts_with("POST "));
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+                    payload.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let model = LoopbackTextModel::new(kind, base_url, "selected-model".into());
+            let error = model
+                .generate(TextRequest {
+                    prompt: "private transcript".into(),
+                    system_instruction: None,
+                    temperature: None,
+                    max_tokens: Some(32),
+                })
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind, ProviderErrorKind::Protocol);
+            assert!(!error.message.contains("private transcript"));
+            assert!(!error.message.contains("unfinished"));
+            server.await.unwrap();
+        }
+    }
+
 }
