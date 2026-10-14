@@ -7,6 +7,7 @@ pub mod openai;
 pub mod system_tts_pcm;
 pub mod system_tts_selection;
 pub mod system_tts_voice_catalog;
+pub mod system_tts_request;
 pub mod traits;
 pub mod tts_catalog;
 pub mod types;
