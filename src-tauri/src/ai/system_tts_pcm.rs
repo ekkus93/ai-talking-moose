@@ -34,7 +34,7 @@ impl SystemPcmAccumulator {
         channels: usize,
     ) -> Result<(), ProviderError> {
         let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
-        if channels == 0 || channels > MAX_CHANNELS || samples.len() % channels != 0 {
+        if channels == 0 || channels > MAX_CHANNELS || !samples.len().is_multiple_of(channels) {
             return Err(invalid());
         }
         let frames = samples.len() / channels;
