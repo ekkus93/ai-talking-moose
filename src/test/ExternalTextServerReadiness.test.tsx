@@ -32,8 +32,12 @@ describe("external server readiness snapshot isolation", () => {
         }),
     );
     renderOllama();
-    fireEvent.click(screen.getByRole("button", { name: "Check Server and Model" }));
-    expect(screen.getByRole("status")).toHaveTextContent(/Checking loopback server/i);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check Server and Model" }),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /Checking loopback server/i,
+    );
 
     await act(async () => {
       useMooseStore.setState((state) => ({
@@ -57,15 +61,21 @@ describe("external server readiness snapshot isolation", () => {
         }),
     );
     renderOllama();
-    const check = screen.getByRole("button", { name: "Check Server and Model" });
+    const check = screen.getByRole("button", {
+      name: "Check Server and Model",
+    });
     fireEvent.click(check);
     fireEvent.click(check);
     expect(complete).toHaveLength(2);
 
     await act(async () => complete[0]("model_ready"));
-    expect(screen.getByRole("status")).toHaveTextContent(/Checking loopback server/i);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /Checking loopback server/i,
+    );
 
     await act(async () => complete[1]("unreachable"));
-    expect(screen.getByRole("status")).toHaveTextContent(/Server is unreachable/i);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /Server is unreachable/i,
+    );
   });
 });
