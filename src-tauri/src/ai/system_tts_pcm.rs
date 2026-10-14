@@ -390,4 +390,40 @@ mod tests {
             ProviderErrorKind::Protocol
         );
     }
+    #[test]
+    fn planar_i32_downmix_is_bounded_and_preserves_signed_extremes() {
+        let mut pcm = SystemPcmAccumulator::new(44_100).unwrap();
+        pcm.append_planar_i32(&[
+            &[i32::MAX, i32::MIN, i32::MAX],
+            &[i32::MAX, i32::MIN, i32::MIN],
+        ])
+        .unwrap();
+        assert_eq!(
+            pcm.append_planar_i32(&[&[0], &[0, 1]])
+                .unwrap_err()
+                .kind,
+            ProviderErrorKind::Protocol
+        );
+        pcm.append_planar_i32(&[&[0]]).unwrap();
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 44_100);
+        let samples: Vec<i16> = output
+            .pcm_bytes
+            .chunks_exact(2)
+            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        assert_eq!(samples, vec![i16::MAX, i16::MIN, 0, 0]);
+    }
+
+    #[test]
+    fn planar_i32_rejects_oversized_chunks_without_partial_audio() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        let oversized = vec![0_i32; 8_000 * (MAX_DURATION_SECONDS + 1)];
+        assert_eq!(
+            pcm.append_planar_i32(&[&oversized]).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
+        pcm.append_planar_i32(&[&[i32::MIN]]).unwrap();
+        assert_eq!(pcm.finish().unwrap().pcm_bytes, i16::MIN.to_le_bytes());
+    }
 }
