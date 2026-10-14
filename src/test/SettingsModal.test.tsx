@@ -38,7 +38,11 @@ const setTextProviderForTest = (provider: "google" | "local") => {
 const setGoogleLiveForTest = () => {
   useMooseStore.setState((state) => ({
     settings: state.settings
-      ? { ...state.settings, text_provider: "google", asr_mode: "gemini_live_audio" }
+      ? {
+          ...state.settings,
+          text_provider: "google",
+          asr_mode: "gemini_live_audio",
+        }
       : null,
   }));
 };
@@ -462,8 +466,12 @@ describe("SettingsModal Component", () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("AI & Models"));
 
-    expect(screen.getByLabelText("Gemini Text & Ambient Remark Model")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Realtime Live Voice Model")).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Gemini Text & Ambient Remark Model"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Realtime Live Voice Model"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/Talk Conversation — selected text/i)).toBeInTheDocument();
   });
 
