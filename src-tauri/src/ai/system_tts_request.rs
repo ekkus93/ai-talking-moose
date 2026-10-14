@@ -66,4 +66,22 @@ mod tests {
         request.pitch = None;
         assert!(validate_system_tts_request(&request, &[]).is_ok());
     }
+
+    #[test]
+    fn system_tts_rate_and_length_boundaries() {
+        let mut request = TtsRequest {
+            text: "x".repeat(4_000),
+            voice_name: None,
+            speaking_rate: Some(0.25),
+            pitch: None,
+        };
+        assert!(validate_system_tts_request(&request, &[]).is_ok());
+        request.speaking_rate = Some(4.0);
+        assert!(validate_system_tts_request(&request, &[]).is_ok());
+        request.speaking_rate = Some(4.1);
+        assert_eq!(validate_system_tts_request(&request, &[]).unwrap_err().kind, ProviderErrorKind::Setup);
+        request.speaking_rate = None;
+        request.text.push('x');
+        assert_eq!(validate_system_tts_request(&request, &[]).unwrap_err().kind, ProviderErrorKind::Protocol);
+    }
 }
