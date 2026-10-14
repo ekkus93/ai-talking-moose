@@ -38,9 +38,9 @@ async fn local_chat_adapters_send_exact_provider_specific_json() {
                 assert!(count > 0, "body was truncated");
                 received.extend_from_slice(&chunk[..count]);
             }
-            let body: Value = serde_json::from_slice(
-                &received[header_end + 4..header_end + 4 + body_size]
-            ).unwrap();
+            let body: Value =
+                serde_json::from_slice(&received[header_end + 4..header_end + 4 + body_size])
+                    .unwrap();
             assert_eq!(body["model"], "selected-model");
             assert_eq!(body["stream"], false);
             assert_eq!(body["messages"][0]["role"], "system");
@@ -61,10 +61,12 @@ async fn local_chat_adapters_send_exact_provider_specific_json() {
                 }
             }
             let payload = match kind {
-                LoopbackTextServer::Ollama =>
-                    r#"{"done":true,"model":"selected-model","message":{"role":"assistant","content":"done"}}"#,
-                LoopbackTextServer::LlamaServer =>
-                    r#"{"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}"#,
+                LoopbackTextServer::Ollama => {
+                    r#"{"done":true,"model":"selected-model","message":{"role":"assistant","content":"done"}}"#
+                }
+                LoopbackTextServer::LlamaServer => {
+                    r#"{"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}"#
+                }
             };
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
@@ -73,12 +75,15 @@ async fn local_chat_adapters_send_exact_provider_specific_json() {
             socket.write_all(response.as_bytes()).await.unwrap();
         });
         let model = LoopbackTextModel::new(kind, base_url, "selected-model".into());
-        let answer = model.generate(TextRequest {
-            prompt: "hello".into(),
-            system_instruction: Some("Keep replies short.".into()),
-            temperature: Some(0.4),
-            max_tokens: Some(24),
-        }).await.unwrap();
+        let answer = model
+            .generate(TextRequest {
+                prompt: "hello".into(),
+                system_instruction: Some("Keep replies short.".into()),
+                temperature: Some(0.4),
+                max_tokens: Some(24),
+            })
+            .await
+            .unwrap();
         assert_eq!(answer.text, "done");
         server.await.unwrap();
     }
