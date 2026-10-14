@@ -184,12 +184,9 @@ mod tests {
             .unwrap();
         let output = pcm.finish().unwrap();
         assert_eq!(output.sample_rate, 48_000);
-        let samples: Vec<i16> = output
-            .pcm_bytes
-            .chunks_exact(2)
-            .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]))
-            .collect();
-        assert_eq!(samples, [0, 16384]);
+        let first = i16::from_le_bytes([output.pcm_bytes[0], output.pcm_bytes[1]]);
+        let second = i16::from_le_bytes([output.pcm_bytes[2], output.pcm_bytes[3]]);
+        assert_eq!((first, second), (0, 16384));
     }
 
     #[test]
@@ -223,6 +220,18 @@ mod tests {
             ProviderErrorKind::Protocol
         );
         assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * 45 * 2);
+    }
+
+    #[test]
+    fn planar_oversized_chunk_is_rejected_without_partial_audio() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        let oversized = vec![0.0_f32; 8_000 * (MAX_DURATION_SECONDS + 1)];
+        assert_eq!(
+            pcm.append_planar_f32(&[&oversized]).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
+        pcm.append_planar_f32(&[&[0.25]]).unwrap();
+        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 2);
     }
 
     #[test]
