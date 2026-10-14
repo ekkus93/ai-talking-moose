@@ -43,14 +43,14 @@ Typed replies and ambient remarks use an explicit text-provider selection. The O
 
 Loopback providers accept only explicit HTTP localhost/127.0.0.1/::1 addresses with a port. They do not launch servers or download model weights. Those independent servers may log or retain prompts according to their own configuration. A failed request must not retry through another provider, silently select a different model, or forward content to Google or OpenAI.
 
-A fresh profile defaults to **Local** text generation with SmolLM2 360M and **Local** TTS with KittenTTS selected. These selections are not installed-state claims and do not trigger downloads. If a selected Local model is absent, corrupt, incompatible, or fails at runtime, the operation fails explicitly; it does not call Google or manufacture Fake success. Talk uses local ASR, Local text generation, and KittenTTS by default. Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected.
+A fresh profile defaults to **Local** text generation with SmolLM2 360M and **Local** TTS with KittenTTS selected. These selections are not installed-state claims and do not trigger downloads. If a selected Local model is absent, corrupt, incompatible, or fails at runtime, the operation fails explicitly; it does not call Google or manufacture Fake success. Talk uses local ASR, Local text generation, and KittenTTS by default. Gemini Live is used only when Gemini Live audio ASR is explicitly selected. Choosing Google text generation with local ASR sends finalized transcript text to Google for non-Live Talk, without streaming microphone audio through Gemini Live.
 
 Local text generation has a separate, explicit installation network phase. **Download & Verify** makes an HTTPS request to the pinned catalog artifact URL, writes to staging, enforces the exact expected byte count, verifies SHA-256, and atomically promotes the artifact. After installation, the Local generation path does not need network I/O; the real CPU acceptance harness proves generation with network denied.
 
 Local text does **not** make the entire Moose offline:
 
 - Local-first Talk uses local ASR, the selected Local text model, and KittenTTS.
-- Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected.
+- Gemini Live is used only when Gemini Live audio ASR is explicitly selected. Choosing Google text generation with local ASR sends finalized transcript text to Google for non-Live Talk, without streaming microphone audio through Gemini Live.
 - Google TTS receives text when Google TTS is used.
 - Selecting the Google text provider sends text-generation requests to Google.
 
