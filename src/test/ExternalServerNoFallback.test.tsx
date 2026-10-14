@@ -8,7 +8,9 @@ import { useMooseStore } from "../stores/mooseStore";
 afterEach(() => vi.restoreAllMocks());
 
 it("does not change selected Ollama provider after an unreachable readiness result", async () => {
-  const check = vi.spyOn(tauriBridge, "testLocalTextServer").mockResolvedValue("unreachable");
+  const check = vi
+    .spyOn(tauriBridge, "testLocalTextServer")
+    .mockResolvedValue("unreachable");
   useMooseStore.setState({
     isSettingsOpen: true,
     settings: {
@@ -20,8 +22,12 @@ it("does not change selected Ollama provider after an unreachable readiness resu
   });
   render(<SettingsModal />);
   fireEvent.click(screen.getByText("AI & Models"));
-  fireEvent.click(screen.getByRole("button", { name: "Check Server and Model" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Check Server and Model" }),
+  );
   await waitFor(() => expect(check).toHaveBeenCalledWith("ollama"));
-  expect(await screen.findByRole("status")).toHaveTextContent("Server is unreachable");
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "Server is unreachable",
+  );
   expect(useMooseStore.getState().settings?.text_provider).toBe("ollama");
 });
