@@ -2,7 +2,11 @@ use super::loopback::{LoopbackReadiness, LoopbackTextModel, LoopbackTextServer};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-async fn fake_catalog(base_host: &str, kind: LoopbackTextServer, payload: &'static str) -> LoopbackReadiness {
+async fn fake_catalog(
+    base_host: &str,
+    kind: LoopbackTextServer,
+    payload: &'static str,
+) -> LoopbackReadiness {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://{base_host}:{port}");
