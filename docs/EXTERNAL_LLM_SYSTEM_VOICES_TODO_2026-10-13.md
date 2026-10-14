@@ -67,6 +67,15 @@ The above is scoped evidence only. Full routing qualification, macOS voice imple
 
 The attempted loopback adapter test-module split left `src-tauri/src/ai/loopback/tests.rs` **unreferenced** at `1bf54ae8a4907ab0726f41dd27e38bd379c05801`: writes to the existing `loopback.rs` module and two deletion attempts were rejected by source-write safety checks. Exact-head Rust CI `38588283369` passed, but this does not compile or qualify the staged test file. Recovery and required cleanup are documented in `docs/ELSV_SOURCE_WRITE_RECOVERY_2026-10-14.md`. Neither the Ollama `:latest` fix nor live-settings credential scrub has landed; keep ELSV-100/300 unchecked.
 
+### Readiness no-fallback UI regression — 2026-10-14
+
+- `b2ec013c89c96abbb6e2a00786a7dc4fda5a0e89`: added a fresh-profile Local text/TTS default test; exact-head CI `38595887869` passed.
+- `8bcc37cfe6b8fea4416913542c45a2dba3b9bcfd`: expanded the test to assert independent loopback server/model defaults; its CI was superseded.
+- `e3edbf6ceeb2731fb65706406da59becdcaff738`: added a frontend test showing that an unreachable Ollama server does not change the selected provider; exact-head CI `38596419876` passed.
+- `f77ecc91ddab6ae166367dc94904e65698dbec9d`: expanded readiness coverage to a reachable server with a missing selected model; exact-head CI `38597007400` passed.
+
+These tests cover a small part of ELSV-300/600 only. Attempts to remove the orphaned loopback test file, fix the Ollama `:latest` comparison, and sanitize future fields during live settings updates were rejected by source-write safety checks. None of those three changes has landed. All checklist items remain open pending their complete named acceptance evidence.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
