@@ -5,6 +5,7 @@ pub mod local_tts;
 pub mod loopback;
 pub mod openai;
 pub mod system_tts_pcm;
+pub mod system_tts_selection;
 pub mod traits;
 pub mod tts_catalog;
 pub mod types;
