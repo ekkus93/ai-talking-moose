@@ -11,14 +11,19 @@ Local LLM V1 adds CPU-friendly **text generation** alongside Google Gemini. It c
 
 Local-first spoken conversations use local ASR, Local text generation, and KittenTTS through the existing conversation lifecycle. Gemini Live remains available when the user explicitly selects Google text generation or Gemini Live audio ASR. Google TTS remains available for standalone speech when selected.
 
-Talk selects its conversation pipeline from the saved provider choices. Local-first mode requires local ASR, Local text, and KittenTTS; Google Live is selected only when Google text generation or Gemini Live audio ASR is selected.
+Talk selects its conversation pipeline from one saved settings snapshot. With local ASR and a non-Google text provider, the non-Live path composes the selected text adapter with the selected standalone TTS adapter. Google text and Gemini Live audio retain the existing Google Live conversation path. The macOS System TTS adapter remains unavailable until buffer synthesis and physical audition are qualified.
 
 ## Provider selection
 
 `AppSettings.text_provider` is the authoritative text-provider choice:
 
 - `local` — `LocalTextModel` backed by the app-owned Local runtime;
-- `google` — `GoogleTextModel` backed by the configured Gemini text model.
+- `google` — `GoogleTextModel` backed by the configured Gemini text model;
+- `openai` — `OpenAiTextModel` backed by the Responses API and its own secret;
+- `ollama` — `LoopbackTextModel` using Ollama's native `/api/chat` endpoint;
+- `llama_server` — `LoopbackTextModel` using `/v1/chat/completions`.
+
+The external adapters are implemented in stages; model readiness, routing combinations, macOS System TTS, and full platform acceptance remain outstanding. Ollama and llama-server use separate request/response mappings, do not start local processes or pull weights, and reject non-loopback destinations, redirects, and proxy routing. Their configured servers may independently log prompts. OpenAI sends text to OpenAI with an independent credential. A failure stays with the selected provider.
 
 Fresh profiles default to **Local** text generation with `smollm2-360m-instruct-q4-k-m` selected and **Local** TTS with KittenTTS selected. Profiles with no saved provider choice migrate to Local; a saved Google selection remains unchanged. Selection does not install or download either model.
 
@@ -31,11 +36,11 @@ Typed message / ambient event
       TextModel selection
         /           \
        /             \
-   Local              Google
-     |                  |
-LocalTextModel      GoogleTextModel
-     |                  |
-LocalRuntimeManager    Gemini REST
+   Local          Google          OpenAI        Ollama / llama-server
+     |               |              |                    |
+LocalTextModel  GoogleTextModel  OpenAiTextModel      LoopbackTextModel
+     |               |              |                    |
+LocalRuntimeManager  Gemini REST  Responses API     loopback HTTP only
      |
  pinned llama.cpp / ggml
 ```
@@ -115,7 +120,9 @@ Local providers do not imply that every app capability is offline:
 - Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected;
 - local Moonshine/Whisper ASR keeps microphone PCM local, and local Talk conversations hand finalized transcripts to the selected Local text model;
 - Google TTS receives text when Google TTS is used for standalone speech;
-- Google text generation is available when the user explicitly selects the Google text provider.
+- Google text generation is available when the user explicitly selects the Google text provider;
+- OpenAI text generation sends selected prompt context to OpenAI with the independent OpenAI key;
+- Ollama and llama-server text generation sends selected prompt context to an independently managed loopback server, which may maintain its own logs.
 
 These boundaries are documented in `docs/PRIVACY.md` and must stay synchronized with Settings/onboarding copy.
 
@@ -134,7 +141,7 @@ Google Live path (explicit selection):
 Microphone -> Gemini Live -> Rust playback
 ```
 
-Selecting Local never downloads missing text/TTS models and never falls back to Google. Talk reports an explicit Local model installation/runtime error until the selected models are installed.
+Selecting Local never downloads missing text/TTS models and never falls back to Google. Talk reports an explicit Local model installation/runtime error until the selected models are installed. For non-Live Talk, the selected text and standalone speech adapters are composed from a single request snapshot. Google standalone TTS sends generated speech text to Google; System Voices remain unavailable pending the macOS adapter and audible acceptance.
 
 ## Packaging and licensing
 
