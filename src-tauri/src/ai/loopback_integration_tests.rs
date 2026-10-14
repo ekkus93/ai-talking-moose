@@ -95,7 +95,7 @@ async fn truncated_generation_is_rejected_at_the_http_boundary() {
             assert!(String::from_utf8_lossy(&buffer[..size])
                 .starts_with(&format!("POST {path} HTTP/1.1")));
             let response = format!(
-                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
                 payload.len()
             );
             stream.write_all(response.as_bytes()).await.unwrap();
