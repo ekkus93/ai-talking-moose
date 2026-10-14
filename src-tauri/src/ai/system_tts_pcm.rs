@@ -59,10 +59,7 @@ impl SystemPcmAccumulator {
     /// Append native AVAudioPCMBuffer-style planar float channels without an
     /// intermediate interleaved allocation. All channels must have the same
     /// frame count. Validate the entire chunk before mutating accumulated PCM.
-    pub fn append_planar_f32(
-        &mut self,
-        channel_samples: &[&[f32]],
-    ) -> Result<(), ProviderError> {
+    pub fn append_planar_f32(&mut self, channel_samples: &[&[f32]]) -> Result<(), ProviderError> {
         let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
         if channel_samples.is_empty() || channel_samples.len() > MAX_CHANNELS {
             return Err(invalid());
@@ -214,6 +211,18 @@ mod tests {
         }
         pcm.append_planar_f32(&[&[0.5]]).unwrap();
         assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 4);
+    }
+
+    #[test]
+    fn planar_frames_share_the_same_cumulative_duration_budget() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        let channel = vec![0.0_f32; 8_000 * 45];
+        pcm.append_planar_f32(&[&channel]).unwrap();
+        assert_eq!(
+            pcm.append_planar_f32(&[&[0.0]]).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
+        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * 45 * 2);
     }
 
     #[test]
