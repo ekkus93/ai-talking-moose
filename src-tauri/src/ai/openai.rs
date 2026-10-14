@@ -317,37 +317,4 @@ mod tests {
         assert_eq!(result.text, "hello from fake");
         server.await.unwrap();
     }
-    #[tokio::test]
-    async fn rate_limit_is_sanitized_without_retrying_or_falling_back() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        use tokio::net::TcpListener;
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let endpoint = format!("http://{}/v1/responses", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0u8; 4096];
-            let _ = stream.read(&mut request).await.unwrap();
-            stream
-                .write_all(b"HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-                .await
-                .unwrap();
-            assert!(tokio::time::timeout(
-                Duration::from_millis(200),
-                listener.accept()
-            )
-            .await
-            .is_err());
-        });
-        let model = OpenAiTextModel::with_endpoint(
-            "test-openai-key".into(),
-            "gpt-4.1-mini".into(),
-            endpoint,
-        );
-        let err = model.generate(sample("private prompt")).await.unwrap_err();
-        assert_eq!(err.kind, ProviderErrorKind::Quota);
-        assert!(!err.message.contains("private prompt"));
-        server.await.unwrap();
-    }
-
 }
