@@ -52,5 +52,7 @@ mod tests {
         assert!(!missing.message.contains("com.apple.voice.missing"));
         assert!(resolve_installed_system_voice("com.apple.voice.test\n", &installed).is_err());
         assert!(resolve_installed_system_voice("", &installed).is_err());
+        assert!(resolve_installed_system_voice(&"x".repeat(129), &installed).is_err());
+        assert!(resolve_installed_system_voice("com.apple.voice.test\u{0000}", &installed).is_err());
     }
 }
