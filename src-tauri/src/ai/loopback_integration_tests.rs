@@ -7,6 +7,15 @@ async fn fake_catalog(
     kind: LoopbackTextServer,
     payload: &'static str,
 ) -> LoopbackReadiness {
+    fake_catalog_for_model(base_host, kind, payload, "selected-model").await
+}
+
+async fn fake_catalog_for_model(
+    base_host: &str,
+    kind: LoopbackTextServer,
+    payload: &'static str,
+    selected_model: &str,
+) -> LoopbackReadiness {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://{base_host}:{port}");
@@ -27,7 +36,7 @@ async fn fake_catalog(
         );
         stream.write_all(response.as_bytes()).await.unwrap();
     });
-    let model = LoopbackTextModel::new(kind, address, "selected-model".into());
+    let model = LoopbackTextModel::new(kind, address, selected_model.into());
     let readiness = model.check_readiness().await;
     server.await.unwrap();
     readiness
@@ -54,6 +63,29 @@ async fn llama_server_catalog_requires_exact_selected_model() {
             expected
         );
     }
+}
+
+#[tokio::test]
+async fn ollama_untagged_alias_is_ready_but_explicit_tags_and_llama_server_are_strict() {
+    let catalog = r#"{"models":[{"name":"selected-model:latest"}]}"#;
+    assert_eq!(
+        fake_catalog_for_model("127.0.0.1", LoopbackTextServer::Ollama, catalog, "selected-model").await,
+        LoopbackReadiness::ModelReady
+    );
+    assert_eq!(
+        fake_catalog_for_model("127.0.0.1", LoopbackTextServer::Ollama, catalog, "selected-model:q4").await,
+        LoopbackReadiness::ReachableButModelUnavailable
+    );
+    assert_eq!(
+        fake_catalog_for_model(
+            "127.0.0.1",
+            LoopbackTextServer::LlamaServer,
+            r#"{"data":[{"id":"selected-model:latest"}]}"#,
+            "selected-model"
+        )
+        .await,
+        LoopbackReadiness::ReachableButModelUnavailable
+    );
 }
 
 #[tokio::test]
