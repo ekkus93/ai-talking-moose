@@ -169,6 +169,36 @@ impl SystemPcmAccumulator {
         Ok(())
     }
 
+    /// Append native interleaved signed 32-bit PCM without allocating a
+    /// planar copy. Validate the entire chunk before changing queued audio.
+    pub fn append_interleaved_i32(
+        &mut self,
+        samples: &[i32],
+        channels: usize,
+    ) -> Result<(), ProviderError> {
+        let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
+        if channels == 0 || channels > MAX_CHANNELS || !samples.len().is_multiple_of(channels) {
+            return Err(invalid());
+        }
+        let frames = samples.len() / channels;
+        let remaining = (self.sample_rate_hz as usize)
+            .saturating_mul(MAX_DURATION_SECONDS)
+            .saturating_sub(self.pcm_bytes.len() / 2);
+        if frames > remaining {
+            return Err(invalid());
+        }
+        self.pcm_bytes.reserve(frames * 2);
+        for frame in samples.chunks_exact(channels) {
+            let sum: i64 = frame.iter().map(|sample| i64::from(*sample)).sum();
+            let mean = sum as f64 / channels as f64;
+            let sample = (mean / 2_147_483_648.0 * 32_768.0)
+                .round()
+                .clamp(-32_768.0, 32_767.0) as i16;
+            self.pcm_bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        Ok(())
+    }
+
     pub fn finish(self) -> Result<AudioStreamData, ProviderError> {
         if self.pcm_bytes.is_empty() {
             return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
@@ -411,6 +441,32 @@ mod tests {
             .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
             .collect();
         assert_eq!(samples, vec![i16::MAX, i16::MIN, 0, 0]);
+    }
+
+    #[test]
+    fn interleaved_i32_downmixes_and_rejects_invalid_chunks_atomically() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        pcm.append_interleaved_i32(&[i32::MAX, i32::MAX, i32::MIN, i32::MIN], 2)
+            .unwrap();
+        for (samples, channels) in [
+            (vec![1], 0),
+            (vec![1], 2),
+            (vec![0; MAX_CHANNELS + 1], MAX_CHANNELS + 1),
+            (vec![0; 8_000 * (MAX_DURATION_SECONDS + 1)], 1),
+        ] {
+            assert_eq!(
+                pcm.append_interleaved_i32(&samples, channels)
+                    .unwrap_err()
+                    .kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 8_000);
+        assert_eq!(
+            output.pcm_bytes,
+            [i16::MAX, i16::MIN].map(i16::to_le_bytes).concat()
+        );
     }
 
     #[test]
