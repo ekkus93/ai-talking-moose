@@ -20,6 +20,10 @@ Scoped frontend CI passed on `57458245f2119d20ef8db180701e537d02b7d824` (run `38
 
 These are scoped checks, not the complete ELSV acceptance matrix or physical macOS audition. Do not mark the following items complete on this evidence alone.
 
+### CI regression and focused routing proof — 2026-10-14
+
+The exact-head CI run `38517544143` on `a0f90a935b9861c36446205473130bc4ba3f393f` still fails three pre-existing `SettingsModal.test.tsx` assertions. They assume that selecting Google *text* exposes the Gemini Live model selector, but that selector is intentionally gated by `asr_mode === "gemini_live_audio"`. The new `ExternalTextLiveBoundary.test.tsx` passes both tests proving that local ASR with Google text hides Live configuration and explicit Gemini Live ASR exposes it. The existing tests must set both Google text and Gemini Live ASR when asserting Live controls. Root cause and exact remediation are recorded in `docs/ELSV_FRONTEND_CI_REGRESSION_2026-10-14.md`. An attempted source-test rewrite was blocked by tool safety checks; no source-test fix was committed. Keep ELSV-600 and ELSV-900 unchecked until the old tests are corrected and the full gate passes.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
