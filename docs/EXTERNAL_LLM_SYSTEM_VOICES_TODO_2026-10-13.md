@@ -111,6 +111,15 @@ Direct-to-master commits `34b13d4`, `6742f9ac`, `ba17a392`, `ce45b17c`, and `6ec
 
 These are platform-neutral prerequisites, **not** native macOS speech synthesis. The OS voice enumeration, AVSpeechSynthesizer buffer callback, playback/cancellation integration, Control Panel enablement, physical Mac audition, and complete ELSV routing/check:all qualification remain open. System TTS continues to fail closed; keep ELSV-500/900 unchecked.
 
+### Additional System PCM and capability qualification — 2026-10-14
+
+- `f11f02a3483f5934b2d4f890dc24c707b8dbf4c4` corrected a Rust formatting failure in the planar signed-32-bit PCM test found by exact-head CI `38634258456`.
+- `acb84f1e965ac1bf56a19437e961b3772ce43b28` rejects even finite pitch values in System TTS requests, rather than silently accepting an unsupported Google-only control; System snapshot routing already omits pitch. The test now verifies explicit rejection and successful pitch-free validation.
+- `32568d13574f38ce4fffec28644a2ccdebbad552` adds bounded, atomic conversion of native interleaved signed-32-bit PCM into mono signed-16-bit playback audio, with sample-rate, extrema, malformed-input, and duration regressions. Its scoped CI identified a Rust 1.99 Clippy warning in an existing PCM test.
+- `0dc545fdf3888471fcb67ef449e84d37c8ff2dfe` fixes that Clippy regression without suppressing the lint. **Exact-head CI `38638116667` passed**, including Rust quality/Clippy, Rust tests, and generated backend-contract verification. Earlier superseded or failed runs are not accepted as qualification evidence.
+
+These changes expand platform-neutral input-format coverage but do **not** implement native macOS AVSpeechSynthesizer, OS voice enumeration, playback/cancellation integration, Control Panel enablement, or physical Mac audition. The complete routing matrix, macOS build, and canonical `check:all` remain unqualified. Keep ELSV-500 and ELSV-900 unchecked until those named criteria have real evidence.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
