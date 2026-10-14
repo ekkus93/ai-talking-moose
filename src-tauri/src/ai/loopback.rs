@@ -292,6 +292,12 @@ mod tests {
             "compatible reply"
         );
         assert!(ollama.text_from_json(&compatible).is_err());
+        assert!(llama
+            .text_from_json(&json!({"choices":[{"message":{"role":"user","content":"echoed prompt"},"finish_reason":"stop"}]}))
+            .is_err());
+        assert!(llama
+            .text_from_json(&json!({"choices":[{"message":{"content":"missing role"},"finish_reason":"stop"}]}))
+            .is_err());
         assert!(ollama
             .text_from_json(&json!({"done":false,"message":{"content":"partial"}}))
             .is_err());
