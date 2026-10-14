@@ -75,6 +75,38 @@ fn persisted_unknown_credential_aliases_are_scrubbed_and_rewritten() {
 }
 
 #[test]
+fn unknown_future_credential_aliases_are_canonicalized_without_losing_preferences() {
+    for alias in [
+        "openaiKey", "OpenAIKey", "openai-key", "OPENAI_API_KEY",
+        "googleKey", "privateKey", "accessKey", "authHeader",
+        "refreshToken", "BearerToken", "clientSecret",
+    ] {
+        assert!(
+            is_sensitive_future_settings_key(alias),
+            "credential alias must be scrubbed: {alias}"
+        );
+    }
+    for preference in ["future_display_hint", "theme", "model_id", "system_voice_id"] {
+        assert!(
+            !is_sensitive_future_settings_key(preference),
+            "unrelated preference must survive: {preference}"
+        );
+    }
+    let mut nested = serde_json::json!({
+        "enabled": true,
+        "groups": [
+            {"api-key": "credential-value", "theme": "dark"},
+            {"authHeader": "credential-value", "model_id": "local"}
+        ]
+    });
+    scrub_sensitive_future_settings(&mut nested);
+    assert_eq!(nested["enabled"], true);
+    assert_eq!(nested["groups"][0]["theme"], "dark");
+    assert_eq!(nested["groups"][1]["model_id"], "local");
+    assert!(!nested.to_string().contains("credential-value"));
+}
+
+#[test]
 fn old_provider_settings_migrate_and_preserve_unrecognized_additive_fields() {
     let mut value = serde_json::to_value(AppSettings {
         text_provider: TextProvider::Google,
