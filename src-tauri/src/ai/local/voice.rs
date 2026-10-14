@@ -399,17 +399,20 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
         session.send_text_turn("Hello").await.unwrap();
         session.interrupt().await.unwrap();
-        assert!(matches!(events.recv().await, Some(LiveServerEvent::Interrupted)));
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Interrupted)
+        ));
         release.send(()).unwrap();
-        assert!(tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            events.recv(),
-        )
-        .await
-        .is_err());
+        let late_event =
+            tokio::time::timeout(std::time::Duration::from_millis(100), events.recv()).await;
+        assert!(late_event.is_err());
     }
 
     struct CancellationProbe {
@@ -466,7 +469,10 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
         session.send_text_turn("first").await.unwrap();
         assert_eq!(
             tokio::time::timeout(std::time::Duration::from_secs(2), started.recv())
