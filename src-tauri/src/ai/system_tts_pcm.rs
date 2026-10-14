@@ -77,7 +77,10 @@ mod tests {
         let output = pcm.finish().unwrap();
         assert_eq!(output.sample_rate, 44_100);
         assert_eq!(output.pcm_bytes.len(), 4);
-        assert_eq!(i16::from_le_bytes([output.pcm_bytes[0], output.pcm_bytes[1]]), 0);
+        assert_eq!(
+            i16::from_le_bytes([output.pcm_bytes[0], output.pcm_bytes[1]]),
+            0
+        );
         assert_eq!(
             i16::from_le_bytes([output.pcm_bytes[2], output.pcm_bytes[3]]),
             16384
@@ -106,8 +109,14 @@ mod tests {
         }
         pcm.append_interleaved_f32(&[-2.0, 2.0], 1).unwrap();
         let audio = pcm.finish().unwrap();
-        assert_eq!(i16::from_le_bytes([audio.pcm_bytes[0], audio.pcm_bytes[1]]), -32767);
-        assert_eq!(i16::from_le_bytes([audio.pcm_bytes[2], audio.pcm_bytes[3]]), 32767);
+        assert_eq!(
+            i16::from_le_bytes([audio.pcm_bytes[0], audio.pcm_bytes[1]]),
+            -32767
+        );
+        assert_eq!(
+            i16::from_le_bytes([audio.pcm_bytes[2], audio.pcm_bytes[3]]),
+            32767
+        );
     }
 
     #[test]

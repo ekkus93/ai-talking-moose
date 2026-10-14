@@ -483,10 +483,9 @@ mod tests {
     #[test]
     fn live_settings_update_scrubs_nested_future_credentials_without_losing_preferences() {
         let mut settings = AppSettings::default();
-        settings.future_settings.insert(
-            "openaiKey".into(),
-            serde_json::json!("credential-canary"),
-        );
+        settings
+            .future_settings
+            .insert("openaiKey".into(), serde_json::json!("credential-canary"));
         settings.future_settings.insert(
             "future_display_hint".into(),
             serde_json::json!({
@@ -510,8 +509,7 @@ mod tests {
             json["future_display_hint"]["children"][1]["extra"]["mode"],
             "local"
         );
-        let (reloaded, migrated) =
-            AppSettings::from_persisted_json(&json.to_string()).unwrap();
+        let (reloaded, migrated) = AppSettings::from_persisted_json(&json.to_string()).unwrap();
         assert!(!migrated, "clean IPC settings must not be re-migrated");
         assert_eq!(reloaded.future_settings, normalized.future_settings);
     }

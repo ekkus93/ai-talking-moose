@@ -69,11 +69,23 @@ async fn llama_server_catalog_requires_exact_selected_model() {
 async fn ollama_untagged_alias_is_ready_but_explicit_tags_and_llama_server_are_strict() {
     let catalog = r#"{"models":[{"name":"selected-model:latest"}]}"#;
     assert_eq!(
-        fake_catalog_for_model("127.0.0.1", LoopbackTextServer::Ollama, catalog, "selected-model").await,
+        fake_catalog_for_model(
+            "127.0.0.1",
+            LoopbackTextServer::Ollama,
+            catalog,
+            "selected-model",
+        )
+        .await,
         LoopbackReadiness::ModelReady
     );
     assert_eq!(
-        fake_catalog_for_model("127.0.0.1", LoopbackTextServer::Ollama, catalog, "selected-model:q4").await,
+        fake_catalog_for_model(
+            "127.0.0.1",
+            LoopbackTextServer::Ollama,
+            catalog,
+            "selected-model:q4",
+        )
+        .await,
         LoopbackReadiness::ReachableButModelUnavailable
     );
     assert_eq!(
