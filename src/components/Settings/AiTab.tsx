@@ -119,7 +119,9 @@ export const AiTab: React.FC<AiTabProps> = ({
             : "Server reachable, but the selected model is not available.",
       );
     } catch {
-      setServerStatus("Could not check the selected local server.");
+      if (useMooseStore.getState().settings?.text_provider === provider) {
+        setServerStatus("Could not check the selected local server.");
+      }
     }
   };
 
