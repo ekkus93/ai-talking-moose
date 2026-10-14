@@ -58,8 +58,10 @@ impl OpenAiTextModel {
         let messages = value["output"].as_array().ok_or_else(protocol_error)?;
         let mut text = String::new();
         for message in messages {
-            if message["type"].as_str() != Some("message") {
-                continue;
+            match message["type"].as_str() {
+                Some("reasoning") => continue,
+                Some("message") => {}
+                _ => return Err(protocol_error()),
             }
             // Never treat a user/tool echo as generated assistant text.
             if message["role"].as_str() != Some("assistant") {
@@ -74,7 +76,10 @@ impl OpenAiTextModel {
             }
             let parts = message["content"].as_array().ok_or_else(protocol_error)?;
             for part in parts {
-                if part["type"].as_str() == Some("output_text") {
+                if part["type"].as_str() != Some("output_text") {
+                    return Err(protocol_error());
+                }
+                {
                     let segment = part["text"].as_str().ok_or_else(protocol_error)?;
                     if text.len().saturating_add(segment.len()) > MAX_TEXT_BYTES {
                         return Err(protocol_error());
