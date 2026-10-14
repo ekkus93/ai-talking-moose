@@ -463,7 +463,9 @@ export const browserPreviewBridge = {
 
   async testLocalTextServer(
     _provider: "ollama" | "llama_server",
-  ): Promise<"unreachable" | "reachable_but_model_unavailable" | "model_ready"> {
+  ): Promise<
+    "unreachable" | "reachable_but_model_unavailable" | "model_ready"
+  > {
     return "unreachable";
   },
 

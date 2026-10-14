@@ -53,8 +53,9 @@ describe("External text provider controls", () => {
 
   it("shows five explicit text providers and persists the selected one", async () => {
     render(<AiTab {...props} />);
-    expect(screen.getAllByRole("radio", { name: /cloud|loopback|local/i }).length)
-      .toBeGreaterThanOrEqual(4);
+    expect(
+      screen.getAllByRole("radio", { name: /cloud|loopback|local/i }).length,
+    ).toBeGreaterThanOrEqual(4);
     fireEvent.click(screen.getByRole("radio", { name: /Ollama — loopback/i }));
     await waitFor(() =>
       expect(useMooseStore.getState().settings?.text_provider).toBe("ollama"),
@@ -73,7 +74,9 @@ describe("External text provider controls", () => {
       .mockResolvedValue("model_ready");
     const setStatus = vi.fn();
     render(<AiTab {...props} setServerStatus={setStatus} />);
-    fireEvent.click(screen.getByRole("button", { name: "Check Server and Model" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check Server and Model" }),
+    );
     await waitFor(() => expect(check).toHaveBeenCalledWith("ollama"));
     expect(setStatus).toHaveBeenCalledWith(
       "Connected: selected model is available.",

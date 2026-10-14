@@ -428,7 +428,8 @@ export const AiTab: React.FC<AiTabProps> = ({
                 {openaiKeyError && <p role="alert">{openaiKeyError}</p>}
                 <p className="text-[10px] text-gray-700">
                   macOS stores the key in Keychain. Linux retains it only until
-                  this app exits; the key is never written to Settings or SQLite.
+                  this app exits; the key is never written to Settings or
+                  SQLite.
                 </p>
               </div>
             )}
@@ -595,11 +596,11 @@ export const AiTab: React.FC<AiTabProps> = ({
           and verified. Model installation itself uses the network.
         </p>
         <p className="text-[10px] text-gray-800">
-          Local-first Talk keeps text and speech on this computer when both
-          the text and TTS providers are Local. OpenAI and Google text or TTS
-          send content to their respective cloud services when selected.
-          Ollama and llama-server use only your configured loopback server.
-          Gemini Live is a separate Google cloud-audio mode.
+          Local-first Talk keeps text and speech on this computer when both the
+          text and TTS providers are Local. OpenAI and Google text or TTS send
+          content to their respective cloud services when selected. Ollama and
+          llama-server use only your configured loopback server. Gemini Live is
+          a separate Google cloud-audio mode.
         </p>
       </section>
     </div>
