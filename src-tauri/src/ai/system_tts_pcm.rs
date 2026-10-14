@@ -174,7 +174,10 @@ mod tests {
             pcm.append_interleaved_f32(&[0.0], 1).unwrap_err().kind,
             ProviderErrorKind::Protocol
         );
-        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * MAX_DURATION_SECONDS * 2);
+        assert_eq!(
+            pcm.finish().unwrap().pcm_bytes.len(),
+            8_000 * MAX_DURATION_SECONDS * 2
+        );
     }
 
     #[test]
@@ -219,7 +222,10 @@ mod tests {
             pcm.append_planar_f32(&[&[0.0]]).unwrap_err().kind,
             ProviderErrorKind::Protocol
         );
-        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * MAX_DURATION_SECONDS * 2);
+        assert_eq!(
+            pcm.finish().unwrap().pcm_bytes.len(),
+            8_000 * MAX_DURATION_SECONDS * 2
+        );
     }
 
     #[test]
