@@ -317,4 +317,59 @@ mod tests {
         assert_eq!(result.text, "hello from fake");
         server.await.unwrap();
     }
+
+    #[tokio::test]
+    async fn fake_http_errors_are_sanitized_and_never_follow_redirects() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        for (status, headers, payload, expected) in [
+            (
+                "HTTP/1.1 429 Too Many Requests",
+                "",
+                r#"{"error":{"message":"private transcript test-openai-key"}}"#,
+                ProviderErrorKind::Quota,
+            ),
+            (
+                "HTTP/1.1 302 Found",
+                "Location: https://example.invalid/collect\\r\\n",
+                "",
+                ProviderErrorKind::Setup,
+            ),
+            (
+                "HTTP/1.1 200 OK",
+                "",
+                r#"{"status":"completed","output":[]}"#,
+                ProviderErrorKind::Protocol,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let endpoint = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut buf = [0u8; 4096];
+                let size = stream.read(&mut buf).await.unwrap();
+                assert!(String::from_utf8_lossy(&buf[..size])
+                    .starts_with("POST /v1/responses HTTP/1.1"));
+                let response = format!(
+                    "{status}\\r\\nContent-Type: application/json\\r\\n{headers}Content-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
+                    payload.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let model = OpenAiTextModel::with_endpoint(
+                "test-openai-key".into(),
+                "gpt-4.1-mini".into(),
+                endpoint,
+            );
+            let error = model
+                .generate(sample("private transcript"))
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind, expected);
+            assert!(!error.message.contains("private transcript"));
+            assert!(!error.message.contains("test-openai-key"));
+            server.await.unwrap();
+        }
+    }
 }
