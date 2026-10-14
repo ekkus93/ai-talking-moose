@@ -283,8 +283,7 @@ mod tests {
             "local".into(),
         );
         let native = json!({"done": true, "message": {"content": "native reply"}});
-        let compatible =
-            json!({"choices":[{"message":{"role":"assistant","content":"compatible reply"},"finish_reason":"stop"}]});
+        let compatible = json!({"choices":[{"message":{"role":"assistant","content":"compatible reply"},"finish_reason":"stop"}]});
         assert_eq!(ollama.text_from_json(&native).unwrap().text, "native reply");
         assert!(llama.text_from_json(&native).is_err());
         assert_eq!(
@@ -296,7 +295,9 @@ mod tests {
             .text_from_json(&json!({"choices":[{"message":{"role":"user","content":"echoed prompt"},"finish_reason":"stop"}]}))
             .is_err());
         assert!(llama
-            .text_from_json(&json!({"choices":[{"message":{"content":"missing role"},"finish_reason":"stop"}]}))
+            .text_from_json(
+                &json!({"choices":[{"message":{"content":"missing role"},"finish_reason":"stop"}]})
+            )
             .is_err());
         assert!(ollama
             .text_from_json(&json!({"done":false,"message":{"content":"partial"}}))
