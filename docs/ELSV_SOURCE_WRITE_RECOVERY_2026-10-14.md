@@ -32,3 +32,9 @@ acceptance items complete from scoped evidence alone.
 
 The CI run for the unchanged master head was successful:
 `38570551738`. This does not qualify the pending fixes.
+
+## Follow-up on 2026-10-14
+
+Scoped tests were added to master and qualified in frontend CI `38586951166` and Rust CI `38587186454`; the canonical TODO records the exact commits. The large existing `src-tauri/src/ai/loopback.rs` source-write payload still triggers a safety rejection, even when only moving its test module without changing behavior. An attempted split staged `src-tauri/src/ai/loopback/tests.rs` in commit `1bf54ae8a4907ab0726f41dd27e38bd379c05801`, but wiring it into `loopback.rs` was rejected. The new file is therefore **unreferenced and must not be counted as active tests or the Ollama alias fix**. Two direct Ralph Bridge deletion attempts were also rejected. Exact-head CI `38588283369` passed, but cannot prove an unreferenced test module runs.
+
+**Next recovery action:** remove the unreferenced `src-tauri/src/ai/loopback/tests.rs` file through an authorized source-delete operation, or complete the module split and wire the tests, then implement the narrow Ollama alias change. Do not claim completion of ELSV-300 until its tests are actually compiled and qualified. The live-settings sanitizer fix remains pending as before.
