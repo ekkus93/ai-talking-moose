@@ -105,6 +105,12 @@ Exact-head CI `38619191978` passed on `8142640892dc0cc5768a38f1264dbdf7373db6f0`
 
 The Control Panel now preserves the checked radio state for a saved System TTS selection while continuing to disable that unfinished provider. Exact-head frontend CI `38621242235` passed on `c86c86bde81dfbf55e1c40c801950dc66fbe0eda`. README setup guidance for OpenAI, Ollama, and llama-server landed in `705b48d708ccb9ed75335f8892d3761c2cd8d6cb`. Native macOS synthesis, installed-voice enumeration, persisted-System selection tests, physical audition, and full ELSV acceptance remain open.
 
+### macOS system-voice input/catalog groundwork — 2026-10-14
+
+Direct-to-master commits `34b13d4`, `6742f9ac`, `ba17a392`, `ce45b17c`, and `6ec111dd` added a control-character voice-ID regression, native catalog normalization (invalid/duplicate/reserved IDs are excluded), and a bounded fail-closed System TTS request validator that rejects empty/oversized speech text, invalid rates, and unavailable saved voice IDs without substituting another voice. The validator consumes the normalized catalog. Exact-head CI **passed** on `6ec111dd509a8e45a3e94c8584401dd68381147d` (run `38625327061`): Rust formatting/Clippy, Rust tests, and generated backend-contract verification. Earlier attempts were superseded or failed formatting and are not acceptance evidence.
+
+These are platform-neutral prerequisites, **not** native macOS speech synthesis. The OS voice enumeration, AVSpeechSynthesizer buffer callback, playback/cancellation integration, Control Panel enablement, physical Mac audition, and complete ELSV routing/check:all qualification remain open. System TTS continues to fail closed; keep ELSV-500/900 unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
