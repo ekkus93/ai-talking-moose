@@ -65,7 +65,7 @@ describe("external text provider disclosure and Live isolation", () => {
     const liveModel = screen.getByLabelText("Realtime Live Voice Model");
     expect(liveModel).toBeInTheDocument();
     expect(
-      screen.getByText(/Gemini Live is a separate Google cloud-audio mode/i),
-    ).toBeInTheDocument();
+      screen.getAllByText(/Gemini Live is a separate Google cloud-audio mode/i),
+    ).not.toHaveLength(0);
   });
 });
