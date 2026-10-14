@@ -267,6 +267,15 @@ mod tests {
         let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
         pcm.append_planar_i16(&[&[i16::MAX, i16::MIN], &[i16::MIN, i16::MIN]])
             .unwrap();
+        assert_eq!(
+            pcm.append_planar_i16(&[&[1], &[1, 2]]).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
+        let oversized = vec![0_i16; 8_000 * (MAX_DURATION_SECONDS + 1)];
+        assert_eq!(
+            pcm.append_planar_i16(&[&oversized]).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
         let output = pcm.finish().unwrap();
         assert_eq!(output.sample_rate, 8_000);
         assert_eq!(output.pcm_bytes.len(), 4);
