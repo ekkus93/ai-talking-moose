@@ -152,9 +152,6 @@ impl LoopbackTextModel {
     }
 
     pub async fn check_readiness(&self) -> LoopbackReadiness {
-        if self.clean_model().is_err() {
-            return LoopbackReadiness::ReachableButModelUnavailable;
-        }
         let Ok(client) = &self.client else {
             return LoopbackReadiness::Unreachable;
         };
@@ -170,7 +167,7 @@ impl LoopbackTextModel {
         let Ok(mut response) = result else {
             return LoopbackReadiness::Unreachable;
         };
-        if !response.status().is_success() {
+        if !response.status().is_success() || self.clean_model().is_err() {
             return LoopbackReadiness::ReachableButModelUnavailable;
         }
         let Ok(data) = Self::bounded_json(&mut response).await else {
@@ -421,6 +418,16 @@ mod tests {
         assert!(!error.message.contains("private transcript"));
         server.await.unwrap();
     }
+    #[tokio::test]
+    async fn invalid_server_and_model_do_not_claim_reachability() {
+        let model = LoopbackTextModel::new(
+            LoopbackTextServer::Ollama,
+            "https://example.invalid:11434".into(),
+            String::new(),
+        );
+        assert_eq!(model.check_readiness().await, LoopbackReadiness::Unreachable);
+    }
+
     #[tokio::test]
     async fn fake_ollama_readiness_requires_an_exact_model_match() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
