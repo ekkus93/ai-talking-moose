@@ -79,6 +79,7 @@ export const AiTab: React.FC<AiTabProps> = ({
 
   const selectTextProvider = (provider: TextProvider) => {
     if (provider === settings.text_provider) return;
+    setServerStatus(null);
     void updateSettingsPatch({ text_provider: provider });
   };
 
