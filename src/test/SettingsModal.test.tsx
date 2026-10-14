@@ -385,14 +385,14 @@ describe("SettingsModal Component", () => {
     expect(
       await screen.findByText(/Not required for Local-first Talk/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Talk Conversation — selected text/i)).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Local ASR, Local text, and KittenTTS run on this computer/i,
-      ),
+      screen.getByText(/Talk Conversation — selected text/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Local-first Talk keeps microphone audio/i),
+      screen.getByText(/Non-Live Talk uses the selected text provider/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Local-first Talk keeps text and speech/i),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/Google Gemini API Key/i)).toBeInTheDocument();
   });
