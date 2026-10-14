@@ -12,6 +12,12 @@ pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoi
                 && voice.id != SYSTEM_DEFAULT_VOICE_ID
                 && voice.id.len() <= 128
                 && !voice.id.chars().any(char::is_control)
+                && !voice.display_name.trim().is_empty()
+                && !voice.display_name.chars().any(char::is_control)
+                && voice
+                    .style
+                    .as_ref()
+                    .is_none_or(|style| !style.chars().any(char::is_control))
                 && seen.insert(voice.id.clone())
         })
         .collect()
