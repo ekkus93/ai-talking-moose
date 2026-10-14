@@ -32,15 +32,27 @@ describe("external text provider disclosure and Live isolation", () => {
     "%s with local ASR exposes only its own provider controls",
     (provider, modelLabel, configLabel) => {
       renderProvider(provider);
-      expect(screen.getByRole("radio", { name: new RegExp(provider === "openai" ? "OpenAI" : provider === "ollama" ? "Ollama" : "llama-server", "i") })).toBeChecked();
+      const displayName = provider === "llama_server" ? "llama-server" : provider;
+      const providerRadio = screen.getByRole("radio", {
+        name: new RegExp(displayName, "i"),
+      });
+      expect(providerRadio).toBeChecked();
       expect(screen.getByLabelText(modelLabel)).toBeInTheDocument();
       expect(screen.getByLabelText(configLabel)).toBeInTheDocument();
-      expect(screen.queryByLabelText("Realtime Live Voice Model")).not.toBeInTheDocument();
-      expect(screen.getByText(/Non-Live Talk uses the selected text provider/i)).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("Realtime Live Voice Model"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/Non-Live Talk uses the selected text provider/i),
+      ).toBeInTheDocument();
       if (provider !== "openai") {
-        expect(screen.queryByLabelText("OpenAI API key (BYOK)")).not.toBeInTheDocument();
+        expect(
+          screen.queryByLabelText("OpenAI API key (BYOK)"),
+        ).not.toBeInTheDocument();
       } else {
-        expect(screen.queryByRole("button", { name: "Check Server and Model" })).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("button", { name: "Check Server and Model" }),
+        ).not.toBeInTheDocument();
       }
     },
   );
@@ -49,6 +61,8 @@ describe("external text provider disclosure and Live isolation", () => {
     renderProvider("ollama", true);
     expect(screen.getByLabelText("Ollama model ID")).toBeInTheDocument();
     expect(screen.getByLabelText("Realtime Live Voice Model")).toBeInTheDocument();
-    expect(screen.getByText(/Gemini Live is a separate Google cloud-audio mode/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Gemini Live is a separate Google cloud-audio mode/i),
+    ).toBeInTheDocument();
   });
 });
