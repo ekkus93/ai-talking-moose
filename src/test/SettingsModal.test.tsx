@@ -472,7 +472,9 @@ describe("SettingsModal Component", () => {
     expect(
       screen.queryByLabelText("Realtime Live Voice Model"),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/Talk Conversation — selected text/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Talk Conversation — selected text/i),
+    ).toBeInTheDocument();
   });
 
   it("shows only current capability-filtered Gemini model options", async () => {
@@ -577,7 +579,9 @@ describe("SettingsModal Component", () => {
     fireEvent.click(screen.getByText("AI & Models"));
 
     const keyField = screen.getByLabelText(/Google Gemini API Key/i);
-    fireEvent.change(keyField, { target: { value: "test-google-partial-draft" } });
+    fireEvent.change(keyField, {
+      target: { value: "test-google-partial-draft" },
+    });
 
     fireEvent.click(screen.getByText("Privacy"));
     fireEvent.click(screen.getByText("AI & Models"));
