@@ -48,5 +48,15 @@ mod tests {
         request.speaking_rate = Some(1.0);
         request.text = " ".into();
         assert!(validate_system_tts_request(&request, &[]).is_err());
+        request.text = "hello".into();
+        request.pitch = Some(f32::NAN);
+        assert_eq!(
+            validate_system_tts_request(&request, &[]).unwrap_err().kind,
+            ProviderErrorKind::Setup
+        );
+        request.pitch = Some(f32::INFINITY);
+        assert!(validate_system_tts_request(&request, &[]).is_err());
+        request.pitch = Some(0.0);
+        assert!(validate_system_tts_request(&request, &[]).is_ok());
     }
 }
