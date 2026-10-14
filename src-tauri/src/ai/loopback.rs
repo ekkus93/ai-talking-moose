@@ -133,13 +133,24 @@ impl LoopbackTextModel {
         }
         let text = match self.kind {
             LoopbackTextServer::Ollama => {
-                if value["message"]["role"].as_str() != Some("assistant") {
+                if value["message"]["role"].as_str() != Some("assistant")
+                    || value["message"]
+                        .get("tool_calls")
+                        .is_some_and(|calls| !calls.is_null())
+                {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
                 }
                 value["message"]["content"].as_str()
             }
             LoopbackTextServer::LlamaServer => {
-                if value["choices"][0]["message"]["role"].as_str() != Some("assistant") {
+                // We request a single text response, never tool invocations or
+                // alternative completions that cannot be attributed to a reply.
+                if value["choices"].as_array().is_none_or(|choices| choices.len() != 1)
+                    || value["choices"][0]["message"]["role"].as_str() != Some("assistant")
+                    || value["choices"][0]["message"]
+                        .get("tool_calls")
+                        .is_some_and(|calls| !calls.is_null())
+                {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
                 }
                 value["choices"][0]["message"]["content"].as_str()
@@ -307,6 +318,36 @@ mod tests {
             "compatible reply"
         );
         assert!(ollama.text_from_json(&compatible).is_err());
+        for malformed in [
+            json!({"choices": []}),
+            json!({"choices": [
+                {"message": {"role": "assistant", "content": "first"}, "finish_reason": "stop"},
+                {"message": {"role": "assistant", "content": "second"}, "finish_reason": "stop"}
+            ]}),
+            json!({"choices": [{
+                "message": {"role": "assistant", "content": "tool output", "tool_calls": [{"id": "unrequested"}]},
+                "finish_reason": "stop"
+            }]}),
+        ] {
+            assert_eq!(
+                llama.text_from_json(&malformed).unwrap_err().kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        assert_eq!(
+            ollama
+                .text_from_json(&json!({
+                    "done": true,
+                    "message": {
+                        "role": "assistant",
+                        "content": "tool output",
+                        "tool_calls": [{"function": {"name": "unrequested"}}]
+                    }
+                }))
+                .unwrap_err()
+                .kind,
+            ProviderErrorKind::Protocol
+        );
         assert!(llama
             .text_from_json(&json!({"choices":[{"message":{"role":"user","content":"echoed prompt"},"finish_reason":"stop"}]}))
             .is_err());
