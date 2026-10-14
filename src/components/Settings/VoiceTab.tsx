@@ -262,6 +262,13 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </div>
         )}
 
+        {settings.tts_provider === "system" && !selectedProvider && (
+          <p className="text-[10px] text-amber-800" role="status">
+            Saved macOS system voice: {settings.system_tts_voice}. This voice
+            cannot be auditioned until system speech support is available.
+          </p>
+        )}
+
         {selectedProvider && (
           <div>
             <label
