@@ -61,6 +61,10 @@ impl OpenAiTextModel {
             if message["type"].as_str() != Some("message") {
                 continue;
             }
+            // Never treat a user/tool echo as generated assistant text.
+            if message["role"].as_str() != Some("assistant") {
+                return Err(protocol_error());
+            }
             let parts = message["content"].as_array().ok_or_else(protocol_error)?;
             for part in parts {
                 if part["type"].as_str() == Some("output_text") {
@@ -96,6 +100,7 @@ impl TextModel for OpenAiTextModel {
             || self.model.len() > 128
             || !self.model.bytes().all(|b| b.is_ascii_alphanumeric() || b"-._:".contains(&b))
             || request.prompt.len() > MAX_PROMPT_BYTES
+            || request.max_tokens == Some(0)
             || request
                 .system_instruction
                 .as_ref()
@@ -183,8 +188,10 @@ mod tests {
         for bad in [
             json!({"status":"completed", "output":[]}),
             json!({"status":"incomplete", "output":[]}),
-            json!({"status":"completed", "output":[{"type":"message", "content":[{"type":"output_text"}]}]}),
-            json!({"status":"completed", "output":[{"type":"message", "content":[{"type":"output_text", "text":"x".repeat(MAX_TEXT_BYTES + 1)}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text"}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"x".repeat(MAX_TEXT_BYTES + 1)}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"user", "content":[{"type":"output_text", "text":"echo"}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "content":[{"type":"output_text", "text":"missing role"}]}]}),
         ] {
             assert_eq!(
                 OpenAiTextModel::output_text(&bad).unwrap_err().kind,
@@ -217,6 +224,15 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn zero_output_token_budget_fails_before_network_io() {
+        let model = OpenAiTextModel::new("test-openai-key".into(), "gpt-4.1-mini".into());
+        let mut request = sample("hello");
+        request.max_tokens = Some(0);
+        let err = model.generate(request).await.unwrap_err();
+        assert_eq!(err.kind, ProviderErrorKind::Setup);
+    }
+
+    #[tokio::test]
     async fn fake_http_responses_validate_shape_auth_and_failure_isolation() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use tokio::net::TcpListener;
@@ -231,7 +247,7 @@ mod tests {
             assert!(received.contains("POST /v1/responses HTTP/1.1"));
             assert!(received.contains("Bearer test-openai-key"));
             // Response payload may arrive in a subsequent TCP chunk.
-            let payload = r#"{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"hello from fake"}]}]}"#;
+            let payload = r#"{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello from fake"}]}]}"#;
             let reply = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 payload.len(), payload
