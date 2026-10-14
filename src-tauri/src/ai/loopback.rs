@@ -200,7 +200,8 @@ impl LoopbackTextModel {
 impl TextModel for LoopbackTextModel {
     async fn generate(&self, request: TextRequest) -> Result<TextResponse, ProviderError> {
         self.clean_model()?;
-        if request.prompt.len() > MAX_BODY_BYTES
+        if request.prompt.trim().is_empty()
+            || request.prompt.len() > MAX_BODY_BYTES
             || request
                 .system_instruction
                 .as_ref()
@@ -208,7 +209,9 @@ impl TextModel for LoopbackTextModel {
             || request
                 .temperature
                 .is_some_and(|value| !value.is_finite() || !(0.0..=2.0).contains(&value))
-            || request.max_tokens == Some(0)
+            || request
+                .max_tokens
+                .is_some_and(|limit| limit == 0 || limit > 4096)
         {
             return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
         }
@@ -229,7 +232,7 @@ impl TextModel for LoopbackTextModel {
                 "stream": false,
                 "options": {
                     "temperature": request.temperature.unwrap_or(0.8).clamp(0.0, 2.0),
-                    "num_predict": request.max_tokens.unwrap_or(1024).clamp(1, 4096)
+                    "num_predict": request.max_tokens.unwrap_or(1024)
                 }
             }),
             LoopbackTextServer::LlamaServer => json!({
@@ -237,7 +240,7 @@ impl TextModel for LoopbackTextModel {
                 "messages": messages,
                 "stream": false,
                 "temperature": request.temperature.unwrap_or(0.8).clamp(0.0, 2.0),
-                "max_tokens": request.max_tokens.unwrap_or(1024).clamp(1, 4096)
+                "max_tokens": request.max_tokens.unwrap_or(1024)
             }),
         };
         let mut response = client
@@ -325,12 +328,23 @@ mod tests {
                 .await;
             assert_eq!(result.unwrap_err().kind, ProviderErrorKind::Setup);
         }
+        for max_tokens in [0, 4097, u32::MAX] {
+            let result = model
+                .generate(TextRequest {
+                    prompt: "hello".into(),
+                    system_instruction: None,
+                    temperature: None,
+                    max_tokens: Some(max_tokens),
+                })
+                .await;
+            assert_eq!(result.unwrap_err().kind, ProviderErrorKind::Setup);
+        }
         let result = model
             .generate(TextRequest {
-                prompt: "hello".into(),
+                prompt: " ".into(),
                 system_instruction: None,
                 temperature: None,
-                max_tokens: Some(0),
+                max_tokens: Some(32),
             })
             .await;
         assert_eq!(result.unwrap_err().kind, ProviderErrorKind::Setup);

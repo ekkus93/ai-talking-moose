@@ -515,10 +515,12 @@ export const AiTab: React.FC<AiTabProps> = ({
             Google Cloud Credential
           </h4>
           <p className="text-[10px] text-gray-700">
-            {settings.text_provider === "local" &&
-            settings.asr_mode !== "gemini_live_audio"
-              ? "Not required for Local-first Talk or Local text. Google TTS still requires it when selected."
-              : "Required for the selected Google conversation or text provider, and for Google TTS."}
+            {settings.asr_mode === "gemini_live_audio" ||
+            settings.text_provider === "google"
+              ? "Required for Gemini Live or Google text generation. Google standalone TTS also requires this key when selected."
+              : settings.tts_provider === "google"
+                ? "Required for the selected Google standalone TTS, not for the selected text provider."
+                : "Not required for the selected text provider or standalone TTS. Google cloud features require it only when selected."}
           </p>
         </div>
 
