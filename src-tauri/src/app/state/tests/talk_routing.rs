@@ -42,7 +42,7 @@ async fn all_text_providers_with_local_asr_connect_without_gemini_live() {
         TextProvider::Ollama,
         TextProvider::LlamaServer,
     ] {
-        for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
+        for tts_provider in [TtsProvider::Local, TtsProvider::Google, TtsProvider::System] {
             let settings = AppSettings {
                 text_provider,
                 tts_provider,
