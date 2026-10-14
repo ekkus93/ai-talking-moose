@@ -17,3 +17,7 @@ it("keeps external provider model configuration separate from the selected Local
   expect(defaults.text_provider).toBe("local");
   expect(defaults.tts_provider).toBe("local");
 });
+
+it("keeps fresh profiles free of transcript persistence", () => {
+  expect(frontendDefaultSettings().save_transcripts).toBe(false);
+});
