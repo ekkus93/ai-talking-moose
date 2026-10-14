@@ -101,7 +101,7 @@ describe("External text provider controls", () => {
         setHasOpenaiKey={setPresence}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Save Key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save OpenAI Key" }));
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith("test-credential-not-a-real-key"),
     );
