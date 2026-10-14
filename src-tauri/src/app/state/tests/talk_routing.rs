@@ -119,3 +119,24 @@ async fn missing_openai_key_in_non_live_talk_does_not_fall_back() {
     }
     session.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn selected_system_voice_audition_fails_closed_until_native_adapter_is_available() {
+    use crate::ai::types::{ProviderErrorKind, TtsRequest};
+    let state = AppState::new_for_tests().unwrap();
+    state.settings.write().tts_provider = TtsProvider::System;
+    let error = state
+        .get_speech_synthesizer()
+        .synthesize(TtsRequest {
+            text: "audition".into(),
+            voice_name: Some("system_default".into()),
+            speaking_rate: None,
+            pitch: None,
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, ProviderErrorKind::Setup);
+    assert!(!error.retryable);
+    assert!(error.message.contains("no other voice provider"));
+    assert!(!error.message.contains("audition"));
+}
