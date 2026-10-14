@@ -141,9 +141,12 @@ impl SecretStore {
     /// Redact both independent provider credentials from diagnostics and errors.
     pub fn redact(&self, input: &str) -> String {
         let mut redacted = input.to_string();
-        for key in [self.google_api_key.read().clone(), self.openai_api_key.read().clone()]
-            .into_iter()
-            .flatten()
+        for key in [
+            self.google_api_key.read().clone(),
+            self.openai_api_key.read().clone(),
+        ]
+        .into_iter()
+        .flatten()
         {
             redacted = crate::secrets::redact_secret(&redacted, &key);
         }
@@ -188,19 +191,28 @@ mod tests {
     fn provider_keys_have_independent_lifetimes_and_both_are_redacted() {
         let backend = Arc::new(MemorySecretBackend::default());
         let store = SecretStore::with_backend(backend.clone()).unwrap();
-        store.set_google_api_key("google-test-secret".into()).unwrap();
-        store.set_openai_api_key("sk-openai-test-secret".into()).unwrap();
+        store
+            .set_google_api_key("google-test-secret".into())
+            .unwrap();
+        store
+            .set_openai_api_key("sk-openai-test-secret".into())
+            .unwrap();
         let reloaded = SecretStore::with_backend(backend).unwrap();
         assert!(reloaded.has_google_api_key());
         assert!(reloaded.has_openai_api_key());
-        assert_eq!(reloaded.get_openai_api_key().as_deref(), Some("sk-openai-test-secret"));
+        assert_eq!(
+            reloaded.get_openai_api_key().as_deref(),
+            Some("sk-openai-test-secret")
+        );
         let redacted = reloaded.redact("Google google-test-secret OpenAI sk-openai-test-secret");
         assert!(!redacted.contains("google-test-secret"));
         assert!(!redacted.contains("sk-openai-test-secret"));
         reloaded.clear().unwrap();
         assert!(!reloaded.has_google_api_key());
         assert!(reloaded.has_openai_api_key());
-        reloaded.set_google_api_key("new-google-secret".into()).unwrap();
+        reloaded
+            .set_google_api_key("new-google-secret".into())
+            .unwrap();
         reloaded.clear_openai_api_key().unwrap();
         assert!(reloaded.has_google_api_key());
         assert!(!reloaded.has_openai_api_key());

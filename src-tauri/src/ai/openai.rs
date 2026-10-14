@@ -98,7 +98,10 @@ impl TextModel for OpenAiTextModel {
         }
         if self.model.is_empty()
             || self.model.len() > 128
-            || !self.model.bytes().all(|b| b.is_ascii_alphanumeric() || b"-._:".contains(&b))
+            || !self
+                .model
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-._:".contains(&b))
             || request.prompt.len() > MAX_PROMPT_BYTES
             || request.max_tokens == Some(0)
             || request
@@ -135,7 +138,10 @@ impl TextModel for OpenAiTextModel {
         let client = self.client.as_ref().map_err(Clone::clone)?;
         let mut response = client
             .post(&self.endpoint)
-            .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", self.api_key))
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bearer {}", self.api_key),
+            )
             .json(&body)
             .send()
             .await
@@ -184,7 +190,10 @@ mod tests {
                              {"type":"output_text", "text":"world"}]}
             ]
         });
-        assert_eq!(OpenAiTextModel::output_text(&response).unwrap().text, "hello world");
+        assert_eq!(
+            OpenAiTextModel::output_text(&response).unwrap().text,
+            "hello world"
+        );
         for bad in [
             json!({"status":"completed", "output":[]}),
             json!({"status":"incomplete", "output":[]}),
