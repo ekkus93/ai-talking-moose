@@ -4,7 +4,7 @@ use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind};
 
 const MAX_SAMPLE_RATE_HZ: u32 = 96_000;
 const MIN_SAMPLE_RATE_HZ: u32 = 8_000;
-const MAX_DURATION_SECONDS: usize = 45;
+const MAX_DURATION_SECONDS: usize = crate::audio::playback::MAX_QUEUED_PLAYBACK_SECONDS;
 const MAX_CHANNELS: usize = 8;
 
 /// Collects native float PCM chunks while keeping the true source sample rate.
@@ -166,15 +166,15 @@ mod tests {
     #[test]
     fn cumulative_duration_limit_rejects_extra_frames_without_corrupting_audio() {
         let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
-        pcm.append_interleaved_f32(&vec![0.0; 8_000 * 20], 1)
+        pcm.append_interleaved_f32(&vec![0.0; 8_000 * 4], 1)
             .unwrap();
-        pcm.append_interleaved_f32(&vec![0.0; 8_000 * 25], 1)
+        pcm.append_interleaved_f32(&vec![0.0; 8_000 * 6], 1)
             .unwrap();
         assert_eq!(
             pcm.append_interleaved_f32(&[0.0], 1).unwrap_err().kind,
             ProviderErrorKind::Protocol
         );
-        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * 45 * 2);
+        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * MAX_DURATION_SECONDS * 2);
     }
 
     #[test]
@@ -213,13 +213,13 @@ mod tests {
     #[test]
     fn planar_frames_share_the_same_cumulative_duration_budget() {
         let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
-        let channel = vec![0.0_f32; 8_000 * 45];
+        let channel = vec![0.0_f32; 8_000 * MAX_DURATION_SECONDS];
         pcm.append_planar_f32(&[&channel]).unwrap();
         assert_eq!(
             pcm.append_planar_f32(&[&[0.0]]).unwrap_err().kind,
             ProviderErrorKind::Protocol
         );
-        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * 45 * 2);
+        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 8_000 * MAX_DURATION_SECONDS * 2);
     }
 
     #[test]
