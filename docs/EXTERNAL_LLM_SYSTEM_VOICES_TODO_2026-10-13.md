@@ -120,6 +120,12 @@ These are platform-neutral prerequisites, **not** native macOS speech synthesis.
 
 These changes expand platform-neutral input-format coverage but do **not** implement native macOS AVSpeechSynthesizer, OS voice enumeration, playback/cancellation integration, Control Panel enablement, or physical Mac audition. The complete routing matrix, macOS build, and canonical `check:all` remain unqualified. Keep ELSV-500 and ELSV-900 unchecked until those named criteria have real evidence.
 
+### Rust regression qualification — 2026-10-14
+
+Commits `30cd8b395d707e87b75935267efc66a39db4212e`, `ee377d69b02b852a01efdcd790039baba5b04aa4`, and `6be9c636cdd2180aadb2eb24482156857b83cc84` corrected Rust 1.99 Clippy failures in settings schema tests and added System TTS request bounds regressions. Exact-head CI `38641301159` passed Rust quality, Rust tests, and generated backend-contract verification.
+
+Native macOS synthesis, voice enumeration, playback/cancellation, Control Panel enablement, physical audition, full routing matrix, and `check:all` remain unqualified. Keep ELSV-500/900 unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
