@@ -454,11 +454,13 @@ mod tests {
                 );
                 stream.write_all(response.as_bytes()).await.unwrap();
             });
-            let model =
-                LoopbackTextModel::new(LoopbackTextServer::Ollama, base_url, "selected-model".into());
+            let model = LoopbackTextModel::new(
+                LoopbackTextServer::Ollama,
+                base_url,
+                "selected-model".into(),
+            );
             assert_eq!(model.check_readiness().await, expected);
             server.await.unwrap();
         }
     }
-
 }
