@@ -263,6 +263,18 @@ mod tests {
     }
 
     #[test]
+    fn planar_i16_input_downmixes_and_preserves_sample_rate() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        pcm.append_planar_i16(&[&[i16::MAX, i16::MIN], &[i16::MIN, i16::MIN]])
+            .unwrap();
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 8_000);
+        assert_eq!(output.pcm_bytes.len(), 4);
+        assert_eq!(i16::from_le_bytes([output.pcm_bytes[0], output.pcm_bytes[1]]), -1);
+        assert_eq!(i16::from_le_bytes([output.pcm_bytes[2], output.pcm_bytes[3]]), i16::MIN);
+    }
+
+    #[test]
     fn bounded_duration_does_not_accept_an_oversized_chunk() {
         let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
         let too_long = vec![0.0_f32; 8_000 * (MAX_DURATION_SECONDS + 1)];
