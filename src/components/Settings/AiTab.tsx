@@ -411,7 +411,7 @@ export const AiTab: React.FC<AiTabProps> = ({
                     onClick={() => void handleSaveOpenaiKey()}
                     className="px-2 py-1 bg-black text-white rounded font-bold"
                   >
-                    Save Key
+                    Save OpenAI Key
                   </button>
                 </div>
                 {hasOpenaiKey ? (
