@@ -153,7 +153,7 @@ struct LocalConversationSession {
     voice_name: String,
     speaking_rate: f32,
     generation: Arc<AtomicU64>,
-    active_synthesis: Arc<Mutex<Option<CancellationToken>>>,
+    active_synthesis: Arc<Mutex<Option<(u64, CancellationToken)>>>,
     closed: bool,
 }
 
@@ -168,6 +168,11 @@ impl LiveSession for LocalConversationSession {
             return Err(ProviderError::from_kind(ProviderErrorKind::Closed));
         }
         let turn = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        // New finalized text supersedes the previous synthesis, even without
+        // a separate explicit interrupt command from the conversation owner.
+        if let Some((_, previous)) = self.active_synthesis.lock().take() {
+            previous.cancel();
+        }
         let current_generation = self.generation.clone();
         let active_synthesis = self.active_synthesis.clone();
         let event_sender = self.event_sender.clone();
@@ -213,7 +218,7 @@ impl LiveSession for LocalConversationSession {
                 .await;
 
             let cancellation = CancellationToken::new();
-            *active_synthesis.lock() = Some(cancellation.clone());
+            *active_synthesis.lock() = Some((turn, cancellation.clone()));
             let audio = speech_synthesizer
                 .synthesize_cancellable(
                     TtsRequest {
@@ -227,7 +232,15 @@ impl LiveSession for LocalConversationSession {
                     &cancellation,
                 )
                 .await;
-            active_synthesis.lock().take();
+            {
+                let mut active = active_synthesis.lock();
+                if active
+                    .as_ref()
+                    .is_some_and(|(active_turn, _)| *active_turn == turn)
+                {
+                    active.take();
+                }
+            }
             if current_generation.load(Ordering::SeqCst) != turn {
                 return;
             }
@@ -255,7 +268,7 @@ impl LiveSession for LocalConversationSession {
 
     async fn interrupt(&mut self) -> Result<(), ProviderError> {
         self.generation.fetch_add(1, Ordering::SeqCst);
-        if let Some(cancellation) = self.active_synthesis.lock().take() {
+        if let Some((_, cancellation)) = self.active_synthesis.lock().take() {
             cancellation.cancel();
         }
         self.event_sender
@@ -267,7 +280,7 @@ impl LiveSession for LocalConversationSession {
     async fn close(&mut self) -> Result<(), ProviderError> {
         self.closed = true;
         self.generation.fetch_add(1, Ordering::SeqCst);
-        if let Some(cancellation) = self.active_synthesis.lock().take() {
+        if let Some((_, cancellation)) = self.active_synthesis.lock().take() {
             cancellation.cancel();
         }
         Ok(())
@@ -397,6 +410,90 @@ mod tests {
         )
         .await
         .is_err());
+    }
+
+    struct CancellationProbe {
+        next: std::sync::atomic::AtomicUsize,
+        started: mpsc::UnboundedSender<usize>,
+        cancelled: mpsc::UnboundedSender<usize>,
+    }
+
+    #[async_trait]
+    impl SpeechSynthesizer for CancellationProbe {
+        async fn synthesize(&self, _request: TtsRequest) -> Result<AudioStreamData, ProviderError> {
+            Err(ProviderError::from_kind(ProviderErrorKind::Setup))
+        }
+
+        async fn synthesize_cancellable(
+            &self,
+            _request: TtsRequest,
+            cancellation: &CancellationToken,
+        ) -> Result<AudioStreamData, ProviderError> {
+            let id = self.next.fetch_add(1, Ordering::SeqCst) + 1;
+            let _ = self.started.send(id);
+            cancellation.cancelled().await;
+            let _ = self.cancelled.send(id);
+            Err(ProviderError::from_kind(ProviderErrorKind::Cancelled))
+        }
+    }
+
+    #[tokio::test]
+    async fn replacing_a_turn_cancels_old_synthesis_and_interrupt_cancels_the_new_one() {
+        let (started_tx, mut started) = mpsc::unbounded_channel();
+        let (cancelled_tx, mut cancelled) = mpsc::unbounded_channel();
+        let provider = LocalConversationProvider::new(
+            Arc::new(ReplyModel),
+            Arc::new(CancellationProbe {
+                next: std::sync::atomic::AtomicUsize::new(0),
+                started: started_tx,
+                cancelled: cancelled_tx,
+            }),
+            "Leo".to_string(),
+            1.0,
+        );
+        let (sender, mut events) = mpsc::channel(8);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "local".to_string(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: Vec::<ToolDeclaration>::new(),
+                },
+                sender,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+        session.send_text_turn("first").await.unwrap();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), started.recv())
+                .await
+                .unwrap(),
+            Some(1)
+        );
+        session.send_text_turn("second").await.unwrap();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), cancelled.recv())
+                .await
+                .unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), started.recv())
+                .await
+                .unwrap(),
+            Some(2)
+        );
+        session.interrupt().await.unwrap();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), cancelled.recv())
+                .await
+                .unwrap(),
+            Some(2)
+        );
     }
 
     #[test]
