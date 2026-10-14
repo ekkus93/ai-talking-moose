@@ -408,10 +408,9 @@ mod tests {
                 assert!(count > 0, "request body truncated");
                 received.extend_from_slice(&chunk[..count]);
             }
-            let body: Value = serde_json::from_slice(
-                &received[header_end + 4..header_end + 4 + content_length],
-            )
-            .unwrap();
+            let body: Value =
+                serde_json::from_slice(&received[header_end + 4..header_end + 4 + content_length])
+                    .unwrap();
             assert_eq!(body["model"], "gpt-4.1-mini");
             assert_eq!(body["input"], "private transcript");
             assert_eq!(body["instructions"], "Stay concise.");
@@ -431,7 +430,14 @@ mod tests {
             "gpt-4.1-mini".into(),
             endpoint,
         );
-        assert_eq!(model.generate(sample("private transcript")).await.unwrap().text, "ok");
+        assert_eq!(
+            model
+                .generate(sample("private transcript"))
+                .await
+                .unwrap()
+                .text,
+            "ok"
+        );
         server.await.unwrap();
     }
 }
