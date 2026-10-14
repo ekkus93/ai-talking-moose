@@ -206,7 +206,8 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </h4>
           <p className="text-[10px] text-gray-700">
             This provider speaks typed replies, ambient remarks, canned
-            reactions, and voice auditions. Non-Live Talk uses the selected standalone speech provider.
+            reactions, and voice auditions. Non-Live Talk uses the selected
+            standalone speech provider.
           </p>
         </div>
 
