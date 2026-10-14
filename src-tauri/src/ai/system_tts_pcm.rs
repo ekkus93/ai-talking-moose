@@ -88,6 +88,37 @@ impl SystemPcmAccumulator {
         Ok(())
     }
 
+    /// Append native planar double-precision float PCM. Scale each channel
+    /// before summing so even finite f64::MAX inputs cannot overflow the mix.
+    /// As with other formats, reject the entire chunk before writing samples.
+    pub fn append_planar_f64(&mut self, channels: &[&[f64]]) -> Result<(), ProviderError> {
+        let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
+        if channels.is_empty() || channels.len() > MAX_CHANNELS {
+            return Err(invalid());
+        }
+        let frames = channels[0].len();
+        let remaining = (self.sample_rate_hz as usize)
+            .saturating_mul(MAX_DURATION_SECONDS)
+            .saturating_sub(self.pcm_bytes.len() / 2);
+        if frames > remaining
+            || channels.iter().any(|channel| {
+                channel.len() != frames || channel.iter().any(|sample| !sample.is_finite())
+            })
+        {
+            return Err(invalid());
+        }
+        self.pcm_bytes.reserve(frames * 2);
+        for frame in 0..frames {
+            let mono = channels
+                .iter()
+                .map(|channel| channel[frame] / channels.len() as f64)
+                .sum::<f64>();
+            let sample = (mono.clamp(-1.0, 1.0) * f64::from(i16::MAX)).round() as i16;
+            self.pcm_bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        Ok(())
+    }
+
     /// Append native planar signed 16-bit PCM without allocating float samples.
     pub fn append_planar_i16(&mut self, channels: &[&[i16]]) -> Result<(), ProviderError> {
         let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
@@ -348,6 +379,44 @@ mod tests {
             ProviderErrorKind::Protocol
         );
         pcm.append_planar_f32(&[&[0.25]]).unwrap();
+        assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 2);
+    }
+
+    #[test]
+    fn planar_f64_preserves_rate_and_handles_extreme_finite_channels() {
+        let mut pcm = SystemPcmAccumulator::new(48_000).unwrap();
+        pcm.append_planar_f64(&[
+            &[f64::MAX, 0.5, -1.0],
+            &[-f64::MAX, 0.5, 1.0],
+        ])
+        .unwrap();
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 48_000);
+        assert_eq!(
+            output.pcm_bytes,
+            [0_i16, 16384_i16, 0_i16]
+                .map(i16::to_le_bytes)
+                .concat()
+        );
+    }
+
+    #[test]
+    fn planar_f64_invalid_chunks_are_atomic() {
+        let mut pcm = SystemPcmAccumulator::new(8_000).unwrap();
+        pcm.append_planar_f64(&[&[0.25]]).unwrap();
+        let oversized = vec![0.0_f64; 8_000 * (MAX_DURATION_SECONDS + 1)];
+        for channels in [
+            vec![],
+            vec![&[1.0][..], &[0.0, 0.0][..]],
+            vec![&[f64::NAN][..]],
+            vec![&[f64::INFINITY][..]],
+            vec![&oversized[..]],
+        ] {
+            assert_eq!(
+                pcm.append_planar_f64(&channels).unwrap_err().kind,
+                ProviderErrorKind::Protocol
+            );
+        }
         assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 2);
     }
 
