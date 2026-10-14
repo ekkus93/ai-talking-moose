@@ -151,14 +151,20 @@ impl LoopbackTextModel {
         }
         let finish_reason = match self.kind {
             LoopbackTextServer::Ollama => {
-                if value["done"].as_bool() != Some(true) {
+                if value["done"].as_bool() != Some(true)
+                    || (value.get("done_reason").is_some()
+                        && value["done_reason"].as_str() != Some("stop"))
+                {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
                 }
                 Some("completed".to_string())
             }
-            LoopbackTextServer::LlamaServer => value["choices"][0]["finish_reason"]
-                .as_str()
-                .map(str::to_string),
+            LoopbackTextServer::LlamaServer => {
+                if value["choices"][0]["finish_reason"].as_str() != Some("stop") {
+                    return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
+                }
+                Some("stop".to_string())
+            }
         };
         Ok(TextResponse {
             text: text.trim().to_string(),
@@ -329,6 +335,63 @@ mod tests {
                 .unwrap_err().kind,
             ProviderErrorKind::Protocol
         );
+    }
+
+    #[test]
+    fn token_budget_truncation_is_not_spoken_as_a_complete_reply() {
+        let ollama = LoopbackTextModel::new(
+            LoopbackTextServer::Ollama,
+            "http://127.0.0.1:11434".into(),
+            "local".into(),
+        );
+        let llama = LoopbackTextModel::new(
+            LoopbackTextServer::LlamaServer,
+            "http://127.0.0.1:8080".into(),
+            "local".into(),
+        );
+        for reason in ["length", "unload", "error"] {
+            let response = json!({
+                "done": true,
+                "done_reason": reason,
+                "model": "local",
+                "message": {"role": "assistant", "content": "incomplete sentence"}
+            });
+            assert_eq!(
+                ollama.text_from_json(&response).unwrap_err().kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        for reason in ["length", "tool_calls", "content_filter"] {
+            let response = json!({
+                "choices": [{
+                    "message": {"role": "assistant", "content": "incomplete sentence"},
+                    "finish_reason": reason
+                }]
+            });
+            assert_eq!(
+                llama.text_from_json(&response).unwrap_err().kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        assert_eq!(
+            llama
+                .text_from_json(&json!({
+                    "choices": [{
+                        "message": {"role": "assistant", "content": "unfinished"},
+                        "finish_reason": null
+                    }]
+                }))
+                .unwrap_err()
+                .kind,
+            ProviderErrorKind::Protocol
+        );
+        assert!(ollama
+            .text_from_json(&json!({
+                "done": true,
+                "done_reason": "stop",
+                "message": {"role": "assistant", "content": "complete"}
+            }))
+            .is_ok());
     }
 
     #[tokio::test]
