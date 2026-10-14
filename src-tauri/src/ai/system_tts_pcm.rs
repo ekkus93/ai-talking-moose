@@ -437,8 +437,10 @@ mod tests {
         assert_eq!(output.sample_rate, 44_100);
         let samples: Vec<i16> = output
             .pcm_bytes
-            .chunks_exact(2)
-            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| i16::from_le_bytes(*pair))
             .collect();
         assert_eq!(samples, vec![i16::MAX, i16::MIN, 0, 0]);
     }
