@@ -97,6 +97,10 @@ Ralph Bridge v0.6.1 accepted and verified direct-to-`master` changes that were p
 
 Exact-head CI `38607283397` passed on `3965d5e7a272ed55767f8cf01d168267bb2f095c` after Rust formatting corrections. Exact-head CI `38608770125` passed on `b3f3c12df3fa8df73ca9a85115485a0550eea4d4`, including Rust quality, Rust tests, and generated-contract checks. The latter also tests bounded cumulative PCM and f64 downmix of extreme finite channels. Native macOS system voice synthesis and physical audition are still outstanding. Keep ELSV-500 and ELSV-900 unchecked.
 
+### ELSV-500 planar PCM qualification — 2026-10-14
+
+Exact-head CI `38619191978` passed on `8142640892dc0cc5768a38f1264dbdf7373db6f0` (Rust tests, Rust quality, and generated-contract checks). New `SystemPcmAccumulator::append_planar_f32` supports bounded planar float-channel conversion without an interleaving allocation. Regression coverage includes channel mismatch, non-finite samples, cumulative duration, and oversized chunks. This does **not** implement native macOS `AVSpeechSynthesizer`, installed voice enumeration, cancellation, real playback, or physical Mac audition. ELSV-500 and ELSV-900 remain open.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
