@@ -102,8 +102,9 @@ impl TextModel for OpenAiTextModel {
                 .model
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b"-._:".contains(&b))
+            || request.prompt.trim().is_empty()
             || request.prompt.len() > MAX_PROMPT_BYTES
-            || request.max_tokens == Some(0)
+            || request.max_tokens.is_some_and(|limit| limit == 0 || limit > 4096)
             || request
                 .system_instruction
                 .as_ref()
@@ -119,7 +120,7 @@ impl TextModel for OpenAiTextModel {
         let mut body = json!({
             "model": self.model,
             "input": request.prompt,
-            "max_output_tokens": request.max_tokens.unwrap_or(1024).clamp(1, 4096),
+            "max_output_tokens": request.max_tokens.unwrap_or(1024),
             "store": false
         });
         if let Some(instructions) = request.system_instruction {
