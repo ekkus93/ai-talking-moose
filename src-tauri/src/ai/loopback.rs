@@ -126,8 +126,20 @@ impl LoopbackTextModel {
     }
 
     fn text_from_json(&self, value: &Value) -> Result<TextResponse, ProviderError> {
+        // An echoed user/tool message is not a generated assistant reply.
+        // When the server supplies a model identity, it must be the selected one.
+        if value.get("model").is_some()
+            && value["model"].as_str() != Some(self.model.as_str())
+        {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
+        }
         let text = match self.kind {
-            LoopbackTextServer::Ollama => value["message"]["content"].as_str(),
+            LoopbackTextServer::Ollama => {
+                if value["message"]["role"].as_str() != Some("assistant") {
+                    return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
+                }
+                value["message"]["content"].as_str()
+            },
             LoopbackTextServer::LlamaServer => {
                 if value["choices"][0]["message"]["role"].as_str() != Some("assistant") {
                     return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
@@ -282,7 +294,7 @@ mod tests {
             "http://127.0.0.1:8080".into(),
             "local".into(),
         );
-        let native = json!({"done": true, "message": {"content": "native reply"}});
+        let native = json!({"done": true, "model": "local", "message": {"role": "assistant", "content": "native reply"}});
         let compatible = json!({"choices":[{"message":{"role":"assistant","content":"compatible reply"},"finish_reason":"stop"}]});
         assert_eq!(ollama.text_from_json(&native).unwrap().text, "native reply");
         assert!(llama.text_from_json(&native).is_err());
@@ -300,8 +312,23 @@ mod tests {
             )
             .is_err());
         assert!(ollama
-            .text_from_json(&json!({"done":false,"message":{"content":"partial"}}))
+            .text_from_json(&json!({"done":false,"message":{"role":"assistant","content":"partial"}}))
             .is_err());
+        for bad in [
+            json!({"done":true,"message":{"role":"user","content":"echoed prompt"}}),
+            json!({"done":true,"message":{"content":"missing role"}}),
+            json!({"done":true,"model":"other-model","message":{"role":"assistant","content":"wrong model"}}),
+        ] {
+            assert_eq!(
+                ollama.text_from_json(&bad).unwrap_err().kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        assert_eq!(
+            llama.text_from_json(&json!({"model":"other-model","choices":[{"message":{"role":"assistant","content":"wrong model"},"finish_reason":"stop"}]}))
+                .unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
     }
 
     #[tokio::test]
@@ -371,7 +398,7 @@ mod tests {
             (
                 LoopbackTextServer::Ollama,
                 "/api/chat",
-                r#"{"done":true,"message":{"content":"ollama response"}}"#,
+                r#"{"done":true,"model":"selected-model","message":{"role":"assistant","content":"ollama response"}}"#,
             ),
             (
                 LoopbackTextServer::LlamaServer,
