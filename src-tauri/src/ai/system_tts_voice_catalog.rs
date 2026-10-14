@@ -52,5 +52,11 @@ mod tests {
             style: None,
         };
         assert!(normalize_installed_voices(vec![bad]).is_empty());
+        let bad_style = TtsVoiceDescriptor {
+            id: "com.apple.voice.bad".into(),
+            display_name: "Valid".into(),
+            style: Some("en\\nUS".into()),
+        };
+        assert!(normalize_installed_voices(vec![bad_style]).is_empty());
     }
 }
