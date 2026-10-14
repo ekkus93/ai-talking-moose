@@ -237,6 +237,16 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
               </span>
             </label>
           ))}
+          <label className="flex items-start gap-2 p-2 border border-gray-400 rounded opacity-60">
+            <input type="radio" name="tts-provider" value="system" disabled />
+            <span>
+              <span className="font-bold">System Voices — unavailable</span>
+              <span className="block text-[10px] text-gray-700">
+                macOS system speech is pending qualification and cannot yet be
+                selected or auditioned. Linux system voices are unsupported.
+              </span>
+            </span>
+          </label>
         </fieldset>
 
         {catalogError && (
