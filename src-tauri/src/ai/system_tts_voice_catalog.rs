@@ -46,5 +46,11 @@ mod tests {
         assert_eq!(normalized.len(), 2);
         assert_eq!(normalized[0].id, "com.apple.voice.one");
         assert_eq!(normalized[1].id, "com.apple.voice.two");
+        let bad = TtsVoiceDescriptor {
+            id: "com.apple.voice.bad".into(),
+            display_name: String::new(),
+            style: None,
+        };
+        assert!(normalize_installed_voices(vec![bad]).is_empty());
     }
 }
