@@ -111,6 +111,15 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
             return Err(format!("{name} contains invalid characters"));
         }
     }
+    // Keep the settings boundary consistent with OpenAI request validation:
+    // a saved model ID must be usable before the user starts a request.
+    if !settings
+        .openai_text_model
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || b"-._:".contains(&byte))
+    {
+        return Err("OpenAI text model ID contains unsupported characters".to_string());
+    }
     validate_loopback_server_address(&settings.ollama_server_address)?;
     validate_loopback_server_address(&settings.llama_server_address)?;
     optional_device_id("input device ID", settings.input_device.as_deref())?;
@@ -422,6 +431,10 @@ mod tests {
         }
         let mut settings = AppSettings::default();
         settings.openai_text_model = String::new();
+        assert!(validate_app_settings(&settings).is_err());
+        settings.openai_text_model = "gpt-4.1 mini".into();
+        assert!(validate_app_settings(&settings).is_err());
+        settings.openai_text_model = "gpt-4.1/mini".into();
         assert!(validate_app_settings(&settings).is_err());
         settings.openai_text_model = "gpt-4.1-mini".into();
         settings.ollama_text_model = "bad\nmodel".into();
