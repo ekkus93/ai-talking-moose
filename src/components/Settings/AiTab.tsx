@@ -110,6 +110,7 @@ export const AiTab: React.FC<AiTabProps> = ({
     setServerStatus("Checking loopback server and selected model…");
     try {
       const state = await tauriBridge.testLocalTextServer(provider);
+      if (useMooseStore.getState().settings?.text_provider !== provider) return;
       setServerStatus(
         state === "model_ready"
           ? "Connected: selected model is available."
