@@ -153,7 +153,7 @@ Commit `0a490e2d25460c5026e5b93715b9acf7dcc63341` additionally rejects padded sa
 
 ### Ollama untagged model identity follow-up — 2026-10-14
 
-The configured default Ollama model ID is `llama3.2`, while Ollama can report its canonical tag as `llama3.2:latest` in `/api/tags` and `/api/chat`. The current adapter compares reported identities with strict equality in both readiness and generation; this may incorrectly report a ready default model as unavailable or reject its valid reply. Resolve only the exact untagged-to-`:latest` Ollama alias, keep explicit tags and llama-server IDs strict, and add both parser and fake-server readiness regressions. A prepared source-write attempt was rejected by the write-safety boundary; **no code fix or passing test is claimed**.
+The default Ollama model ID is `llama3.2`, which Ollama may report as `llama3.2:latest` in `/api/tags` and `/api/chat`. **Resolved:** `e772fba27c014653586c24d24bcba407a1876e47` permits only the exact untagged-to-`:latest` Ollama alias in both readiness and generation; explicit tags and llama-server IDs remain strict. `a8e7d0d8b99eece51d4a1690c46148731da54d02` adds fake-server readiness regressions. The earlier write-safety rejection was superseded by these verified direct-to-`master` commits. The complete ELSV-300 acceptance matrix is still open.
 
 ## ELSV-300 — Ollama and llama-server adapters
 
