@@ -15,6 +15,7 @@
 - **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
 - **Local-first AI:** New profiles use Local text, Local TTS, and platform-local ASR by default. SmolLM2 360M and KittenTTS are selected but never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains optional.
 - **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS or Local KittenTTS. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification.
+- **System voice status:** macOS System Voices are planned but not yet usable: OS voice enumeration, PCM synthesis, and physical audition remain unimplemented. The System choice is disabled rather than silently using another voice. Linux has no System TTS fallback.
 - **Ambient reactions:** When explicitly enabled, the Moose can react to permitted local computer events.
 - **Retro visuals:** Low-resolution integer-scaled pixel art with amplitude-driven mouth animation.
 - **Local control and privacy:** Settings, optional memories, and optional transcripts are stored locally. Privacy-sensitive features default conservatively. Local ASR, Local text, and Local TTS do not silently fall back to cloud providers.
