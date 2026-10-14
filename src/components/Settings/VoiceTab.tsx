@@ -263,7 +263,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             >
               {settings.tts_provider === "google"
                 ? "Google Standalone Voice"
-                : "Local KittenTTS Voice"}
+                : settings.tts_provider === "system"
+                  ? "macOS System Voice"
+                  : "Local KittenTTS Voice"}
             </label>
             <select
               id="settings-standalone-voice"
@@ -356,9 +358,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </div>
         ) : (
           <div className="p-2 border border-gray-400 rounded bg-gray-50 text-[10px] text-gray-700">
-            KittenTTS Mini does not expose a truthful pitch control. Your saved
-            Google pitch preference ({settings.pitch.toFixed(1)}) is preserved
-            and will be used again if you switch back to Google.
+            {settings.tts_provider === "system"
+              ? "System voice synthesis is unavailable in this build. Your Google pitch preference is preserved."
+              : "KittenTTS Mini does not expose a truthful pitch control. Your saved Google pitch preference is preserved."}
           </div>
         )}
 

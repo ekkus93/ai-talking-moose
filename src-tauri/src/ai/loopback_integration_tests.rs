@@ -116,3 +116,32 @@ async fn truncated_generation_is_rejected_at_the_http_boundary() {
         server.await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn model_catalog_redirect_does_not_follow_a_remote_destination() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut buffer = [0u8; 2048];
+        let size = stream.read(&mut buffer).await.unwrap();
+        assert!(String::from_utf8_lossy(&buffer[..size])
+            .starts_with("GET /v1/models HTTP/1.1"));
+        stream
+            .write_all(
+                b"HTTP/1.1 302 Found\r\nLocation: https://example.invalid/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+    });
+    let model = LoopbackTextModel::new(
+        LoopbackTextServer::LlamaServer,
+        base_url,
+        "selected-model".into(),
+    );
+    assert_eq!(
+        model.check_readiness().await,
+        LoopbackReadiness::ReachableButModelUnavailable
+    );
+    server.await.unwrap();
+}
