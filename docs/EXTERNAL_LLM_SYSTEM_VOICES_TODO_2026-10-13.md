@@ -101,6 +101,10 @@ Exact-head CI `38607283397` passed on `3965d5e7a272ed55767f8cf01d168267bb2f095c`
 
 Exact-head CI `38619191978` passed on `8142640892dc0cc5768a38f1264dbdf7373db6f0` (Rust tests, Rust quality, and generated-contract checks). New `SystemPcmAccumulator::append_planar_f32` supports bounded planar float-channel conversion without an interleaving allocation. Regression coverage includes channel mismatch, non-finite samples, cumulative duration, and oversized chunks. This does **not** implement native macOS `AVSpeechSynthesizer`, installed voice enumeration, cancellation, real playback, or physical Mac audition. ELSV-500 and ELSV-900 remain open.
 
+### Saved System voice UI and documentation — 2026-10-14
+
+The Control Panel now preserves the checked radio state for a saved System TTS selection while continuing to disable that unfinished provider. Exact-head frontend CI `38621242235` passed on `c86c86bde81dfbf55e1c40c801950dc66fbe0eda`. README setup guidance for OpenAI, Ollama, and llama-server landed in `705b48d708ccb9ed75335f8892d3761c2cd8d6cb`. Native macOS synthesis, installed-voice enumeration, persisted-System selection tests, physical audition, and full ELSV acceptance remain open.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
