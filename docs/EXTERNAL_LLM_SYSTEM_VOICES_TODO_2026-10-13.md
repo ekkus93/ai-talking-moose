@@ -124,7 +124,7 @@ These changes expand platform-neutral input-format coverage but do **not** imple
 
 Commits `30cd8b395d707e87b75935267efc66a39db4212e`, `ee377d69b02b852a01efdcd790039baba5b04aa4`, and `6be9c636cdd2180aadb2eb24482156857b83cc84` corrected Rust 1.99 Clippy failures in settings schema tests and added System TTS request bounds regressions. Exact-head CI `38641301159` passed Rust quality, Rust tests, and generated backend-contract verification.
 
-Native macOS synthesis, voice enumeration, playback/cancellation, Control Panel enablement, physical audition, full routing matrix, and `check:all` remain unqualified. Keep ELSV-500/900 unchecked.
+Commit `0a490e2d25460c5026e5b93715b9acf7dcc63341` additionally rejects padded saved System voice identifiers before OS selection, with negative regressions. Exact-head CI `38642767523` passed Rust quality, Rust tests, and generated backend-contract verification. Native macOS synthesis, voice enumeration, playback/cancellation, Control Panel enablement, physical audition, full routing matrix, and `check:all` remain unqualified. Keep ELSV-500/900 unchecked.
 
 ## ELSV-100 — Settings and IPC foundations
 
