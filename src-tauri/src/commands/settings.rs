@@ -305,7 +305,9 @@ pub async fn test_local_text_server(
             settings.llama_server_address,
             settings.llama_server_text_model,
         ),
-        _ => return Err("Select Ollama or llama-server for a loopback readiness check".to_string()),
+        _ => {
+            return Err("Select Ollama or llama-server for a loopback readiness check".to_string())
+        }
     };
     Ok(model.check_readiness().await)
 }
