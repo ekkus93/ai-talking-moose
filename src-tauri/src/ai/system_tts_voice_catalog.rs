@@ -57,6 +57,6 @@ mod tests {
             display_name: "Valid".into(),
             style: Some("en\nUS".into()),
         };
-        assert!(normalize_installed_voices(vec![bad_style]).is_empty());
+        assert!(normalize_installed_voices(vec![bad_style.clone()]).is_empty());
     }
 }
