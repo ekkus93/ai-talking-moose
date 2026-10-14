@@ -550,8 +550,8 @@ export const AiTab: React.FC<AiTabProps> = ({
           </button>
         </div>
         <p className="text-[10px] text-gray-700">
-          macOS stores your key in Keychain. Linux holds it only in memory
-          until this app exits. The key is never returned to this settings screen.
+          macOS stores this key in Keychain. On Linux, the key is session-only.
+          It is never returned to this settings screen.
         </p>
         {hasApiKey ? (
           <button

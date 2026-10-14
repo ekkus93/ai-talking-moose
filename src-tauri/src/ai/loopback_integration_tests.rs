@@ -92,10 +92,8 @@ async fn truncated_generation_is_rejected_at_the_http_boundary() {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut buffer = [0u8; 4096];
             let size = stream.read(&mut buffer).await.unwrap();
-            assert!(
-                String::from_utf8_lossy(&buffer[..size])
-                    .starts_with(&format!("POST {path} HTTP/1.1"))
-            );
+            assert!(String::from_utf8_lossy(&buffer[..size])
+                .starts_with(&format!("POST {path} HTTP/1.1")));
             let response = format!(
                 "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
                 payload.len()
@@ -125,8 +123,7 @@ async fn model_catalog_redirect_does_not_follow_a_remote_destination() {
         let (mut stream, _) = listener.accept().await.unwrap();
         let mut buffer = [0u8; 2048];
         let size = stream.read(&mut buffer).await.unwrap();
-        assert!(String::from_utf8_lossy(&buffer[..size])
-            .starts_with("GET /v1/models HTTP/1.1"));
+        assert!(String::from_utf8_lossy(&buffer[..size]).starts_with("GET /v1/models HTTP/1.1"));
         stream
             .write_all(
                 b"HTTP/1.1 302 Found\r\nLocation: https://example.invalid/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
