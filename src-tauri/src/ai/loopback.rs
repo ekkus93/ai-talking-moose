@@ -128,7 +128,12 @@ impl LoopbackTextModel {
     fn text_from_json(&self, value: &Value) -> Result<TextResponse, ProviderError> {
         let text = match self.kind {
             LoopbackTextServer::Ollama => value["message"]["content"].as_str(),
-            LoopbackTextServer::LlamaServer => value["choices"][0]["message"]["content"].as_str(),
+            LoopbackTextServer::LlamaServer => {
+                if value["choices"][0]["message"]["role"].as_str() != Some("assistant") {
+                    return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
+                }
+                value["choices"][0]["message"]["content"].as_str()
+            }
         }
         .ok_or_else(|| ProviderError::from_kind(ProviderErrorKind::Protocol))?;
         if text.trim().is_empty() || text.len() > MAX_OUTPUT_BYTES {
@@ -279,7 +284,7 @@ mod tests {
         );
         let native = json!({"done": true, "message": {"content": "native reply"}});
         let compatible =
-            json!({"choices":[{"message":{"content":"compatible reply"},"finish_reason":"stop"}]});
+            json!({"choices":[{"message":{"role":"assistant","content":"compatible reply"},"finish_reason":"stop"}]});
         assert_eq!(ollama.text_from_json(&native).unwrap().text, "native reply");
         assert!(llama.text_from_json(&native).is_err());
         assert_eq!(
@@ -364,7 +369,7 @@ mod tests {
             (
                 LoopbackTextServer::LlamaServer,
                 "/v1/chat/completions",
-                r#"{"choices":[{"message":{"content":"llama response"},"finish_reason":"stop"}]}"#,
+                r#"{"choices":[{"message":{"role":"assistant","content":"llama response"},"finish_reason":"stop"}]}"#,
             ),
         ] {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
