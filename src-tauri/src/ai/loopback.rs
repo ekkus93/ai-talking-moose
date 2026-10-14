@@ -69,9 +69,8 @@ impl LoopbackTextModel {
                 if url.host_str() == Some("localhost") {
                     let target = SocketAddr::new(
                         IpAddr::V4(Ipv4Addr::LOCALHOST),
-                        url.port().ok_or_else(|| {
-                            ProviderError::from_kind(ProviderErrorKind::Setup)
-                        })?,
+                        url.port()
+                            .ok_or_else(|| ProviderError::from_kind(ProviderErrorKind::Setup))?,
                     );
                     builder = builder.resolve("localhost", target);
                 }
@@ -142,9 +141,9 @@ impl LoopbackTextModel {
                 }
                 Some("completed".to_string())
             }
-            LoopbackTextServer::LlamaServer => {
-                value["choices"][0]["finish_reason"].as_str().map(str::to_string)
-            }
+            LoopbackTextServer::LlamaServer => value["choices"][0]["finish_reason"]
+                .as_str()
+                .map(str::to_string),
         };
         Ok(TextResponse {
             text: text.trim().to_string(),
@@ -160,7 +159,11 @@ impl LoopbackTextModel {
             return LoopbackReadiness::Unreachable;
         };
         let result = client
-            .get(format!("{}{}", self.base_url.trim_end_matches('/'), self.kind.models_path()))
+            .get(format!(
+                "{}{}",
+                self.base_url.trim_end_matches('/'),
+                self.kind.models_path()
+            ))
             .timeout(Duration::from_secs(4))
             .send()
             .await;
@@ -180,7 +183,9 @@ impl LoopbackTextModel {
         let available = models.as_array().is_some_and(|models| {
             models.iter().any(|entry| {
                 let candidate = match self.kind {
-                    LoopbackTextServer::Ollama => entry["name"].as_str().or_else(|| entry["model"].as_str()),
+                    LoopbackTextServer::Ollama => {
+                        entry["name"].as_str().or_else(|| entry["model"].as_str())
+                    }
                     LoopbackTextServer::LlamaServer => entry["id"].as_str(),
                 };
                 candidate == Some(self.model.as_str())
@@ -199,7 +204,10 @@ impl TextModel for LoopbackTextModel {
     async fn generate(&self, request: TextRequest) -> Result<TextResponse, ProviderError> {
         self.clean_model()?;
         if request.prompt.len() > MAX_BODY_BYTES
-            || request.system_instruction.as_ref().is_some_and(|text| text.len() > MAX_BODY_BYTES)
+            || request
+                .system_instruction
+                .as_ref()
+                .is_some_and(|text| text.len() > MAX_BODY_BYTES)
             || request
                 .temperature
                 .is_some_and(|value| !value.is_finite() || !(0.0..=2.0).contains(&value))
@@ -236,7 +244,11 @@ impl TextModel for LoopbackTextModel {
             }),
         };
         let mut response = client
-            .post(format!("{}{}", self.base_url.trim_end_matches('/'), self.kind.chat_path()))
+            .post(format!(
+                "{}{}",
+                self.base_url.trim_end_matches('/'),
+                self.kind.chat_path()
+            ))
             .json(&body)
             .send()
             .await
@@ -266,12 +278,18 @@ mod tests {
             "local".into(),
         );
         let native = json!({"done": true, "message": {"content": "native reply"}});
-        let compatible = json!({"choices":[{"message":{"content":"compatible reply"},"finish_reason":"stop"}]});
+        let compatible =
+            json!({"choices":[{"message":{"content":"compatible reply"},"finish_reason":"stop"}]});
         assert_eq!(ollama.text_from_json(&native).unwrap().text, "native reply");
         assert!(llama.text_from_json(&native).is_err());
-        assert_eq!(llama.text_from_json(&compatible).unwrap().text, "compatible reply");
+        assert_eq!(
+            llama.text_from_json(&compatible).unwrap().text,
+            "compatible reply"
+        );
         assert!(ollama.text_from_json(&compatible).is_err());
-        assert!(ollama.text_from_json(&json!({"done":false,"message":{"content":"partial"}})).is_err());
+        assert!(ollama
+            .text_from_json(&json!({"done":false,"message":{"content":"partial"}}))
+            .is_err());
     }
 
     #[tokio::test]
@@ -281,12 +299,15 @@ mod tests {
             "https://example.com:11434".into(),
             "local".into(),
         );
-        let err = remote.generate(TextRequest {
-            prompt: "hello".into(),
-            system_instruction: None,
-            temperature: None,
-            max_tokens: None,
-        }).await.unwrap_err();
+        let err = remote
+            .generate(TextRequest {
+                prompt: "hello".into(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: None,
+            })
+            .await
+            .unwrap_err();
         assert_eq!(err.kind, ProviderErrorKind::Setup);
     }
     #[tokio::test]
