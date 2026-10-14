@@ -193,7 +193,12 @@ impl LiveSession for LocalConversationSession {
             let response = match generated {
                 Ok(response) => prepare_local_tts_response(&response.text),
                 Err(error) => {
-                    let _ = event_sender.send(LiveServerEvent::Error(error)).await;
+                    // The previous turn may have been interrupted while its
+                    // model request was in flight. Never publish its failure
+                    // into a newer conversation generation.
+                    if current_generation.load(Ordering::SeqCst) == turn {
+                        let _ = event_sender.send(LiveServerEvent::Error(error)).await;
+                    }
                     return;
                 }
             };
@@ -288,6 +293,17 @@ mod tests {
         }
     }
 
+    struct DelayedFailureModel(StdMutex<Option<tokio::sync::oneshot::Receiver<()>>>);
+
+    #[async_trait]
+    impl TextModel for DelayedFailureModel {
+        async fn generate(&self, _request: TextRequest) -> Result<TextResponse, ProviderError> {
+            let ready = self.0.lock().unwrap().take().unwrap();
+            let _ = ready.await;
+            Err(ProviderError::from_kind(ProviderErrorKind::Network))
+        }
+    }
+
     struct RequestCapture(Arc<StdMutex<Option<TtsRequest>>>);
 
     #[async_trait]
@@ -344,6 +360,43 @@ mod tests {
         assert_eq!(request.voice_name.as_deref(), Some("Leo"));
         assert_eq!(request.speaking_rate, Some(0.95));
         assert_eq!(request.pitch, None);
+    }
+
+    #[tokio::test]
+    async fn an_interrupted_text_request_never_emits_a_stale_provider_error() {
+        let (release, pending) = tokio::sync::oneshot::channel();
+        let provider = LocalConversationProvider::new(
+            Arc::new(DelayedFailureModel(StdMutex::new(Some(pending)))),
+            Arc::new(RequestCapture(Arc::new(StdMutex::new(None)))),
+            "Leo".to_string(),
+            1.0,
+        );
+        let (sender, mut events) = mpsc::channel(8);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "local".to_string(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: Vec::<ToolDeclaration>::new(),
+                },
+                sender,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+        session.send_text_turn("Hello").await.unwrap();
+        session.interrupt().await.unwrap();
+        assert!(matches!(events.recv().await, Some(LiveServerEvent::Interrupted)));
+        release.send(()).unwrap();
+        assert!(tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            events.recv(),
+        )
+        .await
+        .is_err());
     }
 
     #[test]
