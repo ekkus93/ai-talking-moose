@@ -134,9 +134,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
       await tauriBridge.auditionTtsVoice(settings.tts_provider, selectedVoice);
     } catch (error) {
       setVoiceError(
-        settings.tts_provider === "local"
-          ? `Local KittenTTS audition failed: ${String(error)}`
-          : `Google TTS audition failed: ${String(error)}`,
+        `${providerLabel(settings.tts_provider)} audition failed: ${String(error)}`,
       );
     } finally {
       setTimeout(() => setIsAuditioning(false), 2500);
@@ -238,12 +236,21 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             </label>
           ))}
           <label className="flex items-start gap-2 p-2 border border-gray-400 rounded opacity-60">
-            <input type="radio" name="tts-provider" value="system" disabled />
+            <input
+              type="radio"
+              name="tts-provider"
+              value="system"
+              checked={settings.tts_provider === "system"}
+              disabled
+              readOnly
+            />
             <span>
               <span className="font-bold">System Voices — unavailable</span>
               <span className="block text-[10px] text-gray-700">
                 macOS system speech is pending qualification and cannot yet be
-                selected or auditioned. Linux system voices are unsupported.
+                selected or auditioned. An existing System selection is preserved
+                but will fail explicitly, not use another provider. Linux system
+                voices are unsupported.
               </span>
             </span>
           </label>
