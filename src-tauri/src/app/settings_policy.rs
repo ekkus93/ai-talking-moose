@@ -447,6 +447,44 @@ mod tests {
     }
 
     #[test]
+    fn external_provider_settings_round_trip_without_erasing_other_provider_choices() {
+        use crate::ai::types::{TextProvider, TtsProvider};
+
+        let mut settings = AppSettings {
+            openai_text_model: "gpt-4.1-mini".into(),
+            ollama_text_model: "local-model:latest".into(),
+            llama_server_text_model: "loaded-model".into(),
+            system_tts_voice: "system_default".into(),
+            ..Default::default()
+        };
+        for text_provider in [
+            TextProvider::Local,
+            TextProvider::Google,
+            TextProvider::Openai,
+            TextProvider::Ollama,
+            TextProvider::LlamaServer,
+        ] {
+            for tts_provider in [
+                TtsProvider::Local,
+                TtsProvider::Google,
+                TtsProvider::System,
+            ] {
+                settings.text_provider = text_provider;
+                settings.tts_provider = tts_provider;
+                let json = serde_json::to_string(&settings).unwrap();
+                let (decoded, migrated) = AppSettings::from_persisted_json(&json).unwrap();
+                assert!(!migrated);
+                assert_eq!(decoded.text_provider, text_provider);
+                assert_eq!(decoded.tts_provider, tts_provider);
+                assert_eq!(decoded.openai_text_model, settings.openai_text_model);
+                assert_eq!(decoded.ollama_text_model, settings.ollama_text_model);
+                assert_eq!(decoded.llama_server_text_model, settings.llama_server_text_model);
+                assert_eq!(decoded.system_tts_voice, settings.system_tts_voice);
+            }
+        }
+    }
+
+    #[test]
     fn persisted_settings_are_classified_and_user_preferences_have_runtime_consumers() {
         let user_consumers = [
             ("asr_mode", "conversation start selects local or Gemini ASR"),
