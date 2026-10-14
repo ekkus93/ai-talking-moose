@@ -385,18 +385,13 @@ mod tests {
     #[test]
     fn planar_f64_preserves_rate_and_handles_extreme_finite_channels() {
         let mut pcm = SystemPcmAccumulator::new(48_000).unwrap();
-        pcm.append_planar_f64(&[
-            &[f64::MAX, 0.5, -1.0],
-            &[-f64::MAX, 0.5, 1.0],
-        ])
-        .unwrap();
+        pcm.append_planar_f64(&[&[f64::MAX, 0.5, -1.0], &[-f64::MAX, 0.5, 1.0]])
+            .unwrap();
         let output = pcm.finish().unwrap();
         assert_eq!(output.sample_rate, 48_000);
         assert_eq!(
             output.pcm_bytes,
-            [0_i16, 16384_i16, 0_i16]
-                .map(i16::to_le_bytes)
-                .concat()
+            [0_i16, 16384_i16, 0_i16].map(i16::to_le_bytes).concat()
         );
     }
 
