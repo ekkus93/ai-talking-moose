@@ -133,9 +133,8 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     try {
       await tauriBridge.auditionTtsVoice(settings.tts_provider, selectedVoice);
     } catch (error) {
-      setVoiceError(
-        `${providerLabel(settings.tts_provider)} audition failed: ${String(error)}`,
-      );
+      const label = providerLabel(settings.tts_provider);
+      setVoiceError(`${label} audition failed: ${String(error)}`);
     } finally {
       setTimeout(() => setIsAuditioning(false), 2500);
     }
