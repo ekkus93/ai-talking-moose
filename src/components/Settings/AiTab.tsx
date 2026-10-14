@@ -216,9 +216,21 @@ export const AiTab: React.FC<AiTabProps> = ({
           </label>
           {(
             [
-              ["openai", "OpenAI — cloud", "Sends prompts to OpenAI with your own key."],
-              ["ollama", "Ollama — loopback", "Connects to an already-running local Ollama server."],
-              ["llama_server", "llama-server — loopback", "Connects to an already-running local llama.cpp server."],
+              [
+                "openai",
+                "OpenAI — cloud",
+                "Sends prompts to OpenAI with your own key.",
+              ],
+              [
+                "ollama",
+                "Ollama — loopback",
+                "Connects to an already-running local Ollama server.",
+              ],
+              [
+                "llama_server",
+                "llama-server — loopback",
+                "Connects to an already-running local llama.cpp server.",
+              ],
             ] as const
           ).map(([id, label, description]) => (
             <label
@@ -332,7 +344,10 @@ export const AiTab: React.FC<AiTabProps> = ({
             />
             {settings.text_provider !== "openai" && (
               <>
-                <label htmlFor="external-server-url" className="block font-bold">
+                <label
+                  htmlFor="external-server-url"
+                  className="block font-bold"
+                >
                   HTTP loopback server (explicit port required)
                 </label>
                 <input
@@ -375,7 +390,10 @@ export const AiTab: React.FC<AiTabProps> = ({
             )}
             {settings.text_provider === "openai" && (
               <div className="space-y-2">
-                <label htmlFor="settings-openai-api-key" className="block font-bold">
+                <label
+                  htmlFor="settings-openai-api-key"
+                  className="block font-bold"
+                >
                   OpenAI API key (BYOK)
                 </label>
                 <div className="flex gap-2">
