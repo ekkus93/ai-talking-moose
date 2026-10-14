@@ -166,6 +166,26 @@ A Google AI Studio API key is **not required for Local-first Talk, Local text ge
 
 Local generation does not silently fall back to Google or Fake. A missing, corrupt, incompatible, or failed Local model produces an explicit failure.
 
+## External text provider setup
+
+AI & Models offers OpenAI, Ollama, and llama-server text generation alongside
+the built-in Local and Google providers. OpenAI requires its own API key and
+model ID. On macOS the key is saved in a separate Keychain entry; on Linux
+it is session-only. Ollama and llama-server require a separately running
+loopback HTTP service and a selected installed model. Default addresses are
+`http://127.0.0.1:11434` and `http://127.0.0.1:8080`, respectively.
+Neither provider is started or downloaded by Talking Moose.
+
+Local ASR sends finalized transcript text to the selected text provider,
+not microphone audio. Gemini Live audio is a separate Google cloud mode.
+Cloud providers receive request text; independently managed loopback
+servers may retain or log their requests. Provider errors never authorize
+fallback to another service. macOS System TTS is still disabled pending
+native integration and physical audition.
+
+See `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md` for the remaining
+qualification work.
+
 ### Idle Banter
 
 Idle Banter recreates the original Talking Moose habit of occasionally making a short snarky remark after you have ignored Moose for a while. It is enabled by default for new profiles, but remains subordinate to **Enable unsolicited ambient remarks** and the existing mute, conversation, quiet-hours, cooldown, annoyance, dismissal, and hourly-rate gates.
