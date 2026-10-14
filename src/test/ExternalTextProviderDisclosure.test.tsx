@@ -6,6 +6,8 @@ import { useMooseStore } from "../stores/mooseStore";
 
 type ExternalProvider = "openai" | "ollama" | "llama_server";
 
+const loopbackLabel = "HTTP loopback server (explicit port required)";
+
 function renderProvider(provider: ExternalProvider, live = false) {
   useMooseStore.setState({
     isSettingsOpen: true,
@@ -26,8 +28,8 @@ describe("external text provider disclosure and Live isolation", () => {
 
   it.each([
     ["openai", "OpenAI model ID", "OpenAI API key (BYOK)"],
-    ["ollama", "Ollama model ID", "HTTP loopback server (explicit port required)"],
-    ["llama_server", "llama-server model ID", "HTTP loopback server (explicit port required)"],
+    ["ollama", "Ollama model ID", loopbackLabel],
+    ["llama_server", "llama-server model ID", loopbackLabel],
   ] as const)(
     "%s with local ASR exposes only its own provider controls",
     (provider, modelLabel, configLabel) => {
