@@ -34,5 +34,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.kind, ProviderErrorKind::Setup);
         assert!(error.message.contains("no other voice provider"));
+        assert!(!error.retryable);
+        assert!(!error.message.contains("hello"));
     }
 }
