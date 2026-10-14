@@ -424,6 +424,8 @@ describe("SettingsModal Component", () => {
     ]) {
       expect(screen.getByRole("radio", { name })).toBeInTheDocument();
     }
+    fireEvent.click(screen.getByRole("radio", { name: /Ollama — loopback/i }));
+    expect(screen.getByText(/HTTP loopback server/i)).toBeInTheDocument();
   });
 
   it("uses the backend-derived Google catalog in the standalone voice selector", async () => {

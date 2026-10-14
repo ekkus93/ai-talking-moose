@@ -103,6 +103,24 @@ async fn configured_google_text_without_secret_fails_auth_instead_of_using_fake_
 }
 
 #[tokio::test]
+async fn openai_text_without_its_own_key_fails_without_cloud_fallback() {
+    let state = AppState::new_for_tests().unwrap();
+    state.settings.write().text_provider = TextProvider::Openai;
+    let error = state
+        .get_text_model()
+        .generate(TextRequest {
+            prompt: "private message".into(),
+            system_instruction: None,
+            temperature: None,
+            max_tokens: Some(8),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, ProviderErrorKind::Auth);
+    assert!(!error.message.contains("private message"));
+}
+
+#[tokio::test]
 async fn configured_local_text_with_unknown_model_fails_without_cloud_fallback() {
     let state = AppState::new_for_tests().unwrap();
     state.settings.write().text_provider = TextProvider::Local;
