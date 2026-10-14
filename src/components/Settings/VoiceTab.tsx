@@ -119,6 +119,8 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     }
     if (settings.tts_provider === "google") {
       await updateSettingsPatch({ google_tts_voice: voice });
+    } else if (settings.tts_provider === "system") {
+      await updateSettingsPatch({ system_tts_voice: voice });
     } else {
       await updateSettingsPatch({ local_tts_voice: voice });
     }
