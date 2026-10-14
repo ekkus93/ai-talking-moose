@@ -425,7 +425,10 @@ mod tests {
             "https://example.invalid:11434".into(),
             String::new(),
         );
-        assert_eq!(model.check_readiness().await, LoopbackReadiness::Unreachable);
+        assert_eq!(
+            model.check_readiness().await,
+            LoopbackReadiness::Unreachable
+        );
     }
 
     #[tokio::test]
