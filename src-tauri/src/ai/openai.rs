@@ -65,6 +65,13 @@ impl OpenAiTextModel {
             if message["role"].as_str() != Some("assistant") {
                 return Err(protocol_error());
             }
+            // A completed top-level response may still contain truncated messages.
+            if message
+                .get("status")
+                .is_some_and(|status| status.as_str() != Some("completed"))
+            {
+                return Err(protocol_error());
+            }
             let parts = message["content"].as_array().ok_or_else(protocol_error)?;
             for part in parts {
                 if part["type"].as_str() == Some("output_text") {
@@ -204,6 +211,9 @@ mod tests {
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"x".repeat(MAX_TEXT_BYTES + 1)}]}]}),
             json!({"status":"completed", "output":[{"type":"message", "role":"user", "content":[{"type":"output_text", "text":"echo"}]}]}),
             json!({"status":"completed", "output":[{"type":"message", "content":[{"type":"output_text", "text":"missing role"}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "status":"incomplete", "content":[{"type":"output_text", "text":"truncated"}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "status":"in_progress", "content":[{"type":"output_text", "text":"partial"}]}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "status":null, "content":[{"type":"output_text", "text":"unrecognized"}]}]}),
         ] {
             assert_eq!(
                 OpenAiTextModel::output_text(&bad).unwrap_err().kind,
