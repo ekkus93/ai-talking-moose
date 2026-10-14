@@ -105,11 +105,7 @@ async fn ollama_untagged_generation_accepts_latest_identity() {
         );
         socket.write_all(response.as_bytes()).await.unwrap();
     });
-    let model = LoopbackTextModel::new(
-        LoopbackTextServer::Ollama,
-        base_url,
-        "llama3.2".into(),
-    );
+    let model = LoopbackTextModel::new(LoopbackTextServer::Ollama, base_url, "llama3.2".into());
     let answer = model
         .generate(TextRequest {
             prompt: "say hello".into(),

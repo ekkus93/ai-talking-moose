@@ -33,9 +33,11 @@ mod tests {
             display_name: "Test voice".to_string(),
             style: Some("en-US".to_string()),
         }];
-        assert!(resolve_installed_system_voice(SYSTEM_DEFAULT_VOICE_ID, &installed)
-            .unwrap()
-            .is_none());
+        assert!(
+            resolve_installed_system_voice(SYSTEM_DEFAULT_VOICE_ID, &installed)
+                .unwrap()
+                .is_none()
+        );
         assert_eq!(
             resolve_installed_system_voice("com.apple.voice.test", &installed)
                 .unwrap()
@@ -43,8 +45,8 @@ mod tests {
                 .display_name,
             "Test voice"
         );
-        let missing = resolve_installed_system_voice("com.apple.voice.missing", &installed)
-            .unwrap_err();
+        let missing =
+            resolve_installed_system_voice("com.apple.voice.missing", &installed).unwrap_err();
         assert_eq!(missing.kind, ProviderErrorKind::Model);
         assert!(!missing.retryable);
         assert!(!missing.message.contains("com.apple.voice.missing"));
