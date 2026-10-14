@@ -372,4 +372,66 @@ mod tests {
             server.await.unwrap();
         }
     }
+
+    #[tokio::test]
+    async fn fake_http_request_maps_text_fields_and_disables_response_storage() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut received = Vec::new();
+            let mut chunk = [0u8; 4096];
+            let header_end = loop {
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert!(count > 0, "request ended before headers");
+                received.extend_from_slice(&chunk[..count]);
+                if let Some(index) = received.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                    break index;
+                }
+            };
+            let headers = String::from_utf8_lossy(&received[..header_end]);
+            assert!(headers.starts_with("POST /v1/responses HTTP/1.1"));
+            assert!(headers
+                .to_ascii_lowercase()
+                .contains("authorization: bearer test-openai-key"));
+            let content_length: usize = headers
+                .lines()
+                .find(|line| line.to_ascii_lowercase().starts_with("content-length:"))
+                .and_then(|line| line.split_once(':'))
+                .and_then(|(_, length)| length.trim().parse().ok())
+                .expect("JSON request has content length");
+            while received.len() < header_end + 4 + content_length {
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert!(count > 0, "request body truncated");
+                received.extend_from_slice(&chunk[..count]);
+            }
+            let body: Value = serde_json::from_slice(
+                &received[header_end + 4..header_end + 4 + content_length],
+            )
+            .unwrap();
+            assert_eq!(body["model"], "gpt-4.1-mini");
+            assert_eq!(body["input"], "private transcript");
+            assert_eq!(body["instructions"], "Stay concise.");
+            assert_eq!(body["max_output_tokens"], 40);
+            assert_eq!(body["temperature"], 0.5);
+            assert_eq!(body["store"], false);
+            assert!(body.get("messages").is_none());
+            let payload = r#"{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}"#;
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+                payload.len()
+            );
+            stream.write_all(reply.as_bytes()).await.unwrap();
+        });
+        let model = OpenAiTextModel::with_endpoint(
+            "test-openai-key".into(),
+            "gpt-4.1-mini".into(),
+            endpoint,
+        );
+        assert_eq!(model.generate(sample("private transcript")).await.unwrap().text, "ok");
+        server.await.unwrap();
+    }
 }
