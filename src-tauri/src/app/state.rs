@@ -210,13 +210,19 @@ impl Default for AppSettings {
 /// plaintext settings record. Match known credential aliases as well as generic
 /// secret-bearing names, without dropping unrelated future preferences.
 fn is_sensitive_future_settings_key(key: &str) -> bool {
-    let name = key.to_ascii_lowercase();
-    ["secret", "password", "credential", "api_key", "apikey", "token", "bearer"]
+    // Compare canonical names so camelCase, snake_case, kebab-case, and
+    // case variants cannot bypass the credential scrubber.
+    let canonical: String = key
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_lowercase())
+        .collect();
+    ["secret", "password", "credential", "apikey", "token", "bearer"]
         .iter()
-        .any(|marker| name.contains(marker))
+        .any(|marker| canonical.contains(marker))
         || matches!(
-            name.as_str(),
-            "openai_key" | "google_key" | "private_key" | "access_key" | "auth_header"
+            canonical.as_str(),
+            "openaikey" | "googlekey" | "privatekey" | "accesskey" | "authheader"
                 | "authorization"
         )
 }
