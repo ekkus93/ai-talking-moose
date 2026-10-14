@@ -9,9 +9,9 @@ Local LLM V1 adds CPU-friendly **text generation** alongside Google Gemini. It c
 - explicit Local-model self-test generation.
 - local-first Talk replies when local ASR and Local text are selected.
 
-Local-first spoken conversations use local ASR, Local text generation, and KittenTTS through the existing conversation lifecycle. Gemini Live remains available when the user explicitly selects Google text generation or Gemini Live audio ASR. Google TTS remains available for standalone speech when selected.
+Local-first spoken conversations use local ASR, Local text generation, and KittenTTS through the existing conversation lifecycle. Gemini Live remains available when the user explicitly selects Gemini Live audio ASR. With local ASR, selecting Google text sends finalized transcript text to Google without starting Gemini Live audio. Google TTS remains available for standalone speech when selected.
 
-Talk selects its conversation pipeline from one saved settings snapshot. With local ASR and a non-Google text provider, the non-Live path composes the selected text adapter with the selected standalone TTS adapter. Google text and Gemini Live audio retain the existing Google Live conversation path. The macOS System TTS adapter remains unavailable until buffer synthesis and physical audition are qualified.
+Talk selects its conversation pipeline from one saved settings snapshot. With local ASR, non-Live Talk composes the selected text adapter (including Google text) with the selected standalone TTS adapter. Gemini Live audio ASR alone selects the separate Google Live conversation path. The macOS System TTS adapter remains unavailable until buffer synthesis and physical audition are qualified.
 
 ## Provider selection
 
@@ -117,7 +117,7 @@ Real CPU acceptance proves generation after installation while the process is in
 
 Local providers do not imply that every app capability is offline:
 
-- Gemini Live is used when Google text generation or Gemini Live audio ASR is explicitly selected;
+- Gemini Live is used only when Gemini Live audio ASR is explicitly selected;
 - local Moonshine/Whisper ASR keeps microphone PCM local, and local Talk conversations hand finalized transcripts to the selected Local text model;
 - Google TTS receives text when Google TTS is used for standalone speech;
 - Google text generation is available when the user explicitly selects the Google text provider;
