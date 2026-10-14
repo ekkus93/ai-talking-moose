@@ -326,7 +326,10 @@ mod tests {
             .unwrap();
         let output = pcm.finish().unwrap();
         assert_eq!(output.sample_rate, 44_100);
-        assert_eq!(output.pcm_bytes, [-1_i16, 15_i16].map(i16::to_le_bytes).concat());
+        assert_eq!(
+            output.pcm_bytes,
+            [-1_i16, 15_i16].map(i16::to_le_bytes).concat()
+        );
     }
 
     #[test]
