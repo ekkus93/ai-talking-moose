@@ -38,7 +38,7 @@ describe("External text provider controls", () => {
     useMooseStore.setState({
       settings: {
         ...frontendDefaultSettings(),
-        asr_mode: "whisper_small_batch",
+        asr_mode: "whisper_small",
         text_provider: "local",
       },
       hasApiKey: false,
