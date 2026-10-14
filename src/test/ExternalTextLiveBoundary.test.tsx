@@ -48,7 +48,7 @@ describe("Google text and Gemini Live settings boundary", () => {
       screen.getByLabelText("Realtime Live Voice Model"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Gemini Live is a separate Google cloud-audio mode/i),
+      screen.getByText(/Gemini Live is a separate Google cloud-audio mode and may send microphone audio to Google/i),
     ).toBeInTheDocument();
   });
 });
