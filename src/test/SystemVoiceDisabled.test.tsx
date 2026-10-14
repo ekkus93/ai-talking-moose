@@ -19,10 +19,18 @@ it("shows System voice as unavailable", () => {
 it("preserves a saved system provider", () => {
   useMooseStore.setState({
     isSettingsOpen: true,
-    settings: { ...frontendDefaultSettings(), tts_provider: "system", system_tts_voice: "com.apple.voice.unavailable" },
+    settings: {
+      ...frontendDefaultSettings(),
+      tts_provider: "system",
+      system_tts_voice: "com.apple.voice.unavailable",
+    },
   });
   render(<SettingsModal />);
   fireEvent.click(screen.getByText("Voice & Audio"));
-  expect(screen.getByRole("radio", { name: /System Voices — unavailable/i })).toBeChecked();
-  expect(screen.getByText(/Saved macOS system voice: com.apple.voice.unavailable/)).toBeInTheDocument();
+  expect(
+    screen.getByRole("radio", { name: /System Voices — unavailable/i }),
+  ).toBeChecked();
+  expect(
+    screen.getByText(/Saved macOS system voice: com.apple.voice.unavailable/),
+  ).toBeInTheDocument();
 });
