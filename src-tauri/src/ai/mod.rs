@@ -22,3 +22,6 @@ mod loopback_integration_tests;
 
 #[cfg(test)]
 mod loopback_request_contract_tests;
+
+#[cfg(test)]
+mod system_tts_acceptance_tests;
