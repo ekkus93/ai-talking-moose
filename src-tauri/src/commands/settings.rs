@@ -491,14 +491,18 @@ mod tests {
     #[test]
     fn live_settings_update_rejects_unknown_future_schema_before_downgrade() {
         let current = crate::app::state::CURRENT_SETTINGS_VERSION;
-        let mut settings = AppSettings::default();
-        settings.settings_version = current + 1;
-        settings.text_provider = TextProvider::Openai;
+        let settings = AppSettings {
+            settings_version: current + 1,
+            text_provider: TextProvider::Openai,
+            ..Default::default()
+        };
         let error = normalize_settings_update(settings).unwrap_err();
         assert!(error.contains("newer app version"));
 
-        let mut old_settings = AppSettings::default();
-        old_settings.settings_version = current.saturating_sub(1);
+        let old_settings = AppSettings {
+            settings_version: current.saturating_sub(1),
+            ..Default::default()
+        };
         assert_eq!(
             normalize_settings_update(old_settings)
                 .unwrap()
