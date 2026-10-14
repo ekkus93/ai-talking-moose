@@ -16,3 +16,23 @@ impl SpeechSynthesizer for UnavailableSpeechSynthesizer {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn unavailable_system_voice_does_not_fallback() {
+        let error = UnavailableSpeechSynthesizer
+            .synthesize(TtsRequest {
+                text: "hello".into(),
+                voice_name: None,
+                speaking_rate: None,
+                pitch: None,
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Setup);
+        assert!(error.message.contains("no other voice provider"));
+    }
+}
