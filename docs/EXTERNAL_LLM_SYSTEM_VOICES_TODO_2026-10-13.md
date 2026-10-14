@@ -126,6 +126,13 @@ Commits `30cd8b395d707e87b75935267efc66a39db4212e`, `ee377d69b02b852a01efdcd7900
 
 Commit `0a490e2d25460c5026e5b93715b9acf7dcc63341` additionally rejects padded saved System voice identifiers before OS selection, with negative regressions. Exact-head CI `38642767523` passed Rust quality, Rust tests, and generated backend-contract verification. Native macOS synthesis, voice enumeration, playback/cancellation, Control Panel enablement, physical audition, full routing matrix, and `check:all` remain unqualified. Keep ELSV-500/900 unchecked.
 
+### Double-precision native PCM groundwork — 2026-10-14
+
+- `f8213e0e4e9c1e000d8520ef342e977398134bea` added bounded, atomic planar f64-to-mono PCM conversion, including extreme finite values, malformed chunks, duration limits, and truthful sample-rate tests. Its first exact-head CI `38645430867` found a rustfmt issue and was superseded.
+- `93692e668b59b2c3ca6c2fe880b35954dabf4211` applied the exact rustfmt correction. **Exact-head CI `38645981744` passed** Rust tests, Rust quality/Clippy, and generated backend-contract verification.
+- This qualifies only a platform-neutral conversion prerequisite. The native macOS AVSpeechSynthesizer callback, installed voice enumeration, cancellation/playback integration, Control Panel enablement, real Mac audition, and full `check:all` remain open. ELSV-500 and ELSV-900 stay unchecked.
+- A potential credential-redaction overlap edge case was identified: if two provider keys share a prefix, replacing the shorter key first may expose the longer key's suffix. An attempted ordered-redaction correction was rejected by source-write safety checks and **has not landed**. Treat this as an ELSV-200 security follow-up; do not claim it qualified.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
