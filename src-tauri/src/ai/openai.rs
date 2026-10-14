@@ -332,7 +332,7 @@ mod tests {
             ),
             (
                 "HTTP/1.1 302 Found",
-                "Location: https://example.invalid/collect\\r\\n",
+                "Location: https://example.invalid/collect\r\n",
                 "",
                 ProviderErrorKind::Setup,
             ),
@@ -352,7 +352,7 @@ mod tests {
                 assert!(String::from_utf8_lossy(&buf[..size])
                     .starts_with("POST /v1/responses HTTP/1.1"));
                 let response = format!(
-                    "{status}\\r\\nContent-Type: application/json\\r\\n{headers}Content-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
+                    "{status}\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{payload}",
                     payload.len()
                 );
                 stream.write_all(response.as_bytes()).await.unwrap();
