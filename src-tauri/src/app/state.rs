@@ -206,6 +206,38 @@ impl Default for AppSettings {
     }
 }
 
+/// Never copy credentials from unknown future settings into the normalized
+/// plaintext settings record. Match known credential aliases as well as generic
+/// secret-bearing names, without dropping unrelated future preferences.
+fn is_sensitive_future_settings_key(key: &str) -> bool {
+    let name = key.to_ascii_lowercase();
+    ["secret", "password", "credential", "api_key", "apikey", "token", "bearer"]
+        .iter()
+        .any(|marker| name.contains(marker))
+        || matches!(
+            name.as_str(),
+            "openai_key" | "google_key" | "private_key" | "access_key" | "auth_header"
+                | "authorization"
+        )
+}
+
+fn scrub_sensitive_future_settings(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(fields) => {
+            fields.retain(|key, _| !is_sensitive_future_settings_key(key));
+            for child in fields.values_mut() {
+                scrub_sensitive_future_settings(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for child in items {
+                scrub_sensitive_future_settings(child);
+            }
+        }
+        _ => {}
+    }
+}
+
 impl AppSettings {
     /// Deserialize persisted settings while preserving the behavior of installations
     /// created before an ASR selector or explicit text-provider selector existed.
@@ -280,13 +312,18 @@ impl AppSettings {
         for legacy in ["provider", "text_model", "tts_model", "tts_voice", "microphone_permission_granted"] {
             settings.future_settings.remove(legacy);
         }
-        // Credentials must never be migrated into the plain-text settings store.
-        settings.future_settings.retain(|key, _| {
-            let name = key.to_ascii_lowercase();
-            !name.contains("secret") && !name.contains("password")
-                && !name.contains("credential") && !name.contains("api_key")
-                && !name.contains("token")
+        // Unknown future fields are preserved except credentials, including
+        // credentials nested inside otherwise harmless additive settings.
+        // Detect removals so startup rewrites the sanitized JSON to SQLite.
+        let original_future_settings = settings.future_settings.clone();
+        settings.future_settings.retain(|key, value| {
+            if is_sensitive_future_settings_key(key) {
+                return false;
+            }
+            scrub_sensitive_future_settings(value);
+            true
         });
+        let scrubbed_future_settings = settings.future_settings != original_future_settings;
         let wake_word_migrated = !had_wake_word_enabled
             || !had_wake_word_phrase
             || settings.wake_word_enabled != wake_word_settings.enabled
@@ -398,7 +435,8 @@ impl AppSettings {
                 || models_migrated
                 || had_enabled_window_title_observation
                 || legacy_idle_banter
-                || idle_banter_seed_repaired,
+                || idle_banter_seed_repaired
+                || scrubbed_future_settings,
         ))
     }
 

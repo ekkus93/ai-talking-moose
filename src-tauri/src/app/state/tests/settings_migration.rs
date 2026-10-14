@@ -31,6 +31,50 @@ fn new_settings_use_the_platform_asr_default_and_local_text() {
 }
 
 #[test]
+fn persisted_unknown_credential_aliases_are_scrubbed_and_rewritten() {
+    let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+    let fields = value.as_object_mut().unwrap();
+    for name in [
+        "openai_key", "google_key", "access_key", "private_key",
+        "auth_header", "openai_api_key", "refresh_token",
+    ] {
+        fields.insert(name.into(), serde_json::json!("should-not-survive"));
+    }
+    fields.insert(
+        "future_display_hint".into(),
+        serde_json::json!({
+            "enabled": true,
+            "nested": [{"authorization": "secret", "theme": "dark"}],
+            "openaiKey": "should-not-survive"
+        }),
+    );
+    let original = value.to_string();
+    let (settings, migrated) = AppSettings::from_persisted_json(&original).unwrap();
+    assert!(migrated, "removing credentials must trigger SQLite normalization");
+    let normalized = serde_json::to_value(&settings).unwrap();
+    assert!(!normalized.to_string().contains("should-not-survive"));
+    assert!(!normalized.to_string().contains("secret"));
+    assert_eq!(normalized["future_display_hint"]["enabled"], true);
+    assert_eq!(normalized["future_display_hint"]["nested"][0]["theme"], "dark");
+
+    // An otherwise current-version profile must be rewritten, not merely
+    // sanitized in memory while leaving credentials in the SQLite row.
+    let file = NamedTempFile::new().unwrap();
+    let path = file.path().to_string_lossy().to_string();
+    let db = Database::new(&path).unwrap();
+    db.set_setting("app_settings", &original).unwrap();
+    drop(db);
+    let secret_store = SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+    let state = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+    let persisted = state.db.get_setting("app_settings").unwrap().unwrap();
+    assert!(!persisted.contains("should-not-survive"));
+    assert!(!persisted.contains("secret"));
+    assert!(persisted.contains("future_display_hint"));
+    let (_, migrated_again) = AppSettings::from_persisted_json(&persisted).unwrap();
+    assert!(!migrated_again, "sanitized settings must migrate only once");
+}
+
+#[test]
 fn old_provider_settings_migrate_and_preserve_unrecognized_additive_fields() {
     let mut value = serde_json::to_value(AppSettings {
         text_provider: TextProvider::Google,
