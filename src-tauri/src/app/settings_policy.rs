@@ -422,6 +422,10 @@ mod tests {
             "http://localhost:9000/#x",
             "http://127.0.0.2:11434",
             "http://0.0.0.0:11434",
+            "http://localhost:65536",
+            "http://LOCALHOST:11434",
+            "http://localhost:11434/%2e%2e",
+            "http://[::ffff:127.0.0.1]:11434",
             " http://localhost:9000",
         ] {
             assert!(
