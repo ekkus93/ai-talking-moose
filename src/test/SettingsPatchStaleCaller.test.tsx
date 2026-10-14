@@ -71,6 +71,14 @@ describe("Settings patch intent", () => {
         googleModelsStatus="ready"
         apiKeyInput=""
         setApiKeyInput={() => undefined}
+        openaiKeyInput=""
+        setOpenaiKeyInput={() => undefined}
+        hasOpenaiKey={false}
+        setHasOpenaiKey={() => undefined}
+        openaiKeyError={null}
+        setOpenaiKeyError={() => undefined}
+        serverStatus={null}
+        setServerStatus={() => undefined}
         testResult={null}
         setTestResult={() => undefined}
         isTesting={false}
