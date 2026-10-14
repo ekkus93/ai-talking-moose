@@ -125,7 +125,10 @@ fn normalize_settings_update(mut new_settings: AppSettings) -> Result<AppSetting
     // Never downgrade an unknown newer settings schema from live IPC. Startup
     // migration already fails closed for future versions; writes must agree.
     if new_settings.settings_version > crate::app::state::CURRENT_SETTINGS_VERSION {
-        return Err("Settings were written by a newer app version; update this app before changing them.".to_string());
+        return Err(
+            "Settings were written by a newer app version; update this app before changing them."
+                .to_string(),
+        );
     }
     // IPC sends complete AppSettings with flattened, unrecognized fields. Never
     // let credential-like aliases or nested values reach SQLite or runtime state.
@@ -497,7 +500,9 @@ mod tests {
         let mut old_settings = AppSettings::default();
         old_settings.settings_version = current.saturating_sub(1);
         assert_eq!(
-            normalize_settings_update(old_settings).unwrap().settings_version,
+            normalize_settings_update(old_settings)
+                .unwrap()
+                .settings_version,
             current
         );
     }
