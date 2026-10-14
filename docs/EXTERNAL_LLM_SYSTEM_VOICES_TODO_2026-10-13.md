@@ -54,6 +54,15 @@ The persisted-settings sanitizer now canonicalizes camelCase, snake_case, and hy
 
 **Remaining security follow-up:** `normalize_settings_update` in `src-tauri/src/commands/settings.rs` must also sanitize untrusted flattened future settings before persisting live IPC updates, using the same recursive sanitizer as startup migration. A proposed shared-helper and regression-test write was rejected by the source-write safety boundary, so no such change is claimed here. ELSV-100/200 remain unchecked pending that fix and the rest of their acceptance matrix.
 
+### Additional focused qualification — 2026-10-14
+
+- `feb8d942262a103570d17223218a0d9a3e52970c`: frontend regression asserts independent OpenAI, Ollama, llama-server and System voice default identifiers while retaining Local provider selections. Exact-head frontend CI `38586574204` passed.
+- `0cf2f7031634ccad26cd75323d25a546e60e7590`: asserts transcript persistence remains disabled for fresh profiles. Its CI was superseded by the following commit; do not count it as a standalone passing run.
+- `84d295e0daa67b8612b9702baaa59c0b60d36476`: frontend regression asserts selected Ollama configuration survives Settings tab switching. Exact-head frontend CI `38586951166` passed.
+- `f14f691166a9f30fdefa6cdc10ef4c66ff9ca722`: unavailable System TTS regression additionally verifies non-retryable error and no speech text in error details. Exact-head Rust tests, Rust quality and generated-contract CI `38587186454` passed.
+
+The above is scoped evidence only. Full routing qualification, macOS voice implementation and physical audition remain outstanding. Attempts to commit the Ollama `:latest` adapter correction and live-settings credential scrub remain blocked by source-write safety checks; neither change has landed.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
