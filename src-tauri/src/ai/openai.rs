@@ -104,7 +104,9 @@ impl TextModel for OpenAiTextModel {
                 .all(|b| b.is_ascii_alphanumeric() || b"-._:".contains(&b))
             || request.prompt.trim().is_empty()
             || request.prompt.len() > MAX_PROMPT_BYTES
-            || request.max_tokens.is_some_and(|limit| limit == 0 || limit > 4096)
+            || request
+                .max_tokens
+                .is_some_and(|limit| limit == 0 || limit > 4096)
             || request
                 .system_instruction
                 .as_ref()
@@ -269,7 +271,11 @@ mod tests {
         }
         let invalid_model = OpenAiTextModel::new("dummy".into(), "../invalid".into());
         assert_eq!(
-            invalid_model.generate(sample("hello")).await.unwrap_err().kind,
+            invalid_model
+                .generate(sample("hello"))
+                .await
+                .unwrap_err()
+                .kind,
             ProviderErrorKind::Setup
         );
         let mut request = sample("hello");
