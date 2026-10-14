@@ -12,7 +12,11 @@ pub fn resolve_installed_system_voice<'a>(
     if saved_id == SYSTEM_DEFAULT_VOICE_ID {
         return Ok(None);
     }
-    if saved_id.is_empty() || saved_id.len() > 128 || saved_id.chars().any(char::is_control) {
+    if saved_id.is_empty()
+        || saved_id.len() > 128
+        || saved_id.trim() != saved_id
+        || saved_id.chars().any(char::is_control)
+    {
         return Err(ProviderError::from_kind(ProviderErrorKind::Model));
     }
     installed
@@ -54,6 +58,8 @@ mod tests {
         assert!(resolve_installed_system_voice("", &installed).is_err());
         assert!(resolve_installed_system_voice(&"x".repeat(129), &installed).is_err());
         assert!(resolve_installed_system_voice("invalid\tvoice", &installed).is_err());
+        assert!(resolve_installed_system_voice(" padded.voice", &installed).is_err());
+        assert!(resolve_installed_system_voice("padded.voice ", &installed).is_err());
         assert!(resolve_installed_system_voice("com.apple.voice.test\r", &installed).is_err());
     }
 }
