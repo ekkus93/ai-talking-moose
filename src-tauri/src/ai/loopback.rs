@@ -200,6 +200,10 @@ impl TextModel for LoopbackTextModel {
         self.clean_model()?;
         if request.prompt.len() > MAX_BODY_BYTES
             || request.system_instruction.as_ref().is_some_and(|text| text.len() > MAX_BODY_BYTES)
+            || request
+                .temperature
+                .is_some_and(|value| !value.is_finite() || !(0.0..=2.0).contains(&value))
+            || request.max_tokens == Some(0)
         {
             return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
         }
@@ -285,4 +289,116 @@ mod tests {
         }).await.unwrap_err();
         assert_eq!(err.kind, ProviderErrorKind::Setup);
     }
+    #[tokio::test]
+    async fn invalid_generation_parameters_fail_before_network() {
+        let model = LoopbackTextModel::new(
+            LoopbackTextServer::Ollama,
+            "http://127.0.0.1:1".into(),
+            "selected-model".into(),
+        );
+        for temperature in [f32::NAN, f32::INFINITY, -0.1, 2.1] {
+            let result = model
+                .generate(TextRequest {
+                    prompt: "hello".into(),
+                    system_instruction: None,
+                    temperature: Some(temperature),
+                    max_tokens: Some(32),
+                })
+                .await;
+            assert_eq!(result.unwrap_err().kind, ProviderErrorKind::Setup);
+        }
+        let result = model
+            .generate(TextRequest {
+                prompt: "hello".into(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(0),
+            })
+            .await;
+        assert_eq!(result.unwrap_err().kind, ProviderErrorKind::Setup);
+    }
+
+    #[tokio::test]
+    async fn fake_servers_use_provider_specific_paths_and_response_shapes() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        for (kind, path, payload) in [
+            (
+                LoopbackTextServer::Ollama,
+                "/api/chat",
+                r#"{"done":true,"message":{"content":"ollama response"}}"#,
+            ),
+            (
+                LoopbackTextServer::LlamaServer,
+                "/v1/chat/completions",
+                r#"{"choices":[{"message":{"content":"llama response"},"finish_reason":"stop"}]}"#,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let base_url = format!("http://{}", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0u8; 4096];
+                let bytes = stream.read(&mut request).await.unwrap();
+                let received = String::from_utf8_lossy(&request[..bytes]);
+                assert!(received.starts_with(&format!("POST {path} HTTP/1.1")));
+                let response = format!(
+                    "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
+                    payload.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let model = LoopbackTextModel::new(kind, base_url, "selected-model".into());
+            let answer = model
+                .generate(TextRequest {
+                    prompt: "say hello".into(),
+                    system_instruction: Some("be concise".into()),
+                    temperature: Some(0.4),
+                    max_tokens: Some(32),
+                })
+                .await
+                .unwrap();
+            assert!(answer.text.ends_with(" response"));
+            server.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn fake_server_redirect_is_not_followed() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 2048];
+            let _ = stream.read(&mut request).await.unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\\r\\nLocation: https://example.invalid/collect\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n",
+                )
+                .await
+                .unwrap();
+        });
+        let model = LoopbackTextModel::new(
+            LoopbackTextServer::Ollama,
+            base_url,
+            "selected-model".into(),
+        );
+        let error = model
+            .generate(TextRequest {
+                prompt: "private transcript".into(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: None,
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Setup);
+        assert!(!error.message.contains("private transcript"));
+        server.await.unwrap();
+    }
+
 }
