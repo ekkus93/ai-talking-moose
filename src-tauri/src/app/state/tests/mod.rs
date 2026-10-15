@@ -7,3 +7,5 @@ mod talk_selected_provider_success;
 mod openai_selected_provider_e2e;
 mod talk_negative_paths;
 mod talk_event_contract;
+#[cfg(target_os = "macos")]
+mod talk_routing_macos_system;

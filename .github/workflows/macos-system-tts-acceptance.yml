@@ -89,6 +89,15 @@ jobs:
           export CARGO_INCREMENTAL=0
           cargo test --locked --release --manifest-path src-tauri/Cargo.toml --lib system_tts
 
+      - name: Verify System/non-Live provider routing matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
+          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          export CARGO_INCREMENTAL=0
+          cargo test --locked --release --manifest-path src-tauri/Cargo.toml --lib app::state::tests::talk_routing
+
       - name: Run AVSpeechSynthesizer acceptance
         id: acceptance
         shell: bash
