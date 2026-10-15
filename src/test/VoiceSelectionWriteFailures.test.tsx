@@ -26,6 +26,32 @@ describe("voice selection persistence failures", () => {
     vi.restoreAllMocks();
   });
 
+  it("hides backend details when standalone provider switching fails", async () => {
+    const patch = vi.fn().mockRejectedValue(new Error("private-device-path"));
+    useMooseStore.setState({ updateSettingsPatch: patch });
+    render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("radio", { name: /Local KittenTTS/i }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith({ tts_provider: "local" }),
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Could not switch standalone speech provider");
+    expect(alert).not.toHaveTextContent("private-device-path");
+  });
+
+  it("hides backend details when a standalone audition fails", async () => {
+    vi.spyOn(tauriBridge, "auditionTtsVoice").mockRejectedValue(
+      new Error("private-transcript-in-audio-error"),
+    );
+    render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Audition Google Gemini TTS/i }),
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Google TTS audition failed");
+    expect(alert).not.toHaveTextContent("private-transcript-in-audio-error");
+  });
+
   it("shows a sanitized error for failed standalone voice save", async () => {
     const patch = vi.fn().mockRejectedValue(new Error("private-key"));
     useMooseStore.setState({ updateSettingsPatch: patch });

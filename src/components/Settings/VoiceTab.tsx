@@ -98,10 +98,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         await tauriBridge.cancelStandaloneSpeech();
       }
       await updateSettingsPatch({ tts_provider: provider });
-    } catch (error) {
-      setVoiceError(
-        `Could not switch standalone speech provider: ${String(error)}`,
-      );
+    } catch {
+      // A rejected IPC write can include credentials, paths or transcripts.
+      setVoiceError("Could not switch standalone speech provider. Please retry.");
     }
   };
 
@@ -144,11 +143,14 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     setVoiceError(null);
     try {
       await tauriBridge.auditionTtsVoice(settings.tts_provider, selectedVoice);
-    } catch (error) {
+    } catch {
+      // Audio/backend errors may carry private device paths or provider data.
       setVoiceError(
         settings.tts_provider === "local"
-          ? `Local KittenTTS audition failed: ${String(error)}`
-          : `Google TTS audition failed: ${String(error)}`,
+          ? "Local KittenTTS audition failed. Please retry."
+          : settings.tts_provider === "system"
+            ? "System voice audition failed. Please retry."
+            : "Google TTS audition failed. Please retry.",
       );
     } finally {
       setTimeout(() => setIsAuditioning(false), 2500);
