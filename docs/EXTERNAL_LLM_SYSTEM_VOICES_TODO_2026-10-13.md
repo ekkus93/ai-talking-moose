@@ -189,6 +189,14 @@ Direct-to-`master` changes `d5443ee832043efd4e6ede764ce59339c8aee80d` and `35d48
 
 **Exact-head CI `38679309547` passed** on `ae6d373035bb09ba9e41bfe6a6c7ef80658d88a5`: Rust tests, Rust quality/Clippy, and generated backend-contract verification. These are focused ELSV-200/300 request-boundary and credential-isolation regressions, **not** full provider acceptance. macOS System voice implementation/audition, routing matrix, canonical `check:all`, and ELSV-900 still need evidence. Keep broader checklist items unchecked.
 
+### Non-Live routing, cancellation, and immutable text-selection evidence — 2026-10-14
+
+- `8a18ba78630e14e201cca3a1f36ca08e92575de7` adds a regression asserting replacement of an in-flight external text turn drops its pending generation future; its CI was superseded and cancelled, so do not count that SHA as standalone qualification.
+- `264aeba85894b01898a999a22c095f7aeb8f3828` makes unsupported System TTS fail at non-Live Talk connection setup **before** any selected Local, Google, OpenAI, Ollama, or llama-server text model is contacted. The test asserts all five fail closed without emitting a transcript or exposing the private instruction. `b5e330935023e2db568b838e920fd171529edd3c` fixes its Rust formatting.
+- `9fc700e7ed928e54480644a1f5f43ce88dfc8e95` adds a regression that captures OpenAI/Ollama/llama-server text provider settings once, changes the live selection, and verifies the original provider's failure identity remains intact without a cloud fallback. **Exact-head CI `38684700623` passed** Rust quality/Clippy, Rust tests, and generated-contract verification on this final SHA.
+
+These are focused ELSV-400 safety/routing regressions only. The complete provider/ASR/TTS matrix, native macOS System TTS, physical voice audition, and ELSV-900 full validation remain outstanding. The existing transcript backpressure test still permits a stale `ModelTranscript` to be queued after interruption; that race requires a cancellation-aware event send and a stricter regression before ELSV-400 can be checked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
