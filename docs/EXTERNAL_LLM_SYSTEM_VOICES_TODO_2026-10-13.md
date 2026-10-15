@@ -171,12 +171,18 @@ Commit `b9b159241e67141f74a7ff14adff692ed9bcb3b4` prevents an interrupted non-Li
 
 **Still outstanding:** native macOS voice enumeration and `AVSpeechSynthesizer` integration, physical Mac playback audition, the complete provider/ASR/TTS matrix, full `check:all`, packaging-policy and generated-tree qualification, and the remaining individual TODO tasks. No new branches or PRs were created.
 
+### ELSV-100 persisted-settings migration and contract verification — 2026-10-14
+
+Version-8 `AppSettings` contains independent OpenAI/Ollama/llama-server model IDs, two loopback server addresses, and `system_tts_voice`; `AppSettings::from_persisted_json` migrates version-7 profiles without discarding explicit saved Google/Local selections or unrelated future additive fields. Existing `state/tests/settings_migration.rs` and `app/settings_policy.rs` tests verify migration, current/default serialization, provider round trips, invalid model/address rejection, nested credential scrubbing, and future-version fail-closed behavior; `frontend_contract_matches_authoritative_rust_defaults_and_catalogs` checks the checked-in generated contract. New direct-to-`master` commit `0f65ed0fe1e1af5281c0d276a78d4fa8284103e6` further verifies version-7 Local-text + Google-standalone-TTS identity, external provider defaults, and idempotent second migration. **Exact-head CI `38673594292` passed** Rust tests, Rust quality/Clippy, and generated backend-contract verification.
+
+These findings qualify the discrete ELSV-100 settings-field/migration and defaults/serialization/invalid-input/future-version test subtasks, now checked. The remaining ELSV-100 policy/immutable-snapshot/ordered frontend write subtask and full cross-provider/platform verification are still open.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
-- [ ] Add separate provider model IDs, loopback addresses, and system voice ID to settings; bump settings version; migrate old settings without changing saved Google/Local choices or wiping unknown future settings.
+- [x] Add separate provider model IDs, loopback addresses, and system voice ID to settings; bump settings version; migrate old settings without changing saved Google/Local choices or wiping unknown future settings.
 - [ ] Validate model IDs, server addresses, and provider combinations at the backend settings boundary; preserve request-scoped settings snapshots and ordered frontend patch writes.
-- [ ] Add migration, serialization, defaults, invalid-input, and future-version tests; regenerate and review `src/generated/backendContract.json`.
+- [x] Add migration, serialization, defaults, invalid-input, and future-version tests; regenerate and review `src/generated/backendContract.json`.
 
 **Acceptance:** fresh profiles remain Local/KittenTTS, existing profiles retain their choices, and frontend/backend settings shapes agree.
 
