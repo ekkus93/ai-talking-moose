@@ -105,6 +105,13 @@ def main() -> None:
     print(f"ASR reference inventory: head={sha} tracked={len(tracked)} matched={len(files)} skipped={len(skipped)}")
     for owner, count in sorted(counts.items()):
         print(f"  {owner}: {count}")
+    # Print the residual unclassified references so Ralph can assign a real
+    # owner and keep the audit exhaustive without artifact-download privileges.
+    for item in files:
+        if item["owner"] == "other":
+            print(f"REQUIRES_OWNER_REVIEW: {item['path']}")
+    for item in skipped:
+        print(f"SKIPPED_TRACKED_PATH: {item['path']} ({item['reason']})")
     print(f"JSON evidence: {args.output}")
 
 
