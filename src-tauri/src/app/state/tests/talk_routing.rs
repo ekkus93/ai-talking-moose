@@ -135,6 +135,58 @@ async fn both_moonshine_asr_modes_keep_all_external_text_and_voice_pairs_non_liv
     }
 }
 
+/// Explicit Gemini Live ASR must use Google Live, regardless of the selected
+/// standalone text model or TTS voice. Missing Live credentials must not cause
+/// a silent fallback to non-Live Talk or an unavailable System speech adapter.
+#[tokio::test]
+async fn explicit_live_asr_is_separate_from_every_standalone_provider_pair() {
+    use crate::ai::types::ProviderErrorKind;
+    let state = AppState::new_for_tests().unwrap();
+    assert!(!state.secrets.has_google_api_key());
+
+    for text_provider in [
+        TextProvider::Local,
+        TextProvider::Google,
+        TextProvider::Openai,
+        TextProvider::Ollama,
+        TextProvider::LlamaServer,
+    ] {
+        for tts_provider in [TtsProvider::Local, TtsProvider::Google, TtsProvider::System] {
+            let settings = AppSettings {
+                asr_mode: AsrMode::GeminiLiveAudio,
+                text_provider,
+                tts_provider,
+                ..AppSettings::default()
+            };
+            let (sender, mut events) = tokio::sync::mpsc::channel(4);
+            let result = state
+                .get_conversation_provider_for(&settings)
+                .connect(
+                    LiveSessionConfig {
+                        model: "selected-live-model".into(),
+                        voice_name: None,
+                        system_instruction: None,
+                        sample_rate_in: 16_000,
+                        sample_rate_out: 24_000,
+                        tools: vec![],
+                    },
+                    sender,
+                )
+                .await;
+            let error = match result {
+                Ok(_) => panic!("Live mode without Google auth cannot start"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.kind,
+                ProviderErrorKind::Auth,
+                "{text_provider:?} {tts_provider:?} must remain in Gemini Live"
+            );
+            assert!(events.try_recv().is_err(), "failed Live connect emitted an event");
+        }
+    }
+}
+
 // Native System synthesis exists on macOS, so this fail-closed path applies elsewhere.
 #[cfg(not(target_os = "macos"))]
 #[tokio::test]
