@@ -40,3 +40,17 @@ The full repository search, generated-contract/UI fixture disposition inventory,
 ## Work-order protection
 
 Moonshine remains available and the saved/fresh macOS ASR selection is unchanged during WSP-100/200. Only a real verified native model transcription on **both** Mac architectures permits the subsequent WSP-300 switch and WSP-500 removal. Gemini Live and KittenTTS remain independent.
+
+## Tracked-reference inventory (2026-10-15, exact-head automated evidence)
+
+The first full **tracked-file** search ran successfully at `e4354b3937ecf3cccdc96b1b60d5023fc3798f94`: workflow `Whisper Migration Reference Inventory`, run `38822092330`, job `116720826717` (success). It scanned 868 tracked paths, found 222 files with migration-related references, and skipped one nonregular/binary path. The JSON per-file/per-line reference and proposed-owner report is artifact `12012788130` (`whisper-reference-inventory-e4354b3937ecf3cccdc96b1b60d5023fc3798f94`).
+
+Provisional owner groups (file counts): app-native 38; ASR backend 12; CI workflows 18; documentation 69; frontend 14; generated contract 1; historical evidence 25; KittenTTS 1; Moonshine runtime 16; native assets 2; other 10; release tooling 16. These sum to 222 matched tracked files. The script `scripts/audit_whisper_migration_references.py` records the exact matching line numbers and proposed disposition, and can be rerun after code changes.
+
+**Not yet accepted as a completed WSP-000 disposition audit:** classifications are heuristic, 10 files are currently in `other`, the remaining groups require owner-by-owner review, and pinned submodule contents are outside the main repository's tracked-file scan. This is inventory evidence, not native build/transcription, no-network, Mac packaging or physical microphone acceptance.
+
+## First macOS static-build failure and correction
+
+The previous Mac native compile workflow `38821017184` on `a46005cd3166e4f772900907e57251030d0e7226` built all four pinned Whisper static archives on arm64, then failed during the unrelated Tauri app resource check: `Library not found: native/macos/libmoonshine.dylib`. This is not proof of a Whisper FFI failure or of a usable app. Commit `6cc3fe302baad4d8d5a579c7bffd65770542131c` isolates the standalone Whisper CLI compile from Moonshine-only app framework resources via a scoped `TAURI_CONFIG` override. The actual shipping Tauri configuration and Moonshine runtime remain unchanged pending WSP-200. Both-architecture rerun `38821907488` must finish before WSP-100 can be evaluated.
+
+An opt-in, real-model Mac arm64/Intel transcription workflow was added in `d7736ca681044731181c669d2fb08a98814b4041`. Its existence is **not** WSP-200 acceptance; no successful pinned-weight Mac transcript, egress-denied proof, or human mic test has yet been recorded.
