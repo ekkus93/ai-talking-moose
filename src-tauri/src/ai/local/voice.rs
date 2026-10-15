@@ -210,15 +210,33 @@ impl LiveSession for LocalConversationSession {
             if response.is_empty() || current_generation.load(Ordering::SeqCst) != turn {
                 return;
             }
-            let _ = event_sender
+            if event_sender
                 .send(LiveServerEvent::ModelTranscript(TranscriptUpdate {
                     text: response.clone(),
                     is_final: true,
                 }))
-                .await;
+                .await
+                .is_err()
+            {
+                return;
+            }
 
+            // Publication can suspend on backpressure. An interruption or
+            // replacement during that await must not start a new TTS request,
+            // particularly when the selected speech provider is cloud-hosted.
             let cancellation = CancellationToken::new();
-            *active_synthesis.lock() = Some((turn, cancellation.clone()));
+            {
+                let mut active = active_synthesis.lock();
+                if current_generation.load(Ordering::SeqCst) != turn {
+                    return;
+                }
+                *active = Some((turn, cancellation.clone()));
+            }
+            // If a cancellation raced the lock handoff, the interrupt path
+            // has cancelled this token; avoid entering the synth adapter.
+            if cancellation.is_cancelled() {
+                return;
+            }
             let audio = speech_synthesizer
                 .synthesize_cancellable(
                     TtsRequest {
@@ -500,6 +518,60 @@ mod tests {
                 .unwrap(),
             Some(2)
         );
+    }
+
+    #[tokio::test]
+    async fn interruption_during_transcript_backpressure_never_starts_cloud_tts() {
+        let captured = Arc::new(StdMutex::new(None));
+        let provider = LocalConversationProvider::new(
+            Arc::new(ReplyModel),
+            Arc::new(RequestCapture(captured.clone())),
+            "cloud-voice".into(),
+            1.0,
+        );
+        // The Connected event fills the channel, forcing publication of the
+        // next ModelTranscript to suspend until the consumer drains it.
+        let (sender, mut events) = mpsc::channel(1);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "selected-external-model".into(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: Vec::<ToolDeclaration>::new(),
+                },
+                sender,
+            )
+            .await
+            .unwrap();
+        session.send_text_turn("first").await.unwrap();
+        // Let the spawned generation reach the channel's backpressure point.
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        let interrupted = tokio::spawn(async move { session.interrupt().await });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
+        // The transcript send was already queued; the interrupted generation
+        // must still be stopped before handing the text to any speech provider.
+        assert!(matches!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+                .await
+                .unwrap(),
+            Some(LiveServerEvent::ModelTranscript(_))
+        ));
+        assert!(matches!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+                .await
+                .unwrap(),
+            Some(LiveServerEvent::Interrupted)
+        ));
+        interrupted.await.unwrap().unwrap();
+        assert!(captured.lock().unwrap().is_none());
     }
 
     #[test]
