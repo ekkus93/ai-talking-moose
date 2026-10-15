@@ -215,6 +215,10 @@ Commit `8c8ba6ef31c3926778699b023821c16edbc114d9` adds a request-level regressio
 
 Direct-to-`master` commit `d21f799a67b51908f5caa2b6774a636058e4697a` rejects zero-width separators and word joiners in OS-supplied System voice display names and style metadata, not just stable voice IDs. Its negative tests retain valid voices while excluding invisible-formatting spoof cases. **Exact-head CI `38703363239` passed** Rust quality/Clippy, Rust tests, and generated backend-contract verification. This is ELSV-500 catalog hardening only: runtime macOS enumeration, AVSpeechSynthesizer, audible playback, physical Mac audition, full routing, and ELSV-900 remain open.
 
+### OS catalog spoofing regression — 2026-10-15
+
+Direct-to-`master` test commit `2e354f1`, corrected for an actual invisible separator in `201909a8` and formatted in `c9811982234331652459949c4e5cae207817c4be`, verifies that malformed third-party macOS voice display metadata cannot make a saved voice appear installed. A subsequent valid OS catalog entry with the same stable ID remains selectable; an unrelated installed voice is never silently substituted. **Exact-head CI `38710911761` passed** Rust tests, Rust quality/Clippy, and generated backend-contract verification. This is platform-neutral ELSV-500 safety evidence, not macOS voice enumeration, buffer synthesis, playback, or physical audition. ELSV-500 and ELSV-900 remain unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
