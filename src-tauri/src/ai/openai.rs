@@ -460,4 +460,77 @@ mod tests {
         );
         server.await.unwrap();
     }
+
+    #[tokio::test]
+    async fn stalled_openai_response_times_out_without_retrying_or_exposing_input() {
+        use tokio::io::AsyncReadExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut received = [0_u8; 4096];
+            let count = stream.read(&mut received).await.unwrap();
+            assert!(String::from_utf8_lossy(&received[..count])
+                .starts_with("POST /v1/responses HTTP/1.1"));
+            // Hold the accepted request beyond the client's injected deadline.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        });
+        let mut model = OpenAiTextModel::with_endpoint(
+            "test-openai-key".into(),
+            "gpt-4.1-mini".into(),
+            endpoint,
+        );
+        model.client = Ok(Client::builder()
+            .redirect(Policy::none())
+            .timeout(Duration::from_millis(50))
+            .build()
+            .unwrap());
+        let error = model
+            .generate(sample("sensitive transcript"))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Network);
+        assert!(!error.message.contains("sensitive transcript"));
+        assert!(!error.message.contains("test-openai-key"));
+        server.await.unwrap();
+        // A generation timeout must not trigger a second request.
+        let extra_accept = tokio::time::timeout(Duration::from_millis(50), listener.accept()).await;
+        assert!(extra_accept.is_err());
+    }
+
+    #[tokio::test]
+    async fn oversized_openai_response_is_rejected_without_exposing_raw_payload() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut received = [0_u8; 4096];
+            let count = stream.read(&mut received).await.unwrap();
+            assert!(String::from_utf8_lossy(&received[..count])
+                .starts_with("POST /v1/responses HTTP/1.1"));
+            let payload = "private-response-fragment".repeat(4_000);
+            assert!(payload.len() > MAX_RESPONSE_BYTES);
+            let headers = format!(
+                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n",
+                payload.len()
+            );
+            stream.write_all(headers.as_bytes()).await.unwrap();
+            let _ = stream.write_all(payload.as_bytes()).await;
+        });
+        let model = OpenAiTextModel::with_endpoint(
+            "test-openai-key".into(),
+            "gpt-4.1-mini".into(),
+            endpoint,
+        );
+        let error = model.generate(sample("private prompt")).await.unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Protocol);
+        assert!(!error.message.contains("private prompt"));
+        assert!(!error.message.contains("private-response-fragment"));
+        server.await.unwrap();
+    }
 }
