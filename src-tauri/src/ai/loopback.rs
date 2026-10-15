@@ -899,3 +899,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod failure_tests;
