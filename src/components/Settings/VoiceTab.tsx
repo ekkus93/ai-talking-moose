@@ -107,22 +107,30 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
 
   const selectStandaloneVoice = async (voice: string) => {
     setVoiceError(null);
-    if (!isConversationActive) {
-      try {
+    try {
+      if (!isConversationActive) {
         await tauriBridge.cancelStandaloneSpeech();
-      } catch (error) {
-        setVoiceError(
-          `Could not preempt the previous standalone voice: ${String(error)}`,
-        );
-        return;
       }
+      if (settings.tts_provider === "google") {
+        await updateSettingsPatch({ google_tts_voice: voice });
+      } else if (settings.tts_provider === "system") {
+        await updateSettingsPatch({ system_tts_voice: voice });
+      } else {
+        await updateSettingsPatch({ local_tts_voice: voice });
+      }
+    } catch {
+      // IPC and device errors can contain private paths or provider details.
+      // The store restores rejected patches; show a fixed, safe error here.
+      setVoiceError("Could not save the standalone voice selection. Please retry.");
     }
-    if (settings.tts_provider === "google") {
-      await updateSettingsPatch({ google_tts_voice: voice });
-    } else if (settings.tts_provider === "system") {
-      await updateSettingsPatch({ system_tts_voice: voice });
-    } else {
-      await updateSettingsPatch({ local_tts_voice: voice });
+  };
+
+  const selectLiveVoice = async (voice: string) => {
+    setVoiceError(null);
+    try {
+      await updateSettingsPatch({ live_voice: voice });
+    } catch {
+      setVoiceError("Could not save the Gemini Live voice selection. Please retry.");
     }
   };
 
@@ -429,9 +437,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           id="settings-live-voice"
           value={settings.live_voice}
           disabled={!catalog}
-          onChange={(event) =>
-            void updateSettingsPatch({ live_voice: event.target.value })
-          }
+          onChange={(event) => void selectLiveVoice(event.target.value)}
           className="w-full p-1.5 border border-black rounded bg-white font-bold disabled:opacity-60"
         >
           {!liveVoiceAvailable && (
