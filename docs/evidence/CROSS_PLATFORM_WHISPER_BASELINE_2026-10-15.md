@@ -60,3 +60,17 @@ An opt-in, real-model Mac arm64/Intel transcription workflow was added in `d7736
 Run `38821907488` at `6cc3fe302baad4d8d5a579c7bffd65770542131c` completed successfully on macOS arm64 (job `116720489506`) and Intel x86_64 (job `116720489783`). Both jobs compiled the pinned whisper.cpp static archives and the real `whisper_acceptance` CLI, invoked the native FFI version function (returned `1.9.4`), and verified their Mach-O architecture. Metal, Accelerate and BLAS were disabled for the CPU baseline; `TALKING_MOOSE_REQUIRE_WHISPER_NATIVE=1` enforced a hard build failure on missing Whisper. The standalone CLI bypassed Moonshine-only Tauri bundle framework resources without modifying production packaging.
 
 This is **compile/link and native invocation evidence only**, not pinned-model loading, real transcription, offline egress denial, physical microphone testing, full ABI exercise, or signed app acceptance. WSP-200 is still unqualified, so the Mac default and Moonshine runtime remain unchanged. A final exact-head rerun is required after later changes.
+
+## Residual owner review completed — 2026-10-15
+
+The tracked reference inventory initially left ten matches in the generic `other` bucket. Commit `aab612fc825153d0f2fe0ab34088c028646268a4` assigned each to an explicit owner and reran the exact-head inventory in workflow run `38823244110` (success, both matching and skipped-path evidence logged). Scope remains a reference census, **not** approval to delete artifacts or proof of a complete platform release.
+
+- `.gitignore`: repository hygiene; ignore architecture-isolated `build/whisper-*/` native output as of `7897bbd`; retain app-generated-output exclusions.
+- `AGENTS.md`, `CLAUDE.md`: developer guidance; replace active Moonshine-only descriptions after WSP-200, not during current dual-engine qualification.
+- `memory.md`: historically dated Whisper integration handoff with stale source/runtime details; treat as archival, never as authoritative current build instructions.
+- `tests/test_freeze_wake_word_runtime_identity.py`: separate sherpa-onnx wake-word runtime integrity tests, **retain**.
+- `wake-word-artifacts.json`: separately pinned sherpa-onnx wake-word assets and ONNX dependencies, **retain** independently of Moonshine.
+- `tools/asr-miri/README.md`, `tools/asr-miri/build.rs`, `tools/asr-miri/src/asr/mod.rs`, `tools/asr-miri/src/asr/moonshine/mod.rs`: Moonshine-specific memory/FFI safety harness; reconcile after WSP-200/300/400, potentially replace with Whisper-appropriate safety coverage. Do not delete early.
+- `third_party/whisper.cpp`: one skipped gitlink, deliberately represented by pinned source SHA `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`; native Mac source CI checks the exact source with `scripts/check_whisper_provenance.py` on both architectures.
+
+All tracked reference matches have an assigned functional owner category and a proposed retained/replaced/removed disposition. Per-file manual risk review and any actual deletion remain future WSP-500 tasks; this closes **inventory**, not cutover.
