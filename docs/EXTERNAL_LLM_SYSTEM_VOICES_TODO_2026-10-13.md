@@ -183,6 +183,12 @@ The backend settings boundary in `src-tauri/src/app/settings_policy.rs` rejects 
 
 Frontend direct-to-`master` commits `848a614c6a5fb129fb431f6f19b25520f95ac2df`, `8ca0f8b317d1e528af3dc4611dc599bd10153e6f`, and `1f684cb79e1379368df6b09a5694355ff1afcb2e` added and qualified the independent provider/TTS serialized-patch regression, including overlapping writes without lost provider selections or concurrent persistence. **Exact-head frontend quality CI `38675039144` passed** on `1f684cb`; Rust settings-boundary and snapshot-related tests and the generated-contract gate passed in `38673594292` and `38672195380`. This qualifies the final individual ELSV-100 policy/request-snapshot/patch-write subtask. All four ELSV-100 subtasks are now checked, while the complete ELSV release and platform acceptance remain open.
 
+### Bounded serialized requests and provider-isolated loopback qualification — 2026-10-14
+
+Direct-to-`master` changes `d5443ee832043efd4e6ede764ce59339c8aee80d` and `35d4868f320f357bd56827e122825c7fb2d52ea6` added fake-server regressions for both Ollama and llama-server: an existing independent Google or OpenAI key is not sent in local request headers or JSON, quota errors expose no private upstream content, and the generation adapter does not automatically retry. Commit `10721c0e8b17cacb2960efed5f8c1c8f842b56da` bounds the *serialized* generation JSON, including combined prompts, instructions, and escaping, before contacting either loopback endpoint. Commit `91904ec3364a03219b48a8f8c52761738dbe2577` enforces the equivalent outbound JSON limit in OpenAI Responses. Rustfmt follow-ups landed on `master` without weakening the checks.
+
+**Exact-head CI `38679309547` passed** on `ae6d373035bb09ba9e41bfe6a6c7ef80658d88a5`: Rust tests, Rust quality/Clippy, and generated backend-contract verification. These are focused ELSV-200/300 request-boundary and credential-isolation regressions, **not** full provider acceptance. macOS System voice implementation/audition, routing matrix, canonical `check:all`, and ELSV-900 still need evidence. Keep broader checklist items unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
