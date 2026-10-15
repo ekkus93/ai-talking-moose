@@ -240,7 +240,9 @@ impl LiveSession for LocalConversationSession {
                 let active = active_synthesis.lock();
                 if current_generation.load(Ordering::SeqCst) != turn
                     || cancellation.is_cancelled()
-                    || !active.as_ref().is_some_and(|(active_turn, _)| *active_turn == turn)
+                    || !active
+                        .as_ref()
+                        .is_some_and(|(active_turn, _)| *active_turn == turn)
                 {
                     return;
                 }
@@ -500,7 +502,10 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
         session.send_text_turn("private text").await.unwrap();
         assert_eq!(
             tokio::time::timeout(std::time::Duration::from_secs(2), started_rx.recv())
@@ -513,7 +518,10 @@ mod tests {
             .await
             .expect("interrupted provider future must be dropped")
             .unwrap();
-        assert!(matches!(events.recv().await, Some(LiveServerEvent::Interrupted)));
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Interrupted)
+        ));
         assert!(
             tokio::time::timeout(std::time::Duration::from_millis(50), events.recv())
                 .await
