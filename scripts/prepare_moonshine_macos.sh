@@ -79,7 +79,7 @@ if ! git -C "$source_dir" lfs pull --include="$ort_rel" --exclude="*"; then
   command -v curl >/dev/null || fail "curl required for verified release fallback"
   archive="$workspace/onnxruntime-official.tgz"
   official_url="https://github.com/microsoft/onnxruntime/releases/download/v${ort_version}/onnxruntime-osx-${arch}-${ort_version}.tgz"
-  curl --fail --location --retry 2 --max-time 120 --output "$archive" "$official_url" \\
+  curl --fail --location --retry 2 --max-time 120 --output "$archive" "$official_url" \
     || fail "official ONNX Runtime release archive unavailable; upstream LFS quota also exhausted"
   python3 - "$archive" "$ort_source" "$ort_version" <<'PY'
 import pathlib, shutil, sys, tarfile
