@@ -42,7 +42,7 @@ async fn all_text_providers_with_local_asr_connect_without_gemini_live() {
         TextProvider::Ollama,
         TextProvider::LlamaServer,
     ] {
-        for tts_provider in [TtsProvider::Local, TtsProvider::Google, TtsProvider::System] {
+        for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
             let settings = AppSettings {
                 text_provider,
                 tts_provider,
@@ -76,6 +76,53 @@ async fn all_text_providers_with_local_asr_connect_without_gemini_live() {
             );
             session.close().await.unwrap();
         }
+    }
+}
+
+#[tokio::test]
+async fn unavailable_system_tts_rejects_before_any_selected_text_provider_starts() {
+    use crate::ai::types::ProviderErrorKind;
+    let state = AppState::new_for_tests().unwrap();
+    for text_provider in [
+        TextProvider::Local,
+        TextProvider::Google,
+        TextProvider::Openai,
+        TextProvider::Ollama,
+        TextProvider::LlamaServer,
+    ] {
+        let settings = AppSettings {
+            text_provider,
+            tts_provider: TtsProvider::System,
+            asr_mode: AsrMode::WhisperSmall,
+            ..AppSettings::default()
+        };
+        let provider = state.get_conversation_provider_for(&settings);
+        let (sender, mut events) = tokio::sync::mpsc::channel(4);
+        let result = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "selected-model".into(),
+                    voice_name: Some("system_default".into()),
+                    system_instruction: Some("private instruction".into()),
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await;
+        let error = match result {
+            Ok(_) => panic!("unavailable System TTS must reject before Talk starts"),
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, ProviderErrorKind::Setup);
+        assert!(!error.retryable);
+        assert!(error.message.contains("no text provider was contacted"));
+        assert!(!error.message.contains("private instruction"));
+        assert!(
+            events.recv().await.is_none(),
+            "failed connection must publish no transcript or audio"
+        );
     }
 }
 
@@ -125,7 +172,7 @@ async fn invalid_loopback_server_cannot_fall_back_to_cloud_or_any_standalone_voi
     use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
     let state = AppState::new_for_tests().unwrap();
     for text_provider in [TextProvider::Ollama, TextProvider::LlamaServer] {
-        for tts_provider in [TtsProvider::Local, TtsProvider::Google, TtsProvider::System] {
+        for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
             let settings = AppSettings {
                 text_provider,
                 tts_provider,

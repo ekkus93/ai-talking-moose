@@ -1,8 +1,30 @@
 //! Explicit fail-closed adapters for provider choices whose runtime is not yet built.
 //! Never substitute another model or voice when a selected provider is unavailable.
-use crate::ai::traits::SpeechSynthesizer;
-use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind, TtsRequest};
+use crate::ai::traits::{LiveSession, RealtimeConversationProvider, SpeechSynthesizer};
+use crate::ai::types::{
+    AudioStreamData, LiveServerEvent, LiveSessionConfig, ProviderError, ProviderErrorKind, TtsRequest,
+};
 use async_trait::async_trait;
+use tokio::sync::mpsc;
+
+/// An unavailable standalone voice must stop Talk before a selected text
+/// provider sees a prompt; failure at the later TTS stage is too late.
+pub(crate) struct UnavailableSystemConversationProvider;
+
+#[async_trait]
+impl RealtimeConversationProvider for UnavailableSystemConversationProvider {
+    async fn connect(
+        &self,
+        _config: LiveSessionConfig,
+        _events: mpsc::Sender<LiveServerEvent>,
+    ) -> Result<Box<dyn LiveSession>, ProviderError> {
+        Err(ProviderError {
+            kind: ProviderErrorKind::Setup,
+            message: "System voice synthesis is not available in this build; Talk was not started and no text provider was contacted.".into(),
+            retryable: false,
+        })
+    }
+}
 
 pub(crate) struct UnavailableSpeechSynthesizer;
 

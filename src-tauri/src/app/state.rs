@@ -690,6 +690,12 @@ impl AppState {
     ) -> Arc<dyn RealtimeConversationProvider> {
         if settings.asr_mode != AsrMode::GeminiLiveAudio
         {
+            // System TTS is not wired to native macOS synthesis yet. Reject
+            // the combination before an external text model can transmit a
+            // transcript and produce an answer that cannot be spoken.
+            if settings.tts_provider == TtsProvider::System {
+                return Arc::new(crate::ai::unavailable::UnavailableSystemConversationProvider);
+            }
             let text_model = Arc::from(self.get_text_model_for(settings));
             let speech_synthesizer: Arc<dyn SpeechSynthesizer> = match settings.tts_provider {
                 TtsProvider::Local => Arc::new(LocalSpeechSynthesizer::new(
