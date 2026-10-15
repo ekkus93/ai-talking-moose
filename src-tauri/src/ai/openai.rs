@@ -572,3 +572,6 @@ mod tests {
         server.await.unwrap();
     }
 }
+
+#[cfg(test)]
+mod failure_tests;
