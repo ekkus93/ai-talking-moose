@@ -149,3 +149,65 @@ jobs:
       - name: Fail when acceptance failed
         if: steps.acceptance.outputs.status != '0'
         run: exit 1
+
+  macos-smoke:
+    name: ELSV macOS Tauri smoke bundle (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            deployment_target: "13.4"
+          - arch: x86_64
+            runner: macos-15-intel
+            deployment_target: "13.4"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-cargo-
+            ${{ runner.os }}-cargo-
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Generate release icon set
+        run: python3 scripts/generate_app_icons.py
+      - name: Validate release metadata and icon set
+        run: python3 scripts/validate_release_metadata.py
+      - name: Validate Moonshine runtime provenance
+        run: python3 scripts/validate_moonshine_runtime_manifest.py
+      - name: Build pinned Moonshine native runtime
+        run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+      - name: Collect dependency license texts
+        run: python3 scripts/collect_release_licenses.py
+      - name: Build unsigned macOS application smoke bundle
+        run: npm run tauri build -- --bundles app
+      - name: Verify self-contained native runtime bundle
+        run: |
+          app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          bash scripts/verify_macos_bundle.sh "$app_path" "${{ matrix.arch }}"
+      - name: Verify packaged build provenance
+        run: |
+          app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          bash scripts/verify_app_build_provenance.sh "$app_path" "$GITHUB_SHA"
+
