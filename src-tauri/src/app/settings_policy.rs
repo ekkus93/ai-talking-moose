@@ -111,6 +111,11 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
             return Err(format!("{name} contains invalid characters"));
         }
     }
+    // The native voice catalog excludes directional Unicode formatting that
+    // could disguise a saved OS voice identifier in the Control Panel.
+    if crate::ai::system_tts_voice_catalog::has_bidi_formatting(&settings.system_tts_voice) {
+        return Err("system TTS voice contains unsupported formatting characters".to_string());
+    }
     // Keep the settings boundary consistent with OpenAI request validation:
     // a saved model ID must be usable before the user starts a request.
     if !settings
@@ -315,6 +320,22 @@ mod tests {
             ..Default::default()
         };
         assert!(validate_app_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn saved_system_voice_rejects_directional_spoofing_at_settings_boundary() {
+        let mut settings = AppSettings::default();
+        assert!(validate_app_settings(&settings).is_ok());
+        settings.system_tts_voice = "com.apple.voice.accepted".into();
+        assert!(validate_app_settings(&settings).is_ok());
+        for id in [
+            "com.apple.voice.\u{202e}spoof",
+            "com.apple.voice.\u{2066}spoof\u{2069}",
+            "com.apple.voice.\u{200f}spoof",
+        ] {
+            settings.system_tts_voice = id.into();
+            assert!(validate_app_settings(&settings).is_err());
+        }
     }
 
     #[test]

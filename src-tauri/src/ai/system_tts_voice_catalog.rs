@@ -8,7 +8,7 @@ const MAX_VOICE_STYLE_BYTES: usize = 128;
 
 // Third-party OS voices may supply display metadata. Reject directional
 // overrides and isolates that can spoof the visible identity of a voice.
-fn has_bidi_formatting(value: &str) -> bool {
+pub(crate) fn has_bidi_formatting(value: &str) -> bool {
     value.chars().any(|ch| {
         matches!(ch, '\u{200e}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
     })
