@@ -1,7 +1,7 @@
 # ELSV macOS System Voices — physical acceptance record
 
-**Date:** 2026-10-15  
-**Status:** Human audition and real-app playback observation **not yet performed**.  
+**Date:** 2026-10-15
+**Status:** Human audition and real-app playback observation **not yet performed**.
 **Scope:** `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md` ELSV-500 / ELSV-900.
 
 ## Existing automated evidence (not a listening substitute)
