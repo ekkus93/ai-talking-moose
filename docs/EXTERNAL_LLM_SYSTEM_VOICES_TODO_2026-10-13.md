@@ -133,6 +133,14 @@ Commit `0a490e2d25460c5026e5b93715b9acf7dcc63341` additionally rejects padded sa
 - This qualifies only a platform-neutral conversion prerequisite. The native macOS AVSpeechSynthesizer callback, installed voice enumeration, cancellation/playback integration, Control Panel enablement, real Mac audition, and full `check:all` remain open. ELSV-500 and ELSV-900 stay unchecked.
 - A potential credential-redaction overlap edge case was identified: if two provider keys share a prefix, replacing the shorter key first may expose the longer key's suffix. An attempted ordered-redaction correction was rejected by source-write safety checks and **has not landed**. Treat this as an ELSV-200 security follow-up; do not claim it qualified.
 
+### Native PCM format and input validation follow-up — 2026-10-14
+
+- `474f1b710145d20f147b124220f9a0d833e97127` rejects embedded NUL and other non-whitespace control characters in System TTS utterances before native synthesis, with a regression retaining legitimate line breaks. Exact-head Rust quality, tests, and generated-contract CI passed in run `38658603051`.
+- `50f2bdb983c729cfb9c6bc42c37162c5527081db` adds bounded interleaved f64 PCM conversion, including finite extreme cancellation, malformed/non-finite input rejection, cumulative duration enforcement, and atomicity. Exact-head Rust quality, tests, and generated-contract CI passed in run `38658987206`.
+- `7cd04246644ae6c36f528941b0f0935a09313606` extends the native-format parity contract test to interleaved f64. Exact-head CI `38659658414` passed Rust quality, Rust tests, and generated-contract verification.
+
+These are platform-neutral macOS prerequisites, not AVSpeechSynthesizer integration or an audible Mac audition. System voice enumeration, native buffer callbacks, cancellation/playback integration, Control Panel enablement, full `check:all`, and ELSV-500/900 acceptance remain open. A separate overlapping-provider-credential redaction fix was attempted but rejected by source-write safety checks; it has **not** landed.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
