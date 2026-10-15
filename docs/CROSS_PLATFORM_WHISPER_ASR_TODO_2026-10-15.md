@@ -51,6 +51,8 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 **HARD CUTOVER GATE WSP-200:** *Both* Mac architectures demonstrably transcribe real audio with the pinned Whisper model and the packaged-compatible native runtime. **Do not remove Moonshine or switch production Mac default before this gate.**
 
+**External dispatch limitation (2026-10-15):** The opt-in manual Mac real-model workflow exists on `master`, but Ralph Bridge's configured `dispatch_validation` interface rejected profiles `whisper-macos-real-cpu-acceptance` and `whisper-macos-real-cpu` with `INVALID_ARGUMENT`. No real-model workflow was launched by these attempts. The GitHub App authentication is healthy for repository reads/writes; the exact dispatch denial cause (profile whitelist vs Actions permission) is not exposed. See `docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_DISPATCH_2026-10-15.md`. WSP-200 and subsequent Mac migration/removal gates stay **unchecked** until both real-model jobs pass.
+
 ## WSP-300 — Unify ASR selection and persist settings safely
 
 - [ ] Make `AsrMode::WhisperSmall` the fresh-profile local ASR default on Linux and macOS. Retain explicit `GeminiLiveAudio` cloud mode with no implicit selection.
