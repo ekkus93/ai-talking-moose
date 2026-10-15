@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 const RESPONSES_ENDPOINT: &str = "https://api.openai.com/v1/responses";
+const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_RESPONSE_BYTES: usize = 64 * 1024;
 const MAX_TEXT_BYTES: usize = 16 * 1024;
 const MAX_PROMPT_BYTES: usize = 64 * 1024;
@@ -150,6 +151,12 @@ impl TextModel for OpenAiTextModel {
                 body["temperature"] = json!(temp);
             }
         }
+        // JSON encoding expands quotes and other escaped characters. Enforce
+        // the complete outbound body budget, including instructions/metadata.
+        let body_size = serde_json::to_vec(&body).map_err(|_| setup())?.len();
+        if body_size > MAX_REQUEST_BYTES {
+            return Err(setup());
+        }
         let client = self.client.as_ref().map_err(Clone::clone)?;
         let mut response = client
             .post(&self.endpoint)
@@ -246,6 +253,27 @@ mod tests {
                 kind
             );
         }
+    }
+
+    #[tokio::test]
+    async fn serialized_openai_body_is_bounded_before_network_io() {
+        let model = OpenAiTextModel::new("test-openai-key".into(), "gpt-4.1-mini".into());
+        let mut request = sample("small");
+        request.prompt = "p".repeat(MAX_PROMPT_BYTES / 2);
+        request.system_instruction = Some("s".repeat(MAX_PROMPT_BYTES / 2));
+        assert_eq!(
+            model.generate(request.clone()).await.unwrap_err().kind,
+            ProviderErrorKind::Setup
+        );
+
+        // JSON escaping doubles the wire-body size without changing the
+        // independently validated prompt byte length.
+        request.prompt = "\"".repeat(MAX_PROMPT_BYTES / 2);
+        request.system_instruction = None;
+        assert_eq!(
+            model.generate(request).await.unwrap_err().kind,
+            ProviderErrorKind::Setup
+        );
     }
 
     #[tokio::test]
