@@ -531,6 +531,65 @@ mod tests {
         session.close().await.unwrap();
     }
 
+    #[tokio::test]
+    async fn replacing_non_live_text_turn_drops_old_generation_before_starting_new_one() {
+        let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+        let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel();
+        let provider = LocalConversationProvider::new(
+            Arc::new(PendingGeneration {
+                started: started_tx,
+                dropped: StdMutex::new(Some(dropped_tx)),
+            }),
+            Arc::new(RequestCapture(Arc::new(StdMutex::new(None)))),
+            "voice".to_string(),
+            1.0,
+        );
+        let (sender, mut events) = mpsc::channel(8);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "external-text".to_string(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
+        session.send_text_turn("first private text").await.unwrap();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), started_rx.recv())
+                .await
+                .unwrap(),
+            Some(())
+        );
+        session.send_text_turn("replacement text").await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), dropped_rx)
+            .await
+            .expect("replacement must drop the previous provider generation")
+            .unwrap();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), started_rx.recv())
+                .await
+                .unwrap(),
+            Some(())
+        );
+        session.close().await.unwrap();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), events.recv())
+                .await
+                .is_err(),
+            "replaced or closed generation must never publish a stale transcript"
+        );
+    }
+
     struct CancellationProbe {
         next: std::sync::atomic::AtomicUsize,
         started: mpsc::UnboundedSender<usize>,
