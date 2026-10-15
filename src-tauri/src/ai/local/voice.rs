@@ -98,6 +98,44 @@ fn strip_outer_quotes(text: &str) -> &str {
     text
 }
 
+/// Keep cancellation ownership through transcript, audio, and completion delivery.
+/// A stale turn must never clear a newer turn's cancellation token.
+struct ActiveTurnCleanup {
+    turn: u64,
+    active: Arc<Mutex<Option<(u64, CancellationToken)>>>,
+}
+
+impl Drop for ActiveTurnCleanup {
+    fn drop(&mut self) {
+        let mut active = self.active.lock();
+        if active
+            .as_ref()
+            .is_some_and(|(generation, _)| *generation == self.turn)
+        {
+            active.take();
+        }
+    }
+}
+
+/// An interrupted turn must not resume a blocked event publication when the
+/// consumer finally drains the bounded conversation channel.
+async fn publish_turn_event(
+    sender: &mpsc::Sender<LiveServerEvent>,
+    event: LiveServerEvent,
+    cancellation: &CancellationToken,
+    generation: &AtomicU64,
+    turn: u64,
+) -> bool {
+    if cancellation.is_cancelled() || generation.load(Ordering::SeqCst) != turn {
+        return false;
+    }
+    tokio::select! {
+        biased;
+        () = cancellation.cancelled() => false,
+        result = sender.send(event) => result.is_ok(),
+    }
+}
+
 /// One-turn local conversation adapter for the existing conversation lifecycle. Local ASR
 /// supplies finalized transcripts; this session generates a local text response and local audio.
 pub struct LocalConversationProvider {
@@ -189,6 +227,10 @@ impl LiveSession for LocalConversationSession {
         let prompt = text.to_string();
 
         tauri::async_runtime::spawn(async move {
+            let _cleanup = ActiveTurnCleanup {
+                turn,
+                active: active_synthesis.clone(),
+            };
             // Reject obsolete turns before opening a selected provider's
             // network request; abort an in-flight future when interrupted.
             if cancellation.is_cancelled() || current_generation.load(Ordering::SeqCst) != turn {
@@ -213,22 +255,31 @@ impl LiveSession for LocalConversationSession {
                     // The previous turn may have been interrupted while its
                     // model request was in flight. Never publish its failure
                     // into a newer conversation generation.
-                    if current_generation.load(Ordering::SeqCst) == turn {
-                        let _ = event_sender.send(LiveServerEvent::Error(error)).await;
-                    }
+                    let _ = publish_turn_event(
+                        &event_sender,
+                        LiveServerEvent::Error(error),
+                        &cancellation,
+                        &current_generation,
+                        turn,
+                    )
+                    .await;
                     return;
                 }
             };
             if response.is_empty() || current_generation.load(Ordering::SeqCst) != turn {
                 return;
             }
-            if event_sender
-                .send(LiveServerEvent::ModelTranscript(TranscriptUpdate {
+            if !publish_turn_event(
+                &event_sender,
+                LiveServerEvent::ModelTranscript(TranscriptUpdate {
                     text: response.clone(),
                     is_final: true,
-                }))
-                .await
-                .is_err()
+                }),
+                &cancellation,
+                &current_generation,
+                turn,
+            )
+            .await
             {
                 return;
             }
@@ -265,27 +316,40 @@ impl LiveSession for LocalConversationSession {
                     &cancellation,
                 )
                 .await;
-            {
-                let mut active = active_synthesis.lock();
-                if active
-                    .as_ref()
-                    .is_some_and(|(active_turn, _)| *active_turn == turn)
-                {
-                    active.take();
-                }
-            }
-            if current_generation.load(Ordering::SeqCst) != turn {
+            if cancellation.is_cancelled() || current_generation.load(Ordering::SeqCst) != turn {
                 return;
             }
             match audio {
                 Ok(audio) => {
-                    let _ = event_sender
-                        .send(LiveServerEvent::AudioData(audio.pcm_bytes))
-                        .await;
-                    let _ = event_sender.send(LiveServerEvent::TurnComplete).await;
+                    if !publish_turn_event(
+                        &event_sender,
+                        LiveServerEvent::AudioData(audio.pcm_bytes),
+                        &cancellation,
+                        &current_generation,
+                        turn,
+                    )
+                    .await
+                    {
+                        return;
+                    }
+                    let _ = publish_turn_event(
+                        &event_sender,
+                        LiveServerEvent::TurnComplete,
+                        &cancellation,
+                        &current_generation,
+                        turn,
+                    )
+                    .await;
                 }
                 Err(error) => {
-                    let _ = event_sender.send(LiveServerEvent::Error(error)).await;
+                    let _ = publish_turn_event(
+                        &event_sender,
+                        LiveServerEvent::Error(error),
+                        &cancellation,
+                        &current_generation,
+                        turn,
+                    )
+                    .await;
                 }
             }
         });
@@ -713,12 +777,64 @@ mod tests {
             events.recv().await,
             Some(LiveServerEvent::Connected)
         ));
-        // The transcript send was already queued; the interrupted generation
-        // must still be stopped before handing the text to any speech provider.
+        // Cancellation wins over a blocked ModelTranscript send. Only the
+        // explicit interruption may be published after the channel drains.
         assert!(matches!(
             tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
                 .await
                 .unwrap(),
+            Some(LiveServerEvent::Interrupted)
+        ));
+        interrupted.await.unwrap().unwrap();
+        assert!(captured.lock().unwrap().is_none());
+        if let Ok(Some(event)) =
+            tokio::time::timeout(std::time::Duration::from_millis(50), events.recv()).await
+        {
+            panic!("interrupted turn published stale event: {event:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn interruption_during_audio_backpressure_suppresses_audio_and_completion() {
+        let captured = Arc::new(StdMutex::new(None));
+        let provider = LocalConversationProvider::new(
+            Arc::new(ReplyModel),
+            Arc::new(RequestCapture(captured.clone())),
+            "selected-voice".into(),
+            1.0,
+        );
+        // Connected blocks transcript publication; after it is drained, the
+        // transcript fills this single-slot channel and blocks AudioData.
+        let (sender, mut events) = mpsc::channel(1);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "selected-text".into(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await
+            .unwrap();
+        session.send_text_turn("private text").await.unwrap();
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while captured.lock().unwrap().is_none() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("selected voice must reach synthesis before interruption");
+        let interrupted = tokio::spawn(async move { session.interrupt().await });
+        assert!(matches!(
+            events.recv().await,
             Some(LiveServerEvent::ModelTranscript(_))
         ));
         assert!(matches!(
@@ -728,7 +844,11 @@ mod tests {
             Some(LiveServerEvent::Interrupted)
         ));
         interrupted.await.unwrap().unwrap();
-        assert!(captured.lock().unwrap().is_none());
+        if let Ok(Some(event)) =
+            tokio::time::timeout(std::time::Duration::from_millis(50), events.recv()).await
+        {
+            panic!("interrupted audio send published stale event: {event:?}");
+        }
     }
 
     #[test]
