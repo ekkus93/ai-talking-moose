@@ -30,12 +30,16 @@ describe("voice selection persistence failures", () => {
     const patch = vi.fn().mockRejectedValue(new Error("private-device-path"));
     useMooseStore.setState({ updateSettingsPatch: patch });
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("radio", { name: /Local KittenTTS/i }));
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /Local KittenTTS/i }),
+    );
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith({ tts_provider: "local" }),
     );
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Could not switch standalone speech provider");
+    expect(alert).toHaveTextContent(
+      "Could not switch standalone speech provider",
+    );
     expect(alert).not.toHaveTextContent("private-device-path");
   });
 

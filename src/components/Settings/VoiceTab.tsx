@@ -100,7 +100,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
       await updateSettingsPatch({ tts_provider: provider });
     } catch {
       // A rejected IPC write can include credentials, paths or transcripts.
-      setVoiceError("Could not switch standalone speech provider. Please retry.");
+      setVoiceError(
+        "Could not switch standalone speech provider. Please retry.",
+      );
     }
   };
 
