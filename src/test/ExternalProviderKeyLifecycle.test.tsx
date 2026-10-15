@@ -72,6 +72,35 @@ describe("OpenAI credential isolation in Settings", () => {
     expect(useMooseStore.getState().settings?.text_provider).toBe("openai");
   });
 
+  it("ignores an old key-presence result after a successful key save", async () => {
+    let resolvePresence: (value: boolean) => void = () => {
+      throw new Error("missing pending resolver");
+    };
+    vi.spyOn(tauriBridge, "hasOpenaiApiKey").mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        resolvePresence = resolve;
+      }),
+    );
+    vi.spyOn(tauriBridge, "setOpenaiApiKey").mockResolvedValue(undefined);
+    renderOpenaiSettings();
+
+    fireEvent.change(screen.getByLabelText("OpenAI API key (BYOK)"), {
+      target: { value: "fresh-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save OpenAI Key" }));
+    expect(
+      await screen.findByRole("button", { name: "Remove Saved OpenAI Key" }),
+    ).toBeInTheDocument();
+
+    resolvePresence(false);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Remove Saved OpenAI Key" }),
+      ).toBeInTheDocument(),
+    );
+    expect(useMooseStore.getState().settings?.text_provider).toBe("openai");
+  });
+
   it("sanitizes credential-store errors rather than displaying raw exceptions", async () => {
     vi.spyOn(tauriBridge, "hasOpenaiApiKey").mockResolvedValue(false);
     vi.spyOn(tauriBridge, "setOpenaiApiKey").mockRejectedValue(

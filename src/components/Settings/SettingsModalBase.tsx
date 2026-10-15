@@ -64,6 +64,12 @@ export const SettingsModal: React.FC = () => {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [hasOpenaiKey, setHasOpenaiKey] = useState(false);
+  const openaiKeyStatusVersion = useRef(0);
+  const updateOpenaiKeyStatus = (available: boolean) => {
+    // Explicit saves/removals win over an older in-flight presence check.
+    openaiKeyStatusVersion.current += 1;
+    setHasOpenaiKey(available);
+  };
   const [openaiKeyError, setOpenaiKeyError] = useState<string | null>(null);
   const [serverStatus, setServerStatus] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<AiTabTestResult | null>(null);
@@ -79,16 +85,23 @@ export const SettingsModal: React.FC = () => {
   );
 
   useEffect(() => {
+    const statusVersion = ++openaiKeyStatusVersion.current;
     if (isSettingsOpen) {
       loadDevices();
       loadGoogleTtsVoices();
       loadMemories();
       void tauriBridge
         .hasOpenaiApiKey()
-        .then(setHasOpenaiKey)
-        .catch(() =>
-          setOpenaiKeyError("Could not read OpenAI credential status."),
-        );
+        .then((available) => {
+          if (openaiKeyStatusVersion.current === statusVersion) {
+            setHasOpenaiKey(available);
+          }
+        })
+        .catch(() => {
+          if (openaiKeyStatusVersion.current === statusVersion) {
+            setOpenaiKeyError("Could not read OpenAI credential status.");
+          }
+        });
       setGoogleModelsStatus("loading");
       void tauriBridge
         .getGoogleModels()
@@ -215,7 +228,7 @@ export const SettingsModal: React.FC = () => {
               openaiKeyInput={openaiKeyInput}
               setOpenaiKeyInput={setOpenaiKeyInput}
               hasOpenaiKey={hasOpenaiKey}
-              setHasOpenaiKey={setHasOpenaiKey}
+              setHasOpenaiKey={updateOpenaiKeyStatus}
               openaiKeyError={openaiKeyError}
               setOpenaiKeyError={setOpenaiKeyError}
               serverStatus={serverStatus}
