@@ -235,6 +235,15 @@ Direct-to-`master` Voice & Audio changes `3a5c1ec85229e9ed04c3f9a6463b577805ec40
 
 These focused ELSV-200/600 safety improvements do not implement native macOS System TTS or complete the provider/ASR/TTS matrix, platform audition, or ELSV-900 release acceptance. Keep the incomplete acceptance checkboxes unchecked.
 
+### Per-section audit and gap closure — 2026-10-15
+
+Read-only audits of ELSV-200/300/400/600 against code and tests (local Linux x86_64; `npm run check:frontend` and `npm run check:rust` pass at each commit below). Items are checked only where the named tests exist.
+
+- **ELSV-200:** Responses adapter (bounded, explicit model, strict parser, no retry/fallback) and the test matrix are checked. `8417a87e` added HTTP 400/404 → Model, 401 → Auth, malformed/HTML/truncated/empty body → Protocol, plus command-level Google/OpenAI key isolation and no key in serialized settings or the stored settings row. **Still open:** (1) `SecretStore::redact` has no production caller (OpenAI errors rely on fixed messages; only Google uses `redact_secret`); macOS Keychain is untestable on Linux. (2) No assertion that the key never reaches browser storage or logs/diagnostics. No end-to-end saved-key → fake-OpenAI test (`with_endpoint` is private, endpoint is hard-coded).
+- **ELSV-300:** adapters/bounds and the fake-server matrix are checked. `6046393e` added stall timeout without retry, 64 KiB response cap over HTTP, refused connection → Unreachable (distinct from a 500 → ReachableButModelUnavailable), `localhost` generation, mid-request cancellation, error sanitization, and a backend no-fallback test. **Still open:** (1) no assertion that the `localhost` → `127.0.0.1` resolve pin is what makes the connection (the fake binds 127.0.0.1 either way); remote-URL rejection is tested for `generate` but not `check_readiness`. (3) No test asserts the adapters never launch a server or pull weights. No-fallback proof for Google/OpenAI is indirect (their endpoints are hard-coded).
+- **ELSV-400:** `da46154c` adds the first success-path routing test: the selected Ollama and llama-server reply, through the app's `get_text_model_for`, is exactly what non-Live Talk synthesizes with the settings voice and rate. **Still open:** same for OpenAI (endpoint not injectable); typed and ambient paths for external providers; Talk with Google TTS auth failure or unavailable KittenTTS; `start_conversation`-level System TTS rejection; non-Live audio-completion and bubble-lifetime tests; typed-reply TTS is snapshotted separately from the text snapshot (design question, deferred); CI qualification of `89bbd6df`.
+- **ELSV-600:** `96b55e13` onboarding discloses OpenAI cloud and loopback servers; stale PRIVACY/ARCHITECTURE status text refreshed. `5ad4e489` adds Voice & Audio catalog loading/empty states plus audition success, no-overlap and missing-key tests. `22a0afab` keeps external model-ID drafts across tab switches, shows "OpenAI key saved / model not verified", and adds cloud/loopback disclosure tests. `56cf1087` adds role-based accessibility checks (no axe dependency was added). **Still open:** System Voices refresh/selection/Audition (blocked on ELSV-500); the audition lock is a 2.5 s post-call debounce, not playback completion; OpenAI has no live readiness check.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
@@ -248,8 +257,8 @@ These focused ELSV-200/600 safety improvements do not implement native macOS Sys
 
 - [ ] Extend secret backend, macOS Keychain identifiers, redaction, and Tauri commands for an independent OpenAI key; keep Linux key session-only and say so in the UI.
 - [ ] Ensure key save/clear/has never reaches persisted settings, SQLite, frontend storage, logs, diagnostics, or another provider; clearing Google must leave OpenAI intact and vice versa.
-- [ ] Implement bounded OpenAI Responses text requests from `TextRequest`, explicit model selection, output extraction, safe error categories, and no automatic retry/fallback.
-- [ ] Add injected-transport tests for request shape, auth, no-key, invalid model, rate limit, timeout, oversized/malformed output, redaction, and provider isolation.
+- [x] Implement bounded OpenAI Responses text requests from `TextRequest`, explicit model selection, output extraction, safe error categories, and no automatic retry/fallback.
+- [x] Add injected-transport tests for request shape, auth, no-key, invalid model, rate limit, timeout, oversized/malformed output, redaction, and provider isolation.
 
 **Acceptance:** selected OpenAI text works with a saved key and failures cannot send the same request to another provider.
 
@@ -260,9 +269,9 @@ The default Ollama model ID is `llama3.2`, which Ollama may report as `llama3.2:
 ## ELSV-300 — Ollama and llama-server adapters
 
 - [ ] Implement backend-only loopback-address validation for each configured server, including port, URL component, redirect, and effective-destination checks.
-- [ ] Implement provider-specific chat-completions request/response adapters and bounded HTTP behavior; do not assume the two servers expose identical capabilities.
+- [x] Implement provider-specific chat-completions request/response adapters and bounded HTTP behavior; do not assume the two servers expose identical capabilities.
 - [ ] Add explicit connection/model checks with truthful reachability versus model-readiness results; never launch a server or pull weights.
-- [ ] Add fake-server tests for IPv4/IPv6/localhost, rejected remote/redirect URLs, model mismatch, malformed body, timeout, cancellation where available, error sanitization, and no cloud fallback.
+- [x] Add fake-server tests for IPv4/IPv6/localhost, rejected remote/redirect URLs, model mismatch, malformed body, timeout, cancellation where available, error sanitization, and no cloud fallback.
 
 **Acceptance:** an unavailable or incompatible server reports a clear error while remaining the selected provider.
 
