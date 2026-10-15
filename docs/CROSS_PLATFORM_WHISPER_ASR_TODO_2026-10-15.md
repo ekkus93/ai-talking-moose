@@ -30,7 +30,7 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 ## WSP-100 — Port the existing Whisper native runtime to macOS (do not remove Moonshine yet)
 
-- [ ] Generalize `src-tauri/build.rs` beyond `target_is_linux` to supported Linux x86_64, `aarch64-apple-darwin` and `x86_64-apple-darwin`. Reuse pinned `third_party/whisper.cpp` with CMake, explicit target arch and compatible toolchain.
+- [x] Generalize `src-tauri/build.rs` beyond `target_is_linux` to supported Linux x86_64, `aarch64-apple-darwin` and `x86_64-apple-darwin`. Reuse pinned `third_party/whisper.cpp` with CMake, explicit target arch and compatible toolchain. (Mac arm64 and Intel source build, static archives, and real FFI version invocation passed at `6cc3fe302baad4d8d5a579c7bffd65770542131c`, run `38821907488`; other WSP-100 and real-model acceptance remain open.)
 - [ ] Verify native static libraries `whisper`, `ggml`, `ggml-cpu`, `ggml-base`, transitive macOS frameworks/libc++, and platform link flags. Never accidentally link a developer-installed Homebrew/shared whisper.cpp at runtime.
 - [ ] Preserve `whisper_native_linked` compilation cfg, source provenance, rerun rules and test-only explicit lib-directory escape hatch. Required macOS release builds must **fail** if source/native link or ABI cannot be established, rather than shipping RuntimeUnavailable.
 - [ ] Check Whisper FFI signatures, `repr(C)` parameter layout, alignment, pointer ownership and callbacks against pinned headers on both Mac architectures; add native ABI/availability smoke with a real invocation, not just a symbol grep.
