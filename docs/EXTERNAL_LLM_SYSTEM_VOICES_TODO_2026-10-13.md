@@ -177,11 +177,17 @@ Version-8 `AppSettings` contains independent OpenAI/Ollama/llama-server model ID
 
 These findings qualify the discrete ELSV-100 settings-field/migration and defaults/serialization/invalid-input/future-version test subtasks, now checked. The remaining ELSV-100 policy/immutable-snapshot/ordered frontend write subtask and full cross-provider/platform verification are still open.
 
+### ELSV-100 routing policy and serialized settings write qualification — 2026-10-14
+
+The backend settings boundary in `src-tauri/src/app/settings_policy.rs` rejects invalid OpenAI model IDs, malformed Ollama/llama-server model IDs, non-loopback addresses, invalid ports, path/query/fragment/user-info URLs, and invalid preference ranges. `src-tauri/src/app/request_snapshot.rs` captures request-scoped typed `AppSettings` and resolves the selected text provider without fallback; non-Live Talk composes selected text/TTS from that snapshot, while explicit Gemini Live audio ASR retains its distinct route. `src/stores/mooseStore.ts` persists field-intent patches serially against the latest successful settings snapshot.
+
+Frontend direct-to-`master` commits `848a614c6a5fb129fb431f6f19b25520f95ac2df`, `8ca0f8b317d1e528af3dc4611dc599bd10153e6f`, and `1f684cb79e1379368df6b09a5694355ff1afcb2e` added and qualified the independent provider/TTS serialized-patch regression, including overlapping writes without lost provider selections or concurrent persistence. **Exact-head frontend quality CI `38675039144` passed** on `1f684cb`; Rust settings-boundary and snapshot-related tests and the generated-contract gate passed in `38673594292` and `38672195380`. This qualifies the final individual ELSV-100 policy/request-snapshot/patch-write subtask. All four ELSV-100 subtasks are now checked, while the complete ELSV release and platform acceptance remain open.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
 - [x] Add separate provider model IDs, loopback addresses, and system voice ID to settings; bump settings version; migrate old settings without changing saved Google/Local choices or wiping unknown future settings.
-- [ ] Validate model IDs, server addresses, and provider combinations at the backend settings boundary; preserve request-scoped settings snapshots and ordered frontend patch writes.
+- [x] Validate model IDs, server addresses, and provider combinations at the backend settings boundary; preserve request-scoped settings snapshots and ordered frontend patch writes.
 - [x] Add migration, serialization, defaults, invalid-input, and future-version tests; regenerate and review `src/generated/backendContract.json`.
 
 **Acceptance:** fresh profiles remain Local/KittenTTS, existing profiles retain their choices, and frontend/backend settings shapes agree.
