@@ -219,6 +219,10 @@ Direct-to-`master` commit `d21f799a67b51908f5caa2b6774a636058e4697a` rejects zer
 
 Direct-to-`master` test commit `2e354f1`, corrected for an actual invisible separator in `201909a8` and formatted in `c9811982234331652459949c4e5cae207817c4be`, verifies that malformed third-party macOS voice display metadata cannot make a saved voice appear installed. A subsequent valid OS catalog entry with the same stable ID remains selectable; an unrelated installed voice is never silently substituted. **Exact-head CI `38710911761` passed** Rust tests, Rust quality/Clippy, and generated backend-contract verification. This is platform-neutral ELSV-500 safety evidence, not macOS voice enumeration, buffer synthesis, playback, or physical audition. ELSV-500 and ELSV-900 remain unchecked.
 
+### ELSV-600 voice selection persistence-error isolation — 2026-10-15
+
+Direct-to-`master` commits `fb4c9c4a937e1f9d3139c011e2422096825d264a` and `d90bf620e733650d29b9d36948534ecdf89a77f1` now handle rejected standalone and Gemini Live voice-selection writes in Voice & Audio without unhandled promise rejections or displaying raw backend errors. Focused frontend regressions assert both failures produce sanitized, actionable alerts without exposing private error content. The initial CI run `38718110017` failed Prettier only; formatting was corrected and **exact-head CI `38718259438` passed** frontend quality (typecheck, lint, formatting, and frontend tests). Rust, macOS, full `check:all`, native System TTS, and physical audition were not exercised by this frontend-scoped run. Keep ELSV-600 and ELSV-900 unchecked pending the complete acceptance matrix.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
