@@ -98,7 +98,6 @@ async fn ollama_untagged_generation_accepts_latest_identity() {
         let mut buf = [0u8; 4096];
         let count = socket.read(&mut buf).await.unwrap();
         assert!(String::from_utf8_lossy(&buf[..count]).starts_with("POST /api/chat HTTP/1.1"));
-            let payload =
         let payload = r#"{"done":true,"model":"llama3.2:latest","message":{"role":"assistant","content":"alias works"}}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
@@ -175,7 +174,8 @@ async fn loopback_generation_never_sends_other_provider_credentials_or_retries_o
 
             // The adapter must classify the quota response without disclosing
             // the raw upstream body or retrying against this or another endpoint.
-            let payload = r#"{"error":"private selected-provider prompt openai-isolated-test-key"}"#;
+            let payload =
+                r#"{"error":"private selected-provider prompt openai-isolated-test-key"}"#;
             let reply = format!(
                 "HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
                 payload.len()
