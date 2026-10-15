@@ -25,7 +25,7 @@ impl OpenAiTextModel {
         Self::with_endpoint(api_key, model, RESPONSES_ENDPOINT.to_string())
     }
 
-    fn with_endpoint(api_key: String, model: String, endpoint: String) -> Self {
+    pub(crate) fn with_endpoint(api_key: String, model: String, endpoint: String) -> Self {
         let client = Client::builder()
             .redirect(Policy::none())
             .timeout(Duration::from_secs(30))

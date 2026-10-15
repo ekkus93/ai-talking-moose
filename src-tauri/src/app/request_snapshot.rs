@@ -44,10 +44,15 @@ impl AppState {
                 global_local_model_installer(),
                 settings.local_text_model.clone(),
             )),
-            TextProvider::Openai => Box::new(OpenAiTextModel::new(
-                self.secrets.get_openai_api_key().unwrap_or_default(),
-                settings.openai_text_model.clone(),
-            )),
+            TextProvider::Openai => {
+                let key = self.secrets.get_openai_api_key().unwrap_or_default();
+                let model = settings.openai_text_model.clone();
+                #[cfg(test)]
+                if let Some(endpoint) = self.openai_endpoint_override.lock().clone() {
+                    return Box::new(OpenAiTextModel::with_endpoint(key, model, endpoint));
+                }
+                Box::new(OpenAiTextModel::new(key, model))
+            }
             TextProvider::Ollama => Box::new(LoopbackTextModel::new(
                 LoopbackTextServer::Ollama,
                 settings.ollama_server_address.clone(),

@@ -495,6 +495,10 @@ pub struct AppState {
     pub tool_router: Arc<ToolRouter>,
     pub settings: Arc<RwLock<AppSettings>>,
     pub is_muted: Arc<RwLock<bool>>,
+    /// Test-only fake OpenAI Responses endpoint. Absent from production builds so
+    /// no setting or command can redirect a saved key to another destination.
+    #[cfg(test)]
+    pub(crate) openai_endpoint_override: Arc<Mutex<Option<String>>>,
 }
 
 mod legacy_secrets;
@@ -637,6 +641,8 @@ impl AppState {
             tool_router,
             settings,
             is_muted: Arc::new(RwLock::new(false)),
+            #[cfg(test)]
+            openai_endpoint_override: Arc::new(Mutex::new(None)),
         })
     }
 
