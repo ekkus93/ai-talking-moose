@@ -34,3 +34,7 @@ The macOS arm64 System TTS acceptance workflow passed at exact SHA `f1cc46af09ae
 | Intel macOS build or explicit deferral | PENDING |
 
 Do not check ELSV-500's human audition or ELSV-900's physical acceptance item until real observations replace these placeholders. Do not commit credentials, audio artifacts, private paths or transcripts.
+
+## macOS release-smoke blocker (2026-10-15)
+
+The native macOS bundle smoke remains unqualified. Moonshine's upstream Git LFS quota is exhausted. The pinned arm64 ONNX Runtime dylib is 27,623,992 bytes; the official release candidate downloaded by CI is 35,138,784 bytes, so the provenance gate correctly rejects substitution (run 38815057443). The prior LFS checkout also failed for a pinned cpp-annote source file. Requalifying the bundle requires access to the original pinned objects or an explicitly reviewed dependency update with matching provenance, licensing, and both macOS architectures. This does not change the pending human voice audition and playback-bubble acceptance.
