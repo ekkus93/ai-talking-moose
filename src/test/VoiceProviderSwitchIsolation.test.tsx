@@ -20,7 +20,7 @@ describe("standalone voice provider switching and Live isolation", () => {
     vi.restoreAllMocks();
   });
 
-  it("does not cancel active Live playback on a standalone provider change", async () => {
+  it("keeps Live playback running during TTS provider changes", async () => {
     const cancel = vi
       .spyOn(tauriBridge, "cancelStandaloneSpeech")
       .mockResolvedValue(undefined);
@@ -28,7 +28,7 @@ describe("standalone voice provider switching and Live isolation", () => {
     useMooseStore.setState({ updateSettingsPatch: patch });
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
     fireEvent.click(
-      screen.getByRole("radio", { name: /Local KittenTTS — on this computer/i }),
+      screen.getByRole("radio", { name: /Local KittenTTS/i }),
     );
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith({ tts_provider: "local" }),
@@ -36,7 +36,7 @@ describe("standalone voice provider switching and Live isolation", () => {
     expect(cancel).not.toHaveBeenCalled();
   });
 
-  it("cancels standalone playback before changing an idle provider", async () => {
+  it("preempts idle speech before switching provider", async () => {
     const cancel = vi
       .spyOn(tauriBridge, "cancelStandaloneSpeech")
       .mockResolvedValue(undefined);
@@ -47,7 +47,7 @@ describe("standalone voice provider switching and Live isolation", () => {
     });
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
     fireEvent.click(
-      screen.getByRole("radio", { name: /Local KittenTTS — on this computer/i }),
+      screen.getByRole("radio", { name: /Local KittenTTS/i }),
     );
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith({ tts_provider: "local" }),
