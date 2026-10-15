@@ -1,4 +1,4 @@
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 
 pub(crate) trait SecretBackend: Send + Sync {
@@ -51,6 +51,8 @@ impl SecretBackend for MemorySecretBackend {
 #[derive(Clone)]
 pub struct SecretStore {
     backend: Arc<dyn SecretBackend>,
+    // Serialize credential writes, verification reads, and cache updates across clones.
+    mutation_lock: Arc<Mutex<()>>,
     google_api_key: Arc<RwLock<Option<String>>>,
     openai_api_key: Arc<RwLock<Option<String>>>,
 }
@@ -72,6 +74,7 @@ impl SecretStore {
         let openai_key = backend.read_openai_api_key()?;
         Ok(Self {
             backend,
+            mutation_lock: Arc::new(Mutex::new(())),
             google_api_key: Arc::new(RwLock::new(google_key)),
             openai_api_key: Arc::new(RwLock::new(openai_key)),
         })
@@ -83,6 +86,7 @@ impl SecretStore {
             return self.clear();
         }
 
+        let _guard = self.mutation_lock.lock();
         self.backend.write_google_api_key(trimmed)?;
         let verified = self.backend.read_google_api_key()?;
         if verified.as_deref() != Some(trimmed) {
@@ -102,6 +106,7 @@ impl SecretStore {
     }
 
     pub fn clear(&self) -> Result<(), String> {
+        let _guard = self.mutation_lock.lock();
         self.backend.delete_google_api_key()?;
         *self.google_api_key.write() = None;
         Ok(())
@@ -115,6 +120,7 @@ impl SecretStore {
         if trimmed.len() > 4096 || trimmed.chars().any(char::is_control) {
             return Err("OpenAI API key must be a bounded single-line credential".to_string());
         }
+        let _guard = self.mutation_lock.lock();
         self.backend.write_openai_api_key(trimmed)?;
         let verified = self.backend.read_openai_api_key()?;
         if verified.as_deref() != Some(trimmed) {
@@ -133,6 +139,7 @@ impl SecretStore {
     }
 
     pub fn clear_openai_api_key(&self) -> Result<(), String> {
+        let _guard = self.mutation_lock.lock();
         self.backend.delete_openai_api_key()?;
         *self.openai_api_key.write() = None;
         Ok(())
@@ -304,6 +311,39 @@ mod tests {
             store.redact("prefix café!xyz suffix"),
             "prefix [REDACTED_SECRET] suffix"
         );
+    }
+
+    #[test]
+    fn simultaneous_secret_updates_keep_backend_and_cache_consistent() {
+        use std::sync::Barrier;
+
+        let backend = Arc::new(MemorySecretBackend::default());
+        let store = SecretStore::with_backend(backend.clone()).unwrap();
+        let barrier = Arc::new(Barrier::new(3));
+        std::thread::scope(|scope| {
+            for worker in 0..2 {
+                let store = store.clone();
+                let barrier = barrier.clone();
+                scope.spawn(move || {
+                    barrier.wait();
+                    for iteration in 0..100 {
+                        store
+                            .set_openai_api_key(format!("openai-{worker}-{iteration}"))
+                            .unwrap();
+                        store
+                            .set_google_api_key(format!("google-{worker}-{iteration}"))
+                            .unwrap();
+                    }
+                });
+            }
+            barrier.wait();
+        });
+        assert!(Arc::ptr_eq(&store.mutation_lock, &store.clone().mutation_lock));
+        assert_eq!(*backend.openai_api_key.read(), store.get_openai_api_key());
+        assert_eq!(*backend.google_api_key.read(), store.get_google_api_key());
+        store.clear_openai_api_key().unwrap();
+        assert!(!store.has_openai_api_key());
+        assert!(store.has_google_api_key());
     }
 
     #[test]
