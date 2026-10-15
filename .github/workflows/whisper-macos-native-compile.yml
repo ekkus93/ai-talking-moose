@@ -62,6 +62,11 @@ jobs:
       - name: Generate application icons
         run: python3 scripts/generate_app_icons.py
       - name: Build native-linked Whisper acceptance executable without model downloads
+        # This is a standalone Whisper CLI probe, not a packaged app. The
+        # production bundle still retains Moonshine until WSP-200 qualifies
+        # both Mac architectures; do not require its dylibs for this probe.
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
         run: |
           cargo build --locked --manifest-path src-tauri/Cargo.toml \
             --features whisper-acceptance --bin whisper_acceptance
