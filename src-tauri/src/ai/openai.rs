@@ -486,13 +486,11 @@ mod tests {
             "gpt-4.1-mini".into(),
             endpoint,
         );
-        model.client = Ok(
-            Client::builder()
-                .redirect(Policy::none())
-                .timeout(Duration::from_millis(50))
-                .build()
-                .unwrap(),
-        );
+        model.client = Ok(Client::builder()
+            .redirect(Policy::none())
+            .timeout(Duration::from_millis(50))
+            .build()
+            .unwrap());
         let error = model
             .generate(sample("sensitive transcript"))
             .await
