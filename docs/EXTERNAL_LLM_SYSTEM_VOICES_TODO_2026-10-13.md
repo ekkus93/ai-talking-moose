@@ -223,6 +223,10 @@ Direct-to-`master` test commit `2e354f1`, corrected for an actual invisible sepa
 
 Direct-to-`master` commits `fb4c9c4a937e1f9d3139c011e2422096825d264a` and `d90bf620e733650d29b9d36948534ecdf89a77f1` now handle rejected standalone and Gemini Live voice-selection writes in Voice & Audio without unhandled promise rejections or displaying raw backend errors. Focused frontend regressions assert both failures produce sanitized, actionable alerts without exposing private error content. The initial CI run `38718110017` failed Prettier only; formatting was corrected and **exact-head CI `38718259438` passed** frontend quality (typecheck, lint, formatting, and frontend tests). Rust, macOS, full `check:all`, native System TTS, and physical audition were not exercised by this frontend-scoped run. Keep ELSV-600 and ELSV-900 unchecked pending the complete acceptance matrix.
 
+### ELSV-600 active-Live standalone voice isolation — 2026-10-15
+
+Direct-to-`master` commits `81c4a6414289719817717271476bfc628535b6cd`, `78e330e3aae3ba49a9df74eb653c0e9523abc9b1`, and `af6030f056dd8075bb930cbd811da56167b997a2` add frontend regressions proving that switching the standalone TTS provider does **not** cancel an active Gemini Live session, while an idle standalone speech session is cancelled **before** applying a provider-selection patch. Initial CI runs `38718690575` and `38718851889` failed Prettier only. **Exact-head frontend CI `38718964624` passed** on `af6030f`, including formatting, lint, typecheck, and frontend tests. This qualifies only the tested ELSV-600 active-Live provider-switch behavior, not all voice/UI combinations, macOS synthesis, or full release acceptance.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
