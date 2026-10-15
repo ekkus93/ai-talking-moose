@@ -101,7 +101,8 @@ jobs:
           assert install["source_commit"] == transcript["source_commit"] == expected_source
           assert install["expected_bytes"] == transcript["expected_bytes"] == 487601967
           assert install["production_installer_verified"] is True
-          assert transcript["host_arch"] == arch, transcript["host_arch"]
+          rust_arch = "aarch64" if arch == "arm64" else arch
+          assert transcript["host_arch"] == rust_arch, transcript["host_arch"]
           assert transcript["runtime"]["whisper_native_linked"] is True
           assert transcript["status"] == "pass"
           assert transcript["transcript"]["transcription_ok"] is True
