@@ -1,8 +1,8 @@
 # Whisper-Only ASR Settings Migration — Implementation Design
 
-**Date:** 2026-10-15  
-**State:** Design accepted for implementation after WSP-200; **no production migration is active yet**.  
-**Source inspected:** `src-tauri/src/app/state.rs` on `master` `a46005cd3166e4f772900907e57251030d0e7226`.  
+**Date:** 2026-10-15
+**State:** Design accepted for implementation after WSP-200; **no production migration is active yet**.
+**Source inspected:** `src-tauri/src/app/state.rs` on `master` `a46005cd3166e4f772900907e57251030d0e7226`.
 **Tracks:** WSP-300, `docs/CROSS_PLATFORM_WHISPER_ASR_TODO_2026-10-15.md`.
 
 ## Existing persisted-settings contract
