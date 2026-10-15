@@ -207,6 +207,10 @@ Direct-to-`master` commit `77ca59f4c2bc42764e5a18e6858cdc9e7ee10cd2` extends ins
 
 This is ELSV-500 platform-neutral identifier safety evidence, not runtime macOS voice enumeration, AVSpeechSynthesizer buffer synthesis, audible playback, or physical Mac audition. Keep ELSV-500/900 unchecked.
 
+### Saved System voice preflight regression — 2026-10-15
+
+Commit `8c8ba6ef31c3926778699b023821c16edbc114d9` adds a request-level regression that rejects a saved OS voice ID containing an invisible zero-width separator even if an untrusted installed catalog advertises that same identifier. **Exact-head CI `38701336175` passed** Rust quality, Rust tests, and generated backend-contract verification. This is platform-neutral ELSV-500 selection safety evidence only. Native macOS enumeration, AVSpeechSynthesizer, actual audio playback, physical audition, and ELSV-900 full validation remain open.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
