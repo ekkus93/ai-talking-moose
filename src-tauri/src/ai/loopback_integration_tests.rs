@@ -225,3 +225,48 @@ async fn ipv6_loopback_model_catalog_uses_the_selected_local_server() {
         server.await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn generation_redirect_is_rejected_without_followup_request() {
+    use super::traits::TextModel;
+    use super::types::{ProviderErrorKind, TextRequest};
+    use std::time::Duration;
+
+    for (kind, path) in [
+        (LoopbackTextServer::Ollama, "/api/chat"),
+        (LoopbackTextServer::LlamaServer, "/v1/chat/completions"),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let redirect_target = format!("{base_url}/unexpected");
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buffer = [0u8; 4096];
+            let size = stream.read(&mut buffer).await.unwrap();
+            assert!(String::from_utf8_lossy(&buffer[..size])
+                .starts_with(&format!("POST {path} HTTP/1.1")));
+            let response = format!(
+                "HTTP/1.1 307 Temporary Redirect\r\nLocation: {redirect_target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+            assert!(
+                tokio::time::timeout(Duration::from_millis(150), listener.accept())
+                    .await
+                    .is_err(),
+                "generation must never follow an HTTP redirect"
+            );
+        });
+        let model = LoopbackTextModel::new(kind, base_url, "selected-model".into());
+        let error = model
+            .generate(TextRequest {
+                prompt: "redirect rejection".into(),
+                system_instruction: None,
+                temperature: None,
+                max_tokens: Some(16),
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Setup);
+        server.await.unwrap();
+    }
+}
