@@ -211,6 +211,10 @@ This is ELSV-500 platform-neutral identifier safety evidence, not runtime macOS 
 
 Commit `8c8ba6ef31c3926778699b023821c16edbc114d9` adds a request-level regression that rejects a saved OS voice ID containing an invisible zero-width separator even if an untrusted installed catalog advertises that same identifier. **Exact-head CI `38701336175` passed** Rust quality, Rust tests, and generated backend-contract verification. This is platform-neutral ELSV-500 selection safety evidence only. Native macOS enumeration, AVSpeechSynthesizer, actual audio playback, physical audition, and ELSV-900 full validation remain open.
 
+### Native voice display-metadata spoofing regression — 2026-10-15
+
+Direct-to-`master` commit `d21f799a67b51908f5caa2b6774a636058e4697a` rejects zero-width separators and word joiners in OS-supplied System voice display names and style metadata, not just stable voice IDs. Its negative tests retain valid voices while excluding invisible-formatting spoof cases. **Exact-head CI `38703363239` passed** Rust quality/Clippy, Rust tests, and generated backend-contract verification. This is ELSV-500 catalog hardening only: runtime macOS enumeration, AVSpeechSynthesizer, audible playback, physical Mac audition, full routing, and ELSV-900 remain open.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
