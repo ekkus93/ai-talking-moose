@@ -419,7 +419,9 @@ describe("SettingsModal Component", () => {
       screen.getByRole("radio", { name: /System Voices — unavailable/i }),
     ).toBeDisabled();
     expect(
-      screen.getByText(/macOS system speech is pending qualification/i),
+      screen.getByText(
+        /available only on macOS and cannot be selected or auditioned here/i,
+      ),
     ).toBeInTheDocument();
     expect(useMooseStore.getState().settings?.tts_provider).toBe("local");
   });

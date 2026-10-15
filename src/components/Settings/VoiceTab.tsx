@@ -37,6 +37,8 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
   const [localModelInstalled, setLocalModelInstalled] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
+  const [catalogRequest, setCatalogRequest] = useState(0);
+
   useEffect(() => {
     let active = true;
     void tauriBridge
@@ -54,7 +56,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     return () => {
       active = false;
     };
-  }, []);
+  }, [catalogRequest]);
 
   const selectedProvider = useMemo(
     () =>
@@ -79,14 +81,21 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     catalog?.gemini_live.voices.some(
       (voice) => voice.id === settings.live_voice,
     ) ?? false;
+  // The backend lists System Voices only where native synthesis exists (macOS).
+  const systemAvailable =
+    catalog?.providers.some((provider) => provider.id === "system") ?? false;
   const auditionBlockedReason =
     settings.tts_provider === "local" && !localModelInstalled
       ? "Download and verify the Local KittenTTS model before auditioning a Local voice."
       : settings.tts_provider === "google" && !hasApiKey
         ? "Google TTS requires a saved Google API key in AI & Models."
-        : settings.tts_provider === "system"
-          ? "System voice synthesis is not yet available in this build."
-          : null;
+        : settings.tts_provider === "system" && !systemAvailable
+          ? "System voices are only available on macOS."
+          : settings.tts_provider === "system" &&
+              selectedProvider &&
+              !selectedVoiceAvailable
+            ? "The saved system voice is not installed. Choose an installed voice or System Default."
+            : null;
 
   const selectProvider = async (provider: TtsProvider) => {
     if (provider === settings.tts_provider) return;
@@ -253,20 +262,29 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
               </span>
             </label>
           ))}
-          <label className="flex items-start gap-2 p-2 border border-gray-400 rounded opacity-60">
+          <label
+            className={`flex items-start gap-2 p-2 border border-gray-400 rounded ${
+              systemAvailable ? "cursor-pointer" : "opacity-60"
+            }`}
+          >
             <input
               type="radio"
               name="tts-provider"
               value="system"
               checked={settings.tts_provider === "system"}
-              disabled
-              readOnly
+              disabled={!systemAvailable}
+              onChange={() => void selectProvider("system")}
             />
             <span>
-              <span className="font-bold">System Voices — unavailable</span>
+              <span className="font-bold">
+                {systemAvailable
+                  ? "System Voices — on this computer"
+                  : "System Voices — unavailable"}
+              </span>
               <span className="block text-[10px] text-gray-700">
-                macOS system speech is pending qualification and cannot yet be
-                selected or auditioned. Linux system voices are unsupported.
+                {systemAvailable
+                  ? "Speaks with voices already installed in macOS. Speech is synthesized on this computer; nothing is sent to a cloud service."
+                  : "System voices are available only on macOS and cannot be selected or auditioned here."}
               </span>
             </span>
           </label>
@@ -293,8 +311,18 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         {settings.tts_provider === "system" && !selectedProvider && (
           <p className="text-[10px] text-amber-800" role="status">
             Saved macOS system voice: {settings.system_tts_voice}. This voice
-            cannot be auditioned until system speech support is available.
+            cannot be auditioned because system speech is unavailable here.
           </p>
+        )}
+
+        {systemAvailable && (
+          <button
+            type="button"
+            onClick={() => setCatalogRequest((value) => value + 1)}
+            className="px-2 py-1 border border-black rounded font-bold"
+          >
+            Refresh System Voices
+          </button>
         )}
 
         {selectedProvider && (
