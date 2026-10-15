@@ -338,7 +338,10 @@ mod tests {
             }
             barrier.wait();
         });
-        assert!(Arc::ptr_eq(&store.mutation_lock, &store.clone().mutation_lock));
+        assert!(Arc::ptr_eq(
+            &store.mutation_lock,
+            &store.clone().mutation_lock
+        ));
         assert_eq!(*backend.openai_api_key.read(), store.get_openai_api_key());
         assert_eq!(*backend.google_api_key.read(), store.get_google_api_key());
         store.clear_openai_api_key().unwrap();
