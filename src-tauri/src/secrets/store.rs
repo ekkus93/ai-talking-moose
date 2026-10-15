@@ -140,14 +140,20 @@ impl SecretStore {
 
     /// Redact both independent provider credentials from diagnostics and errors.
     pub fn redact(&self, input: &str) -> String {
-        let mut redacted = input.to_string();
-        for key in [
+        // Replace longer credentials first. If one key is a prefix of another,
+        // replacing the shorter key first would leave the longer key's suffix
+        // visible in diagnostics and prevent its subsequent exact-match redaction.
+        let mut keys: Vec<String> = [
             self.google_api_key.read().clone(),
             self.openai_api_key.read().clone(),
         ]
         .into_iter()
         .flatten()
-        {
+        .filter(|key| !key.is_empty())
+        .collect();
+        keys.sort_unstable_by_key(|key| std::cmp::Reverse(key.len()));
+        let mut redacted = input.to_string();
+        for key in keys {
             redacted = crate::secrets::redact_secret(&redacted, &key);
         }
         redacted
@@ -218,6 +224,30 @@ mod tests {
         assert!(!reloaded.has_openai_api_key());
         assert!(reloaded.set_openai_api_key("bad\nsecret".into()).is_err());
         assert!(!reloaded.has_openai_api_key());
+    }
+
+    #[test]
+    fn overlapping_provider_keys_are_redacted_without_exposing_suffixes() {
+        let store = SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        store.set_google_api_key("shared-prefix".into()).unwrap();
+        store
+            .set_openai_api_key("shared-prefix-extended-openai".into())
+            .unwrap();
+
+        let message = "Google shared-prefix; OpenAI shared-prefix-extended-openai";
+        assert_eq!(
+            store.redact(message),
+            "Google [REDACTED_SECRET]; OpenAI [REDACTED_SECRET]"
+        );
+        assert!(!store.redact(message).contains("-extended-openai"));
+
+        // Reverse the overlap: the Google credential is now the longer one.
+        store.set_google_api_key("short-key-long-google".into()).unwrap();
+        store.set_openai_api_key("short-key".into()).unwrap();
+        assert_eq!(
+            store.redact("short-key-long-google and short-key"),
+            "[REDACTED_SECRET] and [REDACTED_SECRET]"
+        );
     }
 
     #[test]
