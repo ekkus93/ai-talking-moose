@@ -278,6 +278,18 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </div>
         )}
 
+        {!catalog && !catalogError && (
+          <p className="text-[10px] text-gray-700" role="status">
+            Loading speech voices…
+          </p>
+        )}
+
+        {selectedProvider && selectedProvider.voices.length === 0 && (
+          <p className="text-[10px] text-amber-800" role="status">
+            No voices are available for this speech provider.
+          </p>
+        )}
+
         {settings.tts_provider === "system" && !selectedProvider && (
           <p className="text-[10px] text-amber-800" role="status">
             Saved macOS system voice: {settings.system_tts_voice}. This voice
