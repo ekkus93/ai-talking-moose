@@ -88,6 +88,37 @@ impl SystemPcmAccumulator {
         Ok(())
     }
 
+    /// Append native interleaved double-precision PCM without an intermediate
+    /// planar copy. Divide before summing so finite f64 extremes cannot overflow.
+    /// Validate the complete chunk before modifying the accumulated audio.
+    pub fn append_interleaved_f64(
+        &mut self,
+        samples: &[f64],
+        channels: usize,
+    ) -> Result<(), ProviderError> {
+        let invalid = || ProviderError::from_kind(ProviderErrorKind::Protocol);
+        if channels == 0 || channels > MAX_CHANNELS || !samples.len().is_multiple_of(channels) {
+            return Err(invalid());
+        }
+        let frames = samples.len() / channels;
+        let remaining = (self.sample_rate_hz as usize)
+            .saturating_mul(MAX_DURATION_SECONDS)
+            .saturating_sub(self.pcm_bytes.len() / 2);
+        if frames > remaining || samples.iter().any(|sample| !sample.is_finite()) {
+            return Err(invalid());
+        }
+        self.pcm_bytes.reserve(frames * 2);
+        for frame in samples.chunks_exact(channels) {
+            let mono = frame
+                .iter()
+                .map(|sample| *sample / channels as f64)
+                .sum::<f64>();
+            let sample = (mono.clamp(-1.0, 1.0) * f64::from(i16::MAX)).round() as i16;
+            self.pcm_bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        Ok(())
+    }
+
     /// Append native planar double-precision float PCM. Scale each channel
     /// before summing so even finite f64::MAX inputs cannot overflow the mix.
     /// As with other formats, reject the entire chunk before writing samples.
@@ -380,6 +411,34 @@ mod tests {
         );
         pcm.append_planar_f32(&[&[0.25]]).unwrap();
         assert_eq!(pcm.finish().unwrap().pcm_bytes.len(), 2);
+    }
+
+    #[test]
+    fn interleaved_f64_extremes_are_bounded_and_invalid_chunks_are_atomic() {
+        let mut pcm = SystemPcmAccumulator::new(48_000).unwrap();
+        pcm.append_interleaved_f64(&[f64::MAX, -f64::MAX, 0.5, 0.5], 2)
+            .unwrap();
+        for (samples, channels) in [
+            (vec![1.0], 0),
+            (vec![1.0], 2),
+            (vec![f64::NAN], 1),
+            (vec![f64::INFINITY], 1),
+            (vec![0.0; MAX_CHANNELS + 1], MAX_CHANNELS + 1),
+            (vec![0.0; 48_000 * (MAX_DURATION_SECONDS + 1)], 1),
+        ] {
+            assert_eq!(
+                pcm.append_interleaved_f64(&samples, channels)
+                    .unwrap_err()
+                    .kind,
+                ProviderErrorKind::Protocol
+            );
+        }
+        let output = pcm.finish().unwrap();
+        assert_eq!(output.sample_rate, 48_000);
+        assert_eq!(
+            output.pcm_bytes,
+            [0_i16, 16_384_i16].map(i16::to_le_bytes).concat()
+        );
     }
 
     #[test]
