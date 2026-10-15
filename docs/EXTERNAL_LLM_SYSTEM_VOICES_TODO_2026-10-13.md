@@ -153,6 +153,14 @@ Native macOS `AVSpeechSynthesizer` integration, runtime catalog, cancellation/pl
 
 Direct-to-`master` commit `30f97470c9668e8062aca538529b510b91d89f8b` rejects legacy `function_call` metadata and refusal payloads in both Ollama and llama-server assistant responses, even when the same response includes plausible text. The parser continues to accept absent/null metadata and empty modern `tool_calls`. Its first exact-head CI `38668804961` found only a rustfmt layout failure; commit `e401f05c11119e6397e70bbcd54e977d0d71d261` corrected that formatting. **Exact-head CI `38669056161` passed** Rust quality/Clippy, Rust tests, and generated backend-contract verification. This is focused ELSV-300 response isolation evidence, not completion of the full server routing, cancellation, or platform matrix. ELSV-300/900 remain unchecked.
 
+### OpenAI Settings credential lifecycle and stale-status qualification — 2026-10-14
+
+Commit `5a5c6cdc585d2a5ab739a806181ed815ba114b36` adds OpenAI Control Panel lifecycle tests for trimmed key save, password-input clearing, persistence exclusively through the secret-store bridge, independent Google key presence, OpenAI-only removal, and sanitized key-store failures. A formatting correction landed at `42bc82a2ee7c93a91cb92bd47040aadfaf6fa3f2`. Their scoped CI runs were cancelled when another active Ralph session committed to `master`; cancelled runs are **not** qualification evidence.
+
+Commit `c32e1ed07bc16f8781447d3ea52a1363354d8511` guards pending `hasOpenaiApiKey` replies with a request version that is invalidated by explicit save/removal actions, preventing stale presence results from overriding newer UI state. Its focused frontend CI `38669658070` **passed**. Commit `47e1cb1f6dc8cc0af47832b44ce5b847efff82dc` strengthens the asynchronous race test by awaiting React state flush; `64c0a67746186754de33528a6be4713e08ccd80b` corrects Prettier import formatting. **Exact-head frontend CI `38669894519` passed** on the final code, including frontend quality tests. This qualifies only the focused OpenAI key UI/race regressions, not the complete ELSV-200/600 acceptance matrix.
+
+Native macOS `AVSpeechSynthesizer`, installed-voice catalog integration, playback/cancellation, physical Mac audition, full provider-routing acceptance, and `check:all` remain outstanding; keep ELSV-200/500/600/900 unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
