@@ -366,9 +366,7 @@ mod tests {
                         if (worker + iteration) % 2 == 0 {
                             store.clear_openai_api_key().unwrap();
                         } else {
-                            store
-                                .set_openai_api_key("session-key".into())
-                                .unwrap();
+                            store.set_openai_api_key("session-key".into()).unwrap();
                         }
                     }
                 });
