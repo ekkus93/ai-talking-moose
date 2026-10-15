@@ -1,7 +1,7 @@
 # ELSV non-Live event backpressure and stale-generation remediation
 
 **Date:** 2026-10-14
-**Status:** Open implementation defect; no fix claimed
+**Status:** Implemented at `89bbd6df9a52d854bc27c237ac3d4822ff99b270`; exact-head Rust qualification pending
 **Scope:** ELSV-400 generation identity, barge-in, privacy and event ordering
 
 ## Reproduction and root cause
@@ -12,19 +12,19 @@ The existing test `interruption_during_transcript_backpressure_never_starts_clou
 
 This is not an external cloud-text retry or TTS fallback. It is a stale UI/transcript event delivered after barge-in, contrary to ELSV-400's generation-identity and stale-response-suppression requirement.
 
-## Required code changes
+## Implementation and remaining qualification
 
-1. In `LocalConversationSession::send_text_turn`, publish the model transcript through a cancellation-aware `tokio::select!` with a biased cancellation branch. Drop the pending send when its generation is interrupted or replaced; retain the existing generation/active-synthesis check before invoking TTS.
-2. Change the backpressure regression to require `Interrupted` as the first event after the consumer drains `Connected`. Assert no subsequent stale transcript, audio, or standalone TTS request.
-3. Audit the analogous awaited sends of provider `Error`, `AudioData`, and `TurnComplete`. A generation check *before* a blocked send is insufficient if interruption can occur while awaiting capacity. Keep cancellation ownership alive until the final event is published or abandoned.
-4. Add negative tests for cancellation while an error/audio/completion send is backpressured, including replacement by a newer turn. Ensure new-turn events are not discarded by cancellation of the old token.
-5. Run exact-head Rust formatting/Clippy, the complete Rust test suite, and generated-contract checks. Confirm the scoped CI is **passed**, not superseded or cancelled, before marking the ELSV-400 cancellation subtask complete.
+1. Commit `89bbd6df9a52d854bc27c237ac3d4822ff99b270` added `publish_turn_event` with a biased cancellation branch and a generation check. It covers transcript, provider-error, audio, and completion event publication.
+2. The same commit introduced `ActiveTurnCleanup` so a completed/stale turn cannot clear the cancellation token for a newer turn, and cancellation ownership survives blocked event sends.
+3. The transcript-backpressure test now expects `Interrupted` without stale `ModelTranscript`. A new audio-backpressure test asserts interruption suppresses queued audio and completion.
+4. Remaining focused follow-up: add explicit blocked-error and blocked-completion cases and replacement-generation tests, then run full ELSV-400 routing matrix.
+5. The exact-head Rust CI for `89bbd6d` (run `38686419939`) was **cancelled** when a subsequent documentation commit arrived. It does not qualify the fix. Obtain a passed exact-code-head Rust quality/test/generated-contract run before checking the ELSV-400 cancellation subtask.
 
 ## Current qualification and integration boundaries
 
 The separate regression for dropping an interrupted external text-generation future landed at `8a18ba78630e14e201cca3a1f36ca08e92575de7`. Unsupported System TTS preflight and immutable text-provider selection landed at `264aeba85894b01898a999a22c095f7aeb8f3828` and `9fc700e7ed928e54480644a1f5f43ce88dfc8e95`. Exact-head CI `38684700623` passed for the latter SHA. Those changes do **not** resolve the stale transcript event described here.
 
-A direct source change for the cancellation-aware transcript send was attempted during the 2026-10-14 loop, but Ralph Bridge's source-write call was rejected by an upstream safety check. The working tree and `master` remain unchanged for this specific fix. Reattempt through an authorized source-write path in a future run; do not mark this defect resolved merely because this report exists.
+An earlier direct source-write attempt was rejected by an upstream safety check. A subsequent authorized direct-to-`master` write landed the implementation at `89bbd6d`. The implementation is no longer absent; **CI qualification is still outstanding** because its run was superseded by documentation changes.
 
 ## Platform and privacy constraints
 
