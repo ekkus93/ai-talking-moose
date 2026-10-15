@@ -111,9 +111,10 @@ fn build_commit() -> String {
         .unwrap_or_else(|| UNKNOWN_BUILD_COMMIT.to_string())
 }
 
-// Whisper source build (Linux only). Builds whisper.cpp and ggml into
-// <root>/build/whisper and links the resulting static libraries. macOS and
-// non-Linux targets fail closed for Whisper until proven.
+// The pinned whisper.cpp source builds for Linux and macOS without requiring
+// shared libwhisper libraries at application runtime. macOS uses a separate
+// target-specific CMake directory so ARM and Intel archives cannot be mixed.
+// The Moonshine path remains intact until Mac real-model acceptance is proven.
 fn explicit_whisper_lib_dir() -> Option<PathBuf> {
     let lib_dir = std::env::var(WHISPER_LIB_DIR).ok()?;
     let lib_dir = lib_dir.trim();
@@ -124,11 +125,22 @@ fn explicit_whisper_lib_dir() -> Option<PathBuf> {
     }
 }
 
-fn target_is_linux() -> bool {
-    match std::env::var_os("TARGET") {
-        Some(target) => target.to_string_lossy().contains("linux"),
-        None => false,
-    }
+fn target_is_macos() -> bool {
+    matches!(
+        std::env::var("TARGET").as_deref(),
+        Ok("aarch64-apple-darwin" | "x86_64-apple-darwin")
+    )
+}
+
+fn whisper_target_supported() -> bool {
+    std::env::var("TARGET")
+        .map(|target| target.contains("linux") || target_is_macos())
+        .unwrap_or(false)
+}
+
+fn require_whisper_native() -> bool {
+    std::env::var("TALKING_MOOSE_REQUIRE_WHISPER_NATIVE")
+        .is_ok_and(|value| value == "1")
 }
 
 fn has_whisper_runtime(build_dir: &Path) -> bool {
@@ -158,6 +170,10 @@ fn emit_whisper_link(build_dir: &Path) {
     );
     for lib in WHISPER_STATIC_LIBS {
         println!("cargo:rustc-link-lib=static={lib}");
+    }
+    if target_is_macos() {
+        // The static whisper.cpp/ggml implementation contains C++ objects.
+        println!("cargo:rustc-link-lib=dylib=c++");
     }
     println!("cargo:rustc-cfg=whisper_native_linked");
 }
@@ -226,27 +242,36 @@ fn emit_whisper_native_rerun_paths(whisper_src: &Path) {
 }
 
 fn build_whisper_from_source() {
-    if !target_is_linux() {
+    if !whisper_target_supported() {
         return;
     }
 
     let Some(root) = repository_root() else {
+        whisper_build_failure("repository root unavailable");
         return;
     };
 
     let whisper_src = root.join("third_party").join("whisper.cpp");
     if !whisper_src.join("CMakeLists.txt").is_file() {
+        whisper_build_failure("pinned whisper.cpp submodule is not checked out");
         return;
     }
 
-    let build_dir = root.join("build").join("whisper");
+    let target = std::env::var("TARGET").expect("Cargo supplies TARGET");
+    let build_dir = if target_is_macos() {
+        root.join("build").join(format!("whisper-{target}"))
+    } else {
+        root.join("build").join("whisper")
+    };
     if std::fs::create_dir_all(&build_dir).is_err() {
+        whisper_build_failure("could not create native build directory");
         return;
     }
 
     emit_whisper_native_rerun_paths(&whisper_src);
 
-    let configure = Command::new("cmake")
+    let mut configure = Command::new("cmake");
+    configure
         .current_dir(&build_dir)
         .arg("-S")
         .arg(&whisper_src)
@@ -260,39 +285,59 @@ fn build_whisper_from_source() {
             "-DWHISPER_ALL_WARNINGS=OFF",
             "-DCMAKE_C_FLAGS=-fPIC",
             "-DCMAKE_CXX_FLAGS=-fPIC",
-        ])
-        .output();
+        ]);
+    if target_is_macos() {
+        let arch = if target.starts_with("aarch64-") {
+            "arm64"
+        } else {
+            "x86_64"
+        };
+        let deployment_target = std::env::var("MACOSX_DEPLOYMENT_TARGET")
+            .unwrap_or_else(|_| "13.4".to_string());
+        configure
+            .arg(format!("-DCMAKE_OSX_ARCHITECTURES={arch}"))
+            .arg(format!("-DCMAKE_OSX_DEPLOYMENT_TARGET={deployment_target}"))
+            // Real-model CPU acceptance precedes optional Metal acceleration.
+            .args(["-DGGML_METAL=OFF", "-DGGML_ACCELERATE=OFF", "-DGGML_BLAS=OFF"]);
+    }
+
+    let configure = configure.output();
     let Ok(configure) = configure else {
-        warn_whisper_build_failure("CMake configuration could not start");
+        whisper_build_failure("CMake configuration could not start");
         return;
     };
     if !configure.status.success() {
-        warn_whisper_build_failure("CMake configuration failed");
+        whisper_build_failure("CMake configuration failed");
         return;
     }
 
     let threads = whisper_build_jobs().to_string();
-    let make = Command::new("make")
-        .current_dir(&build_dir)
-        .arg("-j")
+    let make = Command::new("cmake")
+        .arg("--build")
+        .arg(&build_dir)
+        .args(["--config", "Release", "--target", "whisper", "--parallel"])
         .arg(&threads)
-        .arg("whisper")
         .status();
     let Ok(make) = make else {
-        warn_whisper_build_failure("native build tool could not start");
+        whisper_build_failure("native build tool could not start");
         return;
     };
     if !make.success() {
-        warn_whisper_build_failure("native build failed");
+        whisper_build_failure("native build failed");
         return;
     }
 
     if has_whisper_runtime(&build_dir) {
         emit_whisper_link(&build_dir);
+    } else {
+        whisper_build_failure("required static archives were not produced");
     }
 }
 
-fn warn_whisper_build_failure(reason: &str) {
+fn whisper_build_failure(reason: &str) {
+    if require_whisper_native() {
+        panic!("Required Whisper native build failed: {reason}");
+    }
     println!("cargo:warning=Whisper native build {reason}; local Whisper ASR is unavailable.");
 }
 
@@ -302,6 +347,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_MOONSHINE_LIB_DIR");
     println!("cargo:rerun-if-env-changed={WHISPER_LIB_DIR}");
     println!("cargo:rerun-if-env-changed={WHISPER_BUILD_JOBS}");
+    println!("cargo:rerun-if-env-changed=TALKING_MOOSE_REQUIRE_WHISPER_NATIVE");
+    println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-changed=native/macos/{MOONSHINE_DYLIB}");
@@ -322,11 +369,14 @@ fn main() {
         }
     }
 
-    // Whisper source build (Linux) and escape hatch. Fails closed when the
-    // native runtime is absent or on an unsupported target.
+    // Preserve the pre-cutover fail-closed behavior for source checkouts
+    // without submodules. Mac native acceptance sets REQUIRE=1, and must fail
+    // instead of treating a missing Whisper runtime as a passing build.
     if let Some(build_dir) = explicit_whisper_lib_dir() {
         if has_whisper_runtime(&build_dir) {
             emit_whisper_link(&build_dir);
+        } else {
+            whisper_build_failure("explicit Whisper static archives are missing");
         }
     } else {
         build_whisper_from_source();

@@ -1,0 +1,78 @@
+name: Whisper macOS Native Compile
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - src-tauri/build.rs
+      - .github/workflows/whisper-macos-native-compile.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whisper-native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-compile:
+    name: Pinned Whisper static link (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.4"
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: Check out exact source with pinned Whisper submodule
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Assert exact source and target architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          test -f third_party/whisper.cpp/CMakeLists.txt
+          python3 scripts/check_whisper_provenance.py
+          cmake --version
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.arch }}-whisper-native-${{ hashFiles('src-tauri/Cargo.lock') }}
+      - name: Generate application icons
+        run: python3 scripts/generate_app_icons.py
+      - name: Build native-linked Whisper acceptance executable without model downloads
+        run: |
+          cargo build --locked --manifest-path src-tauri/Cargo.toml \
+            --features whisper-acceptance --bin whisper_acceptance
+      - name: Record static binary and archive evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=src-tauri/target/debug/whisper_acceptance
+          test -f "$binary"
+          file "$binary"
+          lipo -archs "$binary" | grep -Fx "${{ matrix.arch }}"
+          archive="build/whisper-$(rustc -vV | sed -n 's/^host: //p')/src/libwhisper.a"
+          test -s "$archive"
+          test ! -e src-tauri/native/macos/ggml-small.bin
+          # This is compile/link evidence only. Real-model offline inference
+          # and physical mic qualification belong to WSP-200/WSP-700.
