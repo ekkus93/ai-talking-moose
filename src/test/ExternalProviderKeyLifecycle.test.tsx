@@ -64,7 +64,9 @@ describe("OpenAI credential isolation in Settings", () => {
       await screen.findByRole("button", { name: "Remove Saved OpenAI Key" }),
     );
     await waitFor(() => expect(clearOpenai).toHaveBeenCalledOnce());
-    expect(await screen.findByText("No OpenAI key is configured.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("No OpenAI key is configured."),
+    ).toBeInTheDocument();
     expect(clearGoogle).not.toHaveBeenCalled();
     expect(useMooseStore.getState().hasApiKey).toBe(true);
     expect(useMooseStore.getState().settings?.text_provider).toBe("openai");
