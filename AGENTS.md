@@ -2,9 +2,8 @@
 
 ## Agent Operating Rules
 
-- **One main agent only.** Do not spawn subagents (or any child/task agents) or delegate work to them — all work happens in this single agent session.
-- **Why:** this workspace runs against a local model, which does not support the subagent path. If you attempt one, it will most likely error out.
-- If a task looks parallelizable, do it yourself in one session (e.g., run independent checks back-to-back in a single Bash command or a series of tool calls) instead of reaching for a subagent.
+- **Subagents are allowed in Claude Code.** You may spawn subagents (e.g., via the Agent tool, or as a skill such as `/lint-n-test` directs) and delegate work to them when it helps.
+- **Local-model (opencode) sessions only:** when this workspace runs against a local model through opencode, the subagent path is not supported and will most likely error out. In that case, do the work in one session (e.g., run independent checks back-to-back in a single Bash command or a series of tool calls) instead of reaching for a subagent.
 
 ## Code Navigation
 
