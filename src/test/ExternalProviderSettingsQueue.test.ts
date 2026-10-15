@@ -20,7 +20,7 @@ afterEach(() => {
   resetSettingsPersistenceForTests();
 });
 
-it("serializes independent provider and TTS patches without losing previously selected fields", async () => {
+it("serializes provider and TTS settings writes", async () => {
   const persisted: AppSettings[] = [];
   let releaseFirst: () => void = () => {
     throw new Error("first settings request was not started");
@@ -30,7 +30,8 @@ it("serializes independent provider and TTS patches without losing previously se
   });
   let activeWrites = 0;
   let maxConcurrentWrites = 0;
-  vi.spyOn(tauriBridge, "updateSettings").mockImplementation(async (candidate) => {
+  const updateSettings = vi.spyOn(tauriBridge, "updateSettings");
+  updateSettings.mockImplementation(async (candidate) => {
     activeWrites += 1;
     maxConcurrentWrites = Math.max(maxConcurrentWrites, activeWrites);
     persisted.push({ ...candidate });
