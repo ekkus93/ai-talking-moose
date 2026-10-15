@@ -18,6 +18,9 @@ pub use traits::*;
 pub use types::*;
 
 #[cfg(test)]
+mod loopback_ipv6_generation_tests;
+
+#[cfg(test)]
 mod loopback_integration_tests;
 
 #[cfg(test)]
