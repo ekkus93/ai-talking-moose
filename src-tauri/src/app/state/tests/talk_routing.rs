@@ -236,6 +236,61 @@ async fn unavailable_system_tts_rejects_before_any_selected_text_provider_starts
     }
 }
 
+
+#[cfg(not(target_os = "macos"))]
+#[tokio::test]
+async fn every_local_asr_rejects_unavailable_system_voice_without_contacting_text_provider() {
+    use crate::ai::types::ProviderErrorKind;
+    let state = AppState::new_for_tests().unwrap();
+    for asr_mode in [
+        AsrMode::WhisperSmall,
+        AsrMode::MoonshineTinyStreaming,
+        AsrMode::MoonshineSmallStreaming,
+    ] {
+        for text_provider in [
+            TextProvider::Local,
+            TextProvider::Google,
+            TextProvider::Openai,
+            TextProvider::Ollama,
+            TextProvider::LlamaServer,
+        ] {
+            let settings = AppSettings {
+                asr_mode,
+                text_provider,
+                tts_provider: TtsProvider::System,
+                ..AppSettings::default()
+            };
+            let (sender, mut events) = tokio::sync::mpsc::channel(4);
+            let result = state
+                .get_conversation_provider_for(&settings)
+                .connect(
+                    LiveSessionConfig {
+                        model: "selected-model".into(),
+                        voice_name: Some("system_default".into()),
+                        system_instruction: Some("private instruction".into()),
+                        sample_rate_in: 16_000,
+                        sample_rate_out: 24_000,
+                        tools: vec![],
+                    },
+                    sender,
+                )
+                .await;
+            let error = match result {
+                Ok(_) => panic!("{asr_mode:?} {text_provider:?} cannot start System TTS"),
+                Err(error) => error,
+            };
+            assert_eq!(error.kind, ProviderErrorKind::Setup);
+            assert!(!error.retryable);
+            assert!(error.message.contains("no text provider was contacted"));
+            assert!(!error.message.contains("private instruction"));
+            assert!(
+                events.try_recv().is_err(),
+                "{asr_mode:?} {text_provider:?} must emit no transcript or audio"
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn missing_openai_key_in_non_live_talk_does_not_fall_back() {
     use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
