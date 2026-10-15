@@ -197,6 +197,10 @@ Direct-to-`master` changes `d5443ee832043efd4e6ede764ce59339c8aee80d` and `35d48
 
 These are focused ELSV-400 safety/routing regressions only. The complete provider/ASR/TTS matrix, native macOS System TTS, physical voice audition, and ELSV-900 full validation remain outstanding. Commit `89bbd6df9a52d854bc27c237ac3d4822ff99b270` subsequently introduced cancellation-aware transcript/error/audio/completion sends and stricter transcript/audio backpressure regressions. Its exact-head Rust CI `38686419939` was cancelled by a newer documentation commit, so this fix is **implemented but not yet CI-qualified**. Additional blocked-error/completion and replacement-generation tests remain advisable. ELSV-400 stays unchecked.
 
+### OpenAI multi-message fail-closed parsing — 2026-10-14
+
+Commit `cfced4d1a67d8e62527b4a5aeb8d4f342481b641` rejects a Responses payload with multiple distinct assistant message items instead of silently concatenating them into one speech bubble. The negative parser regression and existing Rust checks passed at the exact commit in CI run `38690938204` (Rust quality, Rust tests, and generated backend contract). This is focused ELSV-200 evidence only; credential/transport/platform and complete release acceptance remain outstanding.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
