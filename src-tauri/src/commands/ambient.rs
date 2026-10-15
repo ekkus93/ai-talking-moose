@@ -697,3 +697,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod provider_routing_tests;

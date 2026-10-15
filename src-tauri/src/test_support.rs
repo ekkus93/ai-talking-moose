@@ -3,6 +3,8 @@ use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 use tracing_subscriber::fmt::MakeWriter;
 
+pub(crate) mod fake_http;
+
 const LOG_CAPTURE_LIVENESS_MARKER: &str = "TALKING_MOOSE_TEST_LOG_CAPTURE_LIVE";
 static LOG_CAPTURE_LOCK: Mutex<()> = Mutex::new(());
 

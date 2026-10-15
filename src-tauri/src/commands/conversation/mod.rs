@@ -14,3 +14,8 @@ mod provider_boundary_tests {
 mod wake_word_lifecycle_tests {
     include!("wake_word_lifecycle_tests.rs");
 }
+
+#[cfg(test)]
+mod typed_reply_provider_tests {
+    include!("typed_reply_provider_tests.rs");
+}
