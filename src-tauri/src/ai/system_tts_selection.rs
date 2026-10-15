@@ -1,5 +1,5 @@
 //! Platform-neutral, fail-closed selection for macOS runtime voice identifiers.
-use crate::ai::system_tts_voice_catalog::has_bidi_formatting;
+use crate::ai::system_tts_voice_catalog::has_invisible_id_formatting;
 use crate::ai::tts_catalog::TtsVoiceDescriptor;
 use crate::ai::types::{ProviderError, ProviderErrorKind};
 
@@ -17,7 +17,7 @@ pub fn resolve_installed_system_voice<'a>(
         || saved_id.len() > 128
         || saved_id.trim() != saved_id
         || saved_id.chars().any(char::is_control)
-        || has_bidi_formatting(saved_id)
+        || has_invisible_id_formatting(saved_id)
     {
         return Err(ProviderError::from_kind(ProviderErrorKind::Model));
     }
@@ -65,6 +65,12 @@ mod tests {
         assert!(resolve_installed_system_voice("com.apple.voice.test\r", &installed).is_err());
         assert!(
             resolve_installed_system_voice("com.apple.voice.\u{202e}spoof", &installed).is_err()
+        );
+        assert!(
+            resolve_installed_system_voice("com.apple.voice.\u{200b}spoof", &installed).is_err()
+        );
+        assert!(
+            resolve_installed_system_voice("com.apple.voice.\u{feff}spoof", &installed).is_err()
         );
     }
 }

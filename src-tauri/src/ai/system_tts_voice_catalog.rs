@@ -14,6 +14,15 @@ pub(crate) fn has_bidi_formatting(value: &str) -> bool {
     })
 }
 
+/// Stable OS voice identifiers must not contain invisible separators that
+/// make two distinct IDs appear identical in Settings or diagnostic output.
+pub(crate) fn has_invisible_id_formatting(value: &str) -> bool {
+    has_bidi_formatting(value)
+        || value.chars().any(|ch| {
+            matches!(ch, '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}')
+        })
+}
+
 pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoiceDescriptor> {
     let mut seen = HashSet::new();
     voices
@@ -24,7 +33,7 @@ pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoi
                 && voice.id.len() <= 128
                 && voice.id.trim() == voice.id
                 && !voice.id.chars().any(char::is_control)
-                && !has_bidi_formatting(&voice.id)
+                && !has_invisible_id_formatting(&voice.id)
                 && !voice.display_name.trim().is_empty()
                 && voice.display_name.len() <= MAX_VOICE_NAME_BYTES
                 && !voice.display_name.chars().any(char::is_control)
@@ -122,6 +131,8 @@ mod tests {
         let valid = voice("com.apple.voice.safe", "Readable", Some("en-US"));
         let voices = vec![
             voice("com.apple.voice.\u{202e}spoof", "Bad", None),
+            voice("com.apple.voice.\u{200b}spoof", "Bad", None),
+            voice("com.apple.voice.\u{2060}spoof", "Bad", None),
             voice("com.apple.voice.bad", "Name \u{2066}spoof\u{2069}", None),
             voice("com.apple.voice.bad2", "Bad", Some("en-\u{200f}US")),
             valid.clone(),
