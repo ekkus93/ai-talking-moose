@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsModal } from "../components/Settings/SettingsModal";
 import { frontendDefaultSettings } from "../lib/backendContract";
@@ -92,12 +92,12 @@ describe("OpenAI credential isolation in Settings", () => {
       await screen.findByRole("button", { name: "Remove Saved OpenAI Key" }),
     ).toBeInTheDocument();
 
-    resolvePresence(false);
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Remove Saved OpenAI Key" }),
-      ).toBeInTheDocument(),
-    );
+    await act(async () => {
+      resolvePresence(false);
+    });
+    expect(
+      screen.getByRole("button", { name: "Remove Saved OpenAI Key" }),
+    ).toBeInTheDocument();
     expect(useMooseStore.getState().settings?.text_provider).toBe("openai");
   });
 
