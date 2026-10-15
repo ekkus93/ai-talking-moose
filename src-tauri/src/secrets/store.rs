@@ -350,6 +350,36 @@ mod tests {
     }
 
     #[test]
+    fn simultaneous_secret_clears_and_replacements_remain_consistent() {
+        use std::sync::Barrier;
+
+        let backend = Arc::new(MemorySecretBackend::default());
+        let store = SecretStore::with_backend(backend.clone()).unwrap();
+        let barrier = Arc::new(Barrier::new(3));
+        std::thread::scope(|scope| {
+            for worker in 0..2 {
+                let store = store.clone();
+                let barrier = barrier.clone();
+                scope.spawn(move || {
+                    barrier.wait();
+                    for iteration in 0..100 {
+                        if (worker + iteration) % 2 == 0 {
+                            store.clear_openai_api_key().unwrap();
+                        } else {
+                            store
+                                .set_openai_api_key("session-key".into())
+                                .unwrap();
+                        }
+                    }
+                });
+            }
+            barrier.wait();
+        });
+        assert_eq!(*backend.openai_api_key.read(), store.get_openai_api_key());
+        assert!(!store.has_google_api_key());
+    }
+
+    #[test]
     fn empty_key_clears_the_backend() {
         let backend = Arc::new(MemorySecretBackend::default());
         let store = SecretStore::with_backend(backend).unwrap();
