@@ -27,9 +27,7 @@ describe("standalone voice provider switching and Live isolation", () => {
     const patch = vi.fn().mockResolvedValue(undefined);
     useMooseStore.setState({ updateSettingsPatch: patch });
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
-    fireEvent.click(
-      screen.getByRole("radio", { name: /Local KittenTTS/i }),
-    );
+    fireEvent.click(screen.getByRole("radio", { name: /Local KittenTTS/i }));
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith({ tts_provider: "local" }),
     );
@@ -46,9 +44,7 @@ describe("standalone voice provider switching and Live isolation", () => {
       updateSettingsPatch: patch,
     });
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
-    fireEvent.click(
-      screen.getByRole("radio", { name: /Local KittenTTS/i }),
-    );
+    fireEvent.click(screen.getByRole("radio", { name: /Local KittenTTS/i }));
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith({ tts_provider: "local" }),
     );
