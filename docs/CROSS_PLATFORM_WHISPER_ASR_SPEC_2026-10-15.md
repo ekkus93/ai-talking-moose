@@ -1,10 +1,10 @@
 # Cross-Platform Whisper.cpp Local ASR — Specification
 
-**Date:** 2026-10-15  
-**Status:** Approved architecture, implementation not started  
-**Repository:** `ekkus93/ai-talking-moose`  
-**Authoritative implementation checklist:** `docs/CROSS_PLATFORM_WHISPER_ASR_TODO_2026-10-15.md`  
-**Related completed Linux work:** `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`, `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`  
+**Date:** 2026-10-15
+**Status:** Approved architecture, implementation not started
+**Repository:** `ekkus93/ai-talking-moose`
+**Authoritative implementation checklist:** `docs/CROSS_PLATFORM_WHISPER_ASR_TODO_2026-10-15.md`
+**Related completed Linux work:** `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`, `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`
 **Related active acceptance:** `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md`
 
 ## 1. Decision and motivation

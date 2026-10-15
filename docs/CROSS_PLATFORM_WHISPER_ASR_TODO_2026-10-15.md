@@ -1,11 +1,11 @@
 # Cross-Platform Whisper.cpp Local ASR — Implementation TODO
 
-**Date:** 2026-10-15  
-**Status:** Open — architecture authorized; implementation and acceptance outstanding  
-**Specification:** `docs/CROSS_PLATFORM_WHISPER_ASR_SPEC_2026-10-15.md`  
-**Repository:** `ekkus93/ai-talking-moose`, direct-to-`master` workflow  
-**Current baseline:** `2582159ee36dd8690e7443822d0da4be4e911d9a`  
-**Previous Linux Whisper work:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md` (historically completed; do not reopen completed work without a regression)  
+**Date:** 2026-10-15
+**Status:** Open — architecture authorized; implementation and acceptance outstanding
+**Specification:** `docs/CROSS_PLATFORM_WHISPER_ASR_SPEC_2026-10-15.md`
+**Repository:** `ekkus93/ai-talking-moose`, direct-to-`master` workflow
+**Current baseline:** `2582159ee36dd8690e7443822d0da4be4e911d9a`
+**Previous Linux Whisper work:** `docs/WHISPER_CPP_LOCAL_ASR_TODO.md` (historically completed; do not reopen completed work without a regression)
 **Related active checklist:** `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md`
 
 Check a box **only** when a concrete implementation and its stated evidence exist at an observed commit. Record exact SHA, workflow/run and job conclusions, target/arch, commands, numerical measurements where requested, and limitations. A cancelled run, successful docs-only gate, generated stub transcript, or compilation without running inference is not sufficient proof. No item is completed merely because this TODO was committed.
