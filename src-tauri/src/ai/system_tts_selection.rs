@@ -63,6 +63,8 @@ mod tests {
         assert!(resolve_installed_system_voice(" padded.voice", &installed).is_err());
         assert!(resolve_installed_system_voice("padded.voice ", &installed).is_err());
         assert!(resolve_installed_system_voice("com.apple.voice.test\r", &installed).is_err());
-        assert!(resolve_installed_system_voice("com.apple.voice.\u{202e}spoof", &installed).is_err());
+        assert!(
+            resolve_installed_system_voice("com.apple.voice.\u{202e}spoof", &installed).is_err()
+        );
     }
 }
