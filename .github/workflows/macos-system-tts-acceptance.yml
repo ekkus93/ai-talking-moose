@@ -210,4 +210,3 @@ jobs:
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app_path"
           bash scripts/verify_app_build_provenance.sh "$app_path" "$GITHUB_SHA"
-
