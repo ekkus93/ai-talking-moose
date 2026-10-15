@@ -54,7 +54,7 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 ## WSP-300 — Unify ASR selection and persist settings safely
 
 - [ ] Make `AsrMode::WhisperSmall` the fresh-profile local ASR default on Linux and macOS. Retain explicit `GeminiLiveAudio` cloud mode with no implicit selection.
-- [ ] Design an idempotent migration for persisted `moonshine_tiny_streaming` and `moonshine_small_streaming` to `whisper_small`. Decide and document settings-version treatment and preserve unknown/additive fields.
+- [x] Design an idempotent migration for persisted `moonshine_tiny_streaming` and `moonshine_small_streaming` to `whisper_small`. Decide and document settings-version treatment and preserve unknown/additive fields. (Design only, not activated: `docs/evidence/CROSS_PLATFORM_WHISPER_SETTINGS_MIGRATION_DESIGN_2026-10-15.md`; requires WSP-200 before implementation.)
 - [ ] Ensure migration **does not** claim a Whisper model is installed, download weights, silently enable cloud, substitute Moonshine model files, overwrite API/voice/TTS/text selections, or lose privacy/memory flags.
 - [ ] Test fresh Linux/Mac profiles, both persisted Moonshine variants, explicit saved Whisper, explicit Gemini Live, corrupted/invalid/future-version values, and save/restart round trips. Confirm removed choices are never resurrected.
 - [ ] Make ASR catalog/commands/diagnostics truthfully show Whisper availability, download state, model revision, batch partial semantics and runtime errors on both Macs. Preserve install/delete/session ownership rules.
