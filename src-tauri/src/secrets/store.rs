@@ -138,12 +138,11 @@ impl SecretStore {
         Ok(())
     }
 
-    /// Redact both independent provider credentials from diagnostics and errors.
+    /// Redact every occurrence of both provider credentials against the original
+    /// input, including overlapping values. Sequential replacement can expose
+    /// part of a credential that overlaps another credential.
     pub fn redact(&self, input: &str) -> String {
-        // Replace longer credentials first. If one key is a prefix of another,
-        // replacing the shorter key first would leave the longer key's suffix
-        // visible in diagnostics and prevent its subsequent exact-match redaction.
-        let mut keys: Vec<String> = [
+        let keys: Vec<String> = [
             self.google_api_key.read().clone(),
             self.openai_api_key.read().clone(),
         ]
@@ -151,11 +150,39 @@ impl SecretStore {
         .flatten()
         .filter(|key| !key.is_empty())
         .collect();
-        keys.sort_unstable_by_key(|key| std::cmp::Reverse(key.len()));
-        let mut redacted = input.to_string();
-        for key in keys {
-            redacted = crate::secrets::redact_secret(&redacted, &key);
+
+        // Scan UTF-8 character boundaries so overlapping matches of the same
+        // credential are not skipped, unlike str::match_indices.
+        let mut spans: Vec<(usize, usize)> = Vec::new();
+        for (start, _) in input.char_indices() {
+            for key in &keys {
+                if input[start..].starts_with(key) {
+                    spans.push((start, start + key.len()));
+                }
+            }
         }
+        spans.sort_unstable_by_key(|(start, _)| *start);
+
+        // Coalesce overlapping spans before emitting any replacement text.
+        let mut merged: Vec<(usize, usize)> = Vec::new();
+        for (start, end) in spans {
+            if let Some((_, previous_end)) = merged.last_mut() {
+                if start < *previous_end {
+                    *previous_end = (*previous_end).max(end);
+                    continue;
+                }
+            }
+            merged.push((start, end));
+        }
+
+        let mut redacted = String::with_capacity(input.len());
+        let mut cursor = 0;
+        for (start, end) in merged {
+            redacted.push_str(&input[cursor..start]);
+            redacted.push_str(crate::secrets::REDACTED_SECRET);
+            cursor = end;
+        }
+        redacted.push_str(&input[cursor..]);
         redacted
     }
 }
@@ -250,6 +277,30 @@ mod tests {
             store.redact("short-key-long-google and short-key"),
             "[REDACTED_SECRET] and [REDACTED_SECRET]"
         );
+    }
+
+    #[test]
+    fn partial_overlap_redacts_union_without_leaking_either_suffix() {
+        let store = SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        store.set_google_api_key("shared-ABCD".into()).unwrap();
+        store.set_openai_api_key("ABCD-tail".into()).unwrap();
+        assert_eq!(
+            store.redact("combined shared-ABCD-tail separate shared-ABCD and ABCD-tail"),
+            "combined [REDACTED_SECRET] separate [REDACTED_SECRET] and [REDACTED_SECRET]"
+        );
+        assert_eq!(store.redact("unrelated text"), "unrelated text");
+    }
+
+    #[test]
+    fn overlapping_repetitions_and_utf8_boundaries_remain_fully_hidden() {
+        let store = SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        store.set_google_api_key("abab".into()).unwrap();
+        store.set_openai_api_key("baba".into()).unwrap();
+        assert_eq!(store.redact("xababay"), "x[REDACTED_SECRET]y");
+
+        store.set_google_api_key("café!".into()).unwrap();
+        store.set_openai_api_key("é!xyz".into()).unwrap();
+        assert_eq!(store.redact("prefix café!xyz suffix"), "prefix [REDACTED_SECRET] suffix");
     }
 
     #[test]
