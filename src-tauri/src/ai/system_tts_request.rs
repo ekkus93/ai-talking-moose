@@ -7,7 +7,15 @@ pub fn validate_system_tts_request(
     request: &TtsRequest,
     installed: &[TtsVoiceDescriptor],
 ) -> Result<(), ProviderError> {
-    if request.text.trim().is_empty() || request.text.chars().count() > 4_000 {
+    // Native AVSpeechUtterance strings must not receive embedded NUL or
+    // non-printable control characters; ordinary whitespace is permitted.
+    if request.text.trim().is_empty()
+        || request.text.chars().count() > 4_000
+        || request
+            .text
+            .chars()
+            .any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))
+    {
         return Err(ProviderError::from_kind(ProviderErrorKind::Protocol));
     }
     if let Some(rate) = request.speaking_rate {
@@ -50,6 +58,13 @@ mod tests {
         request.speaking_rate = Some(1.0);
         request.text = " ".into();
         assert!(validate_system_tts_request(&request, &[]).is_err());
+        request.text = "hello\\0world".replace("\\0", "\0");
+        assert_eq!(
+            validate_system_tts_request(&request, &[]).unwrap_err().kind,
+            ProviderErrorKind::Protocol
+        );
+        request.text = "hello\nworld".into();
+        assert!(validate_system_tts_request(&request, &[]).is_ok());
         request.text = "hello".into();
         request.pitch = Some(f32::NAN);
         assert_eq!(
