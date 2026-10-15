@@ -79,6 +79,8 @@ async fn all_text_providers_with_local_asr_connect_without_gemini_live() {
     }
 }
 
+// Native System synthesis exists on macOS, so this fail-closed path applies elsewhere.
+#[cfg(not(target_os = "macos"))]
 #[tokio::test]
 async fn unavailable_system_tts_rejects_before_any_selected_text_provider_starts() {
     use crate::ai::types::ProviderErrorKind;
@@ -224,6 +226,8 @@ async fn invalid_loopback_server_cannot_fall_back_to_cloud_or_any_standalone_voi
     }
 }
 
+// On macOS this would synthesize for real; the macOS acceptance workflow covers it.
+#[cfg(not(target_os = "macos"))]
 #[tokio::test]
 async fn selected_system_voice_audition_fails_closed_until_native_adapter_is_available() {
     use crate::ai::types::{ProviderErrorKind, TtsRequest};
