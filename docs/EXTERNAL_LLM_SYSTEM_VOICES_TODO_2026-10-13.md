@@ -266,6 +266,17 @@ On Linux x86_64, `CARGO_BUILD_JOBS=2 npm run check:all` passed on the current wo
 
 macOS compilation/smoke checks and a person listening to the generated WAVs and observing the spoken bubble through playback still require a macOS host and human audition; these are not claimed complete here.
 
+### ELSV-400 full provider-boundary matrix and native macOS routing — 2026-10-15
+
+- Direct-to-master commit `964660cb3f5ec3b0289a0243ad5a9561de450d0a` extends non-Live routing coverage across Moonshine Tiny/Small streaming ASR, all five text providers, and both Local/Google standalone voices (20 combinations). Exact-head CI `38805038356` **passed** Rust tests, Clippy, and generated-contract verification.
+- Commit `2b51ec4603e7adddee8b26f4289ef306b7b20ca3` verifies explicit Gemini Live ASR stays in Google's Live authentication boundary for all five standalone text choices and all three saved standalone voice choices (15 combinations), without silent fallback. Exact-head CI `38805871639` **passed**.
+- Another concurrent Ralph commit, `c468660bb51993cc5c6c31f8cae13763dfd39073`, tests non-macOS System voice rejection across three local ASR modes and five text providers (15 combinations). Its CI was cancelled after later commits; its code remains covered by the passing Rust suite on subsequent exact heads.
+- Commit `3a0906c95f21a83faf89ede14dd02a0f56d9e83a` adds macOS-only non-Live System TTS routing tests covering the same 15 local-ASR/text combinations, registered through `state/tests/mod.rs`. The updated native workflow ran the new routing tests and the existing AVSpeechSynthesizer synthesis acceptance: **macOS arm64 run `38807233726` passed**, and produced the `system-tts-audition` WAV/report artifact. A new manual acceptance document, `docs/ELSV_SYSTEM_TTS_PHYSICAL_AUDITION_2026-10-15.md`, retains honest pending human observations. Initial general CI failed only the document trailing-whitespace gate; `b201cb3dae31d601bec2bb8ec68d89975e9de966` corrected it and docs-fast-path CI `38807560474` **passed**.
+- Commit `623cf06606b8b02ab260940ccecf64090566d27a` adds a Linux fake-server test using valid test Google/OpenAI credentials and three reachable fake endpoints. For each local ASR/text combination, unsupported System TTS fails at connection preflight with **zero** accepted OpenAI, Ollama or llama-server connections. Exact-head Rust tests, Clippy and generated-contract CI `38808413823` **passed**.
+- Together with previously qualified selected-provider generation, typed/ambient, failed-model/voice, mid-request setting snapshot, cancellation, stale-event and TTS negative tests, these establish the supported routing/negative-path **test matrix**. The ELSV-400 matrix subtask is checked for this deterministic qualification; it does **not** assert that every cloud/provider combination was auditioned with live credentials or real downloaded weights, nor that the real Mac UI bubble is qualified. Those remain separate ELSV-500/900 human-hardware and platform-release acceptance gates.
+
+**Still unqualified:** real physical Mac audible comprehension, chosen output device and speech-bubble completion/interrupt observation; full supported macOS Tauri release bundle/smoke (including Intel); and final ELSV-900 release closeout. Automated WAV analysis or synthetic provider stubs cannot substitute for those observations.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
@@ -309,7 +320,7 @@ Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbb
 - [x] Refactor non-Live Talk to compose selected text model and selected standalone TTS, including Local, OpenAI, Ollama, llama-server, KittenTTS, Google TTS, and System Voices where supported.
 - [x] Keep Gemini Live audio mode and existing explicit Google Live behavior separate; show or reject unsupported combinations before Talk starts.
 - [x] Preserve transcript/privacy gates, generation identity, barge-in, cancellation, stale-response suppression, audio completion, and bubble lifetime.
-- [ ] Test every supported routing combination and negative path, including cloud-text/local-TTS, local-text/cloud-TTS, unavailable model/voice, mid-request setting changes, and no unintended Gemini Live connection.
+- [x] Test every supported routing combination and negative path, including cloud-text/local-TTS, local-text/cloud-TTS, unavailable model/voice, mid-request setting changes, and no unintended Gemini Live connection.
 
 **Acceptance:** the provider shown in Settings is the one used by each relevant request; a selected failure never silently changes provider.
 
