@@ -28,6 +28,21 @@ PATTERN = re.compile("|".join(re.escape(token) for token in TOKENS), re.IGNORECA
 
 
 def disposition(path: str) -> tuple[str, str]:
+    # Reviewed residual paths from the first exact-head tracked-file census.
+    # Do not lump wake-word-owned ONNX or obsolete Moonshine safety harnesses
+    # together with the shipping Moonshine ASR implementation.
+    if path == ".gitignore":
+        return "git_hygiene", "Retain; ignore Mac target-specific Whisper CMake outputs"
+    if path in ("AGENTS.md", "CLAUDE.md"):
+        return "developer_guidance", "Update active ASR descriptions at verified cutover"
+    if path == "memory.md":
+        return "historical_handoff", "Retain historical, superseded Whisper integration notes"
+    if path == "tests/test_freeze_wake_word_runtime_identity.py":
+        return "wake_word_tests", "Retain separate sherpa-onnx wake-word runtime tests"
+    if path == "wake-word-artifacts.json":
+        return "wake_word_assets", "Retain independently pinned sherpa-onnx wake-word binaries"
+    if path.startswith("tools/asr-miri/"):
+        return "moonshine_safety_harness", "Reconcile original Moonshine FFI safety harness after WSP-200; do not delete early"
     if path.startswith("docs/evidence/"):
         return "historical_evidence", "Review for archival labeling; never count old evidence as current"
     if path.startswith("src-tauri/src/ai/local_tts/"):
