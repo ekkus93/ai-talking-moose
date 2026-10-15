@@ -252,6 +252,12 @@ Evidence (workflow `macOS System TTS acceptance`, `macos-15` arm64, exact head `
 
 **Still open (not claimed):** a human listening to the uploaded `system-tts-audition` WAVs and observing a spoken bubble persist until playback ends in the real app (ELSV-500 item 4, ELSV-900 audition). The acceptance binary does not exercise real-time playback, the 15 s/10 s timeout paths, a no-audio response, or an unsupported buffer format on macOS. The `macos-15-intel` architecture was not run. The automatic "first installed voice" case picked a non-English voice (Majed) speaking English text; it proves synthesis, not suitability. The ordinary CI macOS bundle jobs were not re-inspected for this change.
 
+### ELSV-400/300 Rust routing tests — 2026-10-15
+
+Commits `67b54959`, `895f4b4d`, `eada5286`, `4771011d` (local `npm run check:rust` exit 0, 1065 lib tests; test-only code, no production behavior changed). Typed replies through the real `send_text_message` command and ambient remarks reach only the selected Ollama / llama-server / OpenAI fake (OpenAI via the `cfg(test)`-only endpoint override), with success and 503 cases showing a safe error, no retry, no fallback and unchanged `text_provider`. Talk voice failures never fall back (Google TTS without a key surfaces `Auth`; uninstalled Local TTS surfaces a Setup/Model error with no Google fallback), and an already-created provider keeps its original selection after settings change. The non-Live event order (final transcript → exact PCM `AudioData` → `TurnComplete`) and stale-generation suppression are pinned at the provider-event level. Remote/private/unspecified addresses are rejected by readiness without a connection attempt.
+
+Findings and limits: (1) With a non-System TTS provider, Talk sends the text to the selected text provider before a Google TTS auth failure appears; only System TTS is rejected up front (behavior is pinned, not changed). (2) The `localhost` → `127.0.0.1` pin cannot be observed on a host where `localhost` resolves only to IPv4; that test is a decoy that does not discriminate here, so it is not counted as pin evidence. (3) Ambient success is tested at `generate_ambient_text`; end-to-end ambient success needs a real voice and unmuted state. (4) Bubble lifetime lives in the event loop/frontend and is not covered here. (5) No production code logs or formats an OpenAI key (grep audit); `SecretStore::redact` remains unused outside tests. ELSV-300 item 1 and ELSV-400 items 2–5 stay unchecked for these reasons.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
@@ -291,7 +297,7 @@ Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbb
 
 ## ELSV-400 — Route selected providers through app behavior
 
-- [ ] Extend text-model factory for typed replies and ambient remarks using one immutable request snapshot.
+- [x] Extend text-model factory for typed replies and ambient remarks using one immutable request snapshot.
 - [ ] Refactor non-Live Talk to compose selected text model and selected standalone TTS, including Local, OpenAI, Ollama, llama-server, KittenTTS, Google TTS, and System Voices where supported.
 - [ ] Keep Gemini Live audio mode and existing explicit Google Live behavior separate; show or reject unsupported combinations before Talk starts.
 - [ ] Preserve transcript/privacy gates, generation identity, barge-in, cancellation, stale-response suppression, audio completion, and bubble lifetime.
