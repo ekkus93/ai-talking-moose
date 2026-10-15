@@ -79,6 +79,62 @@ async fn all_text_providers_with_local_asr_connect_without_gemini_live() {
     }
 }
 
+/// Every installed local ASR architecture must preserve the separate non-Live
+/// text/TTS routing boundary. A provider choice never turns microphone PCM
+/// into Gemini Live traffic merely because it is an external text provider.
+#[tokio::test]
+async fn both_moonshine_asr_modes_keep_all_external_text_and_voice_pairs_non_live() {
+    use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
+    let state = AppState::new_for_tests().unwrap();
+    for asr_mode in [
+        AsrMode::MoonshineTinyStreaming,
+        AsrMode::MoonshineSmallStreaming,
+    ] {
+        for text_provider in [
+            TextProvider::Local,
+            TextProvider::Google,
+            TextProvider::Openai,
+            TextProvider::Ollama,
+            TextProvider::LlamaServer,
+        ] {
+            for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
+                let settings = AppSettings {
+                    asr_mode,
+                    text_provider,
+                    tts_provider,
+                    ..AppSettings::default()
+                };
+                let provider = state.get_conversation_provider_for(&settings);
+                let (sender, mut events) = tokio::sync::mpsc::channel(4);
+                let mut session = provider
+                    .connect(
+                        LiveSessionConfig {
+                            model: "selected-model".into(),
+                            voice_name: None,
+                            system_instruction: None,
+                            sample_rate_in: 16_000,
+                            sample_rate_out: 24_000,
+                            tools: vec![],
+                        },
+                        sender,
+                    )
+                    .await
+                    .expect("Moonshine ASR must route through non-Live Talk");
+                assert!(
+                    matches!(events.recv().await, Some(LiveServerEvent::Connected)),
+                    "{asr_mode:?} {text_provider:?} {tts_provider:?}"
+                );
+                assert_eq!(
+                    session.send_audio_chunk(&[0, 0]).await.unwrap_err().kind,
+                    ProviderErrorKind::Setup,
+                    "{asr_mode:?} {text_provider:?} {tts_provider:?} must not open Gemini Live"
+                );
+                session.close().await.unwrap();
+            }
+        }
+    }
+}
+
 // Native System synthesis exists on macOS, so this fail-closed path applies elsewhere.
 #[cfg(not(target_os = "macos"))]
 #[tokio::test]
