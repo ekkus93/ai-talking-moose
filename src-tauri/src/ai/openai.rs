@@ -58,10 +58,18 @@ impl OpenAiTextModel {
         }
         let messages = value["output"].as_array().ok_or_else(protocol_error)?;
         let mut text = String::new();
+        let mut assistant_messages = 0;
         for message in messages {
             match message["type"].as_str() {
                 Some("reasoning") => continue,
-                Some("message") => {}
+                Some("message") => {
+                    // A text-only request expects one assistant reply. Do not
+                    // concatenate distinct message items into one speech bubble.
+                    assistant_messages += 1;
+                    if assistant_messages > 1 {
+                        return Err(protocol_error());
+                    }
+                }
                 _ => return Err(protocol_error()),
             }
             // Never treat a user/tool echo as generated assistant text.
@@ -228,6 +236,7 @@ mod tests {
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "status":null, "content":[{"type":"output_text", "text":"unrecognized"}]}]}),
             json!({"status":"completed", "output":[{"type":"function_call", "name":"unexpected_tool", "arguments":"{}"}]}),
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"partial"}]}, {"type":"function_call", "name":"unexpected_tool", "arguments":"{}"}]}),
+            json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"first"}]}, {"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"second"}]}]}),
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"safe"}, {"type":"refusal", "refusal":"Cannot help"}]}]}),
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"refusal", "refusal":"Cannot help"}]}]}),
             json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_image", "image_url":"data:image/png;base64,AAAA"}]}]}),
