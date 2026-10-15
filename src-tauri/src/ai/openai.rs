@@ -476,17 +476,23 @@ mod tests {
                 .starts_with("POST /v1/responses HTTP/1.1"));
             // Hold the accepted request beyond the client's injected deadline.
             tokio::time::sleep(Duration::from_millis(200)).await;
+            // Timeout must not cause an automatic second provider request.
+            let extra_accept =
+                tokio::time::timeout(Duration::from_millis(50), listener.accept()).await;
+            assert!(extra_accept.is_err());
         });
         let mut model = OpenAiTextModel::with_endpoint(
             "test-openai-key".into(),
             "gpt-4.1-mini".into(),
             endpoint,
         );
-        model.client = Ok(Client::builder()
-            .redirect(Policy::none())
-            .timeout(Duration::from_millis(50))
-            .build()
-            .unwrap());
+        model.client = Ok(
+            Client::builder()
+                .redirect(Policy::none())
+                .timeout(Duration::from_millis(50))
+                .build()
+                .unwrap(),
+        );
         let error = model
             .generate(sample("sensitive transcript"))
             .await
@@ -495,9 +501,6 @@ mod tests {
         assert!(!error.message.contains("sensitive transcript"));
         assert!(!error.message.contains("test-openai-key"));
         server.await.unwrap();
-        // A generation timeout must not trigger a second request.
-        let extra_accept = tokio::time::timeout(Duration::from_millis(50), listener.accept()).await;
-        assert!(extra_accept.is_err());
     }
 
     #[tokio::test]
@@ -516,7 +519,7 @@ mod tests {
             let payload = "private-response-fragment".repeat(4_000);
             assert!(payload.len() > MAX_RESPONSE_BYTES);
             let headers = format!(
-                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                 payload.len()
             );
             stream.write_all(headers.as_bytes()).await.unwrap();
