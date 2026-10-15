@@ -71,7 +71,7 @@ GIT_LFS_SKIP_SMUDGE=1 git -C "$source_dir" checkout -q --detach FETCH_HEAD
 
 ort_rel="core/third-party/onnxruntime/lib/macos/$arch/libonnxruntime.$ort_version.dylib"
 ort_source="$source_dir/$ort_rel"
-if ! git -C "$source_dir" lfs pull --include="$ort_rel" --exclude="*"; then
+if ! git -C "$source_dir" lfs pull --include="$ort_rel" --exclude="*" || grep -q "https://git-lfs.github.com/spec/v1" "$ort_source"; then
   # Upstream Moonshine Git LFS may exhaust its bandwidth quota. A binary from
   # Microsoft's exact same ONNX Runtime release is usable only when it matches
   # the manifest's pinned byte count and SHA-256, verified immediately below.
