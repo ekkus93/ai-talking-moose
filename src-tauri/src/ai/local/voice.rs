@@ -833,6 +833,9 @@ mod tests {
         .await
         .expect("selected voice must reach synthesis before interruption");
         let interrupted = tokio::spawn(async move { session.interrupt().await });
+        // Let interruption cancel the in-flight AudioData send before
+        // draining the queued transcript; otherwise both sends are ready.
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
         assert!(matches!(
             events.recv().await,
             Some(LiveServerEvent::ModelTranscript(_))
