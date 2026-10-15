@@ -1,7 +1,7 @@
 # ELSV non-Live event backpressure and stale-generation remediation
 
-**Date:** 2026-10-14  
-**Status:** Open implementation defect; no fix claimed  
+**Date:** 2026-10-14
+**Status:** Open implementation defect; no fix claimed
 **Scope:** ELSV-400 generation identity, barge-in, privacy and event ordering
 
 ## Reproduction and root cause
