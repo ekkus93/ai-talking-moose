@@ -32,6 +32,50 @@ interface AiTabProps {
   setIsTesting: (value: boolean) => void;
 }
 
+// Controlled draft that commits on blur and when the tab unmounts, so a model ID
+// typed without leaving the field is not lost on a tab switch.
+const ExternalModelInput: React.FC<{
+  committed: string;
+  onCommit: (value: string) => void;
+}> = ({ committed, onCommit }) => {
+  const [draft, setDraft] = React.useState(committed);
+  const latest = React.useRef({ draft, committed, onCommit });
+  latest.current = { draft, committed, onCommit };
+
+  const commit = () => {
+    const value = latest.current.draft.trim();
+    if (!value) {
+      setDraft(latest.current.committed);
+      return;
+    }
+    if (value !== latest.current.committed) latest.current.onCommit(value);
+  };
+
+  React.useEffect(
+    () => () => {
+      const {
+        draft: pending,
+        committed: saved,
+        onCommit: save,
+      } = latest.current;
+      const value = pending.trim();
+      if (value && value !== saved) save(value);
+    },
+    [],
+  );
+
+  return (
+    <input
+      id="external-text-model"
+      value={draft}
+      maxLength={128}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      className="w-full p-1.5 border border-black rounded bg-white"
+    />
+  );
+};
+
 export const AiTab: React.FC<AiTabProps> = ({
   googleModels,
   googleModelsStatus,
@@ -352,20 +396,16 @@ export const AiTab: React.FC<AiTabProps> = ({
                   ? "Ollama model ID"
                   : "llama-server model ID"}
             </label>
-            <input
-              id="external-text-model"
+            <ExternalModelInput
               key={settings.text_provider}
-              defaultValue={
+              committed={
                 settings.text_provider === "openai"
                   ? settings.openai_text_model
                   : settings.text_provider === "ollama"
                     ? settings.ollama_text_model
                     : settings.llama_server_text_model
               }
-              maxLength={128}
-              onBlur={(event) => {
-                const value = event.target.value.trim();
-                if (!value) return;
+              onCommit={(value) => {
                 serverCheckSequence.current += 1;
                 setServerStatus(null);
                 const field =
@@ -376,7 +416,6 @@ export const AiTab: React.FC<AiTabProps> = ({
                       : "llama_server_text_model";
                 void updateSettingsPatch({ [field]: value });
               }}
-              className="w-full p-1.5 border border-black rounded bg-white"
             />
             {settings.text_provider !== "openai" && (
               <>
@@ -452,6 +491,12 @@ export const AiTab: React.FC<AiTabProps> = ({
                     Save OpenAI Key
                   </button>
                 </div>
+                {hasOpenaiKey ? (
+                  <p className="text-[10px]" role="status">
+                    OpenAI key saved. The model ID is not verified until a
+                    request is made.
+                  </p>
+                ) : null}
                 {hasOpenaiKey ? (
                   <button
                     type="button"
