@@ -1,0 +1,33 @@
+name: Whisper Migration Reference Inventory
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - scripts/audit_whisper_migration_references.py
+      - .github/workflows/whisper-reference-inventory.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+      - name: Inventory all tracked references and proposed owners
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 scripts/audit_whisper_migration_references.py \
+            --output "$RUNNER_TEMP/whisper-reference-inventory.json"
+      - name: Upload inventory (not acceptance evidence)
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-reference-inventory-${{ github.sha }}
+          path: ${{ runner.temp }}/whisper-reference-inventory.json
+          if-no-files-found: error
