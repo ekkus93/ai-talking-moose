@@ -48,7 +48,9 @@ __pycache__/
 *.gguf
 *.GGUF
 
-# Source-built whisper.cpp native runtime (Linux).
+# Source-built whisper.cpp native runtime (Linux and target-isolated macOS).
+# The two Mac CMake trees contain compiled binaries and must never enter Git.
 build/whisper/
+build/whisper-*/
 
 
