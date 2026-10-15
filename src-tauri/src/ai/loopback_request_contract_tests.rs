@@ -118,3 +118,85 @@ async fn ollama_untagged_generation_accepts_latest_identity() {
     assert_eq!(answer.text, "alias works");
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn loopback_generation_never_sends_other_provider_credentials_or_retries_on_quota() {
+    use super::types::ProviderErrorKind;
+    use crate::secrets::{MemorySecretBackend, SecretStore};
+    use std::sync::Arc;
+
+    // Both cloud credentials may be configured while a loopback model is selected.
+    // Neither is permitted to become a header or body field on the local request.
+    let secrets = SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+    secrets.set_google_api_key("google-isolated-test-key".into()).unwrap();
+    secrets.set_openai_api_key("openai-isolated-test-key".into()).unwrap();
+
+    for (kind, path) in [
+        (LoopbackTextServer::Ollama, "/api/chat"),
+        (LoopbackTextServer::LlamaServer, "/v1/chat/completions"),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut received = Vec::new();
+            let mut chunk = [0u8; 4096];
+            let header_end = loop {
+                let read = socket.read(&mut chunk).await.unwrap();
+                assert!(read > 0, "request ended before headers");
+                received.extend_from_slice(&chunk[..read]);
+                if let Some(end) = received.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                    break end;
+                }
+            };
+            let headers = String::from_utf8_lossy(&received[..header_end]);
+            assert!(headers.starts_with(&format!("POST {path} HTTP/1.1")));
+            assert!(!headers.to_ascii_lowercase().contains("authorization:"));
+            let body_len: usize = headers
+                .lines()
+                .find(|line| line.to_ascii_lowercase().starts_with("content-length:"))
+                .and_then(|line| line.split_once(':'))
+                .and_then(|(_, len)| len.trim().parse().ok())
+                .unwrap();
+            while received.len() < header_end + 4 + body_len {
+                let read = socket.read(&mut chunk).await.unwrap();
+                assert!(read > 0, "request ended before complete JSON body");
+                received.extend_from_slice(&chunk[..read]);
+            }
+            let sent = String::from_utf8_lossy(&received[..header_end + 4 + body_len]);
+            assert!(!sent.contains("google-isolated-test-key"));
+            assert!(!sent.contains("openai-isolated-test-key"));
+            assert!(sent.contains("private selected-provider prompt"));
+
+            // The adapter must classify the quota response without disclosing
+            // the raw upstream body or retrying against this or another endpoint.
+            let payload = r#"{"error":"private selected-provider prompt openai-isolated-test-key"}"#;
+            let reply = format!(
+                "HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+                payload.len()
+            );
+            socket.write_all(reply.as_bytes()).await.unwrap();
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(120), listener.accept())
+                    .await
+                    .is_err(),
+                "generation attempted a second request after a quota failure"
+            );
+        });
+        let model = LoopbackTextModel::new(kind, base_url, "selected-model".into());
+        let error = model
+            .generate(TextRequest {
+                prompt: "private selected-provider prompt".into(),
+                system_instruction: Some("private instruction".into()),
+                temperature: None,
+                max_tokens: Some(24),
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Quota);
+        assert!(!error.message.contains("private selected-provider prompt"));
+        assert!(!error.message.contains("openai-isolated-test-key"));
+        assert!(!error.message.contains("google-isolated-test-key"));
+        server.await.unwrap();
+    }
+}
