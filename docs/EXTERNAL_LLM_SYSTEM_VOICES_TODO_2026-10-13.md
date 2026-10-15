@@ -201,6 +201,12 @@ These are focused ELSV-400 safety/routing regressions only. The complete provide
 
 Commit `cfced4d1a67d8e62527b4a5aeb8d4f342481b641` rejects a Responses payload with multiple distinct assistant message items instead of silently concatenating them into one speech bubble. The negative parser regression and existing Rust checks passed at the exact commit in CI run `38690938204` (Rust quality, Rust tests, and generated backend contract). This is focused ELSV-200 evidence only; credential/transport/platform and complete release acceptance remain outstanding.
 
+### System voice identifier spoofing guard — 2026-10-15
+
+Direct-to-`master` commit `77ca59f4c2bc42764e5a18e6858cdc9e7ee10cd2` extends installed System voice ID normalization and saved-voice resolution to reject invisible zero-width separators and BOM characters in addition to existing bidirectional controls. Negative tests cover invisible IDs in the OS catalog and saved selection. Its first CI run `38697384843` failed only Rust formatting; commit `9108adbb305e2868e623db6faecc6bafa391e870` applied the exact rustfmt correction. **Exact-head CI `38698370612` passed** Rust quality/Clippy, Rust tests, and generated backend-contract verification.
+
+This is ELSV-500 platform-neutral identifier safety evidence, not runtime macOS voice enumeration, AVSpeechSynthesizer buffer synthesis, audible playback, or physical Mac audition. Keep ELSV-500/900 unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
