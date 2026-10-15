@@ -6,6 +6,14 @@ use std::collections::HashSet;
 const MAX_VOICE_NAME_BYTES: usize = 256;
 const MAX_VOICE_STYLE_BYTES: usize = 128;
 
+// Third-party OS voices may supply display metadata. Reject directional
+// overrides and isolates that can spoof the visible identity of a voice.
+fn has_bidi_formatting(value: &str) -> bool {
+    value.chars().any(|ch| {
+        matches!(ch, '\u{200e}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+    })
+}
+
 pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoiceDescriptor> {
     let mut seen = HashSet::new();
     voices
@@ -16,11 +24,15 @@ pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoi
                 && voice.id.len() <= 128
                 && voice.id.trim() == voice.id
                 && !voice.id.chars().any(char::is_control)
+                && !has_bidi_formatting(&voice.id)
                 && !voice.display_name.trim().is_empty()
                 && voice.display_name.len() <= MAX_VOICE_NAME_BYTES
                 && !voice.display_name.chars().any(char::is_control)
+                && !has_bidi_formatting(&voice.display_name)
                 && voice.style.as_ref().is_none_or(|style| {
-                    style.len() <= MAX_VOICE_STYLE_BYTES && !style.chars().any(char::is_control)
+                    style.len() <= MAX_VOICE_STYLE_BYTES
+                        && !style.chars().any(char::is_control)
+                        && !has_bidi_formatting(style)
                 })
                 && seen.insert(voice.id.clone())
         })
@@ -98,5 +110,22 @@ mod tests {
             accepted.clone(),
         ];
         assert_eq!(normalize_installed_voices(voices), vec![accepted]);
+    }
+
+    #[test]
+    fn directional_controls_cannot_spoof_installed_voice_identity() {
+        let voice = |id: &str, name: &str, style: Option<&str>| TtsVoiceDescriptor {
+            id: id.into(),
+            display_name: name.into(),
+            style: style.map(str::to_string),
+        };
+        let valid = voice("com.apple.voice.safe", "Readable", Some("en-US"));
+        let voices = vec![
+            voice("com.apple.voice.\u{202e}spoof", "Bad", None),
+            voice("com.apple.voice.bad", "Name \u{2066}spoof\u{2069}", None),
+            voice("com.apple.voice.bad2", "Bad", Some("en-\u{200f}US")),
+            valid.clone(),
+        ];
+        assert_eq!(normalize_installed_voices(voices), vec![valid]);
     }
 }
