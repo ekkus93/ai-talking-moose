@@ -42,3 +42,29 @@ fn invisible_saved_system_voice_identifier_is_not_silently_substituted() {
     assert_eq!(error.kind, ProviderErrorKind::Model);
     assert!(!error.retryable);
 }
+
+#[test]
+fn malformed_os_voice_metadata_cannot_make_a_saved_voice_appear_available() {
+    let voice = |id: &str, name: &str| TtsVoiceDescriptor {
+        id: id.into(),
+        display_name: name.into(),
+        style: Some("en-US".into()),
+    };
+    let saved_id = "com.apple.voice.selected";
+    let request = TtsRequest {
+        text: "Speak this sentence.".into(),
+        voice_name: Some(saved_id.into()),
+        speaking_rate: None,
+        pitch: None,
+    };
+    let catalog = vec![
+        voice(saved_id, "Spoofed\\u{200b} Name"),
+        voice("com.apple.voice.other", "Valid Other Voice"),
+    ];
+    let error = validate_system_tts_request(&request, &catalog).unwrap_err();
+    assert_eq!(error.kind, ProviderErrorKind::Model);
+    assert!(!error.retryable);
+    let mut recovered = catalog;
+    recovered.push(voice(saved_id, "Selected Voice"));
+    assert!(validate_system_tts_request(&request, &recovered).is_ok());
+}
