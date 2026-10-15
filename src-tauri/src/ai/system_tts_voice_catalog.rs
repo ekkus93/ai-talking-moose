@@ -37,11 +37,11 @@ pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoi
                 && !voice.display_name.trim().is_empty()
                 && voice.display_name.len() <= MAX_VOICE_NAME_BYTES
                 && !voice.display_name.chars().any(char::is_control)
-                && !has_bidi_formatting(&voice.display_name)
+                && !has_invisible_id_formatting(&voice.display_name)
                 && voice.style.as_ref().is_none_or(|style| {
                     style.len() <= MAX_VOICE_STYLE_BYTES
                         && !style.chars().any(char::is_control)
-                        && !has_bidi_formatting(style)
+                        && !has_invisible_id_formatting(style)
                 })
                 && seen.insert(voice.id.clone())
         })
@@ -135,6 +135,9 @@ mod tests {
             voice("com.apple.voice.\u{2060}spoof", "Bad", None),
             voice("com.apple.voice.bad", "Name \u{2066}spoof\u{2069}", None),
             voice("com.apple.voice.bad2", "Bad", Some("en-\u{200f}US")),
+            voice("com.apple.voice.bad3", "Name \u{200b}spoof", None),
+            voice("com.apple.voice.bad4", "Name \u{2060}spoof", None),
+            voice("com.apple.voice.bad5", "Bad", Some("en-\u{200d}US")),
             valid.clone(),
         ];
         assert_eq!(normalize_installed_voices(voices), vec![valid]);
