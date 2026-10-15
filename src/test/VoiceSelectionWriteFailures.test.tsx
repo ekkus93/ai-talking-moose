@@ -26,7 +26,7 @@ describe("voice selection persistence failures", () => {
     vi.restoreAllMocks();
   });
 
-  it("hides backend details when standalone provider switching fails", async () => {
+  it("sanitizes failed standalone provider switching", async () => {
     const patch = vi.fn().mockRejectedValue(new Error("private-device-path"));
     useMooseStore.setState({ updateSettingsPatch: patch });
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
@@ -49,7 +49,7 @@ describe("voice selection persistence failures", () => {
     );
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
     fireEvent.click(
-      await screen.findByRole("button", { name: /Audition Google Gemini TTS/i }),
+      await screen.findByRole("button", { name: /Audition Google Gemini/i }),
     );
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Google TTS audition failed");
