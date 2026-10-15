@@ -242,7 +242,9 @@ mod tests {
         assert!(!store.redact(message).contains("-extended-openai"));
 
         // Reverse the overlap: the Google credential is now the longer one.
-        store.set_google_api_key("short-key-long-google".into()).unwrap();
+        store
+            .set_google_api_key("short-key-long-google".into())
+            .unwrap();
         store.set_openai_api_key("short-key".into()).unwrap();
         assert_eq!(
             store.redact("short-key-long-google and short-key"),
