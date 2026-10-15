@@ -137,6 +137,46 @@ fn old_provider_settings_migrate_and_preserve_unrecognized_additive_fields() {
 }
 
 #[test]
+fn version_seven_local_text_and_cloud_tts_settings_keep_their_original_owners() {
+    let original = AppSettings {
+        text_provider: TextProvider::Local,
+        tts_provider: TtsProvider::Google,
+        google_tts_voice: "Kore".into(),
+        local_tts_voice: "Leo".into(),
+        ..Default::default()
+    };
+    let mut value = serde_json::to_value(&original).unwrap();
+    let fields = value.as_object_mut().unwrap();
+    fields.insert("settings_version".into(), serde_json::json!(7));
+    for name in [
+        "openai_text_model",
+        "ollama_text_model",
+        "ollama_server_address",
+        "llama_server_text_model",
+        "llama_server_address",
+        "system_tts_voice",
+    ] {
+        fields.remove(name);
+    }
+    let (loaded, migrated) = AppSettings::from_persisted_json(&value.to_string()).unwrap();
+    assert!(migrated);
+    assert_eq!(loaded.settings_version, CURRENT_SETTINGS_VERSION);
+    assert_eq!(loaded.text_provider, TextProvider::Local);
+    assert_eq!(loaded.tts_provider, TtsProvider::Google);
+    assert_eq!(loaded.google_tts_voice, "Kore");
+    assert_eq!(loaded.local_tts_voice, "Leo");
+    assert_eq!(loaded.system_tts_voice, "system_default");
+    assert_eq!(loaded.ollama_server_address, "http://127.0.0.1:11434");
+    assert_eq!(loaded.llama_server_address, "http://127.0.0.1:8080");
+    let (second, migrated_again) =
+        AppSettings::from_persisted_json(&serde_json::to_string(&loaded).unwrap()).unwrap();
+    assert!(!migrated_again);
+    assert_eq!(second.text_provider, TextProvider::Local);
+    assert_eq!(second.tts_provider, TtsProvider::Google);
+    assert_eq!(second.google_tts_voice, "Kore");
+}
+
+#[test]
 fn external_provider_values_round_trip_without_changing_defaults() {
     for provider in [TextProvider::Openai, TextProvider::Ollama, TextProvider::LlamaServer] {
         let original = AppSettings {
