@@ -1,7 +1,7 @@
 name: Whisper macOS Real CPU Acceptance
 
-# Heavy real-weight qualification. Never add this workflow to ordinary push CI:
-# its 487,601,967-byte model is downloaded only after a manual dispatch.
+# Explicit, network-using 488 MB model installation; never part of ordinary CI.
+# Real transcription here is NOT evidence of denied network egress or a live mic.
 on:
   workflow_dispatch:
 
@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  real-mac-cpu:
-    name: Real Whisper Small inference (${{ matrix.arch }})
+  real-cpu:
+    name: Pinned real Whisper Small inference (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -31,120 +31,93 @@ jobs:
       CARGO_INCREMENTAL: "0"
       TALKING_MOOSE_ALLOW_LIVE_API: "0"
     steps:
-      - name: Checkout exact pinned source and submodule
+      - name: Check out pinned Whisper source
         uses: actions/checkout@v7
         with:
           submodules: true
-      - name: Verify platform and source provenance
+      - name: Verify exact source and host architecture
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(uname -m)" = "${{ matrix.arch }}"
           python3 scripts/check_whisper_provenance.py
-          test -s third_party/whisper.cpp/samples/jfk.wav
-      - name: Install Rust stable
+          test -f third_party/whisper.cpp/samples/jfk.wav
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo downloads
+      - name: Cache Rust registry
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.arch }}-whisper-real-${{ hashFiles('src-tauri/Cargo.lock') }}
-      - name: Generate application icons
+          key: mac-whisper-real-${{ matrix.arch }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+      - name: Generate app icons
         run: python3 scripts/generate_app_icons.py
-      - name: Build native-linked real acceptance binary
+      - name: Build real native-linked acceptance binary
+        # Do not require unrelated Moonshine .app frameworks for this CLI.
+        # The shipping app configuration is not changed by this override.
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
         run: |
           cargo build --locked --manifest-path src-tauri/Cargo.toml \
             --features whisper-acceptance --bin whisper_acceptance
-          src-tauri/target/debug/whisper_acceptance probe-native
-      - name: Install, delete, reinstall, and transcribe actual model
+      - name: Install pinned model and transcribe real JFK corpus
+        id: inference
         shell: bash
         run: |
           set -euo pipefail
-          work="$RUNNER_TEMP/talking-moose-whisper-macos-real"
-          mkdir -p "$work/reports"
-          model="$work/models/whisper/whisper-small"
-          reports="$work/reports"
-          bin="$GITHUB_WORKSPACE/src-tauri/target/debug/whisper_acceptance"
-          corpus="$GITHUB_WORKSPACE/third_party/whisper.cpp/samples/jfk.wav"
-          "$bin" install "$model" "$reports/install-initial.json" >"$reports/install-initial.log" 2>&1
-          "$bin" delete "$model" "$reports/delete.json" >"$reports/delete.log" 2>&1
-          "$bin" install "$model" "$reports/install.json" >"$reports/install.log" 2>&1
-          # This checks actual local native transcription but does not claim a
-          # network-denied environment. Mac egress proof is a separate WSP-200 gate.
-          "$bin" transcribe "$model" "$corpus" "$reports/transcribe.json" >"$reports/transcribe.log" 2>&1
-      - name: Verify real-model evidence and record limitations
+          binary="$GITHUB_WORKSPACE/src-tauri/target/debug/whisper_acceptance"
+          root="$RUNNER_TEMP/whisper-macos-real-${{ matrix.arch }}"
+          model="$root/models/whisper/whisper-small"
+          reports="$root/reports"
+          mkdir -p "$reports"
+          test ! -e "$model"
+          file "$binary"
+          lipo -archs "$binary" | grep -Fx "${{ matrix.arch }}"
+          export TALKING_MOOSE_ACCEPTANCE_HOST_CPU="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || sysctl -n hw.model)"
+          "$binary" probe-native
+          "$binary" install "$model" "$reports/install.json"
+          "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json"
+          "$binary" delete "$model" "$reports/delete.json"
+          test ! -e "$model/ggml-small.bin"
+          echo "report_dir=$reports" >> "$GITHUB_OUTPUT"
+      - name: Assert genuine model and meaningful transcript
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import hashlib
+          python3 - "${{ steps.inference.outputs.report_dir }}" "$GITHUB_SHA" "${{ matrix.arch }}" <<'PY'
           import json
-          import os
-          from pathlib import Path
-
-          root = Path(os.environ["RUNNER_TEMP"]) / "talking-moose-whisper-macos-real"
-          reports = root / "reports"
-          install = json.loads((reports / "install.json").read_text())
-          deletion = json.loads((reports / "delete.json").read_text())
-          transcribe = json.loads((reports / "transcribe.json").read_text())
-          model = root / "models/whisper/whisper-small/ggml-small.bin"
-          assert model.is_file()
-          assert model.stat().st_size == 487601967
-          with model.open("rb") as handle:
-              actual_sha = hashlib.file_digest(handle, "sha256").hexdigest()
-          assert actual_sha == "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
-          assert transcribe["status"] == "pass"
-          assert transcribe["runtime"]["whisper_native_linked"] is True
-          assert transcribe["transcript"]["transcription_ok"] is True
-          assert transcribe["transcript"]["num_segments"] >= 1
-          text = transcribe["transcript"]["text"].lower()
-          assert "fellow americans" in text and "your country" in text, text
-          assert transcribe["model_id"] == "whisper-small-ggml"
-          assert transcribe["source_commit"] == "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774"
-          assert transcribe["sha256"] == actual_sha
-          assert transcribe["host_os"] == "macos"
-          assert transcribe["host_arch"] == os.uname().machine
-          assert not transcribe["network_denied_required"]
-          evidence = {
-              "repository_sha": os.environ["GITHUB_SHA"],
-              "github_run_id": os.environ["GITHUB_RUN_ID"],
-              "host_arch": os.uname().machine,
-              "whisper_model_sha256": actual_sha,
-              "native_runtime_linked": True,
-              "real_transcription_passed": True,
-              "network_egress_denial_proven": False,
-              "physical_microphone_tested": False,
-              "model_install": install,
-              "model_delete": deletion,
-              "transcription": transcribe,
-          }
-          (reports / "macos-real-cpu-evidence.json").write_text(
-              json.dumps(evidence, indent=2) + "\n"
-          )
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write(f"## Mac Whisper real CPU — {os.uname().machine}\n\n")
-              summary.write(f"Commit: `{os.environ['GITHUB_SHA']}`  \n")
-              summary.write(f"Model SHA-256: `{actual_sha}`  \n")
-              summary.write(f"Transcript: {transcribe['transcript']['text']}  \n")
-              summary.write("**Limitations:** network-denied proof and physical microphone acceptance are not covered.\n")
+          import pathlib
+          import sys
+          root, sha, arch = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          install = json.loads((root / "install.json").read_text())
+          transcript = json.loads((root / "transcribe.json").read_text())
+          deletion = json.loads((root / "delete.json").read_text())
+          expected_hash = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+          expected_source = "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774"
+          assert install["git_sha"] == transcript["git_sha"] == sha
+          assert install["sha256"] == transcript["sha256"] == expected_hash
+          assert install["source_commit"] == transcript["source_commit"] == expected_source
+          assert install["expected_bytes"] == transcript["expected_bytes"] == 487601967
+          assert install["production_installer_verified"] is True
+          assert transcript["host_arch"] == arch, transcript["host_arch"]
+          assert transcript["runtime"]["whisper_native_linked"] is True
+          assert transcript["status"] == "pass"
+          assert transcript["transcript"]["transcription_ok"] is True
+          words = transcript["transcript"]["text"].lower()
+          assert all(word in words for word in ("ask", "country", "you")), words
+          assert transcript["transcribe_wall_ms"] > 0
+          assert transcript["peak_resident_memory_bytes"] > 0
+          assert transcript["network_denied_required"] is False
+          assert deletion["removed"] is True
+          print("Real pinned-model macOS Whisper transcription verified; egress isolation and physical mic remain unqualified.")
           PY
-      - name: Upload bounded evidence (no model weights)
+      - name: Upload JSON evidence only (never model weights)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-macos-real-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/talking-moose-whisper-macos-real/reports/
-          retention-days: 21
+          name: whisper-macos-real-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ runner.temp }}/whisper-macos-real-${{ matrix.arch }}/reports/*.json
           if-no-files-found: warn
-      - name: Show last bounded log lines after failure
-        if: failure()
-        shell: bash
-        run: |
-          shopt -s nullglob
-          for log in "$RUNNER_TEMP"/talking-moose-whisper-macos-real/reports/*.log; do
-            echo "--- ${log##*/} ---"
-            tail -n 60 "$log"
-          done
+          retention-days: 30
