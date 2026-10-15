@@ -149,6 +149,10 @@ Commit `d6c88b10a3a6d23166f1c7e4b5825c2b3c1c141f` changed `SecretStore::redact` 
 
 Native macOS `AVSpeechSynthesizer` integration, runtime catalog, cancellation/playback, physical Mac audition, full provider routing matrix, and canonical `check:all` are still outstanding. Keep ELSV-200, ELSV-500, ELSV-600, and ELSV-900 unchecked until their complete named acceptance evidence exists.
 
+### Legacy function-call/refusal isolation — 2026-10-14
+
+Direct-to-`master` commit `30f97470c9668e8062aca538529b510b91d89f8b` rejects legacy `function_call` metadata and refusal payloads in both Ollama and llama-server assistant responses, even when the same response includes plausible text. The parser continues to accept absent/null metadata and empty modern `tool_calls`. Its first exact-head CI `38668804961` found only a rustfmt layout failure; commit `e401f05c11119e6397e70bbcd54e977d0d71d261` corrected that formatting. **Exact-head CI `38669056161` passed** Rust quality/Clippy, Rust tests, and generated backend-contract verification. This is focused ELSV-300 response isolation evidence, not completion of the full server routing, cancellation, or platform matrix. ELSV-300/900 remain unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
