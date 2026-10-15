@@ -304,7 +304,7 @@ Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbb
 ## ELSV-900 — Verification and closeout
 
 - [ ] Run focused provider, routing, secret, settings migration, TTS, and frontend tests without live services or downloaded weights.
-- [ ] Run `CARGO_BUILD_JOBS=2 npm run check:all`, `npm run check:generated-trees`, and `python3 scripts/check_local_llm_packaging_policy.py`; fix any drift without weakening a gate.
+- [x] Run `CARGO_BUILD_JOBS=2 npm run check:all`, `npm run check:generated-trees`, and `python3 scripts/check_local_llm_packaging_policy.py`; fix any drift without weakening a gate. (2026-10-15, Linux x86_64, local at `99052efd`: all three exit 0; packaging policy printed `local-llm-packaging-policy-ok`. Linux only; macOS not exercised.)
 - [ ] Run supported macOS build/smoke checks and a physical Mac system-voice audition; record exact commands, results, limitations, and platform.
 - [ ] Review generated contract, documentation, Git diff, and status; verify no API keys, GGUF files, generated trees, or audio artifacts entered the commit.
 - [ ] Mark this TODO complete only when every acceptance criterion has evidence; record any intentionally deferred platform work separately.
