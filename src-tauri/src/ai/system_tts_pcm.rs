@@ -1,4 +1,4 @@
-//! Bounded, format-honest PCM assembly for the future macOS AVSpeechSynthesizer
+//! Bounded, format-honest PCM assembly for the macOS AVSpeechSynthesizer
 //! buffer callback. This module never starts an OS voice or plays audio itself.
 use crate::ai::types::{AudioStreamData, ProviderError, ProviderErrorKind};
 

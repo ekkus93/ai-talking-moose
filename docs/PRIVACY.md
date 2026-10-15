@@ -31,7 +31,7 @@ The platform's local ASR mode is the default for a new profile. Models are downl
 
 ## 3. Text-generation privacy
 
-Typed replies and ambient remarks use an explicit text-provider selection. The OpenAI, Ollama, and llama-server adapters are implemented; macOS System Voices are not yet available, and full platform acceptance is still being recorded. A failed request never silently switches to another text provider.
+Typed replies and ambient remarks use an explicit text-provider selection. OpenAI, Ollama, and llama-server adapters are implemented. A failed request never silently switches to another text provider.
 
 | Text provider | Prompt/derived text | Model execution | Network during generation |
 | --- | --- | --- | --- |
@@ -68,13 +68,13 @@ Idle Banter can be disabled independently in Behavior settings and is also disab
 
 ## 4. Standalone speech-output privacy
 
-Standalone TTS for typed replies, ambient remarks, canned reactions, and auditions is separate from Gemini Live voice conversations. macOS System Voices are planned but not yet implemented or qualified; selecting System currently fails closed rather than silently playing another voice.
+Standalone TTS for typed replies, ambient remarks, canned reactions, and auditions is separate from Gemini Live voice conversations. On macOS, System Voices use AVSpeechSynthesizer with voices installed in the operating system. Human listening and in-app playback/bubble-duration acceptance remain outstanding; other platforms fail closed without a subprocess or provider fallback.
 
 | Standalone speech provider | Text sent for synthesis | Model execution | Network during synthesis | Fallback behavior |
 | --- | --- | --- | --- | --- |
 | Local KittenTTS | Remains on the computer for synthesis | Pinned KittenTTS artifacts through the app-owned CPU ONNX Runtime path | None required after installation | Fails explicitly; does not call Google TTS |
 | Google Gemini TTS | Sent to Google as required for the selected Gemini TTS request | Google service | HTTPS request to Google | Fails explicitly; does not call Local TTS |
-| macOS System Voices (not yet implemented) | Intended to remain on the Mac | Planned AVSpeechSynthesizer buffer path | No generation network request intended | Currently unavailable; no subprocess or other-provider fallback |
+| macOS System Voices | Remains on the Mac | macOS AVSpeechSynthesizer buffer synthesis | No generation network request | Fails explicitly on unsupported platforms; no subprocess or other-provider fallback |
 
 Local KittenTTS has a separate installation network phase. **Download & Verify** fetches the pinned KittenTTS model/runtime artifacts, writes to staging, verifies expected byte counts and SHA-256, and promotes only verified assets. After installation, Local TTS synthesis does not require network I/O; the real KittenTTS CPU acceptance workflow proves synthesis with network denied.
 

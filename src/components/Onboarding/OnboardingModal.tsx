@@ -293,6 +293,11 @@ export const OnboardingModal: React.FC = () => {
               Google TTS when those cloud options are selected.
             </p>
             <p className="text-gray-900 leading-snug text-[11px]">
+              On macOS, Voice &amp; Audio can use voices already installed in
+              the system through AVSpeechSynthesizer. Speech synthesis stays on
+              the Mac; other platforms do not provide a System voice fallback.
+            </p>
+            <p className="text-gray-900 leading-snug text-[11px]">
               AI &amp; Models can also use OpenAI text generation (cloud, with
               its own OpenAI API key) or an Ollama or llama-server you already
               run on this computer (loopback only; the app never starts a server

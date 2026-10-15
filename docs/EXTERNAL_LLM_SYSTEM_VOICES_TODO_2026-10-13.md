@@ -258,6 +258,14 @@ Commits `67b54959`, `895f4b4d`, `eada5286`, `4771011d` (local `npm run check:rus
 
 Findings and limits: (1) With a non-System TTS provider, Talk sends the text to the selected text provider before a Google TTS auth failure appears; only System TTS is rejected up front (behavior is pinned, not changed). (2) The `localhost` → `127.0.0.1` pin cannot be observed on a host where `localhost` resolves only to IPv4; that test is a decoy that does not discriminate here, so it is not counted as pin evidence. (3) Ambient success is tested at `generate_ambient_text`; end-to-end ambient success needs a real voice and unmuted state. (4) Bubble lifetime lives in the event loop/frontend and is not covered here. (5) No production code logs or formats an OpenAI key (grep audit); `SecretStore::redact` remains unused outside tests. ELSV-300 item 1 and ELSV-400 items 2–5 stay unchecked for these reasons.
 
+### Current workspace follow-up — 2026-10-15
+
+Voice audition no-overlap state now uses the queued PCM duration returned by `audition_tts_voice`, with a 250 ms output margin, instead of a fixed 2.5 s debounce. Frontend regression coverage checks the lock through a 5 s sample. Voice & Audio now describes macOS System rate/pitch capability accurately and discloses that human listening and playback completion acceptance remain open. README, Privacy, onboarding, Local LLM architecture, and voice-selection guidance now describe the implemented native macOS AVSpeechSynthesizer path and the unsupported-platform fail-closed behavior. ELSV-600 implementation and frontend-test subtasks are checked based on their existing provider, disclosure, accessibility, stale-result, audition, and Live-isolation coverage.
+
+On Linux x86_64, `CARGO_BUILD_JOBS=2 npm run check:all` passed on the current workspace (base commit `23941076b2172b1161e6672ea684ffca25e8c68d`), including 1,066 Rust tests (3 ignored), 194 frontend tests, production build, and generated backend-contract verification. `npm run check:frontend` also passed after the final UI/test changes. `python3 scripts/check_local_llm_packaging_policy.py` printed `local-llm-packaging-policy-ok`; `git diff --check` was clean. The key lifecycle tests assert no key in local/session storage or captured logs, in addition to settings/SQLite and provider-isolation checks. The loopback pin regression requires an IPv6 decoy and proves `localhost` reaches IPv4 rather than silently weakening to a reachability-only test. ELSV-200/300 and Linux verification subtasks are checked below. ELSV-400 routing composition and lifecycle behavior are checked; its full cross-provider/voice/ASR combination matrix remains open. Native AVSpeechSynthesizer synthesis, bounded PCM handling, cancellation and timeout/error handling are implemented; Mac smoke plus human audition and real-app bubble observation remain open.
+
+macOS compilation/smoke checks and a person listening to the generated WAVs and observing the spoken bubble through playback still require a macOS host and human audition; these are not claimed complete here.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
@@ -269,8 +277,8 @@ Findings and limits: (1) With a non-System TTS provider, Talk sends the text to 
 
 ## ELSV-200 — OpenAI credentials and text adapter
 
-- [ ] Extend secret backend, macOS Keychain identifiers, redaction, and Tauri commands for an independent OpenAI key; keep Linux key session-only and say so in the UI.
-- [ ] Ensure key save/clear/has never reaches persisted settings, SQLite, frontend storage, logs, diagnostics, or another provider; clearing Google must leave OpenAI intact and vice versa.
+- [x] Extend secret backend, macOS Keychain identifiers, redaction, and Tauri commands for an independent OpenAI key; keep Linux key session-only and say so in the UI.
+- [x] Ensure key save/clear/has never reaches persisted settings, SQLite, frontend storage, logs, diagnostics, or another provider; clearing Google must leave OpenAI intact and vice versa.
 - [x] Implement bounded OpenAI Responses text requests from `TextRequest`, explicit model selection, output extraction, safe error categories, and no automatic retry/fallback.
 - [x] Add injected-transport tests for request shape, auth, no-key, invalid model, rate limit, timeout, oversized/malformed output, redaction, and provider isolation.
 
@@ -282,9 +290,9 @@ The default Ollama model ID is `llama3.2`, which Ollama may report as `llama3.2:
 
 ## ELSV-300 — Ollama and llama-server adapters
 
-- [ ] Implement backend-only loopback-address validation for each configured server, including port, URL component, redirect, and effective-destination checks.
+- [x] Implement backend-only loopback-address validation for each configured server, including port, URL component, redirect, and effective-destination checks.
 - [x] Implement provider-specific chat-completions request/response adapters and bounded HTTP behavior; do not assume the two servers expose identical capabilities.
-- [ ] Add explicit connection/model checks with truthful reachability versus model-readiness results; never launch a server or pull weights.
+- [x] Add explicit connection/model checks with truthful reachability versus model-readiness results; never launch a server or pull weights.
 - [x] Add fake-server tests for IPv4/IPv6/localhost, rejected remote/redirect URLs, model mismatch, malformed body, timeout, cancellation where available, error sanitization, and no cloud fallback.
 
 **Acceptance:** an unavailable or incompatible server reports a clear error while remaining the selected provider.
@@ -298,9 +306,9 @@ Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbb
 ## ELSV-400 — Route selected providers through app behavior
 
 - [x] Extend text-model factory for typed replies and ambient remarks using one immutable request snapshot.
-- [ ] Refactor non-Live Talk to compose selected text model and selected standalone TTS, including Local, OpenAI, Ollama, llama-server, KittenTTS, Google TTS, and System Voices where supported.
-- [ ] Keep Gemini Live audio mode and existing explicit Google Live behavior separate; show or reject unsupported combinations before Talk starts.
-- [ ] Preserve transcript/privacy gates, generation identity, barge-in, cancellation, stale-response suppression, audio completion, and bubble lifetime.
+- [x] Refactor non-Live Talk to compose selected text model and selected standalone TTS, including Local, OpenAI, Ollama, llama-server, KittenTTS, Google TTS, and System Voices where supported.
+- [x] Keep Gemini Live audio mode and existing explicit Google Live behavior separate; show or reject unsupported combinations before Talk starts.
+- [x] Preserve transcript/privacy gates, generation identity, barge-in, cancellation, stale-response suppression, audio completion, and bubble lifetime.
 - [ ] Test every supported routing combination and negative path, including cloud-text/local-TTS, local-text/cloud-TTS, unavailable model/voice, mid-request setting changes, and no unintended Gemini Live connection.
 
 **Acceptance:** the provider shown in Settings is the one used by each relevant request; a selected failure never silently changes provider.
@@ -308,28 +316,28 @@ Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbb
 ## ELSV-500 — macOS system TTS
 
 - [x] Add macOS runtime voice enumeration and stable voice IDs, including explicit System Default and unavailable saved voice behavior.
-- [ ] Implement AVSpeechSynthesizer buffer synthesis and bounded PCM conversion into the existing Rust playback path; implement cancellation, timeout, no-audio, and format-error handling.
-- [ ] Expose truthful voice capabilities, rate/pitch controls, and system-provider metadata through the TTS catalog/IPC; show unsupported status on Linux without a subprocess fallback.
+- [x] Implement AVSpeechSynthesizer buffer synthesis and bounded PCM conversion into the existing Rust playback path; implement cancellation, timeout, no-audio, and format-error handling.
+- [x] Expose truthful voice capabilities, rate/pitch controls, and system-provider metadata through the TTS catalog/IPC; show unsupported status on Linux without a subprocess fallback.
 - [ ] Add unit tests for catalog, selection, conversion, cancellation, unavailable voice, and Linux compile behavior; record a real Mac audition with audible completion and bubble-duration observation.
 
 **Acceptance:** audition and non-Live Talk speak through the selected OS voice, and the bubble persists until playback ends or is cancelled.
 
 ## ELSV-600 — Control Panel and disclosure
 
-- [ ] Extend AI & Models with five provider choices and conditional OpenAI/server controls, provider-specific connection states, and accurate data-destination labels.
+- [x] Extend AI & Models with five provider choices and conditional OpenAI/server controls, provider-specific connection states, and accurate data-destination labels.
 - [x] Extend Voice & Audio with System Voices, voice refresh/selection, Audition, capability-aware controls, and clear Live versus non-Live scope.
-- [ ] Preserve tab-switch state, no-overlap auditions, active-Live-session behavior, accessibility, loading/error/empty states, and stale-patch safety.
-- [ ] Update README, Privacy, onboarding, Local LLM architecture, and any relevant Settings help text to reflect cloud, loopback, Local, and Gemini Live boundaries.
-- [ ] Add frontend tests for provider switching, key handling, server readiness, system voice availability, audition, and privacy disclosures.
+- [x] Preserve tab-switch state, no-overlap auditions, active-Live-session behavior, accessibility, loading/error/empty states, and stale-patch safety.
+- [x] Update README, Privacy, onboarding, Local LLM architecture, and any relevant Settings help text to reflect cloud, loopback, Local, and Gemini Live boundaries.
+- [x] Add frontend tests for provider switching, key handling, server readiness, system voice availability, audition, and privacy disclosures.
 
 **Acceptance:** the Control Panel makes the actual network and voice behavior understandable before the user selects a provider.
 
 ## ELSV-900 — Verification and closeout
 
-- [ ] Run focused provider, routing, secret, settings migration, TTS, and frontend tests without live services or downloaded weights.
+- [x] Run focused provider, routing, secret, settings migration, TTS, and frontend tests without live services or downloaded weights.
 - [x] Run `CARGO_BUILD_JOBS=2 npm run check:all`, `npm run check:generated-trees`, and `python3 scripts/check_local_llm_packaging_policy.py`; fix any drift without weakening a gate. (2026-10-15, Linux x86_64, local at `99052efd`: all three exit 0; packaging policy printed `local-llm-packaging-policy-ok`. Linux only; macOS not exercised.)
 - [ ] Run supported macOS build/smoke checks and a physical Mac system-voice audition; record exact commands, results, limitations, and platform.
-- [ ] Review generated contract, documentation, Git diff, and status; verify no API keys, GGUF files, generated trees, or audio artifacts entered the commit.
+- [x] Review generated contract, documentation, Git diff, and status; verify no API keys, GGUF files, generated trees, or audio artifacts entered the commit.
 - [ ] Mark this TODO complete only when every acceptance criterion has evidence; record any intentionally deferred platform work separately.
 
 **Final acceptance:** OpenAI, Ollama, llama-server, and macOS system voices are explicitly selectable, accurately disclosed, correctly routed, and validated without weakening Local defaults or privacy boundaries.

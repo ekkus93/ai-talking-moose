@@ -56,6 +56,9 @@ describe("OpenAI credential isolation in Settings", () => {
     expect(JSON.stringify(useMooseStore.getState().settings)).not.toContain(
       "test-openai-secret",
     );
+    expect(
+      `${JSON.stringify(window.localStorage)}${JSON.stringify(window.sessionStorage)}`,
+    ).not.toContain("test-openai-secret");
   });
 
   it("removes only the OpenAI credential without clearing Google's key status", async () => {

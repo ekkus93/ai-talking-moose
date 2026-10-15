@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VoiceTab } from "../components/Settings/VoiceTab";
 import {
@@ -79,7 +85,7 @@ describe("System Voices on macOS", () => {
     vi.spyOn(tauriBridge, "getTtsCatalog").mockResolvedValue(macCatalog());
     const audition = vi
       .spyOn(tauriBridge, "auditionTtsVoice")
-      .mockResolvedValue("ok");
+      .mockResolvedValue(1000);
     render(<VoiceTab isAuditioning={false} setIsAuditioning={vi.fn()} />);
     const select = await screen.findByLabelText("macOS System Voice");
     fireEvent.change(select, {
@@ -90,10 +96,26 @@ describe("System Voices on macOS", () => {
         system_tts_voice: "com.apple.voice.compact.en-US.Samantha",
       }),
     );
+    await act(async () =>
+      useMooseStore.setState({
+        settings: {
+          ...frontendDefaultSettings(),
+          tts_provider: "system",
+          system_tts_voice: "com.apple.voice.compact.en-US.Samantha",
+        },
+      }),
+    );
+    expect(screen.getByText(/synthesized on this Mac/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/do not expose pitch control/i),
+    ).toBeInTheDocument();
     const button = await screen.findByRole("button", { name: /Audition/i });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(audition).toHaveBeenCalledWith("system", "system_default");
+    expect(audition).toHaveBeenCalledWith(
+      "system",
+      "com.apple.voice.compact.en-US.Samantha",
+    );
   });
 
   it("refreshes the installed voice list on demand", async () => {

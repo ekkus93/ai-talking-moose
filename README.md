@@ -14,8 +14,7 @@
 - **Local or cloud speech recognition:** Moonshine Tiny/Small and Whisper Small provide local ASR; partial transcripts stay local and finalized text goes to the selected conversation provider. Local is the default; Gemini Live audio is an explicit cloud mode.
 - **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
 - **Local-first AI:** New profiles use Local text, Local TTS, and platform-local ASR by default. SmolLM2 360M and KittenTTS are selected but never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains optional.
-- **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS or Local KittenTTS. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification.
-- **System voice status:** macOS System Voices are planned but not yet usable: OS voice enumeration, PCM synthesis, and physical audition remain unimplemented. The System choice is disabled rather than silently using another voice. Linux has no System TTS fallback.
+- **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS, Local KittenTTS, or macOS System Voices. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification. System Voices use macOS AVSpeechSynthesizer and installed voices; Linux has no System TTS fallback.
 - **Ambient reactions:** When explicitly enabled, the Moose can react to permitted local computer events.
 - **Retro visuals:** Low-resolution integer-scaled pixel art with amplitude-driven mouth animation.
 - **Local control and privacy:** Settings, optional memories, and optional transcripts are stored locally. Privacy-sensitive features default conservatively. Local ASR, Local text, and Local TTS do not silently fall back to cloud providers.
@@ -29,7 +28,7 @@
 - **Speech recognition:** Local Moonshine streaming ASR and local Whisper Small batch ASR, plus optional Gemini Live cloud audio
 - **Text generation:** Provider-neutral `TextModel` routing for built-in Local, Google Gemini, OpenAI Responses, Ollama, and llama-server.
 - **Voice conversation:** Gemini Live is a separate cloud audio path; non-Live Talk with local ASR composes the selected text and standalone TTS providers, including Google text without a Gemini Live audio connection.
-- **Standalone speech output:** Provider-neutral Google Gemini TTS or Local KittenTTS routing for typed replies, ambient remarks, canned reactions, and auditions. Local KittenTTS uses the Rust-owned CPU runtime and adapts 24 kHz PCM into the existing audio playback/mouth-animation path.
+- **Standalone speech output:** Provider-neutral Google Gemini TTS, Local KittenTTS, and macOS System Voices routing for typed replies, ambient remarks, canned reactions, and auditions. Local KittenTTS uses the Rust-owned CPU runtime and adapts 24 kHz PCM into the existing audio playback/mouth-animation path; macOS System Voices capture AVSpeechSynthesizer PCM into that playback path.
 - **Persistence:** SQLite for local application data; independent Google and OpenAI keys in macOS Keychain or session-only Linux memory.
 
 Google model IDs and capabilities are centralized in the Rust Google configuration layer rather than duplicated throughout the frontend. Local GGUF identities, revisions, hashes, sizes, licenses, template hints, and runtime bounds are centralized in `src-tauri/src/ai/local/catalog.rs`. Local KittenTTS model/runtime artifact identities, hashes, sizes, licenses, platform manifests, and CPU-thread policy are centralized under `src-tauri/src/ai/local_tts/`. See `docs/LOCAL_LLM_ARCHITECTURE.md`, `docs/LOCAL_LLM_CATALOG.md`, `docs/VOICE_SELECTION.md`, and `docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md`.
@@ -180,8 +179,9 @@ Local ASR sends finalized transcript text to the selected text provider,
 not microphone audio. Gemini Live audio is a separate Google cloud mode.
 Cloud providers receive request text; independently managed loopback
 servers may retain or log their requests. Provider errors never authorize
-fallback to another service. macOS System TTS is still disabled pending
-native integration and physical audition.
+fallback to another service. macOS System Voices use the native
+AVSpeechSynthesizer adapter and installed OS voices; human listening and
+in-app bubble-duration acceptance remain tracked separately.
 
 See `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md` for the remaining
 qualification work.

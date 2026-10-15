@@ -26,6 +26,10 @@ pub(crate) struct StandaloneSpeechPlayback {
 }
 
 impl StandaloneSpeechPlayback {
+    pub(crate) fn duration_millis(&self) -> u64 {
+        self.duration.as_millis().min(u64::MAX as u128) as u64
+    }
+
     pub(crate) async fn wait_without_cancellation(&self, duration: Duration) -> bool {
         tokio::select! {
             () = tokio::time::sleep(duration) => !self.cancellation.is_cancelled(),

@@ -325,9 +325,9 @@ export const nativeTauriBridge = {
   async auditionTtsVoice(
     provider: TtsProvider,
     voiceName: string,
-  ): Promise<string> {
+  ): Promise<number> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<string>("audition_tts_voice", { provider, voiceName });
+    return invoke<number>("audition_tts_voice", { provider, voiceName });
   },
 
   async cancelStandaloneSpeech(): Promise<void> {

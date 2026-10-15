@@ -49,3 +49,19 @@ fn clearing_one_provider_key_leaves_the_other_and_settings_stay_key_free() {
     clear_openai_like_command(&state);
     assert_eq!(state.secrets.get_google_api_key().as_deref(), Some(GOOGLE));
 }
+
+#[test]
+fn credential_mutations_and_presence_checks_never_log_key_values() {
+    let state = AppState::new_for_tests().unwrap();
+    let (_, logs) = crate::test_support::capture_logs(|| {
+        state.secrets.set_google_api_key(GOOGLE.into()).unwrap();
+        state.secrets.set_openai_api_key(OPENAI.into()).unwrap();
+        assert!(state.secrets.has_google_api_key());
+        assert!(state.secrets.has_openai_api_key());
+        state.secrets.clear().unwrap();
+        state.secrets.clear_openai_api_key().unwrap();
+    });
+
+    assert!(!logs.contains(GOOGLE));
+    assert!(!logs.contains(OPENAI));
+}

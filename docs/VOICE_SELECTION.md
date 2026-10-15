@@ -15,10 +15,10 @@ Talking Moose V1 now has three separate voice ownership domains. Do not collapse
 | --- | --- | --- | --- |
 | Google standalone TTS | `google_tts_voice` | Google Gemini TTS REST request | Used for typed replies, ambient remarks, canned reactions, and voice auditions when `tts_provider = google`. |
 | Local Talk and standalone TTS | `local_tts_voice` | Local KittenTTS runtime | Used for local-first Talk replies and standalone speech when `tts_provider = local`. Requires installed and verified Local TTS assets. |
-| System Voices (pending) | `system_tts_voice` | macOS implementation not yet available | Disabled until qualified; no fallback. |
+| System Voices | `system_tts_voice` | Installed macOS AVSpeechSynthesizer voices | Available on macOS; unsupported platforms fail closed with no fallback. |
 | Gemini Live conversation voice | `live_voice` | Google Gemini Live WebSocket session | Used when Google text generation or Gemini Live audio ASR is selected. Changing it is conversation-restart-sensitive and independent of standalone TTS voice settings. |
 
-The provider selector chooses standalone TTS. With local ASR and non-Google text, non-Live Talk uses the selected standalone TTS provider; selecting Google TTS sends generated speech text to Google even when text generation is local. System Voices remains unavailable until macOS implementation and audition are qualified. Gemini Live is a separate cloud audio conversation path.
+The provider selector chooses standalone TTS. With local ASR and non-Google text, non-Live Talk uses the selected standalone TTS provider; selecting Google TTS sends generated speech text to Google even when text generation is local. macOS System Voices use OS-installed voices through AVSpeechSynthesizer and synthesize locally. Gemini Live is a separate cloud audio conversation path.
 
 ## Google standalone default
 

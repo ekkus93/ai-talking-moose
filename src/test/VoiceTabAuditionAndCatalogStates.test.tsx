@@ -99,8 +99,8 @@ describe("Voice tab catalog states and audition", () => {
     );
     let finish: () => void = () => {};
     const audition = vi.spyOn(tauriBridge, "auditionTtsVoice").mockReturnValue(
-      new Promise<string>((resolve) => {
-        finish = () => resolve("ok");
+      new Promise<number>((resolve) => {
+        finish = () => resolve(5000);
       }),
     );
     render(<Harness />);
@@ -120,10 +120,14 @@ describe("Voice tab catalog states and audition", () => {
 
     vi.useFakeTimers();
     await act(async () => finish());
-    // Still locked through the post-playback debounce window.
+    // Still locked for the reported PCM duration and a short output-device margin.
     expect(button).toBeDisabled();
     await act(async () => {
-      vi.advanceTimersByTime(2500);
+      vi.advanceTimersByTime(5249);
+    });
+    expect(button).toBeDisabled();
+    await act(async () => {
+      vi.advanceTimersByTime(1);
     });
     expect(button).not.toBeDisabled();
     expect(screen.queryByRole("alert")).toBeNull();

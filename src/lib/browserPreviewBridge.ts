@@ -526,8 +526,10 @@ export const browserPreviewBridge = {
   async auditionTtsVoice(
     provider: TtsProvider,
     voiceName: string,
-  ): Promise<string> {
-    return `Auditioning ${provider} voice ${voiceName}`;
+  ): Promise<number> {
+    void provider;
+    void voiceName;
+    return 2500;
   },
 
   async cancelStandaloneSpeech(): Promise<void> {},

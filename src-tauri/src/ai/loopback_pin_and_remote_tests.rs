@@ -23,15 +23,17 @@ fn request() -> TextRequest {
 /// IPv6 listener owns the same port. Unpinned system resolution typically prefers
 /// `::1`, so this test would see the decoy accept a connection without the pin.
 /// Limitation: the pin cannot be forced to matter from test code (the resolver is
-/// not injectable), so this only discriminates on hosts whose `localhost` resolves
-/// to `::1` first. Where `localhost` is IPv4-only (or `::1`/the port pair cannot
-/// be bound) it degrades to a plain reachability check.
+/// not injectable), so bind an IPv6 decoy on the same port and require it to stay
+/// untouched. This makes the effective-destination assertion explicit instead of
+/// silently degrading to ordinary IPv4 reachability.
 #[tokio::test]
 async fn localhost_connects_to_ipv4_even_when_an_ipv6_listener_owns_the_same_port() {
     for kind in KINDS {
         let v4 = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = v4.local_addr().unwrap().port();
-        let decoy = TcpListener::bind(format!("[::1]:{port}")).await.ok();
+        let decoy = TcpListener::bind(format!("[::1]:{port}"))
+            .await
+            .expect("IPv6 loopback must be available to prove the localhost pin");
 
         let server = tokio::spawn(async move {
             let (mut stream, _) = v4.accept().await.unwrap();
@@ -56,14 +58,12 @@ async fn localhost_connects_to_ipv4_even_when_an_ipv6_listener_owns_the_same_por
         assert_eq!(model.check_readiness().await, LoopbackReadiness::ModelReady);
         server.await.unwrap();
 
-        if let Some(decoy) = decoy {
-            assert!(
-                tokio::time::timeout(Duration::from_millis(200), decoy.accept())
-                    .await
-                    .is_err(),
-                "{kind:?}: localhost must be pinned to 127.0.0.1, never ::1"
-            );
-        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), decoy.accept())
+                .await
+                .is_err(),
+            "{kind:?}: localhost must be pinned to 127.0.0.1, never ::1"
+        );
     }
 }
 

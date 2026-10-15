@@ -153,7 +153,16 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     setIsAuditioning(true);
     setVoiceError(null);
     try {
-      await tauriBridge.auditionTtsVoice(settings.tts_provider, selectedVoice);
+      const playbackDurationMs = await tauriBridge.auditionTtsVoice(
+        settings.tts_provider,
+        selectedVoice,
+      );
+      // The backend returns the queued PCM duration, so the audition control
+      // stays locked until playback should have finished.
+      setTimeout(
+        () => setIsAuditioning(false),
+        Math.max(0, playbackDurationMs) + 250,
+      );
     } catch {
       // Audio/backend errors may carry private device paths or provider data.
       setVoiceError(
@@ -163,8 +172,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             ? "System voice audition failed. Please retry."
             : "Google TTS audition failed. Please retry.",
       );
-    } finally {
-      setTimeout(() => setIsAuditioning(false), 2500);
+      setIsAuditioning(false);
     }
   };
 
@@ -315,6 +323,13 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           </p>
         )}
 
+        {settings.tts_provider === "system" && systemAvailable && (
+          <p className="text-[10px] text-gray-700" role="status">
+            System speech is synthesized on this Mac. Human listening and
+            playback completion acceptance are still being qualified.
+          </p>
+        )}
+
         {systemAvailable && (
           <button
             type="button"
@@ -398,7 +413,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
           <p className="text-[10px] text-gray-700">
             {settings.tts_provider === "google"
               ? "Google receives this as performance pacing guidance for standalone speech."
-              : "KittenTTS uses this as the model synthesis speed setting."}
+              : settings.tts_provider === "system"
+                ? "macOS maps this to the installed voice's speaking rate."
+                : "KittenTTS uses this as the model synthesis speed setting."}
           </p>
         </div>
 
@@ -429,7 +446,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
         ) : (
           <div className="p-2 border border-gray-400 rounded bg-gray-50 text-[10px] text-gray-700">
             {settings.tts_provider === "system"
-              ? "System voice synthesis is unavailable in this build. Your Google pitch preference is preserved."
+              ? systemAvailable
+                ? "macOS System Voices do not expose pitch control. Your Google pitch preference is preserved."
+                : "System voice synthesis is unavailable in this build. Your Google pitch preference is preserved."
               : "KittenTTS Mini does not expose a truthful pitch control. Your saved Google pitch preference is preserved."}
           </div>
         )}

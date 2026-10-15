@@ -237,7 +237,7 @@ pub async fn audition_tts_voice<R: Runtime>(
     voice_name: String,
     state: State<'_, AppState>,
     app: tauri::AppHandle<R>,
-) -> Result<String, String> {
+) -> Result<u64, String> {
     // Voice audition is direct user activity. Reset Idle Banter before any Local
     // model readiness work so a long load cannot race a stale background remark.
     state.record_user_interaction();
@@ -282,8 +282,9 @@ pub async fn audition_tts_voice<R: Runtime>(
         Some(voice_name),
     )
     .await?;
+    let playback_duration_ms = playback.duration_millis();
     schedule_standalone_completion(state.character_state.clone(), app.clone(), playback);
-    Ok(script.to_string())
+    Ok(playback_duration_ms)
 }
 
 #[cfg(test)]

@@ -11,7 +11,7 @@ Local LLM V1 adds CPU-friendly **text generation** alongside Google Gemini. It c
 
 Local-first spoken conversations use local ASR, Local text generation, and KittenTTS through the existing conversation lifecycle. Gemini Live remains available when the user explicitly selects Gemini Live audio ASR. With local ASR, selecting Google text sends finalized transcript text to Google without starting Gemini Live audio. Google TTS remains available for standalone speech when selected.
 
-Talk selects its conversation pipeline from one saved settings snapshot. With local ASR, non-Live Talk composes the selected text adapter (including Google text) with the selected standalone TTS adapter. Gemini Live audio ASR alone selects the separate Google Live conversation path. The macOS System TTS adapter remains unavailable until buffer synthesis and physical audition are qualified.
+Talk selects its conversation pipeline from one saved settings snapshot. With local ASR, non-Live Talk composes the selected text adapter (including Google text) with the selected standalone TTS adapter. Gemini Live audio ASR alone selects the separate Google Live conversation path. macOS System TTS uses the native AVSpeechSynthesizer buffer adapter; human audition and in-app playback acceptance remain open.
 
 ## Provider selection
 
@@ -141,7 +141,7 @@ Google Live path (explicit selection):
 Microphone -> Gemini Live -> Rust playback
 ```
 
-Selecting Local never downloads missing text/TTS models and never falls back to Google. Talk reports an explicit Local model installation/runtime error until the selected models are installed. For non-Live Talk, the selected text and standalone speech adapters are composed from a single request snapshot. Google standalone TTS sends generated speech text to Google; System Voices remain unavailable pending the macOS adapter and audible acceptance.
+Selecting Local never downloads missing text/TTS models and never falls back to Google. Talk reports an explicit Local model installation/runtime error until the selected models are installed. For non-Live Talk, the selected text and standalone speech adapters are composed from a single request snapshot. Google standalone TTS sends generated speech text to Google; macOS System Voices synthesize locally through AVSpeechSynthesizer.
 
 ## Packaging and licensing
 
