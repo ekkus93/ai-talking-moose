@@ -812,10 +812,7 @@ mod tests {
 
     #[test]
     fn rejects_legacy_function_calls_and_refusal_metadata_with_assistant_text() {
-        for kind in [
-            LoopbackTextServer::Ollama,
-            LoopbackTextServer::LlamaServer,
-        ] {
+        for kind in [LoopbackTextServer::Ollama, LoopbackTextServer::LlamaServer] {
             let model = LoopbackTextModel::new(
                 kind,
                 "http://127.0.0.1:8080".into(),
