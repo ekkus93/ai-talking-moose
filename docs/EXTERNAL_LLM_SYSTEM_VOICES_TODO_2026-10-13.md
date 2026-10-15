@@ -220,6 +220,12 @@ The default Ollama model ID is `llama3.2`, which Ollama may report as `llama3.2:
 
 **Acceptance:** an unavailable or incompatible server reports a clear error while remaining the selected provider.
 
+### Non-Live Talk preflight and request-scoped cancellation qualification — 2026-10-14
+
+Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbbd50045703e3dcfde` extended non-Live Talk interruption from stale-output suppression to actual cancellation of the in-flight selected text-model future. Commit `8a18ba78630e14e201cca3a1f36ca08e92575de7` tests that replacing a turn drops its previous pending generation instead of continuing to consume the external provider. Commit `264aeba85894b01898a999a22c095f7aeb8f3828` rejects every unsupported non-Live System TTS pairing before sending any text provider request, without changing explicit Gemini Live ASR routing. Its rustfmt correction landed at `b5e330935023e2db568b838e920fd171529edd3c`. Commit `9fc700e7ed928e54480644a1f5f43ce88dfc8e95` verifies immutable request-scoped external text-provider identity even when a user changes settings after capture.
+
+**Exact-head CI `38684700623` passed** on `9fc700e7ed928e54480644a1f5f43ce88dfc8e95`, including Rust tests, Rust quality/Clippy, and generated backend-contract checks. Earlier superseded/cancelled runs are not counted as passes. This is focused ELSV-400 routing and cancellation evidence, not the complete provider/ASR/TTS matrix. Native macOS System TTS, physical audition, frontend/full release checks, and ELSV-900 remain outstanding; keep incomplete acceptance items unchecked.
+
 ## ELSV-400 — Route selected providers through app behavior
 
 - [ ] Extend text-model factory for typed replies and ambient remarks using one immutable request snapshot.
