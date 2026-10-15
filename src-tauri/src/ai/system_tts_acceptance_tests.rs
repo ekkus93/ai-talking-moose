@@ -58,7 +58,7 @@ fn malformed_os_voice_metadata_cannot_make_a_saved_voice_appear_available() {
         pitch: None,
     };
     let catalog = vec![
-        voice(saved_id, "Spoofed\\u{200b} Name"),
+        voice(saved_id, &format!("Spoofed{} Name", char::from_u32(0x200b).unwrap())),
         voice("com.apple.voice.other", "Valid Other Voice"),
     ];
     let error = validate_system_tts_request(&request, &catalog).unwrap_err();
