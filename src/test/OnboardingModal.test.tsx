@@ -112,6 +112,23 @@ describe("OnboardingModal P11 onboarding controls", () => {
     expect(screen.getByText(/stored in Keychain/i)).toBeInTheDocument();
   });
 
+  it("discloses OpenAI cloud and loopback server destinations", () => {
+    render(<OnboardingModal />);
+    fireEvent.click(screen.getByText("Next: Voice"));
+    fireEvent.click(screen.getByText("Next: Local Model"));
+    fireEvent.click(screen.getByText("Continue to Gemini Key"));
+
+    expect(
+      screen.getByText(/OpenAI text generation \(cloud, with its own OpenAI/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/loopback only; the app never starts a server/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/never switches to another provider/i),
+    ).toBeInTheDocument();
+  });
+
   it("updates key-presence state immediately when onboarding saves a key", async () => {
     vi.spyOn(tauriBridge, "setGoogleApiKey").mockResolvedValue(undefined);
 

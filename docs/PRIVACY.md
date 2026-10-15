@@ -31,7 +31,7 @@ The platform's local ASR mode is the default for a new profile. Models are downl
 
 ## 3. Text-generation privacy
 
-Typed replies and ambient remarks use an explicit text-provider selection. The OpenAI and loopback adapters are under implementation and qualification; selecting them does not imply that all Talk and platform acceptance checks are complete.
+Typed replies and ambient remarks use an explicit text-provider selection. The OpenAI, Ollama, and llama-server adapters are implemented; macOS System Voices are not yet available, and full platform acceptance is still being recorded. A failed request never silently switches to another text provider.
 
 | Text provider | Prompt/derived text | Model execution | Network during generation |
 | --- | --- | --- | --- |

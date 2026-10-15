@@ -292,6 +292,13 @@ export const OnboardingModal: React.FC = () => {
               required for Google text generation, Gemini Live audio ASR, or
               Google TTS when those cloud options are selected.
             </p>
+            <p className="text-gray-900 leading-snug text-[11px]">
+              AI &amp; Models can also use OpenAI text generation (cloud, with
+              its own OpenAI API key) or an Ollama or llama-server you already
+              run on this computer (loopback only; the app never starts a server
+              or downloads its models). Each is used only when you select it,
+              and a failure never switches to another provider.
+            </p>
             <div className="flex gap-1.5 p-2 bg-white border border-black rounded text-[10px] text-gray-800">
               <Shield
                 className="w-3.5 h-3.5 flex-shrink-0"

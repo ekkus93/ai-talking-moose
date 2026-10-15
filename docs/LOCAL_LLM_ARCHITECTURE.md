@@ -23,7 +23,7 @@ Talk selects its conversation pipeline from one saved settings snapshot. With lo
 - `ollama` — `LoopbackTextModel` using Ollama's native `/api/chat` endpoint;
 - `llama_server` — `LoopbackTextModel` using `/v1/chat/completions`.
 
-The external adapters are implemented in stages; model readiness, routing combinations, macOS System TTS, and full platform acceptance remain outstanding. Ollama and llama-server use separate request/response mappings, do not start local processes or pull weights, and reject non-loopback destinations, redirects, and proxy routing. Their configured servers may independently log prompts. OpenAI sends text to OpenAI with an independent credential. A failure stays with the selected provider.
+The external adapters are implemented, including model-readiness checks; macOS System TTS, end-to-end routing-combination coverage, and full platform acceptance remain outstanding. Ollama and llama-server use separate request/response mappings, do not start local processes or pull weights, and reject non-loopback destinations, redirects, and proxy routing. Their configured servers may independently log prompts. OpenAI sends text to OpenAI with an independent credential. A failure stays with the selected provider.
 
 Fresh profiles default to **Local** text generation with `smollm2-360m-instruct-q4-k-m` selected and **Local** TTS with KittenTTS selected. Profiles with no saved provider choice migrate to Local; a saved Google selection remains unchanged. Selection does not install or download either model.
 
