@@ -98,6 +98,7 @@ async fn ollama_untagged_generation_accepts_latest_identity() {
         let mut buf = [0u8; 4096];
         let count = socket.read(&mut buf).await.unwrap();
         assert!(String::from_utf8_lossy(&buf[..count]).starts_with("POST /api/chat HTTP/1.1"));
+            let payload =
         let payload = r#"{"done":true,"model":"llama3.2:latest","message":{"role":"assistant","content":"alias works"}}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
@@ -128,8 +129,12 @@ async fn loopback_generation_never_sends_other_provider_credentials_or_retries_o
     // Both cloud credentials may be configured while a loopback model is selected.
     // Neither is permitted to become a header or body field on the local request.
     let secrets = SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
-    secrets.set_google_api_key("google-isolated-test-key".into()).unwrap();
-    secrets.set_openai_api_key("openai-isolated-test-key".into()).unwrap();
+    secrets
+        .set_google_api_key("google-isolated-test-key".into())
+        .unwrap();
+    secrets
+        .set_openai_api_key("openai-isolated-test-key".into())
+        .unwrap();
 
     for (kind, path) in [
         (LoopbackTextServer::Ollama, "/api/chat"),
