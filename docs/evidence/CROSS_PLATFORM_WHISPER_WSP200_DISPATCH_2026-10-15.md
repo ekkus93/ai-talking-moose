@@ -1,8 +1,8 @@
 # WSP-200 macOS real-model acceptance — Dispatch limitation
 
-**Observed:** 2026-10-15  
-**Repository:** `ekkus93/ai-talking-moose`  
-**Current head at record:** `6eefba7658888100e0587aa10ef332839247c944`  
+**Observed:** 2026-10-15
+**Repository:** `ekkus93/ai-talking-moose`
+**Current head at record:** `6eefba7658888100e0587aa10ef332839247c944`
 **Ralph Bridge:** `0.6.2`, build `0acea4b23362e2ccecab8f6c9db4418b162426cf`, authentication mode `app`.
 
 ## Qualified prerequisite, not real-model proof
