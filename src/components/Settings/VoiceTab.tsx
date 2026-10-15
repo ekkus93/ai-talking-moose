@@ -121,7 +121,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     } catch {
       // IPC and device errors can contain private paths or provider details.
       // The store restores rejected patches; show a fixed, safe error here.
-      setVoiceError("Could not save the standalone voice selection. Please retry.");
+      setVoiceError(
+        "Could not save the standalone voice selection. Please retry.",
+      );
     }
   };
 
@@ -130,7 +132,9 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     try {
       await updateSettingsPatch({ live_voice: voice });
     } catch {
-      setVoiceError("Could not save the Gemini Live voice selection. Please retry.");
+      setVoiceError(
+        "Could not save the Gemini Live voice selection. Please retry.",
+      );
     }
   };
 
