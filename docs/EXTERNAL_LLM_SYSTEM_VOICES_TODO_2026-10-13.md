@@ -141,6 +141,14 @@ Commit `0a490e2d25460c5026e5b93715b9acf7dcc63341` additionally rejects padded sa
 
 These are platform-neutral macOS prerequisites, not AVSpeechSynthesizer integration or an audible Mac audition. System voice enumeration, native buffer callbacks, cancellation/playback integration, Control Panel enablement, full `check:all`, and ELSV-500/900 acceptance remain open. A separate overlapping-provider-credential redaction fix was attempted but rejected by source-write safety checks; it has **not** landed.
 
+### Atomic credential-redaction overlap qualification — 2026-10-14
+
+Commit `1f7dde6646c27ad6393b62fe5b23e80ac0598903` initially added longest-first provider credential redaction, but its exact-head CI `38663749233` failed Rust formatting. Commit `903523e9f3f72900746aaa83399dde7eac93ab04` corrected that formatting. Longest-first replacement still had a security edge case when two different credentials overlapped without one fully containing the other: a sequential replacement could disclose a suffix or prefix of the second credential.
+
+Commit `d6c88b10a3a6d23166f1c7e4b5825c2b3c1c141f` changed `SecretStore::redact` to find both credentials' UTF-8 boundary matches against the original input and coalesce overlapping spans before substituting redaction markers, with regressions for partial overlaps, repeated-pattern overlaps, independent occurrences, and Unicode boundaries. Its CI identified a formatting-only failure in the Unicode assertion. Commit `bcd47fe6cce967fdbd2c366b5fe7b7b938b93cdb` applied the exact rustfmt correction. **Exact-head CI `38667953946` passed** Rust quality/Clippy, Rust tests, and generated backend-contract verification on that final code SHA. This closes the *focused overlapping-credential redaction* follow-up only, not all ELSV-200 acceptance criteria.
+
+Native macOS `AVSpeechSynthesizer` integration, runtime catalog, cancellation/playback, physical Mac audition, full provider routing matrix, and canonical `check:all` are still outstanding. Keep ELSV-200, ELSV-500, ELSV-600, and ELSV-900 unchecked until their complete named acceptance evidence exists.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
