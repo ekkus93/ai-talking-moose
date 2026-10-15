@@ -121,6 +121,63 @@ async fn missing_openai_key_in_non_live_talk_does_not_fall_back() {
 }
 
 #[tokio::test]
+async fn invalid_loopback_server_cannot_fall_back_to_cloud_or_any_standalone_voice() {
+    use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
+    let state = AppState::new_for_tests().unwrap();
+    for text_provider in [TextProvider::Ollama, TextProvider::LlamaServer] {
+        for tts_provider in [TtsProvider::Local, TtsProvider::Google, TtsProvider::System] {
+            let settings = AppSettings {
+                text_provider,
+                tts_provider,
+                asr_mode: AsrMode::WhisperSmall,
+                ollama_server_address: "http://example.invalid:11434".into(),
+                llama_server_address: "http://example.invalid:8080".into(),
+                ..AppSettings::default()
+            };
+            let provider = state.get_conversation_provider_for(&settings);
+            let (sender, mut events) = tokio::sync::mpsc::channel(8);
+            let mut session = provider
+                .connect(
+                    LiveSessionConfig {
+                        model: "configured-model".into(),
+                        voice_name: None,
+                        system_instruction: None,
+                        sample_rate_in: 16_000,
+                        sample_rate_out: 24_000,
+                        tools: vec![],
+                    },
+                    sender,
+                )
+                .await
+                .unwrap();
+            assert!(matches!(
+                events.recv().await,
+                Some(LiveServerEvent::Connected)
+            ));
+            session.send_text_turn("Private text").await.unwrap();
+            let result =
+                tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+                    .await
+                    .unwrap();
+            match result {
+                Some(LiveServerEvent::Error(error)) => {
+                    assert_eq!(error.kind, ProviderErrorKind::Setup);
+                    assert!(!error.message.contains("Private text"));
+                }
+                _ => panic!("invalid loopback destination must fail before speech synthesis"),
+            }
+            // No AudioData or TurnComplete follows the selected text failure.
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(20), events.recv())
+                    .await
+                    .is_err()
+            );
+            session.close().await.unwrap();
+        }
+    }
+}
+
+#[tokio::test]
 async fn selected_system_voice_audition_fails_closed_until_native_adapter_is_available() {
     use crate::ai::types::{ProviderErrorKind, TtsRequest};
     let state = AppState::new_for_tests().unwrap();
