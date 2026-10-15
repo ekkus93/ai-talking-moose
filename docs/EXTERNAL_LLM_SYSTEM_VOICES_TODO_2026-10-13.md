@@ -227,6 +227,14 @@ Direct-to-`master` commits `fb4c9c4a937e1f9d3139c011e2422096825d264a` and `d90bf
 
 Direct-to-`master` commits `81c4a6414289719817717271476bfc628535b6cd`, `78e330e3aae3ba49a9df74eb653c0e9523abc9b1`, and `af6030f056dd8075bb930cbd811da56167b997a2` add frontend regressions proving that switching the standalone TTS provider does **not** cancel an active Gemini Live session, while an idle standalone speech session is cancelled **before** applying a provider-selection patch. Initial CI runs `38718690575` and `38718851889` failed Prettier only. **Exact-head frontend CI `38718964624` passed** on `af6030f`, including formatting, lint, typecheck, and frontend tests. This qualifies only the tested ELSV-600 active-Live provider-switch behavior, not all voice/UI combinations, macOS synthesis, or full release acceptance.
 
+### Credential mutation serialization and Voice & Audio error privacy — 2026-10-15
+
+Direct-to-`master` changes `d173c08d42842657000bc371bf1f04f428616655` and rustfmt follow-up `8be28d5118aab820281948e17cae7ae0c0a95c01` serialize Google/OpenAI secret-backend writes, verification reads, and cache updates across clones of the in-memory `SecretStore`. The new concurrent-update regression checks both provider caches against their backend values and confirms clearing OpenAI leaves Google intact. The first exact-head CI `38723657674` failed Rust formatting; its corrected successor `38723904673` was cancelled by a later source commit. **Do not count the Rust change as CI-qualified until a subsequent exact-head Rust test/Clippy/contract run passes.**
+
+Direct-to-`master` Voice & Audio changes `3a5c1ec85229e9ed04c3f9a6463b577805ec4059`, `2597d9f4176ad9595fb1131b251137192e060111`, and `e8d5eeb3ed9b2ca51493d1801ab600b7ad2467fb` replace raw IPC/backend exception interpolation on standalone TTS provider switches and auditions with fixed, credential-safe user errors. Regression tests assert no private device path or transcript from rejected operations appears in the alert. **Exact-head frontend CI `38725723839` passed** on `e8d5eeb3ed9b2ca51493d1801ab600b7ad2467fb`, including typecheck, lint, formatting, and frontend tests. Earlier runs `38724627306` and `38725036312` failed only formatting and were corrected.
+
+These focused ELSV-200/600 safety improvements do not implement native macOS System TTS or complete the provider/ASR/TTS matrix, platform audition, or ELSV-900 release acceptance. Keep the incomplete acceptance checkboxes unchecked.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
