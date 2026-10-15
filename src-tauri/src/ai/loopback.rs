@@ -331,11 +331,8 @@ mod tests {
     #[tokio::test]
     async fn outgoing_json_body_is_bounded_even_with_two_fields_or_escaped_content() {
         for kind in [LoopbackTextServer::Ollama, LoopbackTextServer::LlamaServer] {
-            let model = LoopbackTextModel::new(
-                kind,
-                "http://127.0.0.1:1".into(),
-                "selected-model".into(),
-            );
+            let model =
+                LoopbackTextModel::new(kind, "http://127.0.0.1:1".into(), "selected-model".into());
             let mut request = TextRequest {
                 prompt: "p".repeat(MAX_BODY_BYTES / 2),
                 system_instruction: Some("s".repeat(MAX_BODY_BYTES / 2)),
