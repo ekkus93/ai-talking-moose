@@ -66,12 +66,37 @@ mkdir -p "$source_dir"
 git -C "$source_dir" init -q
 git -C "$source_dir" remote add origin https://github.com/moonshine-ai/moonshine.git
 GIT_LFS_SKIP_SMUDGE=1 git -C "$source_dir" fetch --depth 1 origin "$source_commit"
-git -C "$source_dir" checkout -q --detach FETCH_HEAD
+GIT_LFS_SKIP_SMUDGE=1 git -C "$source_dir" checkout -q --detach FETCH_HEAD
 [[ "$(git -C "$source_dir" rev-parse HEAD)" == "$source_commit" ]] || fail "source commit mismatch"
 
 ort_rel="core/third-party/onnxruntime/lib/macos/$arch/libonnxruntime.$ort_version.dylib"
-git -C "$source_dir" lfs pull --include="$ort_rel"
 ort_source="$source_dir/$ort_rel"
+if ! git -C "$source_dir" lfs pull --include="$ort_rel" --exclude="*"; then
+  # Upstream Moonshine Git LFS may exhaust its bandwidth quota. A binary from
+  # Microsoft's exact same ONNX Runtime release is usable only when it matches
+  # the manifest's pinned byte count and SHA-256, verified immediately below.
+  printf 'Moonshine LFS unavailable; trying official ONNX Runtime %s archive for %s.\\n' "$ort_version" "$arch" >&2
+  command -v curl >/dev/null || fail "curl required for verified release fallback"
+  archive="$workspace/onnxruntime-official.tgz"
+  official_url="https://github.com/microsoft/onnxruntime/releases/download/v${ort_version}/onnxruntime-osx-${arch}-${ort_version}.tgz"
+  curl --fail --location --retry 2 --max-time 120 --output "$archive" "$official_url" \\
+    || fail "official ONNX Runtime release archive unavailable; upstream LFS quota also exhausted"
+  python3 - "$archive" "$ort_source" "$ort_version" <<'PY'
+import pathlib, shutil, sys, tarfile
+archive, destination, version = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+filename = f"libonnxruntime.{version}.dylib"
+with tarfile.open(archive, mode="r:gz") as tar:
+    members = [item for item in tar.getmembers() if item.isfile() and pathlib.PurePosixPath(item.name).name == filename]
+    if len(members) != 1:
+        raise SystemExit(f"official ONNX Runtime archive must contain one {filename}: found {len(members)}")
+    source = tar.extractfile(members[0])
+    if source is None:
+        raise SystemExit("ONNX Runtime archive member could not be read")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with source, destination.open("wb") as target:
+        shutil.copyfileobj(source, target)
+PY
+fi
 [[ -f "$ort_source" ]] || fail "pinned ONNX Runtime dylib was not materialized: $ort_rel"
 
 python3 - "$ort_source" "$ort_sha256" "$ort_bytes" <<'PY'
