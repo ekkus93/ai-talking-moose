@@ -6,11 +6,11 @@
 //! C runtime is built from source via CMake in `src-tauri/build.rs`; model weights
 //! are user-downloaded and never committed.
 pub mod acceptance;
-pub mod native_probe;
 pub(crate) mod engine;
 pub(crate) mod ffi;
 pub(crate) mod installer;
 pub(crate) mod manifest;
+pub mod native_probe;
 
 pub(crate) use ffi::{path_to_cstring, NativeWhisperApi, WhisperApi, WhisperModel, WhisperSegment};
 pub(crate) use installer::WhisperModelInstaller;

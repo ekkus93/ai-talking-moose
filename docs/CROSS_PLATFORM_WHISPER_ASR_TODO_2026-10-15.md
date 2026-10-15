@@ -20,9 +20,9 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 ## WSP-000 — Inventory and baseline (first)
 
-- [ ] Resolve the current head and record the Linux Whisper exact-source, current Mac Moonshine CI status, model/source pins, failing native dependency and historical benchmarks; distinguish historical claims from newly observed evidence.
+- [x] Resolve the current head and record the Linux Whisper exact-source, current Mac Moonshine CI status, model/source pins, failing native dependency and historical benchmarks; distinguish historical claims from newly observed evidence. (Baseline evidence: `docs/evidence/CROSS_PLATFORM_WHISPER_BASELINE_2026-10-15.md`.)
 - [ ] Search every tracked file, module, workflow, test, UI fixture, generated contract, documentation, native resource and manifest for `Moonshine`, `moonshine`, both legacy ASR values, `whisper_native_linked`, `libonnxruntime`, `prepare_moonshine`, and Mac deployment-floor references. Produce an owned disposition list (replace, remove, retain as history, or retain because unrelated).
-- [ ] Record the canonical Whisper source/submodule gitlink and model revision, SHA-256, 487,601,967-byte weight, model path, license, default selection and installer behavior before edits.
+- [x] Record the canonical Whisper source/submodule gitlink and model revision, SHA-256, 487,601,967-byte weight, model path, license, default selection and installer behavior before edits. (Pins and historical Linux real-CPU verification in baseline evidence.)
 - [ ] Identify every macOS app/release CI job and acceptance tool that needs updating: `ci.yml`, `release.yml`, `whisper-real-cpu-acceptance.yml`, Mac native smoke, release validators, signing, notarization, license collection, release docs and physical `P13`.
 - [ ] Run/inspect baseline frontend, Rust, generated contract/tree and packaging-policy checks without downloaded weights; distinguish failures already present at baseline.
 
