@@ -22,7 +22,7 @@ afterEach(() => {
 
 it("serializes independent provider and TTS patches without losing previously selected fields", async () => {
   const persisted: AppSettings[] = [];
-  let releaseFirst = () => {
+  let releaseFirst: () => void = () => {
     throw new Error("first settings request was not started");
   };
   const firstPending = new Promise<void>((resolve) => {
