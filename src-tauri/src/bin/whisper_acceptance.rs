@@ -21,6 +21,19 @@ async fn main() {
         std::process::exit(2);
     }
 
+    if args.len() == 1 && args[0] == "probe-native" {
+        match talking_moose_lib::asr::whisper::native_probe::runtime_version() {
+            Ok(version) => {
+                println!("Whisper native runtime linked and invoked: {version}");
+                return;
+            }
+            Err(error) => {
+                eprintln!("Whisper native runtime probe failed: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     let phase = &args[0];
 
     let (model_root, corpus_wav, report_path, require_network_denied) =

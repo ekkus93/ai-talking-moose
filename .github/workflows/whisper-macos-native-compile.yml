@@ -5,6 +5,8 @@ on:
     branches: [master]
     paths:
       - src-tauri/build.rs
+      - src-tauri/src/asr/whisper/**
+      - src-tauri/src/bin/whisper_acceptance.rs
       - .github/workflows/whisper-macos-native-compile.yml
   workflow_dispatch:
 
@@ -63,6 +65,8 @@ jobs:
         run: |
           cargo build --locked --manifest-path src-tauri/Cargo.toml \
             --features whisper-acceptance --bin whisper_acceptance
+      - name: Invoke linked Whisper runtime without model downloads
+        run: src-tauri/target/debug/whisper_acceptance probe-native
       - name: Record static binary and archive evidence
         shell: bash
         run: |
