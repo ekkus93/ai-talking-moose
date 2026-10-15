@@ -194,8 +194,33 @@ jobs:
         run: python3 scripts/validate_release_metadata.py
       - name: Validate Moonshine runtime provenance
         run: python3 scripts/validate_moonshine_runtime_manifest.py
-      - name: Build pinned Moonshine native runtime
+      - name: Cache pinned Moonshine native runtime
+        id: smoke-runtime-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/native/macos/libmoonshine.dylib
+            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+            src-tauri/native/macos/notices/MoonshineRuntime
+            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
+            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
+            src-tauri/native/macos/notices/WhisperRuntime
+          key: moonshine-macos-${{ matrix.arch }}-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
+          restore-keys: |
+            moonshine-macos-${{ matrix.arch }}-v2-
+      - name: Build pinned Moonshine native runtime on cache miss
+        if: steps.smoke-runtime-cache.outputs.cache-hit != 'true'
         run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+      - name: Restore pinned Whisper notices from gitlink on cache hit
+        if: steps.smoke-runtime-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_whisper_provenance.py
+          git submodule update --init -- third_party/whisper.cpp
+          python3 scripts/check_whisper_provenance.py
+          mkdir -p src-tauri/native/macos/notices/WhisperRuntime
+          cp third_party/whisper.cpp/LICENSE src-tauri/native/macos/notices/WhisperRuntime/WHISPER_CPP_LICENSE
       - name: Collect dependency license texts
         run: python3 scripts/collect_release_licenses.py
       - name: Build unsigned macOS application smoke bundle
