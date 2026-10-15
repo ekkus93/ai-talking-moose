@@ -298,6 +298,14 @@ impl TextModel for LoopbackTextModel {
                 "max_tokens": request.max_tokens.unwrap_or(1024)
             }),
         };
+        // Bound the complete serialized HTTP request, not just each source
+        // string: JSON escapes and the system prompt also consume payload bytes.
+        let body_size = serde_json::to_vec(&body)
+            .map_err(|_| ProviderError::from_kind(ProviderErrorKind::Setup))?
+            .len();
+        if body_size > MAX_BODY_BYTES {
+            return Err(ProviderError::from_kind(ProviderErrorKind::Setup));
+        }
         let mut response = client
             .post(format!(
                 "{}{}",
@@ -319,6 +327,38 @@ impl TextModel for LoopbackTextModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn outgoing_json_body_is_bounded_even_with_two_fields_or_escaped_content() {
+        for kind in [LoopbackTextServer::Ollama, LoopbackTextServer::LlamaServer] {
+            let model = LoopbackTextModel::new(
+                kind,
+                "http://127.0.0.1:1".into(),
+                "selected-model".into(),
+            );
+            let mut request = TextRequest {
+                prompt: "p".repeat(MAX_BODY_BYTES / 2),
+                system_instruction: Some("s".repeat(MAX_BODY_BYTES / 2)),
+                temperature: Some(0.4),
+                max_tokens: Some(32),
+            };
+            assert_eq!(
+                model.generate(request.clone()).await.unwrap_err().kind,
+                ProviderErrorKind::Setup,
+                "combined prompt and instructions must fit the full HTTP body"
+            );
+
+            // Escaping doubles JSON payload bytes even though the original
+            // string is independently shorter than MAX_BODY_BYTES.
+            request.prompt = "\"".repeat(MAX_BODY_BYTES / 2);
+            request.system_instruction = None;
+            assert_eq!(
+                model.generate(request).await.unwrap_err().kind,
+                ProviderErrorKind::Setup,
+                "escaped prompt must not evade the outbound body limit"
+            );
+        }
+    }
 
     #[test]
     fn untagged_ollama_alias_is_exactly_latest_and_never_weakens_llama_server() {
