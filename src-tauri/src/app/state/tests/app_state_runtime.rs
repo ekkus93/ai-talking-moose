@@ -121,6 +121,47 @@ async fn openai_text_without_its_own_key_fails_without_cloud_fallback() {
 }
 
 #[tokio::test]
+async fn text_provider_request_snapshot_does_not_follow_mid_request_settings_changes() {
+    let state = AppState::new_for_tests().unwrap();
+    let request = TextRequest {
+        prompt: "private snapshot prompt".into(),
+        system_instruction: None,
+        temperature: None,
+        max_tokens: Some(8),
+    };
+
+    // Capture the OpenAI selection before switching the live preference to Local.
+    // With no OpenAI credential it must still produce an OpenAI Auth error,
+    // rather than consulting or falling back to the new Local selection.
+    state.settings.write().text_provider = TextProvider::Openai;
+    let snapshot = state.capture_text_request_settings();
+    let pending = state.get_text_model_for(&snapshot.settings);
+    state.settings.write().text_provider = TextProvider::Local;
+    assert_eq!(snapshot.settings.text_provider, TextProvider::Openai);
+    let error = pending.generate(request.clone()).await.unwrap_err();
+    assert_eq!(error.kind, ProviderErrorKind::Auth);
+    assert!(!error.message.contains("private snapshot prompt"));
+
+    for provider in [TextProvider::Ollama, TextProvider::LlamaServer] {
+        {
+            let mut settings = state.settings.write();
+            settings.text_provider = provider;
+            // A malformed address forces a deterministic, pre-network
+            // failure for the selected provider in this isolated test.
+            settings.ollama_server_address = "https://example.invalid:11434".into();
+            settings.llama_server_address = "https://example.invalid:8080".into();
+        }
+        let snapshot = state.capture_text_request_settings();
+        let pending = state.get_text_model_for(&snapshot.settings);
+        state.settings.write().text_provider = TextProvider::Google;
+        assert_eq!(snapshot.settings.text_provider, provider);
+        let error = pending.generate(request.clone()).await.unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::Setup);
+        assert!(!error.message.contains("private snapshot prompt"));
+    }
+}
+
+#[tokio::test]
 async fn configured_local_text_with_unknown_model_fails_without_cloud_fallback() {
     let state = AppState::new_for_tests().unwrap();
     state.settings.write().text_provider = TextProvider::Local;
