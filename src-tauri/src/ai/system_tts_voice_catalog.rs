@@ -18,9 +18,9 @@ pub(crate) fn has_bidi_formatting(value: &str) -> bool {
 /// make two distinct IDs appear identical in Settings or diagnostic output.
 pub(crate) fn has_invisible_id_formatting(value: &str) -> bool {
     has_bidi_formatting(value)
-        || value.chars().any(|ch| {
-            matches!(ch, '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}')
-        })
+        || value
+            .chars()
+            .any(|ch| matches!(ch, '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}'))
 }
 
 pub fn normalize_installed_voices(voices: Vec<TtsVoiceDescriptor>) -> Vec<TtsVoiceDescriptor> {
