@@ -178,7 +178,13 @@ pub fn get_google_tts_voices() -> Vec<GoogleTtsVoiceDescriptor> {
 
 #[tauri::command]
 pub fn get_tts_catalog() -> TtsCatalog {
-    tts_catalog()
+    let mut catalog = tts_catalog();
+    // System Voices exist only where native synthesis is implemented (macOS); the
+    // static catalog and generated contract stay platform-neutral.
+    if let Some(system) = crate::ai::system_tts::provider_descriptor() {
+        catalog.providers.push(system);
+    }
+    catalog
 }
 
 #[tauri::command]

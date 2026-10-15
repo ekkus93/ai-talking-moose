@@ -2606,6 +2606,8 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13a380031deed8e99db00065c45937da434ca987c034e13b87e4441f9e4090be"
 dependencies = [
+ "bitflags 2.13.2",
+ "block2",
  "objc2",
  "objc2-foundation",
 ]
@@ -4129,13 +4131,18 @@ dependencies = [
  "async-trait",
  "av-foundation",
  "base64 0.22.1",
+ "block2",
  "chrono",
  "cpal",
+ "dispatch2",
  "flate2",
  "futures-util",
  "libc",
  "llama-cpp-2",
  "llama-cpp-sys-2",
+ "objc2",
+ "objc2-avf-audio",
+ "objc2-foundation",
  "once_cell",
  "ort",
  "parking_lot",

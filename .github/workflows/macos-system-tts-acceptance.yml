@@ -1,0 +1,142 @@
+name: macOS System TTS acceptance
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/macos-system-tts-acceptance.yml"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/src/ai/system_tts.rs"
+      - "src-tauri/src/ai/system_tts/**"
+      - "src-tauri/src/ai/system_tts_*.rs"
+      - "src-tauri/src/bin/system_tts_acceptance.rs"
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/macos-system-tts-acceptance.yml"
+      - "src-tauri/src/ai/system_tts.rs"
+      - "src-tauri/src/ai/system_tts/**"
+      - "src-tauri/src/bin/system_tts_acceptance.rs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-system-tts-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  TALKING_MOOSE_ALLOW_LIVE_API: "0"
+
+jobs:
+  system-tts:
+    name: AVSpeechSynthesizer acceptance (macos-arm64)
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v7
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: macos-arm64-system-tts-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            macos-arm64-system-tts-cargo-
+            macos-arm64-kittentts-asr-audition-cargo-
+
+      - name: Cache pinned Moonshine native runtime
+        id: moonshine-runtime-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/native/macos/libmoonshine.dylib
+            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
+            src-tauri/native/macos/notices/MoonshineRuntime
+            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
+            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
+          key: moonshine-macos-arm64-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
+
+      - name: Prepare pinned Moonshine native runtime
+        if: steps.moonshine-runtime-cache.outputs.cache-hit != 'true'
+        run: bash scripts/prepare_moonshine_macos.sh arm64
+
+      - name: Generate application icon set
+        run: python3 scripts/generate_app_icons.py
+
+      - name: List installed system voices
+        shell: bash
+        run: say -v '?' | head -40 || true
+
+      - name: System TTS unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
+          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          export CARGO_INCREMENTAL=0
+          cargo test --locked --release --manifest-path src-tauri/Cargo.toml --lib system_tts
+
+      - name: Run AVSpeechSynthesizer acceptance
+        id: acceptance
+        shell: bash
+        run: |
+          set -uo pipefail
+          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
+          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          export CARGO_INCREMENTAL=0
+          mkdir -p "$RUNNER_TEMP/system-tts"
+          set +e
+          cargo run --locked --release --manifest-path src-tauri/Cargo.toml \
+            --features system-tts-acceptance --bin system_tts_acceptance -- \
+            "$RUNNER_TEMP/system-tts" 2>&1 | tee "$RUNNER_TEMP/system-tts/acceptance.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Publish acceptance summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## macOS System TTS acceptance"
+            echo
+            echo "Exact SHA: \`$GITHUB_SHA\`  Runner: macos-15 (arm64)  Acceptance exit: \`${{ steps.acceptance.outputs.status }}\`"
+            echo
+            echo '```'
+            grep -E '^(PASS|FAIL)' "$RUNNER_TEMP/system-tts/acceptance.log" || true
+            echo '```'
+            if [ -f "$RUNNER_TEMP/system-tts/report.json" ]; then
+              echo '```json'
+              cat "$RUNNER_TEMP/system-tts/report.json"
+              echo '```'
+            fi
+            echo
+            echo "WAV files in the \`system-tts-audition\` artifact are for human listening; they are CI evidence only and are not committed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audition audio and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-tts-audition
+          path: ${{ runner.temp }}/system-tts
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail when acceptance failed
+        if: steps.acceptance.outputs.status != '0'
+        run: exit 1

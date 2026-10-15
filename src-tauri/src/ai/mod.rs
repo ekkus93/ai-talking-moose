@@ -4,6 +4,7 @@ pub mod local;
 pub mod local_tts;
 pub mod loopback;
 pub mod openai;
+pub mod system_tts;
 pub mod system_tts_pcm;
 pub mod system_tts_request;
 pub mod system_tts_selection;

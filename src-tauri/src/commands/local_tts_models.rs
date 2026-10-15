@@ -244,7 +244,16 @@ pub async fn audition_tts_voice<R: Runtime>(
     match provider {
         TtsProvider::Google => crate::ai::google::validate_tts_voice(&voice_name)?,
         TtsProvider::System => {
-            return Err("System voice audition is not available in this build".to_string())
+            if !crate::ai::system_tts::is_supported() {
+                return Err("System voice audition is not available in this build".to_string());
+            }
+            // Fail closed on an unknown, removed or malformed saved voice; never
+            // substitute another installed voice.
+            crate::ai::system_tts_selection::resolve_installed_system_voice(
+                &voice_name,
+                &crate::ai::system_tts::installed_voices(),
+            )
+            .map_err(|error| error.to_string())?;
         }
         TtsProvider::Local => {
             validate_local_tts_voice(&voice_name)?;

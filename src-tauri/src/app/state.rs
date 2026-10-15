@@ -681,7 +681,7 @@ impl AppState {
                 settings.local_tts_model.clone(),
                 settings.local_tts_voice.clone(),
             )),
-            TtsProvider::System => Box::new(crate::ai::unavailable::UnavailableSpeechSynthesizer),
+            TtsProvider::System => crate::ai::system_tts::synthesizer(),
         }
     }
 
@@ -696,10 +696,12 @@ impl AppState {
     ) -> Arc<dyn RealtimeConversationProvider> {
         if settings.asr_mode != AsrMode::GeminiLiveAudio
         {
-            // System TTS is not wired to native macOS synthesis yet. Reject
-            // the combination before an external text model can transmit a
-            // transcript and produce an answer that cannot be spoken.
-            if settings.tts_provider == TtsProvider::System {
+            // Where native System synthesis does not exist, reject the combination
+            // before an external text model can transmit a transcript and produce
+            // an answer that cannot be spoken.
+            if settings.tts_provider == TtsProvider::System
+                && !crate::ai::system_tts::is_supported()
+            {
                 return Arc::new(crate::ai::unavailable::UnavailableSystemConversationProvider);
             }
             let text_model = Arc::from(self.get_text_model_for(settings));
@@ -714,7 +716,7 @@ impl AppState {
                     settings.google_tts_model.clone(),
                     settings.google_tts_voice.clone(),
                 )),
-                TtsProvider::System => Arc::new(crate::ai::unavailable::UnavailableSpeechSynthesizer),
+                TtsProvider::System => Arc::from(crate::ai::system_tts::synthesizer()),
             };
             let selected_voice = match settings.tts_provider {
                 TtsProvider::Local => &settings.local_tts_voice,

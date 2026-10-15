@@ -143,7 +143,7 @@ fn synthesizer_for_snapshot(
             snapshot.model_id.clone(),
             snapshot.voice_id.clone(),
         )),
-        TtsProvider::System => Box::new(crate::ai::unavailable::UnavailableSpeechSynthesizer),
+        TtsProvider::System => crate::ai::system_tts::synthesizer(),
     }
 }
 

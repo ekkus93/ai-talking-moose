@@ -10,6 +10,7 @@ edition = "2021"
 frontend-contract-export = []
 local-llm-acceptance = []
 whisper-acceptance = []
+system-tts-acceptance = []
 
 [[bin]]
 name = "export_frontend_contract"
@@ -25,6 +26,11 @@ required-features = ["frontend-contract-export"]
 name = "local_llm_acceptance"
 path = "src/bin/local_llm_acceptance.rs"
 required-features = ["local-llm-acceptance"]
+
+[[bin]]
+name = "system_tts_acceptance"
+path = "src/bin/system_tts_acceptance.rs"
+required-features = ["system-tts-acceptance"]
 
 [[bin]]
 name = "whisper_acceptance"
@@ -84,3 +90,9 @@ tauri = { version = "2.1", features = ["test"] }
 av-foundation = "0.8.1"
 security-framework = "3.7"
 security-framework-sys = "2.17"
+# AVSpeechSynthesizer buffer synthesis for System Voices (ai/system_tts/macos.rs).
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSArray", "NSEnumerator"] }
+objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "block2", "AVSpeechSynthesis", "AVAudioBuffer", "AVAudioFormat", "AVAudioTypes"] }
+block2 = "0.6"
+dispatch2 = "0.3"
