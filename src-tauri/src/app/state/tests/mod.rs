@@ -3,3 +3,4 @@ mod settings_migration;
 mod talk_routing;
 mod provider_secret_isolation;
 mod text_provider_no_fallback;
+mod talk_selected_provider_success;
