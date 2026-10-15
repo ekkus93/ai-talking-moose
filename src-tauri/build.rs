@@ -139,8 +139,7 @@ fn whisper_target_supported() -> bool {
 }
 
 fn require_whisper_native() -> bool {
-    std::env::var("TALKING_MOOSE_REQUIRE_WHISPER_NATIVE")
-        .is_ok_and(|value| value == "1")
+    std::env::var("TALKING_MOOSE_REQUIRE_WHISPER_NATIVE").is_ok_and(|value| value == "1")
 }
 
 fn has_whisper_runtime(build_dir: &Path) -> bool {
@@ -292,13 +291,17 @@ fn build_whisper_from_source() {
         } else {
             "x86_64"
         };
-        let deployment_target = std::env::var("MACOSX_DEPLOYMENT_TARGET")
-            .unwrap_or_else(|_| "13.4".to_string());
+        let deployment_target =
+            std::env::var("MACOSX_DEPLOYMENT_TARGET").unwrap_or_else(|_| "13.4".to_string());
         configure
             .arg(format!("-DCMAKE_OSX_ARCHITECTURES={arch}"))
             .arg(format!("-DCMAKE_OSX_DEPLOYMENT_TARGET={deployment_target}"))
             // Real-model CPU acceptance precedes optional Metal acceleration.
-            .args(["-DGGML_METAL=OFF", "-DGGML_ACCELERATE=OFF", "-DGGML_BLAS=OFF"]);
+            .args([
+                "-DGGML_METAL=OFF",
+                "-DGGML_ACCELERATE=OFF",
+                "-DGGML_BLAS=OFF",
+            ]);
     }
 
     let configure = configure.output();
