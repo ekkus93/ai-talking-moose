@@ -300,7 +300,10 @@ mod tests {
 
         store.set_google_api_key("café!".into()).unwrap();
         store.set_openai_api_key("é!xyz".into()).unwrap();
-        assert_eq!(store.redact("prefix café!xyz suffix"), "prefix [REDACTED_SECRET] suffix");
+        assert_eq!(
+            store.redact("prefix café!xyz suffix"),
+            "prefix [REDACTED_SECRET] suffix"
+        );
     }
 
     #[test]
