@@ -21,6 +21,12 @@ fn native_pcm_formats_produce_identical_mono_playback_and_preserve_rate() {
         .unwrap();
     outputs.push(double_planar.finish().unwrap());
 
+    let mut double_interleaved = SystemPcmAccumulator::new(44_100).unwrap();
+    double_interleaved
+        .append_interleaved_f64(&[0.0, 0.0, 0.5, 0.5], 2)
+        .unwrap();
+    outputs.push(double_interleaved.finish().unwrap());
+
     let mut integer_interleaved = SystemPcmAccumulator::new(44_100).unwrap();
     integer_interleaved
         .append_interleaved_i16(&[0, 0, 16_384, 16_384], 2)
