@@ -6,6 +6,9 @@
 
 Check an item only after its implementation and named evidence exist. Keep the app-owned Local defaults and no-fallback rule throughout.
 
+**Current state (2026-10-15):** ELSV-100/200/300/400/600 are implementation-qualified by the focused tests and CI records below. Native macOS System Voices are implemented and qualified by automated arm64 `AVSpeechSynthesizer` and routing acceptance; Linux System Voices correctly fail closed. **The remaining unchecked ELSV-500/900 items require physical human-audition/bubble-completion evidence and complete macOS Tauri release-smoke verification.** See `docs/ELSV_SYSTEM_TTS_PHYSICAL_AUDITION_2026-10-15.md`. The dated checkpoint sections below are historical; earlier claims that System TTS is not implemented are superseded by the 2026-10-15 checkpoints. No unauditioned speech quality or physical playback success is claimed.
+
+
 ## Implementation checkpoint — 2026-10-14
 
 The checklist remains intentionally unchecked until its full named acceptance evidence exists. Current `master` contains initial implementation in `src-tauri/src/ai/openai.rs`, `src-tauri/src/ai/loopback.rs`, `src-tauri/src/app/request_snapshot.rs`, `src-tauri/src/app/state.rs`, `src-tauri/src/secrets/store.rs`, and `src/components/Settings/AiTab.tsx`. These provide provider enum/settings scaffolding, independent OpenAI secret handling, text adapters, snapshot routing, and initial conditional UI. This is **not** evidence that all ELSV-100/200/300/400/600 acceptance tests pass.
