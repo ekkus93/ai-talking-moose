@@ -173,6 +173,11 @@ impl LiveSession for LocalConversationSession {
         if let Some((_, previous)) = self.active_synthesis.lock().take() {
             previous.cancel();
         }
+        // Own cancellation from the start of text generation, not just TTS.
+        // Otherwise an interrupted cloud text request can keep running after
+        // stale-result suppression has already removed its UI output.
+        let cancellation = CancellationToken::new();
+        *self.active_synthesis.lock() = Some((turn, cancellation.clone()));
         let current_generation = self.generation.clone();
         let active_synthesis = self.active_synthesis.clone();
         let event_sender = self.event_sender.clone();
@@ -184,8 +189,15 @@ impl LiveSession for LocalConversationSession {
         let prompt = text.to_string();
 
         tauri::async_runtime::spawn(async move {
-            let generated = text_model
-                .generate(TextRequest {
+            // Reject obsolete turns before opening a selected provider's
+            // network request; abort an in-flight future when interrupted.
+            if cancellation.is_cancelled() || current_generation.load(Ordering::SeqCst) != turn {
+                return;
+            }
+            let generated = tokio::select! {
+                biased;
+                () = cancellation.cancelled() => return,
+                generated = text_model.generate(TextRequest {
                     prompt,
                     system_instruction: Some(format!(
                         "{}\n\nKeep replies brief (about 60 words), in plain spoken English, without markdown. Output only the words Moose should say; do not include voice labels, stage directions, sound cues, or bracketed delivery notes.",
@@ -193,8 +205,8 @@ impl LiveSession for LocalConversationSession {
                     )),
                     temperature: Some(0.85),
                     max_tokens: Some(100),
-                })
-                .await;
+                }) => generated,
+            };
             let response = match generated {
                 Ok(response) => prepare_local_tts_response(&response.text),
                 Err(error) => {
@@ -224,13 +236,14 @@ impl LiveSession for LocalConversationSession {
             // Publication can suspend on backpressure. An interruption or
             // replacement during that await must not start a new TTS request,
             // particularly when the selected speech provider is cloud-hosted.
-            let cancellation = CancellationToken::new();
             {
-                let mut active = active_synthesis.lock();
-                if current_generation.load(Ordering::SeqCst) != turn {
+                let active = active_synthesis.lock();
+                if current_generation.load(Ordering::SeqCst) != turn
+                    || cancellation.is_cancelled()
+                    || !active.as_ref().is_some_and(|(active_turn, _)| *active_turn == turn)
+                {
                     return;
                 }
-                *active = Some((turn, cancellation.clone()));
             }
             // If a cancellation raced the lock handoff, the interrupt path
             // has cancelled this token; avoid entering the synth adapter.
@@ -427,10 +440,87 @@ mod tests {
             events.recv().await,
             Some(LiveServerEvent::Interrupted)
         ));
-        release.send(()).unwrap();
+        // Cancellation now drops the pending generation future itself;
+        // its oneshot receiver may already be gone.
+        let _ = release.send(());
         let late_event =
             tokio::time::timeout(std::time::Duration::from_millis(100), events.recv()).await;
         assert!(late_event.is_err());
+    }
+
+    struct PendingGeneration {
+        started: mpsc::UnboundedSender<()>,
+        dropped: StdMutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    }
+
+    struct ReportGenerationDrop(Option<tokio::sync::oneshot::Sender<()>>);
+
+    impl Drop for ReportGenerationDrop {
+        fn drop(&mut self) {
+            if let Some(done) = self.0.take() {
+                let _ = done.send(());
+            }
+        }
+    }
+
+    #[async_trait]
+    impl TextModel for PendingGeneration {
+        async fn generate(&self, _request: TextRequest) -> Result<TextResponse, ProviderError> {
+            let _on_drop = ReportGenerationDrop(self.dropped.lock().unwrap().take());
+            let _ = self.started.send(());
+            std::future::pending::<Result<TextResponse, ProviderError>>().await
+        }
+    }
+
+    #[tokio::test]
+    async fn interrupt_cancels_in_flight_external_text_generation_future() {
+        let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+        let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel();
+        let provider = LocalConversationProvider::new(
+            Arc::new(PendingGeneration {
+                started: started_tx,
+                dropped: StdMutex::new(Some(dropped_tx)),
+            }),
+            Arc::new(RequestCapture(Arc::new(StdMutex::new(None)))),
+            "cloud-voice".to_string(),
+            1.0,
+        );
+        let (sender, mut events) = mpsc::channel(8);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: "external-text".to_string(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+        session.send_text_turn("private text").await.unwrap();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), started_rx.recv())
+                .await
+                .unwrap(),
+            Some(())
+        );
+        session.interrupt().await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), dropped_rx)
+            .await
+            .expect("interrupted provider future must be dropped")
+            .unwrap();
+        assert!(matches!(events.recv().await, Some(LiveServerEvent::Interrupted)));
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), events.recv())
+                .await
+                .is_err(),
+            "interrupted generation must not publish transcript or audio"
+        );
+        session.close().await.unwrap();
     }
 
     struct CancellationProbe {
