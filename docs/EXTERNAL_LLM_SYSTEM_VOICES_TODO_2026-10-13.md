@@ -244,6 +244,14 @@ Read-only audits of ELSV-200/300/400/600 against code and tests (local Linux x86
 - **ELSV-400:** `da46154c` adds the first success-path routing test: the selected Ollama and llama-server reply, through the app's `get_text_model_for`, is exactly what non-Live Talk synthesizes with the settings voice and rate. **Still open:** same for OpenAI (endpoint not injectable); typed and ambient paths for external providers; Talk with Google TTS auth failure or unavailable KittenTTS; `start_conversation`-level System TTS rejection; non-Live audio-completion and bubble-lifetime tests; typed-reply TTS is snapshotted separately from the text snapshot (design question, deferred); CI qualification of `89bbd6df`.
 - **ELSV-600:** `96b55e13` onboarding discloses OpenAI cloud and loopback servers; stale PRIVACY/ARCHITECTURE status text refreshed. `5ad4e489` adds Voice & Audio catalog loading/empty states plus audition success, no-overlap and missing-key tests. `22a0afab` keeps external model-ID drafts across tab switches, shows "OpenAI key saved / model not verified", and adds cloud/loopback disclosure tests. `56cf1087` adds role-based accessibility checks (no axe dependency was added). **Still open:** System Voices refresh/selection/Audition (blocked on ELSV-500); the audition lock is a 2.5 s post-call debounce, not playback completion; OpenAI has no live readiness check.
 
+### macOS System Voices native implementation and CI acceptance — 2026-10-15
+
+`eb75fb37` adds `src-tauri/src/ai/system_tts/macos.rs`: voice enumeration via `AVSpeechSynthesisVoice`, buffer capture via `AVSpeechSynthesizer.writeUtterance:toBufferCallback:` on the main dispatch queue, conversion through the existing bounded `SystemPcmAccumulator`, cancel-on-drop (`stopSpeakingAtBoundary`), first-buffer/gap timeouts, and a monotonic `speaking_rate` → `AVSpeechUtterance.rate` mapping. The catalog lists System Voices only on macOS (`get_tts_catalog`), the static catalog and generated contract are unchanged, and other platforms still fail closed with no subprocess or provider fallback. `3d0413f9` enables the Voice & Audio System radio only when the catalog offers it, adds Refresh System Voices, and blocks Audition with a reason when the saved voice is no longer installed.
+
+Evidence (workflow `macOS System TTS acceptance`, `macos-15` arm64, exact head `f1cc46af`, run `38797713849`, **success**): 29 System TTS unit tests pass; the `system_tts_acceptance` binary found 191 installed voices and passed all checks — System Default and one installed voice produce non-silent audio (RMS ≈ 5283 / 4598, peak ≈ 24 170) at 22 050 Hz, 4.4 s / 5.2 s; rate 2.0 is shorter than rate 1.0 (2.26 s vs 4.43 s); a nonexistent voice fails closed with a Model error; synthesis succeeds after a cancelled request. The first run (`38796306560`) failed only because two Linux-only "System unavailable" tests also ran on macOS; they are now gated by `cfg(not(target_os = "macos"))` (`f1cc46af`).
+
+**Still open (not claimed):** a human listening to the uploaded `system-tts-audition` WAVs and observing a spoken bubble persist until playback ends in the real app (ELSV-500 item 4, ELSV-900 audition). The acceptance binary does not exercise real-time playback, the 15 s/10 s timeout paths, a no-audio response, or an unsupported buffer format on macOS. The `macos-15-intel` architecture was not run. The automatic "first installed voice" case picked a non-English voice (Majed) speaking English text; it proves synthesis, not suitability. The ordinary CI macOS bundle jobs were not re-inspected for this change.
+
 ## ELSV-100 — Settings and IPC foundations
 
 - [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
@@ -293,7 +301,7 @@ Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbb
 
 ## ELSV-500 — macOS system TTS
 
-- [ ] Add macOS runtime voice enumeration and stable voice IDs, including explicit System Default and unavailable saved voice behavior.
+- [x] Add macOS runtime voice enumeration and stable voice IDs, including explicit System Default and unavailable saved voice behavior.
 - [ ] Implement AVSpeechSynthesizer buffer synthesis and bounded PCM conversion into the existing Rust playback path; implement cancellation, timeout, no-audio, and format-error handling.
 - [ ] Expose truthful voice capabilities, rate/pitch controls, and system-provider metadata through the TTS catalog/IPC; show unsupported status on Linux without a subprocess fallback.
 - [ ] Add unit tests for catalog, selection, conversion, cancellation, unavailable voice, and Linux compile behavior; record a real Mac audition with audible completion and bubble-duration observation.
@@ -303,7 +311,7 @@ Commits `24af65d24fc024fdfa3714a93824d126d435a4ad` and `4a66bfdd3f86e7a160f36cbb
 ## ELSV-600 — Control Panel and disclosure
 
 - [ ] Extend AI & Models with five provider choices and conditional OpenAI/server controls, provider-specific connection states, and accurate data-destination labels.
-- [ ] Extend Voice & Audio with System Voices, voice refresh/selection, Audition, capability-aware controls, and clear Live versus non-Live scope.
+- [x] Extend Voice & Audio with System Voices, voice refresh/selection, Audition, capability-aware controls, and clear Live versus non-Live scope.
 - [ ] Preserve tab-switch state, no-overlap auditions, active-Live-session behavior, accessibility, loading/error/empty states, and stale-patch safety.
 - [ ] Update README, Privacy, onboarding, Local LLM architecture, and any relevant Settings help text to reflect cloud, loopback, Local, and Gemini Live boundaries.
 - [ ] Add frontend tests for provider switching, key handling, server readiness, system voice availability, audition, and privacy disclosures.
