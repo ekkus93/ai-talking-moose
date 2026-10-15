@@ -161,9 +161,19 @@ Commit `c32e1ed07bc16f8781447d3ea52a1363354d8511` guards pending `hasOpenaiApiKe
 
 Native macOS `AVSpeechSynthesizer`, installed-voice catalog integration, playback/cancellation, physical Mac audition, full provider-routing acceptance, and `check:all` remain outstanding; keep ELSV-200/500/600/900 unchecked.
 
+### Provider type contract, OpenAI timeout, and non-Live Talk cancellation — 2026-10-14
+
+The ELSV-100 provider-enum checklist entry is verified against Rust `src-tauri/src/ai/types.rs` (`TextProvider::{Local,Google,Openai,Ollama,LlamaServer}` and `TtsProvider::{Local,Google,System}`), TypeScript `src/types/moose.ts`, and Rust-derived frontend settings defaults/contract; the generated backend-contract gate and Rust enum serialization tests passed in exact-head CI `38672195380` on `b9b159241e67141f74a7ff14adff692ed9bcb3b4`. Only this discrete ELSV-100 subtask is checked. Settings migration, backend policy/routing, and full cross-platform ELSV-100 acceptance are not implied by that check.
+
+Commits `2326ec6ddb95f0e34872dc78a5f96534ecaddc49`, `c765a0ed81f83e85bd012e11a00de1b2b4f53ce4`, and `ca9404b76b8ab28a44d8ce8cca81226253eefead` added/qualified OpenAI fake-server timeout/no-retry and oversized-response rejection tests, including safe public errors that contain neither a key nor request/response text. Exact-head CI `38671638133` **passed** Rust quality/tests and generated-contract verification on `ca9404b`.
+
+Commit `b9b159241e67141f74a7ff14adff692ed9bcb3b4` prevents an interrupted non-Live transcript publication that was waiting on event-channel backpressure from subsequently initiating standalone TTS, which could otherwise send an obsolete answer to a selected cloud speech service. A regression covers interruption during blocked transcript publication. **Exact-head CI `38672195380` passed** Rust quality/tests, generated contract, and Local LLM compile proofs. These are focused ELSV-200/400 regressions, not full provider-routing acceptance.
+
+**Still outstanding:** native macOS voice enumeration and `AVSpeechSynthesizer` integration, physical Mac playback audition, the complete provider/ASR/TTS matrix, full `check:all`, packaging-policy and generated-tree qualification, and the remaining individual TODO tasks. No new branches or PRs were created.
+
 ## ELSV-100 — Settings and IPC foundations
 
-- [ ] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
+- [x] Add stable OpenAI, Ollama, and llama-server `TextProvider` values and System `TtsProvider` value across Rust, TypeScript, and generated contract.
 - [ ] Add separate provider model IDs, loopback addresses, and system voice ID to settings; bump settings version; migrate old settings without changing saved Google/Local choices or wiping unknown future settings.
 - [ ] Validate model IDs, server addresses, and provider combinations at the backend settings boundary; preserve request-scoped settings snapshots and ordered frontend patch writes.
 - [ ] Add migration, serialization, defaults, invalid-input, and future-version tests; regenerate and review `src/generated/backendContract.json`.
