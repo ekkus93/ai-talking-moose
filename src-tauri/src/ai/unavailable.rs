@@ -2,7 +2,8 @@
 //! Never substitute another model or voice when a selected provider is unavailable.
 use crate::ai::traits::{LiveSession, RealtimeConversationProvider, SpeechSynthesizer};
 use crate::ai::types::{
-    AudioStreamData, LiveServerEvent, LiveSessionConfig, ProviderError, ProviderErrorKind, TtsRequest,
+    AudioStreamData, LiveServerEvent, LiveSessionConfig, ProviderError, ProviderErrorKind,
+    TtsRequest,
 };
 use async_trait::async_trait;
 use tokio::sync::mpsc;
