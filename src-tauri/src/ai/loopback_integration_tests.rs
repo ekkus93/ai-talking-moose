@@ -186,3 +186,42 @@ async fn model_catalog_redirect_does_not_follow_a_remote_destination() {
     );
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn ipv6_loopback_model_catalog_uses_the_selected_local_server() {
+    for (kind, path, payload) in [
+        (
+            LoopbackTextServer::Ollama,
+            "/api/tags",
+            r#"{"models":[{"name":"selected-model"}]}"#,
+        ),
+        (
+            LoopbackTextServer::LlamaServer,
+            "/v1/models",
+            r#"{"data":[{"id":"selected-model"}]}"#,
+        ),
+    ] {
+        // Some CI hosts disable IPv6 entirely. Do not mistake that host
+        // limitation for a provider failure; the IPv4 path is tested above.
+        let Ok(listener) = TcpListener::bind("[::1]:0").await else {
+            eprintln!("IPv6 loopback unavailable; skipping IPv6 socket qualification");
+            return;
+        };
+        let base_url = format!("http://[::1]:{}", listener.local_addr().unwrap().port());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buffer = [0u8; 2048];
+            let size = stream.read(&mut buffer).await.unwrap();
+            assert!(String::from_utf8_lossy(&buffer[..size])
+                .starts_with(&format!("GET {path} HTTP/1.1")));
+            let response = format!(
+                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{payload}",
+                payload.len()
+            ).replace("\\r", "\r").replace("\\n", "\n");
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let model = LoopbackTextModel::new(kind, base_url, "selected-model".into());
+        assert_eq!(model.check_readiness().await, LoopbackReadiness::ModelReady);
+        server.await.unwrap();
+    }
+}
