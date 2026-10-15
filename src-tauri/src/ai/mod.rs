@@ -25,6 +25,8 @@ mod loopback_integration_tests;
 mod loopback_ipv6_generation_tests;
 
 #[cfg(test)]
+mod loopback_pin_and_remote_tests;
+#[cfg(test)]
 mod loopback_request_contract_tests;
 
 #[cfg(test)]
