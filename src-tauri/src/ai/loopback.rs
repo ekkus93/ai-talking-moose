@@ -135,11 +135,15 @@ impl LoopbackTextModel {
     }
 
     fn has_tool_calls(message: &Value) -> bool {
-        match message.get("tool_calls") {
+        // Neither endpoint is asked to invoke tools. Reject legacy function
+        // calls and refusal metadata as well as modern tool_calls, even when
+        // the same response contains plausible assistant text.
+        let unrequested = |field: &str| match message.get(field) {
             None | Some(Value::Null) => false,
-            Some(Value::Array(calls)) => !calls.is_empty(),
+            Some(Value::Array(calls)) if field == "tool_calls" => !calls.is_empty(),
             _ => true,
-        }
+        };
+        unrequested("tool_calls") || unrequested("function_call") || unrequested("refusal")
     }
 
     fn text_from_json(&self, value: &Value) -> Result<TextResponse, ProviderError> {
@@ -803,6 +807,61 @@ mod tests {
             assert!(!error.message.contains("private transcript"));
             assert!(!error.message.contains("unfinished"));
             server.await.unwrap();
+        }
+    }
+
+    #[test]
+    fn rejects_legacy_function_calls_and_refusal_metadata_with_assistant_text() {
+        for kind in [
+            LoopbackTextServer::Ollama,
+            LoopbackTextServer::LlamaServer,
+        ] {
+            let model = LoopbackTextModel::new(
+                kind,
+                "http://127.0.0.1:8080".into(),
+                "selected-model".into(),
+            );
+            for field in [
+                json!({"function_call": {"name": "unrequested", "arguments": "{}"}}),
+                json!({"function_call": "malformed"}),
+                json!({"refusal": "not allowed"}),
+            ] {
+                let mut message = json!({"role": "assistant", "content": "partial reply"});
+                for (key, value) in field.as_object().unwrap() {
+                    message[key] = value.clone();
+                }
+                let response = match kind {
+                    LoopbackTextServer::Ollama => {
+                        json!({"done": true, "model": "selected-model", "message": message})
+                    }
+                    LoopbackTextServer::LlamaServer => {
+                        json!({"choices": [{"message": message, "finish_reason": "stop"}]})
+                    }
+                };
+                assert_eq!(
+                    model.text_from_json(&response).unwrap_err().kind,
+                    ProviderErrorKind::Protocol
+                );
+            }
+            let clean_message = json!({
+                "role": "assistant",
+                "content": "ordinary reply",
+                "function_call": null,
+                "refusal": null,
+                "tool_calls": []
+            });
+            let clean_response = match kind {
+                LoopbackTextServer::Ollama => {
+                    json!({"done": true, "model": "selected-model", "message": clean_message})
+                }
+                LoopbackTextServer::LlamaServer => {
+                    json!({"choices": [{"message": clean_message, "finish_reason": "stop"}]})
+                }
+            };
+            assert_eq!(
+                model.text_from_json(&clean_response).unwrap().text,
+                "ordinary reply"
+            );
         }
     }
 }
