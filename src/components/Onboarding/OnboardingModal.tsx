@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 const WHISPER_MODE = "whisper_small" as const;
+type WhisperModel = AsrModelDescriptor | null;
 
 export const OnboardingModal: React.FC = () => {
   const {
@@ -27,8 +28,7 @@ export const OnboardingModal: React.FC = () => {
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
   const [keyStatus, setKeyStatus] = useState<string | null>(null);
-  const [whisperModel, setWhisperModel] =
-    useState<AsrModelDescriptor | null>(null);
+  const [whisperModel, setWhisperModel] = useState<WhisperModel>(null);
   const [isInstallingWhisper, setIsInstallingWhisper] = useState(false);
   const [modelStatus, setModelStatus] = useState<string | null>(null);
   const [completionStatus, setCompletionStatus] = useState<string | null>(null);
@@ -42,9 +42,8 @@ export const OnboardingModal: React.FC = () => {
     void tauriBridge
       .getAsrModels()
       .then((models) => {
-        setWhisperModel(
-          models.find((model) => model.mode === WHISPER_MODE) ?? null,
-        );
+        const whisper = models.find((model) => model.mode === WHISPER_MODE);
+        setWhisperModel(whisper ?? null);
       })
       .catch((error) =>
         setModelStatus(`Could not inspect local models: ${error}`),
@@ -52,10 +51,8 @@ export const OnboardingModal: React.FC = () => {
   }, [isOnboardingOpen]);
 
   const asrMode = settings?.asr_mode ?? WHISPER_MODE;
-  const selectedAsrName =
-    asrMode === "gemini_live_audio"
-      ? "Gemini Live Cloud Audio"
-      : "Whisper Small";
+  const isCloudAsr = asrMode === "gemini_live_audio";
+  const selectedAsrName = isCloudAsr ? "Gemini Live Cloud Audio" : "Whisper Small";
 
   if (!isOnboardingOpen) {
     return null;
