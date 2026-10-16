@@ -18,6 +18,36 @@ async fn starting_a_new_provider_tears_down_previous_local_asr_before_connect() 
 }
 
 #[tokio::test]
+async fn whisper_missing_model_blocks_provider_connect_and_microphone_capture() {
+    let manager = ConversationManager::new();
+    let temp = tempfile::TempDir::new().unwrap();
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let mut request = test_request(false);
+    request.asr_mode = AsrMode::WhisperSmall;
+    request.moonshine_installer = None;
+    request.whisper_installer = Some(Arc::new(
+        crate::asr::whisper::WhisperModelInstaller::new(
+            temp.path().join("models").join("whisper").join("whisper-small"),
+        )
+        .unwrap(),
+    ));
+    request.provider = Arc::new(ConnectCountingProvider {
+        connect_count: connect_count.clone(),
+    });
+    let capture = request.capture.clone();
+
+    let error = manager
+        .start_session(request)
+        .await
+        .expect_err("missing Whisper model must fail before provider connection");
+    assert!(error.contains("Whisper") || error.contains("whisper"), "{error}");
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(!capture.lock().is_active());
+    assert!(!manager.local_asr_lifecycle().is_active().await);
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
+}
+
+#[tokio::test]
 async fn barge_in_keeps_current_local_asr_active() {
     let manager = ConversationManager::new();
     let playback = Arc::new(AudioPlayback::new());
