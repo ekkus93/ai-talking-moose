@@ -385,6 +385,14 @@ fn main() {
     // without submodules. Mac native acceptance sets REQUIRE=1, and must fail
     // instead of treating a missing Whisper runtime as a passing build.
     if let Some(build_dir) = explicit_whisper_lib_dir() {
+        // This escape hatch is for debug/test ABI qualification only. A
+        // production release must build the pinned whisper.cpp submodule
+        // rather than silently linking developer-supplied static archives.
+        if std::env::var("PROFILE").as_deref() != Ok("debug") {
+            panic!(
+                "{WHISPER_LIB_DIR} is only allowed in debug/test builds; release builds must compile pinned whisper.cpp source"
+            );
+        }
         if has_whisper_runtime(&build_dir) {
             emit_whisper_link(&build_dir);
         } else {
