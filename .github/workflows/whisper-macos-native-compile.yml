@@ -102,7 +102,7 @@ jobs:
           # packaged libwhisper/libggml dylib. These four libraries are static.
           otool -L "$binary" > "$RUNNER_TEMP/whisper-dynamic-libraries.txt"
           cat "$RUNNER_TEMP/whisper-dynamic-libraries.txt"
-          if grep -Ei 'lib(whisper|ggml[^/]*)\\.dylib|/opt/homebrew/.*(whisper|ggml)' \
+          if grep -Ei 'lib(whisper|ggml[^/]*)\.dylib|/opt/homebrew/.*(whisper|ggml)' \
             "$RUNNER_TEMP/whisper-dynamic-libraries.txt"; then
             echo "Unexpected dynamic Whisper/ggml library dependency" >&2
             exit 1
