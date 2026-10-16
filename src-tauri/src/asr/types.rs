@@ -98,8 +98,8 @@ impl Default for AsrModelDescriptor {
     }
 }
 ///
-/// Memory values are process RSS snapshots because the native Moonshine/ONNX
-/// allocator is process-global and does not expose a reliable per-model RSS.
+/// Memory values are process RSS snapshots. Native Whisper/ggml and other
+/// process allocations cannot be separated into reliable per-model RSS.
 /// `baseline_resident_memory_bytes` is sampled before the native model is
 /// opened, so callers can derive a session-local incremental footprint without
 /// pretending the process-level measurement is model-exclusive.
