@@ -236,16 +236,17 @@ pub(super) fn model_in_use(state: &AppState, mode: AsrMode) -> bool {
 }
 
 fn ensure_mode_supported(mode: AsrMode) -> Result<(), String> {
-    if matches!(
-        mode,
-        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
-    ) {
-        return Err(
+    match mode {
+        AsrMode::WhisperSmall => Ok(()),
+        AsrMode::GeminiLiveAudio => Err(
+            "Gemini Live is a cloud audio mode and has no local ASR model to install or delete."
+                .to_string(),
+        ),
+        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => Err(
             "Moonshine local ASR has been replaced by Whisper Small. Install or verify Whisper Small in Settings."
                 .to_string(),
-        );
+        ),
     }
-    Ok(())
 }
 
 fn ensure_model_mutation_allowed(state: &AppState, mode: AsrMode) -> Result<(), String> {
@@ -589,7 +590,9 @@ mod tests {
             assert!(error.contains("replaced by Whisper Small"));
         }
         assert!(ensure_mode_supported(AsrMode::WhisperSmall).is_ok());
-        assert!(ensure_mode_supported(AsrMode::GeminiLiveAudio).is_ok());
+        let cloud_error = ensure_mode_supported(AsrMode::GeminiLiveAudio).unwrap_err();
+        assert!(cloud_error.contains("no local ASR model"));
+        assert!(!cloud_error.contains("Moonshine"));
     }
 
     #[test]
