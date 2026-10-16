@@ -4,6 +4,15 @@ use super::{
 use crate::installer_http::{classify_installer_http_failure, InstallerHttpFailure};
 use async_trait::async_trait;
 use futures_util::StreamExt;
+use std::time::Duration;
+
+// Only retry timeouts before receiving a response/body. A partial streaming
+// download must never be replayed into the existing integrity-verifying sink.
+const INITIAL_REQUEST_TIMEOUT_RETRIES: usize = 2;
+
+fn should_retry_initial_request(is_timeout: bool, retries_used: usize) -> bool {
+    is_timeout && retries_used < INITIAL_REQUEST_TIMEOUT_RETRIES
+}
 
 pub(super) trait DownloadSink: Send {
     fn write_chunk(&mut self, chunk: &[u8]) -> Result<(), WhisperModelInstallError>;
@@ -57,9 +66,26 @@ impl ModelDownloadTransport for ReqwestModelDownloadTransport {
             return Err(WhisperModelInstallError::cancelled());
         }
 
-        let response = tokio::select! {
-            () = cancellation.cancelled() => return Err(WhisperModelInstallError::cancelled()),
-            response = self.client.get(url).header(reqwest::header::ACCEPT_ENCODING, "identity").send() => response.map_err(reqwest_install_error)?,
+        // Retry only initial HTTPS request timeouts, with bounded backoff.
+        // Never retry after bytes reach the integrity-verifying sink.
+        let mut retries_used = 0;
+        let response = loop {
+            let attempt = tokio::select! {
+                () = cancellation.cancelled() => return Err(WhisperModelInstallError::cancelled()),
+                response = self.client.get(url).header(reqwest::header::ACCEPT_ENCODING, "identity").send() => response,
+            };
+            match attempt {
+                Ok(response) => break response,
+                Err(error) if should_retry_initial_request(error.is_timeout(), retries_used) => {
+                    retries_used += 1;
+                    let delay = Duration::from_secs(1_u64 << retries_used);
+                    tokio::select! {
+                        () = cancellation.cancelled() => return Err(WhisperModelInstallError::cancelled()),
+                        () = tokio::time::sleep(delay) => {}
+                    }
+                }
+                Err(error) => return Err(reqwest_install_error(error)),
+            }
         };
 
         let status = response.status();
@@ -96,5 +122,14 @@ mod tests {
     #[test]
     fn transport_struct_exists() {
         let _ = std::mem::size_of::<ReqwestModelDownloadTransport>();
+    }
+
+    #[test]
+    fn only_initial_timeouts_receive_bounded_retries() {
+        assert!(should_retry_initial_request(true, 0));
+        assert!(should_retry_initial_request(true, 1));
+        assert!(!should_retry_initial_request(true, 2));
+        assert!(!should_retry_initial_request(false, 0));
+        assert!(!should_retry_initial_request(false, 1));
     }
 }
