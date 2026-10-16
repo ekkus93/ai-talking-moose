@@ -517,6 +517,26 @@ mod tests {
             AsrMode::MoonshineTinyStreaming,
             AsrMode::MoonshineSmallStreaming
         ));
+        // Production Whisper mode must retain the same active-session and
+        // in-flight-start protections as the legacy model selectors.
+        assert!(model_is_in_use(
+            Some(AsrMode::WhisperSmall),
+            false,
+            AsrMode::GeminiLiveAudio,
+            AsrMode::WhisperSmall
+        ));
+        assert!(model_is_in_use(
+            None,
+            true,
+            AsrMode::WhisperSmall,
+            AsrMode::WhisperSmall
+        ));
+        assert!(!model_is_in_use(
+            Some(AsrMode::GeminiLiveAudio),
+            false,
+            AsrMode::WhisperSmall,
+            AsrMode::WhisperSmall
+        ));
     }
 
     #[tokio::test]
@@ -528,7 +548,7 @@ mod tests {
         // Simulate a conversation start already inside its settings snapshot /
         // graph-activation critical section. Model mutation must wait.
         let conversation_guard = settings_runtime_lock().lock().await;
-        let mutation = acquire_model_mutation_guard(&state, AsrMode::MoonshineTinyStreaming);
+        let mutation = acquire_model_mutation_guard(&state, AsrMode::WhisperSmall);
         tokio::pin!(mutation);
         assert!(
             tokio::time::timeout(Duration::from_millis(20), &mut mutation)
