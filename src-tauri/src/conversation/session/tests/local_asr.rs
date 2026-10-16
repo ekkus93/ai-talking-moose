@@ -81,6 +81,114 @@ async fn barge_in_keeps_current_local_asr_active() {
 }
 
 #[tokio::test]
+async fn barge_in_preserves_whisper_pipeline_and_generation() {
+    let manager = ConversationManager::new();
+    let playback = Arc::new(AudioPlayback::new());
+    let generation = 36;
+    manager.generation.store(generation, Ordering::SeqCst);
+    manager.is_in_conversation.store(true, Ordering::SeqCst);
+    *manager.active_session_id.lock() = Some("whisper-barge-session".to_string());
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
+    *manager.lifecycle.write() = ConversationLifecycle::Responding;
+
+    let stop_count = attach_counting_local_asr(&manager, generation).await;
+    let interrupt_count = Arc::new(AtomicUsize::new(0));
+    *manager.live_session.lock().await = Some(Box::new(CountingSession {
+        close_count: Arc::new(AtomicUsize::new(0)),
+        interrupt_count: interrupt_count.clone(),
+    }));
+
+    manager.barge_in(playback).await.unwrap();
+    assert_eq!(interrupt_count.load(AtomicOrdering::SeqCst), 1);
+    assert_eq!(stop_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(manager.local_asr_lifecycle().is_active().await);
+    assert!(manager.local_asr_callback_is_current(generation).await);
+}
+
+#[tokio::test]
+async fn whisper_stop_during_preparation_cannot_connect_or_reanimate_session() {
+    let manager = ConversationManager::new();
+    let gate = Arc::new(LocalAsrPreparationTestGate::failing());
+    manager.set_local_asr_preparation_test_gate(Some(gate.clone()));
+
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let state_events = Arc::new(SyncMutex::new(Vec::new()));
+    let lifecycle_events = Arc::new(SyncMutex::new(Vec::new()));
+    let mut request = test_request(false);
+    request.asr_mode = AsrMode::WhisperSmall;
+    request.moonshine_installer = None;
+    request.provider = Arc::new(ConnectCountingProvider {
+        connect_count: connect_count.clone(),
+    });
+    let capture = request.capture.clone();
+    let playback = request.playback.clone();
+    let captured_states = state_events.clone();
+    let captured_lifecycles = lifecycle_events.clone();
+    request.callbacks = ConversationCallbacks::new(
+        move |state| captured_states.lock().push(state),
+        move |lifecycle| captured_lifecycles.lock().push(lifecycle),
+        |_, _, _| {},
+        |_| {},
+        |_| {},
+        |_| {},
+    );
+
+    let manager_for_start = manager.clone();
+    let start_task = tokio::spawn(async move { manager_for_start.start_session(request).await });
+    tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        gate.entered.notified(),
+    )
+    .await
+    .expect("Whisper startup must reach the preparation barrier");
+
+    tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        manager.stop_session(capture.clone(), playback),
+    )
+    .await
+    .expect("Stop must not wait for blocked Whisper preparation");
+    gate.release.notify_one();
+
+    let error = tokio::time::timeout(std::time::Duration::from_millis(500), start_task)
+        .await
+        .expect("cancelled Whisper preparation must terminate")
+        .unwrap()
+        .expect_err("stale Whisper preparation must be cancelled");
+    assert_eq!(error, "Conversation start was cancelled");
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(!capture.lock().is_active());
+    assert!(!manager.local_asr_lifecycle().is_active().await);
+    assert!(!manager.is_active());
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Idle);
+    assert!(!state_events.lock().contains(&CharacterState::Error));
+    assert!(!lifecycle_events.lock().contains(&ConversationLifecycle::Failed));
+}
+
+#[tokio::test]
+async fn cloud_wake_handoff_fails_without_starting_provider_or_capture() {
+    let manager = ConversationManager::new();
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let mut request = test_request(false);
+    request.asr_mode = AsrMode::GeminiLiveAudio;
+    request.provider = Arc::new(ConnectCountingProvider {
+        connect_count: connect_count.clone(),
+    });
+    let capture = request.capture.clone();
+    let wake_pcm = WakeCommandHandoffAudio::new(16_000, vec![101, 202, 303]).unwrap();
+
+    let error = manager
+        .start_session_with_wake_handoff(request, Some(wake_pcm))
+        .await
+        .expect_err("wake-word PCM must not be forwarded into cloud audio mode");
+    assert!(error.contains("requires a local speech-recognition pipeline"));
+    assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
+    assert!(!capture.lock().is_active());
+    assert!(!manager.local_asr_lifecycle().is_active().await);
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Failed);
+}
+
+#[tokio::test]
 async fn stale_local_asr_callback_cannot_mutate_newer_generation() {
     let manager = ConversationManager::new();
     manager.generation.store(40, Ordering::SeqCst);
