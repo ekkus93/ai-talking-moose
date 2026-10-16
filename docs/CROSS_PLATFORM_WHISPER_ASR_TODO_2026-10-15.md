@@ -39,6 +39,8 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 **Gate WSP-100:** real native Whisper runtime is linked and loadable on macOS arm64 and x86_64; Linux still builds. Moonshine is **still present** pending WSP-200.
 
+**Additional WSP-100 native qualification (2026-10-16):** Exact-source `50dcce604acb7fbe0b20e4ec7b96a1f5c0f34f39`, macOS workflow `38901291044`, passed arm64 job `116974464725` and Intel job `116974464318`. Both invoked the linked native Whisper runtime, verified static archives/Mach-O architecture/no dynamic Whisper dependency, and proved the explicit required-native debug build fails closed when the static archives are absent. The remaining WSP-100 checkbox stays open pending a separate production **release-profile** failure/provenance test; the debug acceptance override is not itself release-profile proof. This is no-model link/ABI evidence, not real transcription or packaged-app qualification.
+
 ## WSP-200 — Real Whisper inference, installer and performance on both Macs (mandatory pre-cutover gate)
 
 - [ ] Use the existing production `WhisperModelInstaller` and exact manifest on Mac. Verify explicit install, clean reinstall, cancellation, corruption/hash mismatch, missing weight, disk space, model lease and safe delete/update interaction.
@@ -128,7 +130,7 @@ Record each phase's completion here or link a dedicated file under `docs/evidenc
 | Phase | Head SHA | Platform / architecture | Exact CI run / command | Outcome / measurement | Remaining limitation |
 | --- | --- | --- | --- | --- | --- |
 | WSP-000 | Pending | Pending | Pending | Pending | Pending |
-| WSP-100 | Pending | Pending | Pending | Pending | Pending |
+| WSP-100 | `50dcce604acb7fbe0b20e4ec7b96a1f5c0f34f39` (partial gate) | macOS arm64 and x86_64 native CPU-only link | Run `38901291044`, jobs `116974464725` / `116974464318` | Both passed pinned-source native invoke, archive/link verification and debug required-native negative check | Production release-profile fail-closed qualification and packaged app remain open |
 | WSP-200 | `999a04e3aefaa9b93f30ad0c53b188009f9f228c` (two-arch real-corpus evidence, other gates open) | macOS ARM64 and x86_64 CPU-only | Run `38886320925`, jobs `116924832423` / `116924832215` | Both passed pinned install and real JFK transcript with CPU-only logs; ARM64 2,319 ms, Intel 11,502 ms transcribe wall; peak RSS 865,730,560 / 843,063,296 bytes | Enforced macOS network denial, packaged app, native lifecycle matrix and physical mic still unqualified |
 | WSP-300 | `ba6f871acd496db4f6fa584e32852c9f2834ea38` (UI); `fe3ddc642b73f57aa88ab8ccd1cb0ad4272f3934` (defaults); `ab30cca6438d88b9853ac2deccc7b5cda6d3ff27` (IPC/SQLite regressions) | Frontend and Linux Rust unit tests | CI `38893061667` frontend success; CI `38893284623` defaults quality/tests/contract success; CI `38897533479` Rust quality/tests/contract success; Wake audit `38897533475` + lifecycle `38897533476` success | Whisper-only UI, retired modes rejected on new settings writes, both persisted Moonshine variants migrate to Whisper once without implicit model installation; explicit Gemini Live preserved | Native macOS packaged app, complete provider/routing matrix, ASR-015 replacement, physical Mac acceptance still open |
 | WSP-400 | Pending | Pending | Pending | Pending | Pending |
