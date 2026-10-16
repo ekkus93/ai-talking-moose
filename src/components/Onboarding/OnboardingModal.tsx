@@ -52,7 +52,7 @@ export const OnboardingModal: React.FC = () => {
 
   const asrMode = settings?.asr_mode ?? WHISPER_MODE;
   const isCloudAsr = asrMode === "gemini_live_audio";
-  const selectedAsrName = isCloudAsr ? "Gemini Live Cloud Audio" : "Whisper Small";
+  const asrName = isCloudAsr ? "Gemini Live Cloud Audio" : "Whisper Small";
 
   if (!isOnboardingOpen) {
     return null;
@@ -176,7 +176,7 @@ export const OnboardingModal: React.FC = () => {
               you start in Settings, and closes when the session stops.
             </p>
             <p className="text-[11px]">
-              Current mode: <strong>{selectedAsrName}</strong>
+              Current mode: <strong>{asrName}</strong>
             </p>
             <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-800 space-y-1.5">
               <p>
