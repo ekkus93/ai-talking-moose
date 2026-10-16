@@ -504,7 +504,10 @@ mod tests {
         assert_eq!(state.observe(&voiced, voiced.len()), InferenceAction::None);
         assert!(state.active);
         assert!(!state.acknowledge_final_delivery(0));
-        assert!(state.active, "a stale final acknowledgement must not end new speech");
+        assert!(
+            state.active,
+            "a stale final acknowledgement must not end new speech"
+        );
         assert_eq!(state.segment_id, 1);
 
         assert_eq!(
