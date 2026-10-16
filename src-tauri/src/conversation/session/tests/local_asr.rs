@@ -1,5 +1,125 @@
 use super::*;
 
+struct WhisperTextRecordingSession {
+    turns: Arc<SyncMutex<Vec<String>>>,
+    microphone_chunks: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl LiveSession for WhisperTextRecordingSession {
+    async fn send_audio_chunk(&mut self, _pcm_bytes: &[u8]) -> Result<(), ProviderError> {
+        self.microphone_chunks.fetch_add(1, AtomicOrdering::SeqCst);
+        Ok(())
+    }
+
+    async fn send_text_turn(&mut self, text: &str) -> Result<(), ProviderError> {
+        self.turns.lock().push(text.to_string());
+        Ok(())
+    }
+
+    async fn send_tool_response(
+        &mut self,
+        _response: ToolCallResponse,
+    ) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn interrupt(&mut self) -> Result<(), ProviderError> {
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<(), ProviderError> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn whisper_final_turn_crosses_only_selected_text_session_boundary() {
+    let manager = ConversationManager::new();
+    let generation = 99;
+    let session_id = "whisper-local-text";
+    let turns = Arc::new(SyncMutex::new(Vec::new()));
+    let microphone_chunks = Arc::new(AtomicUsize::new(0));
+    let state_events = Arc::new(SyncMutex::new(Vec::new()));
+    let transcripts = Arc::new(SyncMutex::new(Vec::new()));
+    manager.generation.store(generation, Ordering::SeqCst);
+    manager.is_in_conversation.store(true, Ordering::SeqCst);
+    *manager.lifecycle.write() = ConversationLifecycle::Listening;
+    *manager.active_session_id.lock() = Some(session_id.to_string());
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
+    *manager.live_session.lock().await = Some(Box::new(WhisperTextRecordingSession {
+        turns: turns.clone(),
+        microphone_chunks: microphone_chunks.clone(),
+    }));
+    let state_events_for_callback = state_events.clone();
+    *manager.state_callback.lock() =
+        Some(Arc::new(move |state| state_events_for_callback.lock().push(state)));
+    *manager.lifecycle_callback.lock() = Some(Arc::new(|_| {}));
+    let transcripts_for_callback = transcripts.clone();
+    *manager.transcript_callback.lock() = Some(Arc::new(move |id, role, text| {
+        transcripts_for_callback.lock().push((id, role, text));
+    }));
+    let _resource = attach_counting_local_asr(&manager, generation).await;
+
+    assert!(!manager
+        .forward_microphone_chunk(generation, AsrMode::WhisperSmall, &[1, 2])
+        .await
+        .unwrap());
+    assert!(!manager
+        .handle_local_asr_event(
+            generation,
+            session_id,
+            AsrEvent::PartialTranscript {
+                text: "uncommitted".to_string(),
+            },
+        )
+        .await
+        .unwrap());
+    assert!(!manager
+        .handle_local_asr_event(
+            generation,
+            session_id,
+            AsrEvent::FinalTranscript {
+                text: "    ".to_string(),
+            },
+        )
+        .await
+        .unwrap());
+    assert!(turns.lock().is_empty());
+    assert!(transcripts.lock().is_empty());
+
+    assert!(manager
+        .handle_local_asr_event(
+            generation,
+            session_id,
+            AsrEvent::FinalTranscript {
+                text: "  final local turn  ".to_string(),
+            },
+        )
+        .await
+        .unwrap());
+    assert_eq!(turns.lock().as_slice(), &["final local turn"]);
+    assert_eq!(
+        transcripts.lock().as_slice(),
+        &[(session_id.to_string(), "user".to_string(), "final local turn".to_string())]
+    );
+    assert_eq!(microphone_chunks.load(AtomicOrdering::SeqCst), 0);
+    assert_eq!(state_events.lock().as_slice(), &[CharacterState::Thinking]);
+    assert_eq!(manager.lifecycle(), ConversationLifecycle::Responding);
+
+    assert!(!manager
+        .handle_local_asr_event(
+            generation - 1,
+            session_id,
+            AsrEvent::FinalTranscript {
+                text: "stale private turn".to_string(),
+            },
+        )
+        .await
+        .unwrap());
+    assert_eq!(turns.lock().len(), 1);
+}
+
 #[tokio::test]
 async fn starting_a_new_provider_tears_down_previous_local_asr_before_connect() {
     let manager = ConversationManager::new();
