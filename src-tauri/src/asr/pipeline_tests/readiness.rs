@@ -125,3 +125,73 @@ async fn unexpected_engine_sample_rate_fails_before_capture() {
     };
     assert_eq!(error.kind, AsrErrorKind::Internal);
 }
+
+#[tokio::test]
+async fn whisper_missing_model_fails_before_pipeline_or_capture_is_available() {
+    let (callback, events) = callback_events();
+    let result = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        || {
+            Err(AsrError {
+                kind: AsrErrorKind::ModelNotInstalled,
+                message: "Whisper Small must be explicitly installed.".to_string(),
+                retryable: true,
+            })
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await;
+
+    let error = match result {
+        Ok(_) => panic!("missing Whisper model unexpectedly started a pipeline"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind, AsrErrorKind::ModelNotInstalled);
+    assert!(events.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn cancelled_whisper_startup_reaps_late_native_factory_without_running() {
+    let state = Arc::new(FakeState::default());
+    let factory_entered = Arc::new(AtomicBool::new(false));
+    let release_factory = Arc::new(AtomicBool::new(false));
+    let reaped = Arc::new(AtomicBool::new(false));
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let entered = factory_entered.clone();
+    let release = release_factory.clone();
+    let reaped_for_start = reaped.clone();
+
+    let start_task = tokio::spawn(async move {
+        LocalAsrPipeline::start_architecture(
+            LocalAsrArchitecture::WhisperSmall,
+            WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            move || {
+                entered.store(true, Ordering::SeqCst);
+                while !release.load(Ordering::SeqCst) {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                Ok(Box::new(FakeEngine {
+                    state: worker_state,
+                    sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+                }) as Box<dyn PipelineEngine>)
+            },
+            callback,
+            WORKER_STARTUP_TIMEOUT,
+            Some(reaped_for_start),
+        )
+        .await
+    });
+
+    wait_until_async(|| factory_entered.load(Ordering::SeqCst)).await;
+    start_task.abort();
+    assert!(start_task.await.unwrap_err().is_cancelled());
+    release_factory.store(true, Ordering::SeqCst);
+    wait_until_async(|| state.stops.load(Ordering::SeqCst) == 1).await;
+    wait_until_async(|| reaped.load(Ordering::SeqCst)).await;
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
+    assert!(events.lock().unwrap().is_empty());
+}

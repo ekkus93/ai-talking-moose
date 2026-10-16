@@ -95,3 +95,36 @@ async fn inference_error_is_preserved_and_emitted() {
     );
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn whisper_malformed_pcm_fails_closed_and_does_not_invoke_inference() {
+    let state = Arc::new(FakeState::default());
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    pipeline.test_sender().try_send(vec![1, 2, 3]).unwrap();
+    wait_until(|| !pipeline.is_running());
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
+    assert_eq!(pipeline.diagnostics().last_error.unwrap().kind, AsrErrorKind::AudioInput);
+    assert!(matches!(
+        events.lock().unwrap().as_slice(),
+        [AsrEvent::Error { error: AsrError { kind: AsrErrorKind::AudioInput, .. } }]
+    ));
+    assert_eq!(pipeline.stop_and_join().await.unwrap_err().kind, AsrErrorKind::AudioInput);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+}

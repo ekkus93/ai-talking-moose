@@ -42,12 +42,12 @@ fn reap_cancelled_startup_worker(
 ) {
     // Keep the JoinHandle owned after an async startup future is cancelled. The
     // dedicated reaper may block until a native factory call returns, without
-    // blocking a Tokio worker thread or detaching the Moonshine inference thread.
+    // blocking a Tokio worker thread or detaching the local ASR inference thread.
     let worker_slot = Arc::new(Mutex::new(Some(worker)));
     let reaper_slot = worker_slot.clone();
     let reaper_probe = reaped_probe.clone();
     let spawn_result = thread::Builder::new()
-        .name("moonshine-startup-reaper".to_string())
+        .name("local-asr-startup-reaper".to_string())
         .spawn(move || {
             if let Some(worker) = reaper_slot.lock().take() {
                 let _ = worker.join();
