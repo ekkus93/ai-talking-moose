@@ -77,7 +77,31 @@ jobs:
           lipo -archs "$binary" | grep -Fx "${{ matrix.arch }}"
           export TALKING_MOOSE_ACCEPTANCE_HOST_CPU="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || sysctl -n hw.model)"
           "$binary" probe-native
-          "$binary" install "$model" "$reports/install.json"
+          # Retry only transient HTTPS timeouts. The production installer
+          # removes staging data after failure and rechecks the pinned SHA-256
+          # before promoting a complete model. Never resume partial downloads.
+          for attempt in 1 2 3; do
+            rm -f "$reports/install.json"
+            if "$binary" install "$model" "$reports/install.json" > "$reports/install-attempt.log" 2>&1; then
+              cat "$reports/install-attempt.log"
+              break
+            fi
+            cat "$reports/install-attempt.log" >&2
+            if ! grep -Fq 'The Whisper model download timed out.' "$reports/install-attempt.log"; then
+              echo "Whisper installer failed for a non-timeout reason; refusing retry" >&2
+              exit 1
+            fi
+            if test -e "$model/ggml-small.bin"; then
+              echo "Installer left a model file after timeout; refusing unsafe retry" >&2
+              exit 1
+            fi
+            if test "$attempt" -eq 3; then
+              echo "Whisper installer exhausted three timeout attempts" >&2
+              exit 1
+            fi
+            sleep "$((attempt * 10))"
+          done
+          rm -f "$reports/install-attempt.log"
           "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json"
           "$binary" delete "$model" "$reports/delete.json"
           test ! -e "$model/ggml-small.bin"
