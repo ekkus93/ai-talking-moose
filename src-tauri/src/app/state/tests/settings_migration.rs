@@ -740,6 +740,89 @@ fn unknown_persisted_asr_value_fails_closed_instead_of_selecting_cloud() {
 }
 
 #[test]
+fn explicit_whisper_and_gemini_choices_survive_sqlite_restart_without_model_installation() {
+    for mode in [AsrMode::WhisperSmall, AsrMode::GeminiLiveAudio] {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let mut saved = AppSettings {
+            asr_mode: mode,
+            text_provider: TextProvider::Openai,
+            openai_text_model: "gpt-4.1-mini".into(),
+            tts_provider: TtsProvider::Local,
+            local_tts_voice: "TestVoice".into(),
+            memory_enabled: true,
+            save_transcripts: true,
+            ..Default::default()
+        };
+        saved.future_settings.insert(
+            "future_visual_preference".into(),
+            serde_json::json!({"layout": "compact"}),
+        );
+        let db = Database::new(&path).unwrap();
+        db.set_setting("app_settings", &serde_json::to_string(&saved).unwrap())
+            .unwrap();
+        drop(db);
+
+        for restart in 0..2 {
+            let secret_store =
+                SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+            let app = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+            let loaded = app.settings.read().clone();
+            assert_eq!(loaded.settings_version, CURRENT_SETTINGS_VERSION);
+            assert_eq!(loaded.asr_mode, mode, "restart {restart}");
+            assert_eq!(loaded.text_provider, TextProvider::Openai);
+            assert_eq!(loaded.openai_text_model, "gpt-4.1-mini");
+            assert_eq!(loaded.tts_provider, TtsProvider::Local);
+            assert_eq!(loaded.local_tts_voice, "TestVoice");
+            assert!(loaded.memory_enabled);
+            assert!(loaded.save_transcripts);
+            assert_eq!(
+                loaded.future_settings.get("future_visual_preference"),
+                saved.future_settings.get("future_visual_preference")
+            );
+            assert!(
+                app.whisper_installer.verify_installed().unwrap().is_none(),
+                "restart must never install model weights implicitly"
+            );
+            let persisted = app.db.get_setting("app_settings").unwrap().unwrap();
+            let (decoded, changed) = AppSettings::from_persisted_json(&persisted).unwrap();
+            assert!(!changed, "current settings must not be rewritten on restart");
+            assert_eq!(decoded.asr_mode, mode);
+        }
+    }
+}
+
+#[test]
+fn invalid_persisted_asr_selection_preserves_original_sqlite_row_on_startup_error() {
+    for invalid_mode in ["unsupported_asr_mode", "moonshine_streaming_unknown"] {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let mut data = serde_json::to_value(AppSettings::default()).unwrap();
+        data["asr_mode"] = serde_json::json!(invalid_mode);
+        data["future_visual_preference"] = serde_json::json!({"layout": "wide"});
+        let original = data.to_string();
+        let db = Database::new(&path).unwrap();
+        db.set_setting("app_settings", &original).unwrap();
+        drop(db);
+
+        let secret_store =
+            SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        let error = match AppState::new_with_secret_store(Some(&path), secret_store) {
+            Ok(_) => panic!("invalid ASR selection must prevent startup"),
+            Err(error) => error,
+        };
+        assert!(error.contains("failed to decode persisted app settings"));
+        assert!(!error.contains("future_visual_preference"));
+        let reopened = Database::new(&path).unwrap();
+        assert_eq!(
+            reopened.get_setting("app_settings").unwrap().as_deref(),
+            Some(original.as_str()),
+            "invalid selection cannot be silently rewritten to cloud or local ASR"
+        );
+    }
+}
+
+#[test]
 fn explicit_cloud_asr_and_missing_legacy_selection_remain_unchanged() {
     let original = AppSettings {
         asr_mode: AsrMode::GeminiLiveAudio,
