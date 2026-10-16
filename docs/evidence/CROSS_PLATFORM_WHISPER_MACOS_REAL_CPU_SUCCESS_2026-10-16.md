@@ -1,9 +1,9 @@
 # macOS Whisper Small genuine CPU-only transcription — two-architecture pass
 
-**Recorded:** 2026-10-16 (UTC)  
-**Source SHA:** `999a04e3aefaa9b93f30ad0c53b188009f9f228c`  
-**Workflow:** [Whisper macOS Real CPU Acceptance #38886320925](https://github.com/ekkus93/ai-talking-moose/actions/runs/38886320925) — `workflow_dispatch`, **success**  
-**Model:** Whisper Small `ggml-small.bin`, 487,601,967 bytes, SHA-256 `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`  
+**Recorded:** 2026-10-16 (UTC)
+**Source SHA:** `999a04e3aefaa9b93f30ad0c53b188009f9f228c`
+**Workflow:** [Whisper macOS Real CPU Acceptance #38886320925](https://github.com/ekkus93/ai-talking-moose/actions/runs/38886320925) — `workflow_dispatch`, **success**
+**Model:** Whisper Small `ggml-small.bin`, 487,601,967 bytes, SHA-256 `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`
 **Native source:** pinned whisper.cpp `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774`
 
 | Real-model job | Result | Transcript wall | Reported peak RSS | Artifact |
