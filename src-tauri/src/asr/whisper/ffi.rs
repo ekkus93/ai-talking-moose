@@ -492,7 +492,10 @@ mod tests {
             dtw_mem_size: 0,
         };
         NativeWhisperApi::configure_cpu_context(&mut params);
-        assert!(!params.use_gpu, "CPU qualification must not silently select Metal");
+        assert!(
+            !params.use_gpu,
+            "CPU qualification must not silently select Metal"
+        );
         assert!(!params.flash_attn);
         // Repeated context setup is safe and cannot reactivate acceleration.
         NativeWhisperApi::configure_cpu_context(&mut params);
