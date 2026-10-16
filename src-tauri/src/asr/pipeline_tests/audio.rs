@@ -120,11 +120,22 @@ async fn whisper_malformed_pcm_fails_closed_and_does_not_invoke_inference() {
     pipeline.test_sender().try_send(vec![1, 2, 3]).unwrap();
     wait_until(|| !pipeline.is_running());
     assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
-    assert_eq!(pipeline.diagnostics().last_error.unwrap().kind, AsrErrorKind::AudioInput);
+    assert_eq!(
+        pipeline.diagnostics().last_error.unwrap().kind,
+        AsrErrorKind::AudioInput
+    );
     assert!(matches!(
         events.lock().unwrap().as_slice(),
-        [AsrEvent::Error { error: AsrError { kind: AsrErrorKind::AudioInput, .. } }]
+        [AsrEvent::Error {
+            error: AsrError {
+                kind: AsrErrorKind::AudioInput,
+                ..
+            }
+        }]
     ));
-    assert_eq!(pipeline.stop_and_join().await.unwrap_err().kind, AsrErrorKind::AudioInput);
+    assert_eq!(
+        pipeline.stop_and_join().await.unwrap_err().kind,
+        AsrErrorKind::AudioInput
+    );
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }

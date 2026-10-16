@@ -188,7 +188,11 @@ async fn cancelled_whisper_startup_reaps_late_native_factory_without_running() {
 
     wait_until_async(|| factory_entered.load(Ordering::SeqCst)).await;
     start_task.abort();
-    assert!(start_task.await.unwrap_err().is_cancelled());
+    let join_error = match start_task.await {
+        Ok(_) => panic!("aborted Whisper startup unexpectedly completed"),
+        Err(error) => error,
+    };
+    assert!(join_error.is_cancelled());
     release_factory.store(true, Ordering::SeqCst);
     wait_until_async(|| state.stops.load(Ordering::SeqCst) == 1).await;
     wait_until_async(|| reaped.load(Ordering::SeqCst)).await;
