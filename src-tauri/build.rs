@@ -72,6 +72,39 @@ fn git_output(repo_root: &Path, args: &[&str]) -> Option<String> {
     String::from_utf8(output.stdout).ok()
 }
 
+// Production/acceptance builds must use exactly the revision recorded in
+// both the checked-in submodule gitlink and the application's model manifest.
+// This prevents a locally advanced submodule from silently changing the native
+// Whisper implementation while the model and license provenance remain pinned.
+fn whisper_source_matches_pin(repo_root: &Path, whisper_src: &Path) -> bool {
+    let expected = include_str!("src/asr/whisper/manifest.rs")
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("pub const WHISPER_SOURCE_COMMIT: &str = \"")
+                .and_then(|value| value.strip_suffix("\";"))
+        });
+    let Some(expected) = expected else {
+        return false;
+    };
+    if normalize_commit(expected).as_deref() != Some(expected) {
+        return false;
+    }
+    let checked_out = git_output(whisper_src, &["rev-parse", "HEAD"])
+        .and_then(|value| normalize_commit(&value));
+    let gitlink = git_output(repo_root, &["ls-tree", "HEAD", "--", "third_party/whisper.cpp"])
+        .and_then(|value| {
+            let mut parts = value.split_whitespace();
+            match (parts.next(), parts.next(), parts.next(), parts.next()) {
+                (Some("160000"), Some("commit"), Some(sha), Some("third_party/whisper.cpp")) => {
+                    normalize_commit(sha)
+                }
+                _ => None,
+            }
+        });
+    checked_out.as_deref() == Some(expected) && gitlink.as_deref() == Some(expected)
+}
+
 fn git_commit() -> Option<String> {
     let repo_root = repository_root()?;
     normalize_commit(&git_output(&repo_root, &["rev-parse", "HEAD"])?)
@@ -260,6 +293,10 @@ fn build_whisper_from_source() {
     let whisper_src = root.join("third_party").join("whisper.cpp");
     if !whisper_src.join("CMakeLists.txt").is_file() {
         whisper_build_failure("pinned whisper.cpp submodule is not checked out");
+        return;
+    }
+    if require_whisper_native() && !whisper_source_matches_pin(&root, &whisper_src) {
+        whisper_build_failure("checked-out whisper.cpp revision does not match the manifest and gitlink");
         return;
     }
 
