@@ -90,18 +90,21 @@ fn whisper_source_matches_pin(repo_root: &Path, whisper_src: &Path) -> bool {
     if normalize_commit(expected).as_deref() != Some(expected) {
         return false;
     }
-    let checked_out = git_output(whisper_src, &["rev-parse", "HEAD"])
-        .and_then(|value| normalize_commit(&value));
-    let gitlink = git_output(repo_root, &["ls-tree", "HEAD", "--", "third_party/whisper.cpp"])
-        .and_then(|value| {
-            let mut parts = value.split_whitespace();
-            match (parts.next(), parts.next(), parts.next(), parts.next()) {
-                (Some("160000"), Some("commit"), Some(sha), Some("third_party/whisper.cpp")) => {
-                    normalize_commit(sha)
-                }
-                _ => None,
+    let checked_out =
+        git_output(whisper_src, &["rev-parse", "HEAD"]).and_then(|value| normalize_commit(&value));
+    let gitlink = git_output(
+        repo_root,
+        &["ls-tree", "HEAD", "--", "third_party/whisper.cpp"],
+    )
+    .and_then(|value| {
+        let mut parts = value.split_whitespace();
+        match (parts.next(), parts.next(), parts.next(), parts.next()) {
+            (Some("160000"), Some("commit"), Some(sha), Some("third_party/whisper.cpp")) => {
+                normalize_commit(sha)
             }
-        });
+            _ => None,
+        }
+    });
     checked_out.as_deref() == Some(expected) && gitlink.as_deref() == Some(expected)
 }
 
@@ -296,7 +299,9 @@ fn build_whisper_from_source() {
         return;
     }
     if require_whisper_native() && !whisper_source_matches_pin(&root, &whisper_src) {
-        whisper_build_failure("checked-out whisper.cpp revision does not match the manifest and gitlink");
+        whisper_build_failure(
+            "checked-out whisper.cpp revision does not match the manifest and gitlink",
+        );
         return;
     }
 
