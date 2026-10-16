@@ -42,7 +42,7 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 ## WSP-200 — Real Whisper inference, installer and performance on both Macs (mandatory pre-cutover gate)
 
 - [ ] Use the existing production `WhisperModelInstaller` and exact manifest on Mac. Verify explicit install, clean reinstall, cancellation, corruption/hash mismatch, missing weight, disk space, model lease and safe delete/update interaction.
-- [ ] With the actual pinned `ggml-small.bin` downloaded into user/test data only, run `whisper_acceptance` fixed-corpus inference on macOS arm64; capture exact commit, source/model SHA, real transcript and JSON reports.
+- [x] With the actual pinned `ggml-small.bin` downloaded into user/test data only, run `whisper_acceptance` fixed-corpus inference on macOS arm64; capture exact commit, source/model SHA, real transcript and JSON reports. (Passed arm64 job `116799364037` in manual run `38846896241` at SHA `df9411fde91ecbe245de662cc92b2f4a3af3f96f`; artifact `12023986115`. CPU-only backend assurance requires the new explicit-context fix to be rerun. See `docs/evidence/CROSS_PLATFORM_WHISPER_MACOS_REAL_MODEL_PARTIAL_2026-10-15.md`.)
 - [ ] Repeat equivalent pinned-model/fixed-corpus native inference on macOS x86_64; do not treat arm64 success, a mock, or compile-only smoke as Intel success.
 - [ ] Verify genuine offline inference after install on both Macs using an enforced macOS-appropriate egress-denial mechanism; if the enforcement cannot be demonstrated, explicitly record the limitation and leave that acceptance checkbox open.
 - [ ] Record first partial/final latency, utterance accuracy/content recall, real-time factor, model load time, CPU thread count, RSS/peak memory, buffer occupancy/drops and sustained/repeated utterance behavior for both architectures; compare against Linux's pinned baseline.
@@ -51,7 +51,7 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 **HARD CUTOVER GATE WSP-200:** *Both* Mac architectures demonstrably transcribe real audio with the pinned Whisper model and the packaged-compatible native runtime. **Do not remove Moonshine or switch production Mac default before this gate.**
 
-**External dispatch limitation (2026-10-15):** The opt-in manual Mac real-model workflow exists on `master`, but Ralph Bridge's configured `dispatch_validation` interface rejected profiles `whisper-macos-real-cpu-acceptance` and `whisper-macos-real-cpu` with `INVALID_ARGUMENT`. No real-model workflow was launched by these attempts. The GitHub App authentication is healthy for repository reads/writes; the exact dispatch denial cause (profile whitelist vs Actions permission) is not exposed. See `docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_DISPATCH_2026-10-15.md`. WSP-200 and subsequent Mac migration/removal gates stay **unchecked** until both real-model jobs pass.
+**Current acceptance state (2026-10-15):** A human dispatched run `38846896241` on `df9411fde91ecbe245de662cc92b2f4a3af3f96f`: real pinned-model arm64 transcription **passed**, while Intel x86_64 failed with an initial HTTPS model download timeout before inference. Retry logic was committed at `0314cab3124be9e141c54e6c5f839ad93130c228`, and CPU-only context enforcement at `01b963d4cb1ad456b187b47d22a79f857684a56c`; neither change has yet been validated in a new real-model manual run. Ralph Bridge `dispatch_validation` continues to reject the relevant profiles with opaque `INVALID_ARGUMENT`. See `docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_DISPATCH_2026-10-15.md` and `docs/evidence/CROSS_PLATFORM_WHISPER_MACOS_REAL_MODEL_PARTIAL_2026-10-15.md`. **The WSP-200 cutover gate is still OPEN. Do not switch macOS defaults or remove Moonshine before genuine Intel inference.** Do not spend migration effort repairing the Moonshine-specific ONNX Runtime/LFS fallback: replace its gates after Whisper replacement is qualified, preserving independent KittenTTS ONNX Runtime.
 
 ## WSP-300 — Unify ASR selection and persist settings safely
 
@@ -123,7 +123,7 @@ Record each phase's completion here or link a dedicated file under `docs/evidenc
 | --- | --- | --- | --- | --- | --- |
 | WSP-000 | Pending | Pending | Pending | Pending | Pending |
 | WSP-100 | Pending | Pending | Pending | Pending | Pending |
-| WSP-200 | Pending | Pending | Pending | Pending | Pending |
+| WSP-200 | `df9411fde91ecbe245de662cc92b2f4a3af3f96f` (partial only) | macOS ARM64 passed; Intel incomplete | Run `38846896241`, jobs `116799364037` / `116799363827` | ARM64 JFK transcript verified; 5,655 ms wall; 931,201,024-byte peak RSS. Intel initial download timeout | CPU-only requalification and Intel inference needed; offline egress/mic still open |
 | WSP-300 | Pending | Pending | Pending | Pending | Pending |
 | WSP-400 | Pending | Pending | Pending | Pending | Pending |
 | WSP-500 | Pending | Pending | Pending | Pending | Pending |
