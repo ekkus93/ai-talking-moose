@@ -89,8 +89,24 @@ jobs:
           test -f "$binary"
           file "$binary"
           lipo -archs "$binary" | grep -Fx "${{ matrix.arch }}"
-          archive="build/whisper-$(rustc -vV | sed -n 's/^host: //p')/src/libwhisper.a"
-          test -s "$archive"
+          build_dir="build/whisper-$(rustc -vV | sed -n 's/^host: //p')"
+          for archive in \
+            "$build_dir/src/libwhisper.a" \
+            "$build_dir/ggml/src/libggml.a" \
+            "$build_dir/ggml/src/libggml-base.a" \
+            "$build_dir/ggml/src/libggml-cpu.a"; do
+            test -s "$archive" || { echo "Missing static Whisper archive: $archive" >&2; exit 1; }
+            file "$archive"
+          done
+          # A native-linked acceptance CLI must not depend on a Homebrew or
+          # packaged libwhisper/libggml dylib. These four libraries are static.
+          otool -L "$binary" > "$RUNNER_TEMP/whisper-dynamic-libraries.txt"
+          cat "$RUNNER_TEMP/whisper-dynamic-libraries.txt"
+          if grep -Ei 'lib(whisper|ggml[^/]*)\\.dylib|/opt/homebrew/.*(whisper|ggml)' \
+            "$RUNNER_TEMP/whisper-dynamic-libraries.txt"; then
+            echo "Unexpected dynamic Whisper/ggml library dependency" >&2
+            exit 1
+          fi
           test ! -e src-tauri/native/macos/ggml-small.bin
           # This is compile/link evidence only. Real-model offline inference
           # and physical mic qualification belong to WSP-200/WSP-700.
