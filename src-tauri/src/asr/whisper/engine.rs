@@ -484,4 +484,76 @@ mod tests {
 
         assert!(transcript_text(&segments).is_empty());
     }
+
+    #[test]
+    fn stale_final_ack_cannot_advance_next_utterance() {
+        let mut state = WhisperUtteranceState::default();
+        let voiced = speech(1_600);
+        let quiet = silence(WHISPER_ENDPOINT_SILENCE_SAMPLES);
+
+        assert_eq!(state.observe(&voiced, voiced.len()), InferenceAction::None);
+        assert_eq!(
+            state.observe(&quiet, voiced.len() + quiet.len()),
+            InferenceAction::Final
+        );
+        state.final_update_pending_delivery = true;
+        assert!(state.acknowledge_final_delivery(0));
+        assert_eq!(state.segment_id, 1);
+        assert!(!state.acknowledge_final_delivery(0));
+
+        assert_eq!(state.observe(&voiced, voiced.len()), InferenceAction::None);
+        assert!(state.active);
+        assert!(!state.acknowledge_final_delivery(0));
+        assert!(state.active, "a stale final acknowledgement must not end new speech");
+        assert_eq!(state.segment_id, 1);
+
+        assert_eq!(
+            state.observe(&quiet, voiced.len() + quiet.len()),
+            InferenceAction::Final
+        );
+        state.final_update_pending_delivery = true;
+        assert!(state.acknowledge_final_delivery(1));
+        assert_eq!(state.segment_id, 2);
+    }
+
+    #[test]
+    fn silence_endpoint_accumulates_across_chunks_without_premature_final() {
+        let mut state = WhisperUtteranceState::default();
+        let voiced = speech(1_600);
+        assert_eq!(state.observe(&voiced, voiced.len()), InferenceAction::None);
+        let first_quiet = silence(3_200);
+        assert_eq!(
+            state.observe(&first_quiet, voiced.len() + first_quiet.len()),
+            InferenceAction::None
+        );
+        let second_quiet = silence(4_799);
+        assert_eq!(
+            state.observe(
+                &second_quiet,
+                voiced.len() + first_quiet.len() + second_quiet.len()
+            ),
+            InferenceAction::None
+        );
+        assert!(state.active);
+        let last_quiet = silence(1);
+        assert_eq!(
+            state.observe(
+                &last_quiet,
+                voiced.len() + first_quiet.len() + second_quiet.len() + 1
+            ),
+            InferenceAction::Final
+        );
+    }
+
+    #[test]
+    fn maximum_duration_takes_precedence_over_partial_refresh() {
+        let config = WhisperEngineConfig {
+            partial_interval_samples: WHISPER_MAX_UTTERANCE_SAMPLES,
+            ..WhisperEngineConfig::default()
+        };
+        let mut state = WhisperUtteranceState::with_config(config);
+        let voiced = speech(WHISPER_MAX_UTTERANCE_SAMPLES);
+        assert_eq!(state.observe(&voiced, voiced.len()), InferenceAction::Final);
+        assert_eq!(state.segment_id, 0);
+    }
 }
