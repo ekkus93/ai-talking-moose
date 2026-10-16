@@ -57,7 +57,7 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 ## WSP-300 — Unify ASR selection and persist settings safely
 
-- [ ] Make `AsrMode::WhisperSmall` the fresh-profile local ASR default on Linux and macOS. Retain explicit `GeminiLiveAudio` cloud mode with no implicit selection.
+- [x] Make `AsrMode::WhisperSmall` the fresh-profile local ASR default on Linux and macOS. Retain explicit `GeminiLiveAudio` cloud mode with no implicit selection. (`AsrMode` platform cfg and `AppSettings::default`/migration tests, exact-source main CI `38893284623` at `fe3ddc642b73f57aa88ab8ccd1cb0ad4272f3934`: Rust quality, Rust tests, generated contract all passed. This is a code/defaults gate, not physical Mac app acceptance.)
 - [x] Design an idempotent migration for persisted `moonshine_tiny_streaming` and `moonshine_small_streaming` to `whisper_small`. Decide and document settings-version treatment and preserve unknown/additive fields. (Design only, not activated: `docs/evidence/CROSS_PLATFORM_WHISPER_SETTINGS_MIGRATION_DESIGN_2026-10-15.md`; requires WSP-200 before implementation.)
 - [ ] Ensure migration **does not** claim a Whisper model is installed, download weights, silently enable cloud, substitute Moonshine model files, overwrite API/voice/TTS/text selections, or lose privacy/memory flags.
 - [ ] Test fresh Linux/Mac profiles, both persisted Moonshine variants, explicit saved Whisper, explicit Gemini Live, corrupted/invalid/future-version values, and save/restart round trips. Confirm removed choices are never resurrected.
@@ -126,7 +126,7 @@ Record each phase's completion here or link a dedicated file under `docs/evidenc
 | WSP-000 | Pending | Pending | Pending | Pending | Pending |
 | WSP-100 | Pending | Pending | Pending | Pending | Pending |
 | WSP-200 | `999a04e3aefaa9b93f30ad0c53b188009f9f228c` (two-arch real-corpus evidence, other gates open) | macOS ARM64 and x86_64 CPU-only | Run `38886320925`, jobs `116924832423` / `116924832215` | Both passed pinned install and real JFK transcript with CPU-only logs; ARM64 2,319 ms, Intel 11,502 ms transcribe wall; peak RSS 865,730,560 / 843,063,296 bytes | Enforced macOS network denial, packaged app, native lifecycle matrix and physical mic still unqualified |
-| WSP-300 | `ba6f871acd496db4f6fa584e32852c9f2834ea38` (frontend UI only) | Frontend UI and mock contract tests | CI `38893061667` — Frontend quality success | Only Whisper local selector and explicit Gemini Live; onboarding model install optional; batch diagnostics corrected | Settings/catalog full matrix, native Mac app and provider routing still open |
+| WSP-300 | `ba6f871acd496db4f6fa584e32852c9f2834ea38` (UI); `fe3ddc642b73f57aa88ab8ccd1cb0ad4272f3934` (defaults) | Frontend and Linux Rust unit tests | CI `38893061667` frontend success; CI `38893284623` Rust quality/tests/contract success | Whisper-only UI; explicit Gemini Live; platform default and settings-version tests | Native Mac app, full migration/IPC matrix, provider routing, legacy ASR-015 replacement still open |
 | WSP-400 | Pending | Pending | Pending | Pending | Pending |
 | WSP-500 | Pending | Pending | Pending | Pending | Pending |
 | WSP-600 | Pending | Pending | Pending | Pending | Pending |
