@@ -1,7 +1,7 @@
 # WSP-100 release-profile qualification and WSP-300/400 regression checkpoint
 
-**Date:** 2026-10-16 UTC  
-**Repository:** `ekkus93/ai-talking-moose`  
+**Date:** 2026-10-16 UTC
+**Repository:** `ekkus93/ai-talking-moose`
 **Commit workflow:** direct expected-head commits to `master` via Ralph Bridge exclusively.
 
 ## WSP-100 — two-architecture native release-profile gate
