@@ -7,6 +7,7 @@ on:
       - src-tauri/build.rs
       - src-tauri/src/asr/whisper/**
       - src-tauri/src/bin/whisper_acceptance.rs
+      - scripts/whisper_ffi_abi_probe.c
       - .github/workflows/whisper-macos-native-compile.yml
   workflow_dispatch:
 
@@ -48,6 +49,14 @@ jobs:
           test -f third_party/whisper.cpp/CMakeLists.txt
           python3 scripts/check_whisper_provenance.py
           cmake --version
+      - name: Compile pinned Whisper C ABI layout checks
+        shell: bash
+        run: |
+          clang -std=c11 -Wall -Wextra -Werror \
+            -I third_party/whisper.cpp/include \
+            -I third_party/whisper.cpp/ggml/include \
+            -c scripts/whisper_ffi_abi_probe.c \
+            -o "$RUNNER_TEMP/whisper_ffi_abi_probe.o"
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
