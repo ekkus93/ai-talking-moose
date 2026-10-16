@@ -46,6 +46,9 @@ impl Fakes {
             .unwrap();
         let mut settings = state.settings.write();
         settings.text_provider = provider;
+        // Keep provider-routing tests independent of the CI runner clock: a
+        // quiet-hours denial returns Ok(None) before the expected HTTP 503.
+        settings.quiet_hours_enabled = false;
         settings.ollama_server_address = self.ollama.origin();
         settings.llama_server_address = self.llama.origin();
         settings.ollama_text_model = "selected-model".into();
