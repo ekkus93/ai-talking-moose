@@ -81,6 +81,8 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 **Gate WSP-400:** correct single-engine app routing across targets; no loss of previous ELSV-400 or privacy guarantees.
 
+**Partial WSP-400 lifecycle regression (2026-10-16):** Direct-to-master `50dcce604acb7fbe0b20e4ec7b96a1f5c0f34f39` adds three deterministic Whisper utterance-state tests for stale/duplicate final-delivery acknowledgements across consecutive utterances, silence endpoint accumulation across chunks, and maximum-duration finality taking precedence over partial refresh. Exact-head main CI `38901291197` passed Rust tests, Rust quality and generated contract. These are isolated state-machine unit tests, **not** a claim of live capture, real-model native lifecycle, end-to-end provider routing, packaged Mac operation or physical microphone acceptance; all WSP-400 acceptance boxes remain open.
+
 ## WSP-500 — Remove Moonshine and obsolete dependencies (only after WSP-200/300/400)
 
 - [ ] Remove `src-tauri/src/asr/moonshine/`, Moonshine factories/types, architecture variants and default branches, old installers/commands, native load probes and active Moonshine test fixtures; keep useful provider-neutral tests.
