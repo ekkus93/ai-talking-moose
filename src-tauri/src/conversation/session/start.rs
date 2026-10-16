@@ -102,7 +102,7 @@ impl ConversationManager {
         if let Some(handoff_audio) = wake_handoff_audio {
             let Some(pipeline) = local_pipeline.as_ref() else {
                 let message = concat!(
-                    "Wake Word handoff requires local Moonshine command ASR; ",
+                    "Wake Word handoff requires a local speech-recognition pipeline; ",
                     "no microphone audio was sent."
                 )
                 .to_string();

@@ -45,7 +45,7 @@ fn production_start_failure_resumes_enabled_wake_runtime() {
         .unwrap();
 
     get_ipc_response(&webview, ipc_request("start_conversation"))
-        .expect_err("missing Moonshine model should fail the normal production start path");
+        .expect_err("missing Whisper model should fail the normal production start path");
 
     assert_eq!(wake_runtime.phase(), WakeWordRuntimePhase::Listening);
 }
@@ -70,7 +70,7 @@ fn production_manual_start_failure_keeps_disabled_wake_runtime_disabled() {
         .unwrap();
 
     get_ipc_response(&webview, ipc_request("start_conversation"))
-        .expect_err("missing Moonshine model should fail the normal manual start path");
+        .expect_err("missing Whisper model should fail the normal manual start path");
 
     assert_eq!(wake_runtime.phase(), WakeWordRuntimePhase::Disabled);
 }
@@ -94,7 +94,7 @@ fn production_manual_start_failure_preserves_manual_path_when_wake_failed() {
         .unwrap();
 
     get_ipc_response(&webview, ipc_request("start_conversation"))
-        .expect_err("missing Moonshine model should fail after manual command start reaches ASR");
+        .expect_err("missing Whisper model should fail after manual command start reaches ASR");
 
     assert_eq!(wake_runtime.phase(), WakeWordRuntimePhase::Loading);
 }
