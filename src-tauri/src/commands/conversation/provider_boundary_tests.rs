@@ -58,6 +58,36 @@ fn local_text_selection_does_not_change_moonshine_voice_preflight() {
 }
 
 #[test]
+fn local_text_selection_does_not_bypass_whisper_model_preflight() {
+    let mut app_state = AppState::new_for_tests().unwrap();
+    app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
+    {
+        let mut settings = app_state.settings.write();
+        settings.text_provider = TextProvider::Local;
+        settings.local_text_model = "missing-local-model".to_string();
+        settings.asr_mode = AsrMode::WhisperSmall;
+    }
+    let capture = app_state.audio_capture.clone();
+
+    let app = mock_builder()
+        .manage(app_state)
+        .invoke_handler(tauri::generate_handler![start_conversation])
+        .build(mock_context(noop_assets()))
+        .unwrap();
+    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+
+    let error = get_ipc_response(&webview, ipc_request("start_conversation", json!({})))
+        .expect_err("missing Whisper model must fail before any text-provider activity");
+    let error = error.as_str().unwrap();
+
+    assert!(error.contains("Whisper"), "{error}");
+    assert!(!error.contains("selected conversation model is unavailable"));
+    assert!(!capture.lock().is_active());
+}
+
+#[test]
 fn local_text_selection_still_uses_google_live_for_cloud_voice() {
     let app_state = AppState::new_for_tests().unwrap();
     {
