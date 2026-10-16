@@ -162,7 +162,9 @@ async fn whisper_stop_during_preparation_cannot_connect_or_reanimate_session() {
     assert!(!manager.is_active());
     assert_eq!(manager.lifecycle(), ConversationLifecycle::Idle);
     assert!(!state_events.lock().contains(&CharacterState::Error));
-    assert!(!lifecycle_events.lock().contains(&ConversationLifecycle::Failed));
+    assert!(!lifecycle_events
+        .lock()
+        .contains(&ConversationLifecycle::Failed));
 }
 
 #[tokio::test]
