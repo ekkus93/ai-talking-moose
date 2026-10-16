@@ -30,7 +30,7 @@ jobs:
           - arch: x86_64
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 100
     env:
       MACOSX_DEPLOYMENT_TARGET: "13.4"
       TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
@@ -134,3 +134,70 @@ jobs:
             exit 1
           fi
           echo "Required missing-Whisper native build failed closed on ${{ matrix.arch }}"
+      - name: Build release-profile native Whisper and invoke the real linked runtime
+        # Unlike debug ABI probes, this exercises the production Cargo profile.
+        # Keep the model absent and do not create a signed/release app artifact.
+        shell: bash
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+        run: |
+          set -euo pipefail
+          test -z "${TALKING_MOOSE_WHISPER_LIB_DIR:-}"
+          cargo build --locked --release --manifest-path src-tauri/Cargo.toml \
+            --features whisper-acceptance --bin whisper_acceptance
+          binary=src-tauri/target/release/whisper_acceptance
+          test -f "$binary"
+          "$binary" probe-native
+          lipo -archs "$binary" | grep -Fx "${{ matrix.arch }}"
+          otool -L "$binary" > "$RUNNER_TEMP/whisper-release-dependencies.txt"
+          if grep -Ei 'lib(whisper|ggml[^/]*)\\.dylib|/opt/homebrew/.*(whisper|ggml)' \
+              "$RUNNER_TEMP/whisper-release-dependencies.txt"; then
+            echo "Release-profile Whisper unexpectedly depends on a dynamic developer library" >&2
+            exit 1
+          fi
+          test ! -e src-tauri/native/macos/ggml-small.bin
+      - name: Reject developer Whisper static archives in production release profile
+        shell: bash
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+          TALKING_MOOSE_WHISPER_LIB_DIR: ${{ runner.temp }}/whisper-release-override-forbidden
+        run: |
+          set -euo pipefail
+          test ! -e "$TALKING_MOOSE_WHISPER_LIB_DIR"
+          log="$RUNNER_TEMP/whisper-release-override-denied.log"
+          if cargo build --locked --release --manifest-path src-tauri/Cargo.toml \
+              --features whisper-acceptance --bin whisper_acceptance > "$log" 2>&1; then
+            echo "Release build accepted developer-supplied native library path" >&2
+            exit 1
+          fi
+          if ! grep -Fq 'is only allowed in debug/test builds; release builds must compile pinned whisper.cpp source' "$log"; then
+            tail -n 70 "$log" >&2
+            echo "Release build failed for an unexpected reason" >&2
+            exit 1
+          fi
+      - name: Reject missing pinned Whisper source in production release profile
+        shell: bash
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+        run: |
+          set -euo pipefail
+          test -z "${TALKING_MOOSE_WHISPER_LIB_DIR:-}"
+          source_file=third_party/whisper.cpp/CMakeLists.txt
+          missing_file="$RUNNER_TEMP/whisper-CMakeLists.intentionally-absent"
+          test -f "$source_file"
+          test ! -e "$missing_file"
+          mv "$source_file" "$missing_file"
+          trap 'mv "$missing_file" "$source_file"' EXIT
+          # Force the Cargo build script to rerun even on a warm release cache.
+          touch src-tauri/build.rs
+          log="$RUNNER_TEMP/whisper-release-missing-source.log"
+          if cargo build --locked --release --manifest-path src-tauri/Cargo.toml \
+              --features whisper-acceptance --bin whisper_acceptance > "$log" 2>&1; then
+            echo "Release build unexpectedly accepted missing pinned Whisper source" >&2
+            exit 1
+          fi
+          if ! grep -Fq 'Required Whisper native build failed: pinned whisper.cpp submodule is not checked out' "$log"; then
+            tail -n 70 "$log" >&2
+            echo "Release build failed for an unexpected reason" >&2
+            exit 1
+          fi
