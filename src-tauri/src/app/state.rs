@@ -116,7 +116,7 @@ pub struct AppSettings {
     pub future_settings: BTreeMap<String, serde_json::Value>,
 }
 
-pub const CURRENT_SETTINGS_VERSION: u32 = 8;
+pub const CURRENT_SETTINGS_VERSION: u32 = 9;
 
 #[derive(Debug, Error)]
 pub enum PersistedSettingsError {
@@ -262,7 +262,7 @@ impl AppSettings {
     /// New profiles use the local ASR runtime supported by their platform. Legacy profiles
     /// without an ASR selector migrate to Gemini Live audio because that was their only path.
     pub fn from_persisted_json(json: &str) -> Result<(Self, bool), PersistedSettingsError> {
-        let value: serde_json::Value = serde_json::from_str(json)?;
+        let mut value: serde_json::Value = serde_json::from_str(json)?;
         if let Some(persisted_version) = value
             .get("settings_version")
             .and_then(serde_json::Value::as_u64)
@@ -272,6 +272,24 @@ impl AppSettings {
                     found: persisted_version,
                     current: CURRENT_SETTINGS_VERSION,
                 });
+            }
+        }
+        // Rewrite only persisted Moonshine ASR selections before decoding the
+        // legacy enum variants. Leave saved Gemini Live, saved Whisper, and
+        // profiles with no ASR selector unchanged. Missing legacy selectors
+        // continue to represent the old Gemini Live behavior.
+        let asr_migrated = value
+            .get("asr_mode")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|mode| {
+                matches!(
+                    mode,
+                    "moonshine_tiny_streaming" | "moonshine_small_streaming"
+                )
+            });
+        if asr_migrated {
+            if let Some(fields) = value.as_object_mut() {
+                fields.insert("asr_mode".to_string(), serde_json::json!("whisper_small"));
             }
         }
         let had_asr_mode = value.get("asr_mode").is_some();
@@ -360,15 +378,8 @@ impl AppSettings {
                 }
                 Err(error) => return Err(PersistedSettingsError::Invalid(error)),
             };
-        let unsupported_asr_mode = cfg!(target_os = "linux")
-            && matches!(
-                settings.asr_mode,
-                AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
-            );
         if !had_asr_mode {
             settings.asr_mode = AsrMode::GeminiLiveAudio;
-        } else if unsupported_asr_mode {
-            settings.asr_mode = AsrMode::default();
         }
         if !had_text_provider {
             // Profiles without an explicit provider inherit the Local-first default.
@@ -426,7 +437,7 @@ impl AppSettings {
         Ok((
             settings,
             !had_asr_mode
-                || unsupported_asr_mode
+                || asr_migrated
                 || had_legacy_microphone_permission
                 || !had_current_version
                 || wake_word_migrated

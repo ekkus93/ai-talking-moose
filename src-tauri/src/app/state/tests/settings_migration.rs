@@ -6,9 +6,7 @@ use tempfile::NamedTempFile;
 fn new_settings_use_the_platform_asr_default_and_local_text() {
     let settings = AppSettings::default();
     assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
-    #[cfg(target_os = "macos")]
-    assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
     assert!(!settings.wake_word_enabled);
     assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
@@ -195,9 +193,8 @@ fn external_provider_values_round_trip_without_changing_defaults() {
     assert_eq!(AppSettings::default().tts_provider, TtsProvider::Local);
 }
 
-#[cfg(target_os = "linux")]
 #[test]
-fn persisted_moonshine_selection_migrates_to_whisper_on_linux() {
+fn persisted_moonshine_selection_migrates_to_whisper_on_supported_platforms() {
     let original = AppSettings {
         asr_mode: AsrMode::MoonshineSmallStreaming,
         wake_word_enabled: true,
@@ -285,10 +282,7 @@ fn missing_wake_word_fields_default_disabled_and_preserve_unrelated_settings() {
     assert!(migrated);
     assert!(!settings.wake_word_enabled);
     assert_eq!(settings.wake_word_phrase, DEFAULT_WAKE_PHRASE);
-    #[cfg(target_os = "linux")]
     assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
-    #[cfg(target_os = "macos")]
-    assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
     assert_eq!(settings.tts_provider, TtsProvider::Local);
     assert_eq!(settings.local_tts_voice, "Bella");
     assert_eq!(settings.google_tts_voice, "Kore");
@@ -643,6 +637,75 @@ fn frontend_contract_matches_authoritative_rust_defaults_and_catalogs() {
 }
 
 #[test]
+fn moonshine_tiny_and_small_migration_preserves_independent_settings_and_is_idempotent() {
+    for legacy_asr_mode in [
+        AsrMode::MoonshineTinyStreaming,
+        AsrMode::MoonshineSmallStreaming,
+    ] {
+        let mut original = AppSettings {
+            settings_version: 8,
+            asr_mode: legacy_asr_mode,
+            wake_word_enabled: true,
+            memory_enabled: true,
+            save_transcripts: true,
+            text_provider: TextProvider::Google,
+            tts_provider: TtsProvider::Local,
+            local_tts_voice: "TestVoice".to_string(),
+            ..Default::default()
+        };
+        original.future_settings.insert(
+            "future_visual_preference".to_string(),
+            serde_json::json!({"size": 3}),
+        );
+        let (settings, migrated) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&original).unwrap())
+                .unwrap();
+        assert!(migrated);
+        assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
+        assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
+        assert!(settings.wake_word_enabled);
+        assert!(settings.memory_enabled);
+        assert!(settings.save_transcripts);
+        assert_eq!(settings.text_provider, TextProvider::Google);
+        assert_eq!(settings.tts_provider, TtsProvider::Local);
+        assert_eq!(settings.local_tts_voice, "TestVoice");
+        assert_eq!(
+            settings.future_settings.get("future_visual_preference"),
+            Some(&serde_json::json!({"size": 3}))
+        );
+        // Loading a normalized profile again does not repeat migration,
+        // implicitly install a model, or change explicit cloud selections.
+        let (again, migrated_again) =
+            AppSettings::from_persisted_json(&serde_json::to_string(&settings).unwrap())
+                .unwrap();
+        assert!(!migrated_again);
+        assert_eq!(again.asr_mode, AsrMode::WhisperSmall);
+        assert_eq!(again.future_settings, settings.future_settings);
+    }
+}
+
+#[test]
+fn explicit_cloud_asr_and_missing_legacy_selection_remain_unchanged() {
+    let original = AppSettings {
+        asr_mode: AsrMode::GeminiLiveAudio,
+        ..Default::default()
+    };
+    let (cloud, migrated) =
+        AppSettings::from_persisted_json(&serde_json::to_string(&original).unwrap())
+            .unwrap();
+    assert!(!migrated);
+    assert_eq!(cloud.asr_mode, AsrMode::GeminiLiveAudio);
+
+    let mut old = serde_json::to_value(&original).unwrap();
+    old.as_object_mut().unwrap().remove("asr_mode");
+    let (legacy, migrated) =
+        AppSettings::from_persisted_json(&serde_json::to_string(&old).unwrap())
+            .unwrap();
+    assert!(migrated);
+    assert_eq!(legacy.asr_mode, AsrMode::GeminiLiveAudio);
+}
+
+#[test]
 fn current_settings_keep_selected_asr_mode() {
     let original = AppSettings {
         asr_mode: AsrMode::MoonshineSmallStreaming,
@@ -651,16 +714,8 @@ fn current_settings_keep_selected_asr_mode() {
     let json = serde_json::to_string(&original).unwrap();
 
     let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
-    #[cfg(target_os = "linux")]
-    {
-        assert!(migrated);
-        assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
-    }
-    #[cfg(target_os = "macos")]
-    {
-        assert!(!migrated);
-        assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
-    }
+    assert!(migrated);
+    assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
 }
 
 #[test]

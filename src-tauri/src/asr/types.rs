@@ -2,15 +2,14 @@ use serde::{Deserialize, Serialize};
 
 /// User-selectable speech-recognition path.
 ///
-/// Local Moonshine modes keep microphone audio on-device. `GeminiLiveAudio`
-/// sends microphone audio to the configured Google Gemini Live session.
+/// Whisper Small keeps microphone audio on-device. `GeminiLiveAudio`
+/// sends microphone audio to the explicitly configured Google Gemini Live session.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AsrMode {
-    #[cfg_attr(target_os = "macos", default)]
     MoonshineTinyStreaming,
     MoonshineSmallStreaming,
-    #[cfg_attr(target_os = "linux", default)]
+    #[cfg_attr(any(target_os = "linux", target_os = "macos"), default)]
     WhisperSmall,
     #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), default)]
     GeminiLiveAudio,
@@ -158,10 +157,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn asr_mode_default_is_moonshine_tiny_streaming() {
-        #[cfg(target_os = "macos")]
-        assert_eq!(AsrMode::default(), AsrMode::MoonshineTinyStreaming);
-        #[cfg(target_os = "linux")]
+    fn supported_platform_asr_default_is_whisper_small() {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         assert_eq!(AsrMode::default(), AsrMode::WhisperSmall);
     }
 
