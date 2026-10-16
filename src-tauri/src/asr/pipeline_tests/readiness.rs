@@ -199,3 +199,55 @@ async fn cancelled_whisper_startup_reaps_late_native_factory_without_running() {
     assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
     assert!(events.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn repeated_whisper_start_stop_joins_each_worker_and_isolates_final_events() {
+    for cycle in 0..5 {
+        let state = Arc::new(FakeState::default());
+        let transcript = format!("Whisper session {cycle}");
+        state
+            .stop_updates
+            .lock()
+            .unwrap()
+            .push(StreamingTranscriptUpdate::Final {
+                segment_id: 7,
+                text: transcript.clone(),
+                latency_ms: 1,
+            });
+
+        let (callback, events) = callback_events();
+        let worker_state = state.clone();
+        let mut pipeline = LocalAsrPipeline::start_architecture(
+            LocalAsrArchitecture::WhisperSmall,
+            WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            move || {
+                Ok(Box::new(FakeEngine {
+                    state: worker_state,
+                    sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+                }) as Box<dyn PipelineEngine>)
+            },
+            callback,
+            WORKER_STARTUP_TIMEOUT,
+            None,
+        )
+        .await
+        .unwrap();
+
+        pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+        wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+        pipeline.stop_and_join().await.unwrap();
+        pipeline.stop_and_join().await.unwrap();
+
+        assert!(!pipeline.is_running(), "Whisper worker leaked on cycle {cycle}");
+        assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            events.lock().unwrap().as_slice(),
+            [
+                AsrEvent::SpeechStarted { monotonic_ms: None },
+                AsrEvent::FinalTranscript { text: transcript },
+                AsrEvent::SpeechEnded { monotonic_ms: None },
+            ],
+            "Whisper final event duplicated or leaked across cycle {cycle}"
+        );
+    }
+}
