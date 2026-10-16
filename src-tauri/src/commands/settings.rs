@@ -491,16 +491,16 @@ mod tests {
             ..Default::default()
         };
         let persisted_before = serde_json::to_string(&saved).unwrap();
-        for retired in [
-            "moonshine_tiny_streaming",
-            "moonshine_small_streaming",
-        ] {
+        for retired in ["moonshine_tiny_streaming", "moonshine_small_streaming"] {
             // Exercise the same Serde decoding as a direct/stale Tauri IPC caller.
             let mut incoming = serde_json::to_value(&saved).unwrap();
             incoming["asr_mode"] = serde_json::json!(retired);
             let decoded: AppSettings = serde_json::from_value(incoming).unwrap();
             let error = normalize_settings_update(decoded).unwrap_err();
-            assert!(error.contains("Moonshine ASR is retired"), "{retired}: {error}");
+            assert!(
+                error.contains("Moonshine ASR is retired"),
+                "{retired}: {error}"
+            );
             // Rejected requests cannot reach persist_and_apply_settings.
             let (loaded, migrated) = AppSettings::from_persisted_json(&persisted_before).unwrap();
             assert!(!migrated);
@@ -520,11 +520,13 @@ mod tests {
                 asr_mode: mode,
                 memory_enabled: true,
                 ..Default::default()
-            }).unwrap();
+            })
+            .unwrap();
             assert_eq!(updated.asr_mode, mode);
             assert!(updated.memory_enabled);
             let (reloaded, migrated) =
-                AppSettings::from_persisted_json(&serde_json::to_string(&updated).unwrap()).unwrap();
+                AppSettings::from_persisted_json(&serde_json::to_string(&updated).unwrap())
+                    .unwrap();
             assert!(!migrated);
             assert_eq!(reloaded.asr_mode, mode);
         }

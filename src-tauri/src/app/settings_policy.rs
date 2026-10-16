@@ -94,7 +94,10 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
         settings.asr_mode,
         AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
     ) {
-        return Err("Moonshine ASR is retired; select Whisper Small or explicit Gemini Live audio.".to_string());
+        return Err(
+            "Moonshine ASR is retired; select Whisper Small or explicit Gemini Live audio."
+                .to_string(),
+        );
     }
 
     validate_live_model(&settings.live_model)?;
