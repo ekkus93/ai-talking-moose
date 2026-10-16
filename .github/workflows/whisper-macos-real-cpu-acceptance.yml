@@ -102,7 +102,21 @@ jobs:
             sleep "$((attempt * 10))"
           done
           rm -f "$reports/install-attempt.log"
-          "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json"
+          # Capture upstream native diagnostics so real-model acceptance proves
+          # the CPU-only baseline rather than silently falling back to Metal.
+          native_log="$root/whisper-transcribe-native.log"
+          if ! "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json" > "$native_log" 2>&1; then
+            cat "$native_log" >&2
+            exit 1
+          fi
+          cat "$native_log"
+          grep -Fq 'whisper_init_with_params_no_state: use gpu    = 0' "$native_log"
+          grep -Fq 'whisper_init_with_params_no_state: flash attn = 0' "$native_log"
+          if grep -Fq 'whisper_backend_init_gpu: using' "$native_log"; then
+            echo "Native Whisper unexpectedly selected a GPU backend" >&2
+            exit 1
+          fi
+          rm -f "$native_log"
           "$binary" delete "$model" "$reports/delete.json"
           test ! -e "$model/ggml-small.bin"
           echo "report_dir=$reports" >> "$GITHUB_OUTPUT"
