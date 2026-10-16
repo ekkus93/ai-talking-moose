@@ -260,6 +260,7 @@ jobs:
           bash -n scripts/run_backend_failure_matrix.sh
           bash -n scripts/run_backend_stress_matrix.sh
           python3 scripts/check_whisper_acceptance_workflow.py
+          python3 scripts/check_whisper_macos_acceptance_workflow.py
           test -s .github/workflows/ci.yml
           grep -q '^name: CI$' .github/workflows/ci.yml
 

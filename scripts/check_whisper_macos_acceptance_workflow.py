@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Static safety contract for manual macOS Whisper Small real-model acceptance.
+
+This script never downloads weights. It rejects accidental conversion of the
+opt-in acceptance workflow into ordinary CI, loss of either architecture,
+submodule/provenance checks, or substitution of compile-only for inference.
+"""
+
+from __future__ import annotations
+
+import re
+import textwrap
+from pathlib import Path
+
+WORKFLOW = (
+    Path(__file__).resolve().parents[1]
+    / ".github/workflows/whisper-macos-real-cpu-acceptance.yml"
+)
+
+
+def check_workflow(text: str) -> None:
+    required = {
+        "manual dispatch": "workflow_dispatch:",
+        "arm64 target": "arch: arm64",
+        "Intel target": "arch: x86_64",
+        "arm64 runner": "runner: macos-15",
+        "Intel runner": "runner: macos-15-intel",
+        "pinned source checkout": "submodules: true",
+        "exact-head verification": 'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"',
+        "source provenance": "python3 scripts/check_whisper_provenance.py",
+        "hard native build requirement": 'TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"',
+        "real acceptance feature": "--features whisper-acceptance --bin whisper_acceptance",
+        "real corpus": "third_party/whisper.cpp/samples/jfk.wav",
+        "native probe": '"$binary" probe-native',
+        "production model install": '"$binary" install "$model" "$reports/install.json"',
+        "actual transcription": '"$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json"',
+        "production model deletion": '"$binary" delete "$model" "$reports/delete.json"',
+        "installed model integrity": 'assert install["production_installer_verified"] is True',
+        "model bytes": '487601967',
+        "model hash": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+        "source revision": "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774",
+        "genuine transcription": 'assert transcript["transcript"]["transcription_ok"] is True',
+        "meaningful words": '("ask", "country", "you")',
+        "runtime identity": 'assert transcript["runtime"]["whisper_native_linked"] is True',
+        "architecture evidence": 'assert transcript["host_arch"] == rust_arch',
+        "JSON evidence upload": "actions/upload-artifact@v4",
+        "no model weight artifacts": "/reports/*.json",
+    }
+    for description, snippet in required.items():
+        if snippet not in text:
+            raise ValueError(f"Mac Whisper acceptance missing {description}: {snippet}")
+
+    for event in ("push", "pull_request", "schedule", "repository_dispatch"):
+        if re.search(rf"^\s*{event}\s*:", text, flags=re.MULTILINE):
+            raise ValueError(f"Mac real-model workflow must not trigger on {event}")
+    if text.count("arch: arm64") != 1 or text.count("arch: x86_64") != 1:
+        raise ValueError("Mac acceptance matrix must contain exactly one job per architecture")
+    if "sudo unshare --net" in text or "--require-network-denied" in text:
+        raise ValueError("Mac workflow cannot claim Linux namespace-based egress isolation")
+    if re.search(r"^\s*path:.*(?:ggml-small[.]bin|/models/)", text, re.MULTILINE):
+        raise ValueError("Mac acceptance must not upload model weights")
+
+    # Compile the embedded JSON assertion program before any costly model run.
+    lines = text.splitlines()
+    blocks = []
+    for index, line in enumerate(lines):
+        if "<<'PY'" not in line:
+            continue
+        end = next(
+            (n for n in range(index + 1, len(lines)) if lines[n].strip() == "PY"),
+            None,
+        )
+        if end is None:
+            raise ValueError("Unterminated Mac acceptance Python heredoc")
+        blocks.append(textwrap.dedent("\n".join(lines[index + 1 : end])) + "\n")
+    if not blocks:
+        raise ValueError("Mac acceptance requires executable JSON assertions")
+    for index, source in enumerate(blocks, start=1):
+        compile(source, f"mac-whisper-acceptance-{index}", "exec")
+
+
+def main() -> int:
+    check_workflow(WORKFLOW.read_text(encoding="utf-8"))
+    print("macOS Whisper real-model acceptance workflow policy OK")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
