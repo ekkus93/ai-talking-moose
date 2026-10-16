@@ -52,8 +52,9 @@ async fn whisper_final_turn_crosses_only_selected_text_session_boundary() {
         microphone_chunks: microphone_chunks.clone(),
     }));
     let state_events_for_callback = state_events.clone();
-    *manager.state_callback.lock() =
-        Some(Arc::new(move |state| state_events_for_callback.lock().push(state)));
+    *manager.state_callback.lock() = Some(Arc::new(move |state| {
+        state_events_for_callback.lock().push(state)
+    }));
     *manager.lifecycle_callback.lock() = Some(Arc::new(|_| {}));
     let transcripts_for_callback = transcripts.clone();
     *manager.transcript_callback.lock() = Some(Arc::new(move |id, role, text| {
@@ -101,7 +102,11 @@ async fn whisper_final_turn_crosses_only_selected_text_session_boundary() {
     assert_eq!(turns.lock().as_slice(), &["final local turn"]);
     assert_eq!(
         transcripts.lock().as_slice(),
-        &[(session_id.to_string(), "user".to_string(), "final local turn".to_string())]
+        &[(
+            session_id.to_string(),
+            "user".to_string(),
+            "final local turn".to_string()
+        )]
     );
     assert_eq!(microphone_chunks.load(AtomicOrdering::SeqCst), 0);
     assert_eq!(state_events.lock().as_slice(), &[CharacterState::Thinking]);
