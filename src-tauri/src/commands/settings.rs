@@ -199,18 +199,6 @@ pub async fn update_settings<R: Runtime>(
 
     new_settings = normalize_settings_update(new_settings)?;
 
-    #[cfg(target_os = "linux")]
-    if matches!(
-        new_settings.asr_mode,
-        crate::asr::AsrMode::MoonshineTinyStreaming | crate::asr::AsrMode::MoonshineSmallStreaming
-    ) {
-        return Err("Moonshine speech recognition is available only in the macOS app.".to_string());
-    }
-    #[cfg(target_os = "macos")]
-    if new_settings.asr_mode == crate::asr::AsrMode::WhisperSmall {
-        return Err("Whisper Small is available only in the Linux app.".to_string());
-    }
-
     let previous = state.settings.read().clone();
     validate_changed_audio_devices(&previous, &new_settings)?;
     let restart_required = conversation_restart_required(&previous, &new_settings);
@@ -492,6 +480,54 @@ mod tests {
             crate::ai::types::TtsProvider::Local
         );
         assert_eq!(normalized.talkativeness, 0.73);
+    }
+
+    #[test]
+    fn live_settings_ipc_rejects_retired_moonshine_without_rewriting_saved_selection() {
+        let saved = AppSettings {
+            asr_mode: crate::asr::AsrMode::WhisperSmall,
+            text_provider: TextProvider::Local,
+            save_transcripts: true,
+            ..Default::default()
+        };
+        let persisted_before = serde_json::to_string(&saved).unwrap();
+        for retired in [
+            "moonshine_tiny_streaming",
+            "moonshine_small_streaming",
+        ] {
+            // Exercise the same Serde decoding as a direct/stale Tauri IPC caller.
+            let mut incoming = serde_json::to_value(&saved).unwrap();
+            incoming["asr_mode"] = serde_json::json!(retired);
+            let decoded: AppSettings = serde_json::from_value(incoming).unwrap();
+            let error = normalize_settings_update(decoded).unwrap_err();
+            assert!(error.contains("Moonshine ASR is retired"), "{retired}: {error}");
+            // Rejected requests cannot reach persist_and_apply_settings.
+            let (loaded, migrated) = AppSettings::from_persisted_json(&persisted_before).unwrap();
+            assert!(!migrated);
+            assert_eq!(loaded.asr_mode, crate::asr::AsrMode::WhisperSmall);
+            assert_eq!(loaded.text_provider, TextProvider::Local);
+            assert!(loaded.save_transcripts);
+        }
+    }
+
+    #[test]
+    fn live_settings_ipc_accepts_whisper_and_explicit_cloud_on_supported_platforms() {
+        for mode in [
+            crate::asr::AsrMode::WhisperSmall,
+            crate::asr::AsrMode::GeminiLiveAudio,
+        ] {
+            let updated = normalize_settings_update(AppSettings {
+                asr_mode: mode,
+                memory_enabled: true,
+                ..Default::default()
+            }).unwrap();
+            assert_eq!(updated.asr_mode, mode);
+            assert!(updated.memory_enabled);
+            let (reloaded, migrated) =
+                AppSettings::from_persisted_json(&serde_json::to_string(&updated).unwrap()).unwrap();
+            assert!(!migrated);
+            assert_eq!(reloaded.asr_mode, mode);
+        }
     }
 
     #[test]
