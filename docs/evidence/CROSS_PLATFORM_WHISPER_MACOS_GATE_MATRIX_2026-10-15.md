@@ -1,0 +1,38 @@
+# Cross-Platform Whisper — macOS CI, Release, and P13 Gate Ownership Matrix
+
+**Inspected source:** `master` `f5d88ed3b4a1e0ca50edfa2b346e87c478a50e6a` on 2026-10-15 (PDT).
+**Scope:** WSP-000 gate inventory; planned ownership, not approval to cut over.
+**Authority:** `docs/CROSS_PLATFORM_WHISPER_ASR_SPEC_2026-10-15.md`.
+
+## Workflow and acceptance ownership
+
+| Entry point | Existing verified behavior / scope | Required migration before WSP-600/700 |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` `classify` | Selective docs/CI/frontend/Rust/contract/release checks; `workflow_dispatch` requests full validation. | Update changed-path classification and gate triggers for new Whisper native sources, scripts and package checks; no docs-only CI may count as full qualification. |
+| `ci.yml` `rust-clippy`, `rust-tests`, `backend-contract` | Linux backend tests, formatting, generated contract; current manifest still validates Moonshine. | Keep Linux Whisper source/installer/FFI tests and regenerated contract; remove only Moonshine-specific assertions after replacement coverage. |
+| `ci.yml` `release-static` | Release metadata, scripts syntax, license inventory and local LLM/TTS packaging policies; includes Moonshine scripts. | Replace Moonshine runtime/provenance checks with pinned Whisper native/license checks; retain independent KittenTTS ONNX and local TTS policy. |
+| `ci.yml` `macos-bundle` | `full_validation` only; arm64 `macos-15`, Intel `macos-15-intel`; stages Moonshine dylibs, builds unsigned Tauri app and checks bundle/provenance. | Checkout pinned Whisper submodule; require native Whisper build on both targets; validate real app Mach-O architecture, native load, absent Moonshine dylibs, license, and no developer rpaths. This is not currently a routine push gate. |
+| `ci.yml` `canonical-check-all` / `full-local-llm-x86` | Full check:all and separate Intel local LLM compile proof when dispatched. | Rerun at exact cutover SHA; do not drop unrelated LLM coverage. |
+| `.github/workflows/whisper-macos-native-compile.yml` | Push-triggered on native code/workflow changes; arm64 and Intel static source build, pinned provenance, CLI link and FFI version probe, C header ABI compile assertions (added at `f5d88ed3b4a1e0ca50edfa2b346e87c478a50e6a`). | Verify all four static archives, dynamic loader/rpath, and keep a current exact-head successful two-arch run. No model, installer, packaged app or microphone evidence here. |
+| `.github/workflows/whisper-macos-real-cpu-acceptance.yml` | Manual `workflow_dispatch` only; both Macs, pinned production model installer, real JFK WAV transcription, deletion and JSON report. | Dispatch via authorized Ralph profile or human workflow action; inspect exact SHA, both transcripts and metrics. Add enforced Mac egress-denial evidence separately; no physical microphone claim. |
+| `.github/workflows/whisper-real-cpu-acceptance.yml` | Manual Linux x86_64 real-model install/delete/reinstall and transcription in an OS network namespace. | Rerun on final exact head and retain genuine network-isolation and pinned-model assertions. |
+| `.github/workflows/release.yml` `source-gate` | Tagged Linux source quality, release metadata, Moonshine provenance, dependency audits and license inventory. | Preserve all existing non-ASR gates; replace Moonshine checks with Whisper source/native and updated notice requirements. |
+| `release.yml` `build-macos` | Signed/notarized arm64 and Intel app/DMG, current Moonshine native staging and release verification. | Checkout `submodules: true` for pinned whisper.cpp (currently absent); set required native build failure policy; remove Moonshine staging only after WSP-200/300/400; verify signed Whisper app and architecture. |
+| `release.yml` `publish-draft` | Requires two architecture app zips, two DMGs, checksums and publishes draft only. | Preserve two-arch/checksum and draft-release gate; do not publish without P13 and System TTS owner acceptance. |
+| `scripts/verify_macos_bundle.sh` | Requires `libmoonshine.dylib`, Moonshine ONNX dylib, their rpaths/signatures, notices and `--moonshine-native-smoke-test`; checks deployment floor and bundle. | Require pinned static Whisper presence and real native smoke; reject Moonshine dylibs and developer paths; keep notices, deployment checks, secret/model-weight exclusions and independent TTS dependencies. |
+| `scripts/verify_macos_release.sh` | Wraps bundle/provenance checks plus Developer ID, hardened runtime, secure timestamp, Gatekeeper, stapled app/DMG, and secret exclusion. | Keep signing/notarization and provenance checks intact; inherit updated Whisper bundle verifier. |
+| `scripts/verify_app_build_provenance.sh`, `scripts/collect_release_licenses.py`, `scripts/validate_release_metadata.py` | Build identity, licenses and release metadata. | Update ASR notice inventory only; preserve all unrelated dependencies and exact-source identity. |
+| `scripts/run_p13_macos_release_acceptance.sh` | Requires real Mac, exact tagged checkout, installed app/DMG, checksums, manual PASS/FAIL/SKIP evidence; current prompts explicitly require Moonshine Tiny/Small. | Rewrite prompts for explicit verified Whisper Small, missing/corrupt no-fallback, mic/wake/partial/final, provider/TTS, device selection, upgrade, privacy and absence of Moonshine. Repeat per architecture or record owner-authorized Intel deferral. |
+| `docs/MACOS_RELEASE.md` and release notes | Current 13.4 floor attributed to Moonshine ONNX 1.23.2, describes Moonshine staging and release/P13 steps. | Re-evaluate minimum against *all* remaining dependencies; document Whisper, independent KittenTTS ONNX, signing/notarization and exact acceptance commands. |
+
+## Observed evidence and known gaps
+
+- Earlier `Whisper macOS Native Compile` run `38821907488` at `6cc3fe302baad4d8d5a579c7bffd65770542131c` passed arm64 and Intel static compile plus live FFI version probe; it **did not transcribe**. A later two-arch ABI-enhanced run is in progress at this inventory checkpoint and must be inspected independently.
+- Existing Linux real-model acceptance is historical (`37756211710`, `cf3280ea1d4e91d298828e4935e3369f8cbd6be6`), not a current-head pass.
+- `CI` run `38827895566` at `f5d88ed3b4a1e0ca50edfa2b346e87c478a50e6a` passed **CI plumbing only**; Rust, full check:all, Mac app bundles and release checks were skipped. Do not interpret the workflow-level green status as WSP-000 full baseline or WSP-600 qualification.
+- `ASR-015 Native Acceptance` previously failed on the Moonshine native dependency path. This is not evidence that Whisper model inference failed.
+- Ralph Bridge `dispatch_validation` currently rejects the named real-model Mac profiles; no WSP-200 acceptance run was launched through it. Operator-approved profile or human dispatch is required. See `docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_DISPATCH_2026-10-15.md`.
+- Production `build.rs` currently makes missing Whisper native libraries fatal only with `TALKING_MOOSE_REQUIRE_WHISPER_NATIVE=1`; current release workflow does not set this flag or check out the Whisper submodule. **Both must change before cutover/release**, not silently ship a `RuntimeUnavailable` selector.
+- No current exact-head signed/notarized app, enforced macOS network denial, real-model Mac transcript, live microphone, wake-word, speech-bubble, or human System Voices evidence is claimed.
+
+**Ordering:** Do not change macOS ASR defaults, delete Moonshine, or remove its current release smoke until real pinned Whisper Small transcription succeeds on both Macs and WSP-200 is accepted. Preserve KittenTTS's separate `ort` dependency and wake-word sherpa-onnx.
