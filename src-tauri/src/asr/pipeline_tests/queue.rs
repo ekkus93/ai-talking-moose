@@ -61,6 +61,71 @@ async fn wake_handoff_queue_full_fails_without_dropping_or_reordering_payload() 
     pipeline.stop_and_join().await.unwrap();
 }
 #[tokio::test]
+async fn whisper_wake_handoff_precedes_live_pcm_on_the_same_ingress() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
+    let handoff_samples = vec![i16::MIN, -1, 100, i16::MAX];
+    let live_samples = vec![77, -88, 99];
+    let handoff =
+        WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, handoff_samples.clone())
+            .unwrap();
+
+    pipeline.prime_wake_handoff(handoff).unwrap();
+    pipeline
+        .test_sender()
+        .try_send(AudioResampler::i16_to_bytes(&live_samples))
+        .unwrap();
+    wait_until(|| state.received_pcm.lock().unwrap().len() == 2);
+
+    assert_eq!(
+        state.received_pcm.lock().unwrap().as_slice(),
+        &[
+            AudioResampler::i16_to_f32(&handoff_samples),
+            AudioResampler::i16_to_f32(&live_samples),
+        ]
+    );
+    assert_eq!(
+        pipeline.diagnostics().queue_capacity,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
+    );
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn whisper_full_wake_handoff_queue_fails_closed_without_overwriting_pcm() {
+    let state = Arc::new(FakeState::default());
+    state.block_push.store(true, Ordering::SeqCst);
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
+    let sender = pipeline.test_sender();
+    sender.try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    for _ in 0..WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS {
+        sender.try_send(vec![0, 0]).unwrap();
+    }
+
+    let error = pipeline
+        .prime_wake_handoff(
+            WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, vec![7, 8, 9]).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, AsrErrorKind::AudioInput);
+    assert_eq!(
+        pipeline.diagnostics().queue_depth,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
+    );
+
+    state.block_push.store(false, Ordering::SeqCst);
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(
+        state.received_pcm.lock().unwrap().len(),
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS + 1
+    );
+}
+
+#[tokio::test]
 async fn processed_chunk_releases_queue_depth() {
     let state = Arc::new(FakeState::default());
     let mut pipeline = fake_pipeline(state.clone()).await;

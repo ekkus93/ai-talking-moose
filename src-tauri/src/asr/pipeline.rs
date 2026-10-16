@@ -226,10 +226,10 @@ impl LocalAsrPipeline {
         .await
     }
 
-    /// Prime the existing Moonshine command-ASR ingress with the exact wake
-    /// pre-roll plus post-trigger live PCM before microphone ownership moves to
-    /// `start_capture`. This preserves chronological ordering without acoustic
-    /// wake-phrase trimming or a second inference path.
+    /// Prime the shared local ASR ingress (Whisper or legacy Moonshine) with
+    /// exact wake pre-roll and post-trigger PCM before microphone ownership
+    /// transfers to `start_capture`. The bounded queue preserves chronological
+    /// ordering without acoustic trimming or a second inference path.
     // WWR-310 lands the ingress seam before the production orchestrator calls it.
     #[allow(dead_code)]
     pub(crate) fn prime_wake_handoff(
