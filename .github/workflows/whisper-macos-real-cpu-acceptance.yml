@@ -102,6 +102,13 @@ jobs:
             sleep "$((attempt * 10))"
           done
           rm -f "$reports/install-attempt.log"
+          # A clean reinstall must use the same production model lifecycle,
+          # without reusing weights left behind from the first installation.
+          mv "$reports/install.json" "$reports/install-initial.json"
+          "$binary" delete "$model" "$reports/delete-before-reinstall.json"
+          test ! -e "$model/ggml-small.bin"
+          test ! -e "$model/.talking-moose-model.json"
+          "$binary" install "$model" "$reports/install.json"
           # Capture upstream native diagnostics so real-model acceptance proves
           # the CPU-only baseline rather than silently falling back to Metal.
           native_log="$root/whisper-transcribe-native.log"
@@ -129,12 +136,19 @@ jobs:
           import pathlib
           import sys
           root, sha, arch = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          install_initial = json.loads((root / "install-initial.json").read_text())
+          delete_before_reinstall = json.loads((root / "delete-before-reinstall.json").read_text())
           install = json.loads((root / "install.json").read_text())
           transcript = json.loads((root / "transcribe.json").read_text())
           deletion = json.loads((root / "delete.json").read_text())
           expected_hash = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
           expected_source = "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774"
-          assert install["git_sha"] == transcript["git_sha"] == sha
+          assert install_initial["git_sha"] == install["git_sha"] == transcript["git_sha"] == sha
+          assert install_initial["disposition"] == install["disposition"] == "installed"
+          assert install_initial["production_installer_verified"] is True
+          assert install_initial["sha256"] == install["sha256"]
+          assert install_initial["revision"] == install["revision"]
+          assert delete_before_reinstall["removed"] is True
           assert install["sha256"] == transcript["sha256"] == expected_hash
           assert install["source_commit"] == transcript["source_commit"] == expected_source
           assert install["expected_bytes"] == transcript["expected_bytes"] == 487601967

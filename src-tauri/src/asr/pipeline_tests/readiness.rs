@@ -127,6 +127,35 @@ async fn unexpected_engine_sample_rate_fails_before_capture() {
 }
 
 #[tokio::test]
+async fn whisper_rejects_wrong_native_input_rate_before_exposing_audio_ingress() {
+    let state = Arc::new(FakeState::default());
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let result = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: 48_000,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await;
+
+    let error = match result {
+        Ok(_) => panic!("Whisper unexpectedly accepted a non-16kHz native engine"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind, AsrErrorKind::Internal);
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
+    assert!(events.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn whisper_missing_model_fails_before_pipeline_or_capture_is_available() {
     let (callback, events) = callback_events();
     let result = LocalAsrPipeline::start_architecture(
