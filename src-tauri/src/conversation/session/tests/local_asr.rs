@@ -27,7 +27,10 @@ async fn whisper_missing_model_blocks_provider_connect_and_microphone_capture() 
     request.moonshine_installer = None;
     request.whisper_installer = Some(Arc::new(
         crate::asr::whisper::WhisperModelInstaller::new(
-            temp.path().join("models").join("whisper").join("whisper-small"),
+            temp.path()
+                .join("models")
+                .join("whisper")
+                .join("whisper-small"),
         )
         .unwrap(),
     ));
@@ -40,7 +43,10 @@ async fn whisper_missing_model_blocks_provider_connect_and_microphone_capture() 
         .start_session(request)
         .await
         .expect_err("missing Whisper model must fail before provider connection");
-    assert!(error.contains("Whisper") || error.contains("whisper"), "{error}");
+    assert!(
+        error.contains("Whisper") || error.contains("whisper"),
+        "{error}"
+    );
     assert_eq!(connect_count.load(AtomicOrdering::SeqCst), 0);
     assert!(!capture.lock().is_active());
     assert!(!manager.local_asr_lifecycle().is_active().await);

@@ -685,6 +685,61 @@ fn moonshine_tiny_and_small_migration_preserves_independent_settings_and_is_idem
 }
 
 #[test]
+fn legacy_moonshine_sqlite_selection_rewrites_once_without_installing_whisper() {
+    for retired in [
+        AsrMode::MoonshineTinyStreaming,
+        AsrMode::MoonshineSmallStreaming,
+    ] {
+        let original = AppSettings {
+            settings_version: 8,
+            asr_mode: retired,
+            text_provider: TextProvider::Google,
+            tts_provider: TtsProvider::Local,
+            memory_enabled: true,
+            save_transcripts: true,
+            ..Default::default()
+        };
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let db = Database::new(&path).unwrap();
+        db.set_setting("app_settings", &serde_json::to_string(&original).unwrap())
+            .unwrap();
+        drop(db);
+
+        let secret_store =
+            SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        let state = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+        assert_eq!(state.settings.read().asr_mode, AsrMode::WhisperSmall);
+        assert_eq!(state.settings.read().text_provider, TextProvider::Google);
+        assert_eq!(state.settings.read().tts_provider, TtsProvider::Local);
+        assert!(state.settings.read().memory_enabled);
+        assert!(state.settings.read().save_transcripts);
+        assert!(
+            state.whisper_installer.verify_installed().unwrap().is_none(),
+            "settings migration must not silently install the Whisper weight"
+        );
+
+        let normalized = state.db.get_setting("app_settings").unwrap().unwrap();
+        assert!(!normalized.contains("moonshine_"));
+        let (reloaded, migrated_again) = AppSettings::from_persisted_json(&normalized).unwrap();
+        assert!(!migrated_again, "SQLite migration must be idempotent");
+        assert_eq!(reloaded.asr_mode, AsrMode::WhisperSmall);
+        assert_eq!(reloaded.text_provider, TextProvider::Google);
+        assert!(reloaded.save_transcripts);
+    }
+}
+
+#[test]
+fn unknown_persisted_asr_value_fails_closed_instead_of_selecting_cloud() {
+    let mut value = serde_json::to_value(AppSettings::default()).unwrap();
+    value["asr_mode"] = serde_json::json!("moonshine_unknown_streaming");
+    assert!(matches!(
+        AppSettings::from_persisted_json(&value.to_string()),
+        Err(PersistedSettingsError::Decode(_))
+    ));
+}
+
+#[test]
 fn explicit_cloud_asr_and_missing_legacy_selection_remain_unchanged() {
     let original = AppSettings {
         asr_mode: AsrMode::GeminiLiveAudio,
