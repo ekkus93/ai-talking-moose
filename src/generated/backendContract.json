@@ -1,6 +1,6 @@
 {
   "settings": {
-    "settings_version": 8,
+    "settings_version": 9,
     "asr_mode": "whisper_small",
     "wake_word_enabled": false,
     "wake_word_phrase": "Hey, Moose",
@@ -842,7 +842,7 @@
       "needs_acknowledgement": false
     },
     "AppSettings": {
-      "settings_version": 8,
+      "settings_version": 9,
       "asr_mode": "whisper_small",
       "wake_word_enabled": false,
       "wake_word_phrase": "Hey, Moose",
