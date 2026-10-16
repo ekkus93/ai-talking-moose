@@ -108,7 +108,7 @@ export const AsrDiagnosticsPanel: React.FC = () => {
             value={metricsSource(diagnostics)}
           />
           <DiagnosticRow
-            label="Streaming"
+            label="Local ASR session"
             value={diagnostics.streaming ? "Active" : "Inactive"}
           />
           <DiagnosticRow
@@ -215,12 +215,13 @@ export const AsrDiagnosticsPanel: React.FC = () => {
       )}
 
       <p className="text-[10px] text-gray-500">
-        For local Moonshine modes, a real-time factor below 1× means cumulative
+        Whisper Small transcribes local audio in batches, not as a continuous
+        streaming recognizer. A real-time factor below 1× means cumulative
         inference is faster than the amount of audio processed. CPU and RSS are
-        process-level measurements while the local ASR pipeline is active; RSS
-        increases are relative to the pre-model baseline rather than claimed as
-        model-exclusive allocations. Completed-session values are retained from
-        immediately before local-model teardown and labeled as snapshots.
+        process-level measurements while local ASR is active; RSS increases are
+        relative to the pre-model baseline, not model-exclusive allocations.
+        Completed-session values are retained from before model teardown and
+        labeled as snapshots.
       </p>
     </section>
   );
