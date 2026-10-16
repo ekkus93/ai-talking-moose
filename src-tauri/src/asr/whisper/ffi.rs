@@ -284,6 +284,15 @@ impl Drop for WhisperModel {
 pub(crate) struct NativeWhisperApi;
 
 impl NativeWhisperApi {
+    // CPU is the required, reproducible baseline on Linux and both macOS targets.
+    // whisper_context_default_params() may enable GPU backends automatically;
+    // do not let a Metal-capable runner silently qualify a GPU execution path.
+    #[cfg(any(whisper_native_linked, test))]
+    fn configure_cpu_context(params: &mut WhisperContextParams) {
+        params.use_gpu = false;
+        params.flash_attn = false;
+    }
+
     #[cfg(whisper_native_linked)]
     fn language_ptr() -> *const c_char {
         WHISPER_LANGUAGE_EN.as_ptr() as *const c_char
@@ -404,7 +413,8 @@ impl WhisperApi for NativeWhisperApi {
         {
             // SAFETY: `model_path` remains alive for the duration of the call; `cparams`
             // is a by-value C struct with every field at the exact C width.
-            let cparams = unsafe { whisper_context_default_params() };
+            let mut cparams = unsafe { whisper_context_default_params() };
+            Self::configure_cpu_context(&mut cparams);
             // SAFETY: `model_path` is NUL-terminated and alive for this call; `cparams`
             // matches the pinned C ABI. The returned pointer is checked for null before
             // ownership is transferred into `WhisperModel`.
@@ -464,6 +474,26 @@ mod tests {
             160
         );
         assert_eq!(std::mem::offset_of!(WhisperFullParams, vad_params), 280);
+    }
+
+    #[test]
+    fn mac_and_linux_whisper_context_is_explicitly_cpu_only() {
+        let mut params = WhisperContextParams {
+            use_gpu: true,
+            flash_attn: true,
+            gpu_device: 0,
+            dtw_token_timestamps: false,
+            dtw_aheads_preset: 0,
+            dtw_n_top: 0,
+            dtw_aheads: WhisperAheads {
+                n_heads: 0,
+                heads: std::ptr::null(),
+            },
+            dtw_mem_size: 0,
+        };
+        NativeWhisperApi::configure_cpu_context(&mut params);
+        assert!(!params.use_gpu, "CPU qualification must not silently select Metal");
+        assert!(!params.flash_attn);
     }
 
     #[test]
