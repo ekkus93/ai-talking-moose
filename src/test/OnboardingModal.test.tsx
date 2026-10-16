@@ -24,12 +24,10 @@ describe("OnboardingModal ASR privacy", () => {
     fireEvent.click(screen.getByText("Next: Voice"));
 
     expect(screen.getByText(/Current mode:/)).toHaveTextContent(
-      process.platform === "linux"
-        ? "Whisper Small"
-        : "Moonshine Tiny Streaming",
+      "Whisper Small",
     );
     expect(
-      screen.getByText(/processes microphone audio locally/i),
+      screen.getByText(/local English recognition that/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -70,13 +68,13 @@ describe("OnboardingModal P11 onboarding controls", () => {
     });
   });
 
-  it("offers the Tiny model download without blocking onboarding", async () => {
+  it("offers the Whisper model download without blocking onboarding", async () => {
     render(<OnboardingModal />);
     fireEvent.click(screen.getByText("Next: Voice"));
     fireEvent.click(screen.getByText("Next: Local Model"));
 
     expect(
-      await screen.findByRole("button", { name: /Download Tiny Model/i }),
+      await screen.findByRole("button", { name: /Download Whisper Model/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Continue to Gemini Key/i }),

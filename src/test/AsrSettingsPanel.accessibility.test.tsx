@@ -98,7 +98,7 @@ describe("AsrSettingsPanel accessibility", () => {
 
     await act(async () => {
       progressListener?.({
-        mode: "moonshine_tiny_streaming",
+        mode: "whisper_small",
         install_state: "downloading",
         downloaded_bytes: 25,
         total_bytes: 100,
@@ -107,7 +107,7 @@ describe("AsrSettingsPanel accessibility", () => {
     });
 
     const progress = screen.getByRole("progressbar", {
-      name: "Moonshine Tiny Streaming download progress",
+      name: "Whisper Small download progress",
     });
     expect(progress).toHaveAttribute("aria-valuenow", "25");
     expect(progress).toHaveAttribute("aria-valuetext", "25% downloaded");

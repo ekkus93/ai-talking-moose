@@ -385,18 +385,6 @@ export const AsrSettingsPanel: React.FC = () => {
 
       <fieldset className="space-y-3">
         <legend className="sr-only">Choose speech recognition mode</legend>
-        {modelsByMode.has("moonshine_tiny_streaming") &&
-          renderLocalModel(
-            "moonshine_tiny_streaming",
-            "Moonshine Tiny Streaming",
-            "Default. Fast local English speech recognition with the smallest CPU and disk footprint.",
-          )}
-        {modelsByMode.has("moonshine_small_streaming") &&
-          renderLocalModel(
-            "moonshine_small_streaming",
-            "Moonshine Small Streaming",
-            "Higher-capacity local English speech recognition with a larger model and CPU footprint.",
-          )}
         {modelsByMode.has("whisper_small") &&
           renderLocalModel(
             "whisper_small",

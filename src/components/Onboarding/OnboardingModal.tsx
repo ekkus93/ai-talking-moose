@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 
-const TINY_MODE = "moonshine_tiny_streaming" as const;
+const WHISPER_MODE = "whisper_small" as const;
 
 export const OnboardingModal: React.FC = () => {
   const {
@@ -27,8 +27,8 @@ export const OnboardingModal: React.FC = () => {
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
   const [keyStatus, setKeyStatus] = useState<string | null>(null);
-  const [tinyModel, setTinyModel] = useState<AsrModelDescriptor | null>(null);
-  const [isInstallingTiny, setIsInstallingTiny] = useState(false);
+  const [whisperModel, setWhisperModel] = useState<AsrModelDescriptor | null>(null);
+  const [isInstallingWhisper, setIsInstallingWhisper] = useState(false);
   const [modelStatus, setModelStatus] = useState<string | null>(null);
   const [completionStatus, setCompletionStatus] = useState<string | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -41,38 +41,34 @@ export const OnboardingModal: React.FC = () => {
     void tauriBridge
       .getAsrModels()
       .then((models) => {
-        setTinyModel(models.find((model) => model.mode === TINY_MODE) ?? null);
+        setWhisperModel(models.find((model) => model.mode === WHISPER_MODE) ?? null);
       })
       .catch((error) =>
         setModelStatus(`Could not inspect local models: ${error}`),
       );
   }, [isOnboardingOpen]);
 
-  const asrMode = settings?.asr_mode ?? TINY_MODE;
+  const asrMode = settings?.asr_mode ?? WHISPER_MODE;
   const selectedAsrName =
-    asrMode === "whisper_small"
-      ? "Whisper Small"
-      : asrMode === "moonshine_small_streaming"
-        ? "Moonshine Small Streaming"
-        : asrMode === "gemini_live_audio"
-          ? "Gemini Live Cloud Audio"
-          : "Moonshine Tiny Streaming";
+    asrMode === "gemini_live_audio"
+      ? "Gemini Live Cloud Audio"
+      : "Whisper Small";
 
   if (!isOnboardingOpen) {
     return null;
   }
 
-  const handleInstallTiny = async () => {
-    setIsInstallingTiny(true);
+  const handleInstallWhisper = async () => {
+    setIsInstallingWhisper(true);
     setModelStatus(null);
     try {
-      const installed = await tauriBridge.installAsrModel(TINY_MODE);
-      setTinyModel(installed);
-      setModelStatus("Moonshine Tiny is ready for local speech recognition.");
+      const installed = await tauriBridge.installAsrModel(WHISPER_MODE);
+      setWhisperModel(installed);
+      setModelStatus("Whisper Small is ready for local speech recognition.");
     } catch (error) {
-      setModelStatus(`Tiny model download failed: ${error}`);
+      setModelStatus(`Whisper model download failed: ${error}`);
     } finally {
-      setIsInstallingTiny(false);
+      setIsInstallingWhisper(false);
     }
   };
 
@@ -184,17 +180,6 @@ export const OnboardingModal: React.FC = () => {
             </p>
             <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-800 space-y-1.5">
               <p>
-                <strong>Moonshine Tiny Streaming:</strong> processes microphone
-                audio locally, so microphone audio stays on this computer.
-                Local-first Talk sends the finalized transcript to the selected
-                Local text model. It is the smallest local model.
-              </p>
-              <p>
-                <strong>Moonshine Small Streaming:</strong> the same local-audio
-                privacy boundary, with a larger local model for higher accuracy
-                at greater disk/CPU cost.
-              </p>
-              <p>
                 <strong>Whisper Small:</strong> local English recognition that
                 batches microphone PCM into short transcription windows —
                 microphone PCM stays on this computer. Partial transcripts may
@@ -228,41 +213,41 @@ export const OnboardingModal: React.FC = () => {
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 font-bold text-xs text-indigo-900">
               <Download className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Optional Moonshine Tiny Download</span>
+              <span>Optional Whisper Small Download</span>
             </div>
             <p className="text-gray-900 leading-snug text-[11px]">
-              Tiny is the recommended privacy-first starting point. Downloading
-              it is optional; onboarding will continue even if you skip it.
+              Whisper Small is the local recognition default. Installing the verified
+              model is optional here; onboarding continues if you skip it.
             </p>
             <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-800 space-y-1">
               <p>
                 Status:{" "}
-                <strong>{tinyModel?.install_state ?? "checking"}</strong>
+                <strong>{whisperModel?.install_state ?? "checking"}</strong>
               </p>
-              {tinyModel?.expected_bytes ? (
+              {whisperModel?.expected_bytes ? (
                 <p>
                   Expected download: about{" "}
-                  {Math.ceil(tinyModel.expected_bytes / 1_000_000)} MB.
+                  {Math.ceil(whisperModel.expected_bytes / 1_000_000)} MB.
                 </p>
               ) : null}
               {modelStatus ? <p role="status">{modelStatus}</p> : null}
             </div>
             <button
               type="button"
-              onClick={() => void handleInstallTiny()}
+              onClick={() => void handleInstallWhisper()}
               disabled={
-                isInstallingTiny ||
-                tinyModel?.install_state === "installed" ||
-                tinyModel?.active === true
+                isInstallingWhisper ||
+                whisperModel?.install_state === "installed" ||
+                whisperModel?.active === true
               }
               className="w-full py-1.5 bg-white border border-black font-bold rounded hover:bg-gray-100 disabled:opacity-60"
             >
-              {isInstallingTiny
-                ? "Downloading Tiny…"
-                : tinyModel?.install_state === "installed" ||
-                    tinyModel?.active === true
-                  ? "Tiny Model Ready ✓"
-                  : "Download Tiny Model"}
+              {isInstallingWhisper
+                ? "Downloading Whisper…"
+                : whisperModel?.install_state === "installed" ||
+                    whisperModel?.active === true
+                  ? "Whisper Model Ready ✓"
+                  : "Download Whisper Model"}
             </button>
             <button
               type="button"

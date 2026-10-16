@@ -176,28 +176,15 @@ describe("SettingsModal Component", () => {
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Speech Recognition"));
 
-    if (process.platform === "linux") {
-      expect(
-        await screen.findByRole("radio", { name: /Whisper Small/ }),
-      ).toBeChecked();
-      expect(
-        screen.queryByRole("radio", { name: /Moonshine Tiny Streaming/ }),
-      ).not.toBeInTheDocument();
-    } else {
-      const tiny = await screen.findByRole("radio", {
-        name: /Moonshine Tiny Streaming/,
-      });
-      expect(tiny).toBeChecked();
-    }
-    if (process.platform !== "linux") {
-      expect(
-        screen.getByRole("radio", { name: /Moonshine Small Streaming/ }),
-      ).not.toBeChecked();
-    } else {
-      expect(
-        screen.queryByRole("radio", { name: /Moonshine Small Streaming/ }),
-      ).not.toBeInTheDocument();
-    }
+    expect(
+      await screen.findByRole("radio", { name: /Whisper Small/ }),
+    ).toBeChecked();
+    expect(
+      screen.queryByRole("radio", { name: /Moonshine Tiny Streaming/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("radio", { name: /Moonshine Small Streaming/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(/Finalized transcript text is handled by the selected/i),
     ).toBeInTheDocument();
