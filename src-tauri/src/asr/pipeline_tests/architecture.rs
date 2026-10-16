@@ -17,6 +17,46 @@ async fn mock_capture_uses_same_authoritative_capture_at_16khz() {
     pipeline.stop_and_join().await.unwrap();
 }
 #[tokio::test]
+async fn whisper_mock_microphone_feeds_one_authoritative_16khz_worker() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
+    let mut capture = AudioCapture::new_mock();
+
+    pipeline.start_capture(&mut capture, None, None).unwrap();
+    assert!(capture.is_active());
+    assert_eq!(
+        capture.diagnostics().sample_rate_hz,
+        Some(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ)
+    );
+    assert_eq!(capture.diagnostics().channels, Some(1));
+
+    let samples = vec![i16::MIN, 0, i16::MAX];
+    capture
+        .mock_pcm_sender()
+        .expect("one authoritative mock microphone sender")
+        .try_send(AudioResampler::i16_to_bytes(&samples))
+        .unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    assert_eq!(
+        state.received_pcm.lock().unwrap().as_slice(),
+        &[AudioResampler::i16_to_f32(&samples)]
+    );
+
+    capture.stop();
+    assert!(!capture.is_active());
+    assert!(capture.mock_pcm_sender().is_none());
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(!pipeline.is_running());
+    let error = pipeline
+        .start_capture(&mut capture, None, None)
+        .unwrap_err();
+    assert_eq!(error.kind, AsrErrorKind::InvalidState);
+    assert!(!capture.is_active());
+}
+
+#[tokio::test]
 async fn small_pipeline_uses_same_bounded_worker_and_reports_small_architecture() {
     let state = Arc::new(FakeState::default());
     let mut pipeline = fake_pipeline_for_architecture(
