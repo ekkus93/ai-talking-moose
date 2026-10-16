@@ -238,7 +238,10 @@ async fn repeated_whisper_start_stop_joins_each_worker_and_isolates_final_events
         pipeline.stop_and_join().await.unwrap();
         pipeline.stop_and_join().await.unwrap();
 
-        assert!(!pipeline.is_running(), "Whisper worker leaked on cycle {cycle}");
+        assert!(
+            !pipeline.is_running(),
+            "Whisper worker leaked on cycle {cycle}"
+        );
         assert_eq!(state.stops.load(Ordering::SeqCst), 1);
         assert_eq!(
             events.lock().unwrap().as_slice(),
