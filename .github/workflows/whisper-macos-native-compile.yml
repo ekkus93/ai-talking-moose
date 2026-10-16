@@ -110,3 +110,27 @@ jobs:
           test ! -e src-tauri/native/macos/ggml-small.bin
           # This is compile/link evidence only. Real-model offline inference
           # and physical mic qualification belong to WSP-200/WSP-700.
+      - name: Verify required Whisper native runtime fails closed if archives are absent
+        shell: bash
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+          TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
+          TALKING_MOOSE_WHISPER_LIB_DIR: ${{ runner.temp }}/whisper-intentionally-missing-libraries
+        run: |
+          set -euo pipefail
+          test ! -e "$TALKING_MOOSE_WHISPER_LIB_DIR"
+          # Build script is rerun because it explicitly tracks the override env
+          # and must reject an empty native directory even on a warm build.
+          log="$RUNNER_TEMP/whisper-negative-link.log"
+          if cargo build --locked --manifest-path src-tauri/Cargo.toml \
+              --features whisper-acceptance --bin whisper_acceptance > "$log" 2>&1; then
+            cat "$log" >&2
+            echo "Required Whisper build unexpectedly succeeded without native archives" >&2
+            exit 1
+          fi
+          if ! grep -Fq 'Required Whisper native build failed: explicit Whisper static archives are missing' "$log"; then
+            cat "$log" >&2
+            echo "Build failed for an unrelated reason, not the required Whisper policy" >&2
+            exit 1
+          fi
+          echo "Required missing-Whisper native build failed closed on ${{ matrix.arch }}"
