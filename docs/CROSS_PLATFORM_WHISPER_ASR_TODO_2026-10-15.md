@@ -62,7 +62,7 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 - [ ] Ensure migration **does not** claim a Whisper model is installed, download weights, silently enable cloud, substitute Moonshine model files, overwrite API/voice/TTS/text selections, or lose privacy/memory flags.
 - [ ] Test fresh Linux/Mac profiles, both persisted Moonshine variants, explicit saved Whisper, explicit Gemini Live, corrupted/invalid/future-version values, and save/restart round trips. Confirm removed choices are never resurrected.
 - [ ] Make ASR catalog/commands/diagnostics truthfully show Whisper availability, download state, model revision, batch partial semantics and runtime errors on both Macs. Preserve install/delete/session ownership rules.
-- [ ] Update Voice/AI Control Panel and onboarding to expose only supported ASR choices; preserve clear local/cloud disclosure, no fallback and optional explicit download. Remove obsolete Moonshine UI from active choices only after WSP-200.
+- [x] Update Voice/AI Control Panel and onboarding to expose only supported ASR choices; preserve clear local/cloud disclosure, no fallback and optional explicit download. Remove obsolete Moonshine UI from active choices only after WSP-200. (Whisper-only local selector, explicit Gemini Live, onboarding optional install and truthful batch diagnostics; frontend CI `38893061667` passed at `ba6f871acd496db4f6fa584e32852c9f2834ea38`. Evidence: `docs/evidence/CROSS_PLATFORM_WHISPER_WSP300_UI_2026-10-16.md`. This does not qualify packaged Mac app or WSP-300 as a whole.)
 - [ ] Update TypeScript/Rust type switches, IPC fixtures, backend contract generation and tests. Preserve provider snapshots, Gemini Live isolation and settings compatibility.
 
 **Gate WSP-300:** installed and freshly created Mac/Linux profiles select usable Whisper or deliberately surface missing-model error; legacy Moonshine settings migrate predictably without silent network behavior.
@@ -126,7 +126,7 @@ Record each phase's completion here or link a dedicated file under `docs/evidenc
 | WSP-000 | Pending | Pending | Pending | Pending | Pending |
 | WSP-100 | Pending | Pending | Pending | Pending | Pending |
 | WSP-200 | `999a04e3aefaa9b93f30ad0c53b188009f9f228c` (two-arch real-corpus evidence, other gates open) | macOS ARM64 and x86_64 CPU-only | Run `38886320925`, jobs `116924832423` / `116924832215` | Both passed pinned install and real JFK transcript with CPU-only logs; ARM64 2,319 ms, Intel 11,502 ms transcribe wall; peak RSS 865,730,560 / 843,063,296 bytes | Enforced macOS network denial, packaged app, native lifecycle matrix and physical mic still unqualified |
-| WSP-300 | Pending | Pending | Pending | Pending | Pending |
+| WSP-300 | `ba6f871acd496db4f6fa584e32852c9f2834ea38` (frontend UI only) | Frontend UI and mock contract tests | CI `38893061667` — Frontend quality success | Only Whisper local selector and explicit Gemini Live; onboarding model install optional; batch diagnostics corrected | Settings/catalog full matrix, native Mac app and provider routing still open |
 | WSP-400 | Pending | Pending | Pending | Pending | Pending |
 | WSP-500 | Pending | Pending | Pending | Pending | Pending |
 | WSP-600 | Pending | Pending | Pending | Pending | Pending |
