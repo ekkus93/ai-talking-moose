@@ -139,7 +139,14 @@ fn whisper_target_supported() -> bool {
 }
 
 fn require_whisper_native() -> bool {
+    // An explicit CI/acceptance requirement always wins. Standard production
+    // release builds on supported targets must not silently ship a Whisper
+    // selector that can only return RuntimeUnavailable when native linking
+    // fails. Debug builds without an initialized submodule may still fail
+    // closed so developer checkouts remain usable.
     std::env::var("TALKING_MOOSE_REQUIRE_WHISPER_NATIVE").is_ok_and(|value| value == "1")
+        || (whisper_target_supported()
+            && std::env::var("PROFILE").is_ok_and(|profile| profile == "release"))
 }
 
 fn has_whisper_runtime(build_dir: &Path) -> bool {
@@ -348,9 +355,11 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(moonshine_native_linked)");
     println!("cargo:rustc-check-cfg=cfg(whisper_native_linked)");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_MOONSHINE_LIB_DIR");
+
     println!("cargo:rerun-if-env-changed={WHISPER_LIB_DIR}");
     println!("cargo:rerun-if-env-changed={WHISPER_BUILD_JOBS}");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_REQUIRE_WHISPER_NATIVE");
+    println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
