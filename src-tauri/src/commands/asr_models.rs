@@ -236,16 +236,14 @@ pub(super) fn model_in_use(state: &AppState, mode: AsrMode) -> bool {
 }
 
 fn ensure_mode_supported(mode: AsrMode) -> Result<(), String> {
-    if cfg!(target_os = "linux")
-        && matches!(
-            mode,
-            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
-        )
-    {
-        return Err("Moonshine speech recognition is available only in the macOS app.".to_string());
-    }
-    if cfg!(target_os = "macos") && mode == AsrMode::WhisperSmall {
-        return Err("Whisper Small is available only in the Linux app.".to_string());
+    if matches!(
+        mode,
+        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
+    ) {
+        return Err(
+            "Moonshine local ASR has been replaced by Whisper Small. Install or verify Whisper Small in Settings."
+                .to_string(),
+        );
     }
     Ok(())
 }
@@ -280,29 +278,12 @@ async fn acquire_model_mutation_guard(
 
 #[tauri::command]
 pub async fn get_asr_models(state: State<'_, AppState>) -> Result<Vec<AsrModelDescriptor>, String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let whisper_active = model_in_use(state.inner(), AsrMode::WhisperSmall);
         let whisper =
             load_whisper_descriptor(state.whisper_installer.clone(), whisper_active).await?;
         Ok(vec![whisper])
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let tiny_active = model_in_use(state.inner(), AsrMode::MoonshineTinyStreaming);
-        let small_active = model_in_use(state.inner(), AsrMode::MoonshineSmallStreaming);
-        let tiny = load_descriptor(
-            state.moonshine_installer.clone(),
-            MoonshineModelArchitecture::TinyStreaming,
-            tiny_active,
-        );
-        let small = load_descriptor(
-            state.moonshine_installer.clone(),
-            MoonshineModelArchitecture::SmallStreaming,
-            small_active,
-        );
-        let (tiny, small) = tokio::try_join!(tiny, small)?;
-        Ok(vec![tiny, small])
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
@@ -576,6 +557,19 @@ mod tests {
                 .await
                 .expect("conversation start should proceed after model mutation releases");
         drop(conversation_guard);
+    }
+
+    #[test]
+    fn retired_moonshine_modes_cannot_be_installed_or_deleted() {
+        for mode in [
+            AsrMode::MoonshineTinyStreaming,
+            AsrMode::MoonshineSmallStreaming,
+        ] {
+            let error = ensure_mode_supported(mode).expect_err("Moonshine is retired");
+            assert!(error.contains("replaced by Whisper Small"));
+        }
+        assert!(ensure_mode_supported(AsrMode::WhisperSmall).is_ok());
+        assert!(ensure_mode_supported(AsrMode::GeminiLiveAudio).is_ok());
     }
 
     #[test]
