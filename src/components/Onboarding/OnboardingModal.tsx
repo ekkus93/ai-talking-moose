@@ -27,7 +27,8 @@ export const OnboardingModal: React.FC = () => {
   const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState("");
   const [keyStatus, setKeyStatus] = useState<string | null>(null);
-  const [whisperModel, setWhisperModel] = useState<AsrModelDescriptor | null>(null);
+  const [whisperModel, setWhisperModel] =
+    useState<AsrModelDescriptor | null>(null);
   const [isInstallingWhisper, setIsInstallingWhisper] = useState(false);
   const [modelStatus, setModelStatus] = useState<string | null>(null);
   const [completionStatus, setCompletionStatus] = useState<string | null>(null);
@@ -41,7 +42,9 @@ export const OnboardingModal: React.FC = () => {
     void tauriBridge
       .getAsrModels()
       .then((models) => {
-        setWhisperModel(models.find((model) => model.mode === WHISPER_MODE) ?? null);
+        setWhisperModel(
+          models.find((model) => model.mode === WHISPER_MODE) ?? null,
+        );
       })
       .catch((error) =>
         setModelStatus(`Could not inspect local models: ${error}`),
@@ -216,8 +219,9 @@ export const OnboardingModal: React.FC = () => {
               <span>Optional Whisper Small Download</span>
             </div>
             <p className="text-gray-900 leading-snug text-[11px]">
-              Whisper Small is the local recognition default. Installing the verified
-              model is optional here; onboarding continues if you skip it.
+              Whisper Small is the local recognition default. Installing the
+              verified model is optional here; onboarding continues if you skip
+              it.
             </p>
             <div className="p-2 bg-white border border-black rounded text-[10px] text-gray-800 space-y-1">
               <p>
