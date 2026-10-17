@@ -351,6 +351,61 @@ async fn missing_openai_key_in_non_live_talk_does_not_fall_back() {
     }
 }
 
+/// Missing Google *text* credentials must not be interpreted as permission
+/// to open Gemini Live or to synthesize through either standalone TTS choice.
+#[tokio::test]
+async fn missing_google_text_key_in_whisper_non_live_talk_never_starts_tts() {
+    use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
+    let state = AppState::new_for_tests().unwrap();
+    assert!(!state.secrets.has_google_api_key());
+
+    for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
+        let settings = AppSettings {
+            text_provider: TextProvider::Google,
+            tts_provider,
+            asr_mode: AsrMode::WhisperSmall,
+            ..AppSettings::default()
+        };
+        let provider = state.get_conversation_provider_for(&settings);
+        let (sender, mut events) = tokio::sync::mpsc::channel(8);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: settings.google_text_model.clone(),
+                    voice_name: None,
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await
+            .expect("Whisper local ASR must connect only to the non-Live adapter");
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
+        session.send_text_turn("private missing Google key").await.unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+            .await
+            .expect("missing key must fail promptly");
+        match result {
+            Some(LiveServerEvent::Error(error)) => {
+                assert_eq!(error.kind, ProviderErrorKind::Auth, "{tts_provider:?}");
+                assert!(!error.message.contains("private missing Google key"));
+            }
+            _ => panic!("Google text without a key must fail closed with {tts_provider:?}"),
+        }
+        let late = tokio::time::timeout(std::time::Duration::from_millis(30), events.recv()).await;
+        assert!(
+            !matches!(late, Ok(Some(_))),
+            "{tts_provider:?} must not receive audio or completion after an auth failure"
+        );
+        session.close().await.unwrap();
+    }
+}
+
 #[tokio::test]
 async fn invalid_loopback_server_cannot_fall_back_to_cloud_or_any_standalone_voice() {
     use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
