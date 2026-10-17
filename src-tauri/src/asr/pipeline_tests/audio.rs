@@ -202,11 +202,16 @@ async fn whisper_inference_failure_after_partial_never_emits_a_stale_final() {
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
     let recorded = events.lock().unwrap();
     assert_eq!(
-        recorded.iter().filter(|event| matches!(event, AsrEvent::Error { .. })).count(),
+        recorded
+            .iter()
+            .filter(|event| matches!(event, AsrEvent::Error { .. }))
+            .count(),
         1
     );
     assert!(
-        !recorded.iter().any(|event| matches!(event, AsrEvent::FinalTranscript { .. })),
+        !recorded
+            .iter()
+            .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })),
         "failed Whisper inference must not promote a partial transcript to a final"
     );
 }
