@@ -330,3 +330,79 @@ async fn drop_stops_and_joins_worker_as_safety_net() {
     }
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn whisper_stop_drains_queued_pcm_in_order_and_delivers_one_final() {
+    let state = Arc::new(FakeState::default());
+    let gate = Arc::new(PushGate::default());
+    *state.push_gate.lock().unwrap() = Some(gate.clone());
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 101,
+            text: "whisper queue drained".to_string(),
+            latency_ms: 3,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }))
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let sender = pipeline.test_sender();
+    let samples = [11_i16, -22, 33];
+    sender
+        .try_send(AudioResampler::i16_to_bytes(&[samples[0]]))
+        .unwrap();
+    gate.wait_until_entered();
+    for sample in &samples[1..] {
+        sender
+            .try_send(AudioResampler::i16_to_bytes(&[*sample]))
+            .unwrap();
+    }
+    assert_eq!(pipeline.diagnostics().queue_depth, 2);
+    assert_eq!(
+        pipeline.diagnostics().queue_capacity,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
+    );
+
+    pipeline.request_stop();
+    *state.push_gate.lock().unwrap() = None;
+    gate.release();
+    pipeline.stop_and_join().await.unwrap();
+
+    assert_eq!(state.pushes.load(Ordering::SeqCst), samples.len());
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(!pipeline.is_running());
+    assert_eq!(pipeline.diagnostics().queue_depth, 0);
+    let received = state.received_pcm.lock().unwrap();
+    assert_eq!(received.len(), samples.len());
+    for (pcm, sample) in received.iter().zip(samples.iter()) {
+        assert_eq!(pcm, &AudioResampler::i16_to_f32(&[*sample]));
+    }
+    drop(received);
+    assert_eq!(
+        events.lock().unwrap().as_slice(),
+        [
+            AsrEvent::SpeechStarted { monotonic_ms: None },
+            AsrEvent::FinalTranscript {
+                text: "whisper queue drained".to_string(),
+            },
+            AsrEvent::SpeechEnded { monotonic_ms: None },
+        ]
+    );
+}
