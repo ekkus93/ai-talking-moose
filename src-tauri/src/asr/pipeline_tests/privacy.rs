@@ -65,3 +65,71 @@ fn sensitive_asr_payloads_are_processed_without_entering_tracing() {
     assert!(!logs.contains(std::str::from_utf8(RAW_PCM).unwrap()));
     assert!(!logs.contains(&pcm_base64));
 }
+
+#[test]
+fn whisper_worker_does_not_log_pcm_or_transcripts() {
+    const TRANSCRIPT: &str = "PRIVATE_WHISPER_TRANSCRIPT_9e72";
+    const RAW_PCM: &[u8] = b"WHISPER_PCM_42!!";
+    let pcm_bytes = RAW_PCM.to_vec();
+    let pcm_base64 = base64::engine::general_purpose::STANDARD.encode(RAW_PCM);
+    let state = Arc::new(FakeState::default());
+    state
+        .updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 42,
+            text: TRANSCRIPT.to_string(),
+            latency_ms: 1,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+
+    let (_, logs) = capture_logs(|| {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let mut pipeline = LocalAsrPipeline::start_architecture(
+                LocalAsrArchitecture::WhisperSmall,
+                WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+                move || {
+                    Ok(Box::new(FakeEngine {
+                        state: worker_state,
+                        sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+                    }) as Box<dyn PipelineEngine>)
+                },
+                callback,
+                WORKER_STARTUP_TIMEOUT,
+                None,
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(
+                pipeline.diagnostics().architecture,
+                LocalAsrArchitecture::WhisperSmall
+            );
+            pipeline.test_sender().try_send(pcm_bytes).unwrap();
+            wait_until(|| events.lock().unwrap().len() == 3);
+            assert!(matches!(
+                events.lock().unwrap().as_slice(),
+                [
+                    AsrEvent::SpeechStarted { .. },
+                    AsrEvent::FinalTranscript { text },
+                    AsrEvent::SpeechEnded { .. },
+                ] if text == TRANSCRIPT
+            ));
+            assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+            assert_eq!(state.received_pcm.lock().unwrap().len(), 1);
+            pipeline.stop_and_join().await.unwrap();
+            assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+        });
+    });
+
+    assert_log_capture_live(&logs);
+    assert!(!logs.contains(TRANSCRIPT));
+    assert!(!logs.contains(std::str::from_utf8(RAW_PCM).unwrap()));
+    assert!(!logs.contains(&pcm_base64));
+}
