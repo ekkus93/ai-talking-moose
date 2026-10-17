@@ -134,3 +134,52 @@ async fn processed_chunk_releases_queue_depth() {
     wait_until(|| pipeline.diagnostics().queue_depth == 0);
     pipeline.stop_and_join().await.unwrap();
 }
+
+#[tokio::test]
+async fn whisper_ingress_rejects_newest_chunk_and_drains_older_pcm_in_order() {
+    let state = Arc::new(FakeState::default());
+    state.block_push.store(true, Ordering::SeqCst);
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
+    let sender = pipeline.test_sender();
+
+    let first = [i16::MIN, -111];
+    sender
+        .try_send(AudioResampler::i16_to_bytes(&first))
+        .unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+
+    for index in 0..WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS {
+        sender
+            .try_send(AudioResampler::i16_to_bytes(&[(index + 1) as i16]))
+            .unwrap();
+    }
+    assert_eq!(
+        pipeline.diagnostics().queue_depth,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
+    );
+
+    let rejected = AudioResampler::i16_to_bytes(&[i16::MAX]);
+    assert!(matches!(
+        sender.try_send(rejected),
+        Err(mpsc::error::TrySendError::Full(_))
+    ));
+
+    state.block_push.store(false, Ordering::SeqCst);
+    pipeline.stop_and_join().await.unwrap();
+
+    let received = state.received_pcm.lock().unwrap();
+    assert_eq!(
+        received.len(),
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS + 1
+    );
+    assert_eq!(received[0], AudioResampler::i16_to_f32(&first));
+    for index in 0..WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS {
+        assert_eq!(
+            received[index + 1],
+            AudioResampler::i16_to_f32(&[(index + 1) as i16]),
+            "queued PCM must retain its original chronological position"
+        );
+    }
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+}
