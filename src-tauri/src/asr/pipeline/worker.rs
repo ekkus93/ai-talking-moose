@@ -176,7 +176,12 @@ pub(super) fn run_worker(
         }
         Err(stop_error) => {
             if terminal_error.is_none() {
-                record_terminal_error(metrics, event_callback, event_delivery, &stop_error);
+                // An explicit abort retires this generation. Retain the
+                // cleanup failure for the joining owner, but never schedule
+                // another ASR event after cancellation.
+                if !abort_requested.load(Ordering::SeqCst) {
+                    record_terminal_error(metrics, event_callback, event_delivery, &stop_error);
+                }
                 terminal_error = Some(stop_error);
             }
         }

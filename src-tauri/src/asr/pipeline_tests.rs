@@ -41,6 +41,7 @@ struct FakeState {
     stops: AtomicUsize,
     received_pcm: StdMutex<Vec<Vec<f32>>>,
     fail_push: StdMutex<Option<AsrError>>,
+    fail_stop: StdMutex<Option<AsrError>>,
     updates: StdMutex<Vec<StreamingTranscriptUpdate>>,
     stop_updates: StdMutex<Vec<StreamingTranscriptUpdate>>,
     push_gate: StdMutex<Option<Arc<PushGate>>>,
@@ -81,6 +82,9 @@ impl PipelineEngine for FakeEngine {
 
     fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
         self.state.stops.fetch_add(1, Ordering::SeqCst);
+        if let Some(error) = self.state.fail_stop.lock().unwrap().clone() {
+            return Err(error);
+        }
         Ok(std::mem::take(
             &mut *self.state.stop_updates.lock().unwrap(),
         ))

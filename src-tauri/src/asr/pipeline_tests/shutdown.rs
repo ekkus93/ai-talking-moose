@@ -223,6 +223,46 @@ fn worker_abort_before_first_chunk_skips_queued_audio_and_stops_engine_once() {
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
     assert!(events.lock().unwrap().is_empty());
 }
+#[test]
+fn whisper_abort_cleanup_failure_does_not_emit_post_cancel_error() {
+    let state = Arc::new(FakeState::default());
+    let stop_error = AsrError {
+        kind: AsrErrorKind::Inference,
+        message: "synthetic native Whisper cleanup failure".to_string(),
+        retryable: false,
+    };
+    *state.fail_stop.lock().unwrap() = Some(stop_error.clone());
+    let mut engine = FakeEngine {
+        state: state.clone(),
+        sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel(2);
+    tx.try_send(vec![0, 0]).unwrap();
+    drop(tx);
+    let stop = AtomicBool::new(true);
+    let abort = AtomicBool::new(true);
+    let metrics = Mutex::new(crate::asr::runtime_metrics::RuntimeMetrics::new());
+    let delivery = Arc::new(LocalAsrEventDeliveryTracker::default());
+    let (callback, events) = callback_events();
+
+    let error = super::super::run_worker(
+        &mut engine,
+        &mut rx,
+        &stop,
+        &abort,
+        &metrics,
+        &callback,
+        &delivery,
+    )
+    .expect_err("native cleanup failure must remain visible to the joining owner");
+
+    assert_eq!(error, stop_error);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
+    assert!(events.lock().unwrap().is_empty(),
+        "cancelled Whisper generation must not publish a late ASR error");
+}
+
 #[tokio::test]
 async fn graceful_stop_waits_for_scheduled_final_delivery_acknowledgement() {
     let state = Arc::new(FakeState::default());
