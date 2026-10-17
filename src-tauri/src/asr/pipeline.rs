@@ -359,6 +359,7 @@ impl LocalAsrPipeline {
             Ok(Ok(()))
         };
 
+
         self.running.store(false, Ordering::SeqCst);
         self.event_delivery.wait_until_idle().await;
         match result {
@@ -468,9 +469,8 @@ impl LocalAsrPipeline {
                 if engine.input_sample_rate_hz() != LOCAL_ASR_INPUT_SAMPLE_RATE_HZ {
                     let error = AsrError {
                         kind: AsrErrorKind::Internal,
-                        message:
-                            "Local ASR engine reported an unexpected input sample rate."
-                                .to_string(),
+                        message: "Local ASR engine reported an unexpected input sample rate."
+                            .to_string(),
                         retryable: false,
                     };
                     let _ = engine.stop();

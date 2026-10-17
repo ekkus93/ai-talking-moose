@@ -7,6 +7,15 @@ on:
       - src-tauri/build.rs
       - src-tauri/src/asr/whisper/**
       - src-tauri/src/bin/whisper_acceptance.rs
+      # Shared paths must requalify both macOS architectures whenever the
+      # production Whisper pipeline, transcript state, or ASR contracts move.
+      - src-tauri/src/asr/pipeline.rs
+      - src-tauri/src/asr/pipeline_tests.rs
+      - src-tauri/src/asr/pipeline_tests/**
+      - src-tauri/src/asr/transcript_state.rs
+      - src-tauri/src/asr/runtime_metrics.rs
+      - src-tauri/src/asr/types.rs
+      - src-tauri/src/asr/lifecycle.rs
       - scripts/whisper_ffi_abi_probe.c
       - .github/workflows/whisper-macos-native-compile.yml
   workflow_dispatch:
