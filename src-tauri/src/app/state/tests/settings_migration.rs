@@ -823,6 +823,72 @@ fn invalid_persisted_asr_selection_preserves_original_sqlite_row_on_startup_erro
 }
 
 #[test]
+fn current_version_legacy_moonshine_selection_migrates_once_without_changing_preferences() {
+    for retired in [
+        AsrMode::MoonshineTinyStreaming,
+        AsrMode::MoonshineSmallStreaming,
+    ] {
+        let file = NamedTempFile::new().unwrap();
+        let path = file.path().to_string_lossy().to_string();
+        let mut saved = AppSettings {
+            settings_version: CURRENT_SETTINGS_VERSION,
+            asr_mode: retired,
+            text_provider: TextProvider::Openai,
+            openai_text_model: "gpt-4.1-mini".into(),
+            tts_provider: TtsProvider::Local,
+            local_tts_voice: "ExistingVoice".into(),
+            memory_enabled: true,
+            save_transcripts: false,
+            ..Default::default()
+        };
+        saved.future_settings.insert(
+            "future_display_preference".into(),
+            serde_json::json!({"contrast": "high"}),
+        );
+        let db = Database::new(&path).unwrap();
+        db.set_setting("app_settings", &serde_json::to_string(&saved).unwrap())
+            .unwrap();
+        drop(db);
+
+        let secret_store =
+            SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        let state = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+        let loaded = state.settings.read().clone();
+        assert_eq!(loaded.asr_mode, AsrMode::WhisperSmall);
+        assert_eq!(loaded.text_provider, TextProvider::Openai);
+        assert_eq!(loaded.openai_text_model, "gpt-4.1-mini");
+        assert_eq!(loaded.tts_provider, TtsProvider::Local);
+        assert_eq!(loaded.local_tts_voice, "ExistingVoice");
+        assert!(loaded.memory_enabled);
+        assert!(!loaded.save_transcripts);
+        assert_eq!(
+            loaded.future_settings.get("future_display_preference"),
+            saved.future_settings.get("future_display_preference")
+        );
+        assert!(state.whisper_installer.verify_installed().unwrap().is_none());
+        let normalized = state.db.get_setting("app_settings").unwrap().unwrap();
+        assert!(!normalized.contains("moonshine_"));
+        let (_, changed_again) = AppSettings::from_persisted_json(&normalized).unwrap();
+        assert!(!changed_again);
+        drop(state);
+
+        let secret_store =
+            SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+        let restarted = AppState::new_with_secret_store(Some(&path), secret_store).unwrap();
+        assert_eq!(restarted.settings.read().asr_mode, AsrMode::WhisperSmall);
+        assert_eq!(
+            restarted.db.get_setting("app_settings").unwrap().unwrap(),
+            normalized,
+            "migration must persist exactly once, even from a current-version row"
+        );
+        assert!(
+            restarted.whisper_installer.verify_installed().unwrap().is_none(),
+            "migration must not install Whisper weights"
+        );
+    }
+}
+
+#[test]
 fn explicit_cloud_asr_and_missing_legacy_selection_remain_unchanged() {
     let original = AppSettings {
         asr_mode: AsrMode::GeminiLiveAudio,
