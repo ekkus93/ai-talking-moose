@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -71,6 +72,9 @@ jobs:
 
       - name: Validate tag and release metadata
         run: python3 scripts/validate_release_metadata.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Verify pinned Whisper source and model provenance
+        run: python3 scripts/check_whisper_provenance.py
 
       - name: Validate Moonshine runtime provenance
         run: python3 scripts/validate_moonshine_runtime_manifest.py
@@ -142,6 +146,7 @@ jobs:
       TALKING_MOOSE_ALLOW_LIVE_API: "0"
       TALKING_MOOSE_BUILD_COMMIT: ${{ github.sha }}
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -152,6 +157,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -190,6 +196,9 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Verify native Whisper source provenance
+        run: python3 scripts/check_whisper_provenance.py
 
       - name: Validate Moonshine and Local TTS runtime provenance
         run: |
