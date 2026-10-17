@@ -220,6 +220,47 @@ async fn whisper_native_and_model_preflight_fail_closed_without_events() {
 }
 
 #[tokio::test]
+async fn whisper_startup_preserves_preflight_error_instead_of_reporting_a_join_failure() {
+    for (kind, retryable) in [
+        (AsrErrorKind::ModelNotInstalled, true),
+        (AsrErrorKind::ModelCorrupt, false),
+        (AsrErrorKind::RuntimeUnavailable, true),
+        (AsrErrorKind::ModelLoadFailed, false),
+    ] {
+        let expected_message = format!("Whisper preflight rejected {kind:?}");
+        let worker_message = expected_message.clone();
+        let (callback, events) = callback_events();
+        let result = LocalAsrPipeline::start_architecture(
+            LocalAsrArchitecture::WhisperSmall,
+            WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            move || {
+                Err(AsrError {
+                    kind,
+                    message: worker_message,
+                    retryable,
+                })
+            },
+            callback,
+            WORKER_STARTUP_TIMEOUT,
+            None,
+        )
+        .await;
+
+        let error = match result {
+            Ok(_) => panic!("failed Whisper preflight unexpectedly exposed audio ingress"),
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, kind);
+        assert_eq!(error.message, expected_message);
+        assert_eq!(error.retryable, retryable);
+        assert!(
+            events.lock().unwrap().is_empty(),
+            "failed preflight must not generate a transcript or audio event"
+        );
+    }
+}
+
+#[tokio::test]
 async fn cancelled_whisper_startup_reaps_late_native_factory_without_running() {
     let state = Arc::new(FakeState::default());
     let factory_entered = Arc::new(AtomicBool::new(false));

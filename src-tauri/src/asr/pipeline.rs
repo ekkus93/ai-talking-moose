@@ -530,12 +530,18 @@ impl LocalAsrPipeline {
                 Ok(pipeline)
             }
             Ok(Ok(Err(error))) => {
+                // The worker has already reported a specific startup failure.
+                // Joining it must not replace that error with a generic join
+                // failure merely because the worker returned Err as expected.
                 join_finished_startup_worker(startup_worker.take_worker()).await?;
                 Err(error)
             }
             Ok(Err(_)) => {
-                join_finished_startup_worker(startup_worker.take_worker()).await?;
-                Err(worker_join_error())
+                // If the startup channel closed without a readiness result,
+                // recover the actual worker error when it exited normally.
+                Err(join_finished_startup_worker(startup_worker.take_worker())
+                    .await?
+                    .unwrap_or_else(worker_join_error))
             }
             Err(_) => Err(worker_startup_timeout_error()),
         }
@@ -598,12 +604,13 @@ fn worker_startup_timeout_error() -> AsrError {
 
 async fn join_finished_startup_worker(
     worker: JoinHandle<Result<(), AsrError>>,
-) -> Result<(), AsrError> {
+) -> Result<Option<AsrError>, AsrError> {
     let joined = tokio::task::spawn_blocking(move || worker.join())
         .await
         .map_err(|_| worker_join_error())?;
     match joined {
-        Ok(_) => Ok(()),
+        Ok(Ok(())) => Ok(None),
+        Ok(Err(error)) => Ok(Some(error)),
         Err(_) => Err(worker_join_error()),
     }
 }
