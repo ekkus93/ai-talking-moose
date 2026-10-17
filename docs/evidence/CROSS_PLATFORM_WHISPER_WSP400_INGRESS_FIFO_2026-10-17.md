@@ -1,8 +1,8 @@
 # WSP-400 — Whisper bounded ingress preserves accepted PCM ordering
 
-**Recorded:** 2026-10-17 UTC  
-**Qualified source SHA:** `d0f7327d4d299459403fa40f1e3ab1324cf21cb7`  
-**Test:** `whisper_ingress_rejects_newest_chunk_and_drains_older_pcm_in_order`  
+**Recorded:** 2026-10-17 UTC
+**Qualified source SHA:** `d0f7327d4d299459403fa40f1e3ab1324cf21cb7`
+**Test:** `whisper_ingress_rejects_newest_chunk_and_drains_older_pcm_in_order`
 **Source:** `src-tauri/src/asr/pipeline_tests/queue.rs`
 
 ## Deterministic test and assertions
