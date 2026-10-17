@@ -803,7 +803,10 @@ async fn active_verified_model_lease_serializes_reinstall_without_replacing_weig
     });
     started_rx.await.unwrap();
 
-    assert!(!reinstall_task.is_finished(), "install must wait for an active model lease");
+    assert!(
+        !reinstall_task.is_finished(),
+        "install must wait for an active model lease"
+    );
     assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
     assert_eq!(fs::read(installer.marker_path()).unwrap(), original_marker);
     assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
