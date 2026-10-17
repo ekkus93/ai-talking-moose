@@ -1,8 +1,8 @@
 # WSP-400 — Whisper startup preflight error handoff
 
-**Date:** 2026-10-17  
-**Repository:** `ekkus93/ai-talking-moose`  
-**Exact source commit:** `993d8e043f25fae90bac1cbf709403e19477ec87`  
+**Date:** 2026-10-17
+**Repository:** `ekkus93/ai-talking-moose`
+**Exact source commit:** `993d8e043f25fae90bac1cbf709403e19477ec87`
 **Modified source:** `src-tauri/src/asr/pipeline.rs`, `src-tauri/src/asr/pipeline_tests/readiness.rs`
 
 ## Defect and correction
