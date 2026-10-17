@@ -769,6 +769,57 @@ fn interrupted_legacy_copy_is_cleaned_and_can_be_retried() {
 }
 
 #[tokio::test]
+async fn active_verified_model_lease_serializes_reinstall_without_replacing_weights() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    let installer = Arc::new(installer);
+    installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    let original_marker = fs::read(installer.marker_path()).unwrap();
+
+    let operation_lock = install_operation_lock(manifest::WHISPER_SMALL_ID);
+    let lease = WhisperVerifiedModelLease {
+        model_path: installer.model_path(),
+        _operation_guard: operation_lock.clone().lock_owned().await,
+    };
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let reinstall_installer = installer.clone();
+    let reinstall_task = tokio::spawn(async move {
+        let _ = started_tx.send(());
+        reinstall_installer
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+    });
+    started_rx.await.unwrap();
+
+    assert!(!reinstall_task.is_finished(), "install must wait for an active model lease");
+    assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
+    assert_eq!(fs::read(installer.marker_path()).unwrap(), original_marker);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+
+    drop(lease);
+    let result = reinstall_task.await.unwrap().unwrap();
+    assert_eq!(
+        result.disposition,
+        WhisperModelInstallDisposition::AlreadyInstalled
+    );
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
+    assert_eq!(fs::read(installer.marker_path()).unwrap(), original_marker);
+}
+
+#[tokio::test]
 async fn active_verified_model_lease_blocks_delete_until_released() {
     let temp = tempfile::TempDir::new().unwrap();
     let installer = Arc::new(WhisperModelInstaller::new(temp.path()).unwrap());
