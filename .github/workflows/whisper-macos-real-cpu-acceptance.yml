@@ -62,6 +62,16 @@ jobs:
         run: |
           cargo build --locked --manifest-path src-tauri/Cargo.toml \
             --features whisper-acceptance --bin whisper_acceptance
+      - name: Run shared Whisper pipeline lifecycle regressions
+        # Deterministic mock-engine tests: capture, wake PCM ordering,
+        # startup/cancel, worker join, overload and final-delivery contracts.
+        # These are additional to, not replacements for, real-model inference.
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+        run: |
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            asr::pipeline::tests -- --test-threads=1
+
       - name: Install pinned model and transcribe real JFK corpus
         id: inference
         shell: bash

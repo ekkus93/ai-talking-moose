@@ -33,6 +33,7 @@ def check_workflow(text: str) -> None:
         "real corpus": "third_party/whisper.cpp/samples/jfk.wav",
         "native probe": '"$binary" probe-native',
         "production model install": '"$binary" install "$model" "$reports/install.json"',
+        "macOS pipeline lifecycle tests": "asr::pipeline::tests -- --test-threads=1",
         "actual transcription": '"$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json"',
         "production model deletion": '"$binary" delete "$model" "$reports/delete.json"',
         "installed model integrity": 'assert install["production_installer_verified"] is True',
