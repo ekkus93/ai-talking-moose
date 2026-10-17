@@ -118,8 +118,13 @@ jobs:
           app="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app" && test -d "$app"
           bash scripts/verify_app_build_provenance.sh "$app" "$GITHUB_SHA"
-          executable="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)"
-          test -n "$executable"
+          bundle_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          test -n "$bundle_executable"
+          case "$bundle_executable" in
+            */*|.*) echo "Unsafe CFBundleExecutable value" >&2; exit 1 ;;
+          esac
+          executable="$app/Contents/MacOS/$bundle_executable"
+          test -f "$executable" && test -x "$executable"
           lipo -archs "$executable" | grep -Fx "${{ matrix.arch }}"
           "$executable" --whisper-native-smoke-test | grep -E '^whisper-native-runtime-version=.+$'
           otool -L "$executable" > "$RUNNER_TEMP/whisper-app-dylibs.txt"
