@@ -295,41 +295,60 @@ async fn every_local_asr_rejects_unavailable_system_voice_without_contacting_tex
 async fn missing_openai_key_in_non_live_talk_does_not_fall_back() {
     use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
     let state = AppState::new_for_tests().unwrap();
-    let settings = AppSettings {
-        text_provider: TextProvider::Openai,
-        tts_provider: TtsProvider::Local,
-        asr_mode: AsrMode::WhisperSmall,
-        ..AppSettings::default()
-    };
-    let provider = state.get_conversation_provider_for(&settings);
-    let (sender, mut events) = tokio::sync::mpsc::channel(8);
-    let mut session = provider
-        .connect(
-            LiveSessionConfig {
-                model: settings.openai_text_model.clone(),
-                voice_name: Some(settings.local_tts_voice.clone()),
-                system_instruction: None,
-                sample_rate_in: 16_000,
-                sample_rate_out: 24_000,
-                tools: vec![],
-            },
-            sender,
-        )
-        .await
-        .unwrap();
-    assert!(matches!(
-        events.recv().await,
-        Some(LiveServerEvent::Connected)
-    ));
-    session.send_text_turn("Hello").await.unwrap();
-    let result = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
-        .await
-        .unwrap();
-    match result {
-        Some(LiveServerEvent::Error(error)) => assert_eq!(error.kind, ProviderErrorKind::Auth),
-        _ => panic!("missing OpenAI key must report auth failure without another provider"),
+    assert!(!state.secrets.has_openai_api_key());
+
+    // Either standalone TTS choice must stay unused when the selected
+    // OpenAI text provider has no key: no silent Local/Google fallback,
+    // synthesized audio, or successful turn completion after Auth.
+    for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
+        let settings = AppSettings {
+            text_provider: TextProvider::Openai,
+            tts_provider,
+            asr_mode: AsrMode::WhisperSmall,
+            ..AppSettings::default()
+        };
+        let provider = state.get_conversation_provider_for(&settings);
+        let (sender, mut events) = tokio::sync::mpsc::channel(8);
+        let mut session = provider
+            .connect(
+                LiveSessionConfig {
+                    model: settings.openai_text_model.clone(),
+                    voice_name: Some(match tts_provider {
+                        TtsProvider::Local => settings.local_tts_voice.clone(),
+                        TtsProvider::Google => settings.google_tts_voice.clone(),
+                        TtsProvider::System => unreachable!("System is not in this test matrix"),
+                    }),
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
+        session.send_text_turn("private missing-key turn").await.unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+            .await
+            .unwrap();
+        match result {
+            Some(LiveServerEvent::Error(error)) => {
+                assert_eq!(error.kind, ProviderErrorKind::Auth, "{tts_provider:?}");
+                assert!(!error.message.contains("private missing-key turn"));
+            }
+            _ => panic!("missing OpenAI key must fail closed with {tts_provider:?}"),
+        }
+        let late = tokio::time::timeout(std::time::Duration::from_millis(30), events.recv()).await;
+        assert!(
+            !matches!(late, Ok(Some(_))),
+            "{tts_provider:?} must never receive audio or completion after an auth failure"
+        );
+        session.close().await.unwrap();
     }
-    session.close().await.unwrap();
 }
 
 #[tokio::test]
