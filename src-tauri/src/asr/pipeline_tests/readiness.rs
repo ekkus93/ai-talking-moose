@@ -183,6 +183,43 @@ async fn whisper_missing_model_fails_before_pipeline_or_capture_is_available() {
 }
 
 #[tokio::test]
+async fn whisper_native_and_model_preflight_fail_closed_without_events() {
+    for kind in [
+        AsrErrorKind::ModelCorrupt,
+        AsrErrorKind::RuntimeUnavailable,
+        AsrErrorKind::ModelLoadFailed,
+    ] {
+        let (callback, events) = callback_events();
+        let result = LocalAsrPipeline::start_architecture(
+            LocalAsrArchitecture::WhisperSmall,
+            WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+            move || {
+                Err(AsrError {
+                    kind,
+                    message: "Whisper native/model preflight failed.".to_string(),
+                    retryable: false,
+                })
+            },
+            callback,
+            WORKER_STARTUP_TIMEOUT,
+            None,
+        )
+        .await;
+
+        let error = match result {
+            Ok(_) => panic!("Whisper accepted a failed native/model preflight"),
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, kind);
+        assert!(!error.retryable);
+        assert!(
+            events.lock().unwrap().is_empty(),
+            "Whisper must not emit ASR events after a failed preflight"
+        );
+    }
+}
+
+#[tokio::test]
 async fn cancelled_whisper_startup_reaps_late_native_factory_without_running() {
     let state = Arc::new(FakeState::default());
     let factory_entered = Arc::new(AtomicBool::new(false));

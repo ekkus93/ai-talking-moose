@@ -358,6 +358,7 @@ impl LocalAsrPipeline {
         } else {
             Ok(Ok(()))
         };
+
         self.running.store(false, Ordering::SeqCst);
         self.event_delivery.wait_until_idle().await;
         match result {
@@ -468,7 +469,7 @@ impl LocalAsrPipeline {
                     let error = AsrError {
                         kind: AsrErrorKind::Internal,
                         message:
-                            "Local ASR streaming engine reported an unexpected input sample rate."
+                            "Local ASR engine reported an unexpected input sample rate."
                                 .to_string(),
                         retryable: false,
                     };
