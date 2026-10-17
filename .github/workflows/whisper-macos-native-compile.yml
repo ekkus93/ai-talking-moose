@@ -16,6 +16,9 @@ on:
       - src-tauri/src/asr/runtime_metrics.rs
       - src-tauri/src/asr/types.rs
       - src-tauri/src/asr/lifecycle.rs
+      # Requalify persisted Whisper/Gemini defaults and migration on both Macs.
+      - src-tauri/src/app/state.rs
+      - src-tauri/src/app/state/tests/settings_migration.rs
       - scripts/whisper_ffi_abi_probe.c
       - .github/workflows/whisper-macos-native-compile.yml
   workflow_dispatch:
@@ -130,6 +133,13 @@ jobs:
             asr::pipeline::tests -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             asr::whisper::installer::tests -- --test-threads=1
+      - name: Qualify macOS Whisper settings migration and provider preservation
+        # Deterministic SQLite/settings tests; no cloud keys or model downloads.
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+        run: |
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::settings_migration -- --test-threads=1
       - name: Verify required Whisper native runtime fails closed if archives are absent
         shell: bash
         env:
