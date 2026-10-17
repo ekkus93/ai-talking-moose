@@ -485,3 +485,58 @@ async fn selected_system_voice_audition_fails_closed_until_native_adapter_is_ava
     assert!(error.message.contains("no other voice provider"));
     assert!(!error.message.contains("audition"));
 }
+
+/// On macOS the native System Voice is an independently selected TTS output,
+/// not permission to open Gemini Live or forward local microphone PCM.
+/// This is a routing-only test: it does not synthesize or audition audio.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn whisper_with_macos_system_voice_keeps_every_text_provider_non_live() {
+    use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
+    let state = AppState::new_for_tests().unwrap();
+
+    for text_provider in [
+        TextProvider::Local,
+        TextProvider::Google,
+        TextProvider::Openai,
+        TextProvider::Ollama,
+        TextProvider::LlamaServer,
+    ] {
+        let settings = AppSettings {
+            asr_mode: AsrMode::WhisperSmall,
+            text_provider,
+            tts_provider: TtsProvider::System,
+            ..AppSettings::default()
+        };
+        let (sender, mut events) = tokio::sync::mpsc::channel(4);
+        let mut session = state
+            .get_conversation_provider_for(&settings)
+            .connect(
+                LiveSessionConfig {
+                    model: "selected-text-model".into(),
+                    voice_name: Some("system_default".into()),
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await
+            .expect("Whisper + macOS System Voice must use non-Live Talk");
+        assert!(
+            matches!(events.recv().await, Some(LiveServerEvent::Connected)),
+            "{text_provider:?} did not open the non-Live adapter"
+        );
+        assert_eq!(
+            session.send_audio_chunk(&[0, 0]).await.unwrap_err().kind,
+            ProviderErrorKind::Setup,
+            "{text_provider:?} must not forward Whisper PCM to Gemini Live"
+        );
+        assert!(
+            events.try_recv().is_err(),
+            "{text_provider:?} must not emit audio or a successful turn"
+        );
+        session.close().await.unwrap();
+    }
+}
