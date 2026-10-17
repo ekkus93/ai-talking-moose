@@ -169,10 +169,7 @@ async fn whisper_ingress_rejects_newest_chunk_and_drains_older_pcm_in_order() {
     pipeline.stop_and_join().await.unwrap();
 
     let received = state.received_pcm.lock().unwrap();
-    assert_eq!(
-        received.len(),
-        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS + 1
-    );
+    assert_eq!(received.len(), WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS + 1);
     assert_eq!(received[0], AudioResampler::i16_to_f32(&first));
     for index in 0..WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS {
         assert_eq!(
