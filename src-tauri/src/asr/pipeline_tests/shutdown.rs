@@ -266,6 +266,54 @@ fn whisper_abort_cleanup_failure_does_not_emit_post_cancel_error() {
 }
 
 #[tokio::test]
+async fn whisper_abort_during_failed_inference_suppresses_late_error_event() {
+    let state = Arc::new(FakeState::default());
+    let gate = Arc::new(PushGate::default());
+    *state.push_gate.lock().unwrap() = Some(gate.clone());
+    let inference_error = AsrError {
+        kind: AsrErrorKind::Inference,
+        message: "synthetic Whisper inference failure after abort".to_string(),
+        retryable: true,
+    };
+    *state.fail_push.lock().unwrap() = Some(inference_error.clone());
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    pipeline.test_sender().try_send(vec![0, 0]).unwrap();
+    gate.wait_until_entered();
+    pipeline.request_abort();
+    gate.release();
+
+    let joined_error = pipeline
+        .stop_and_join()
+        .await
+        .expect_err("joining owner must still observe failed native inference");
+    assert_eq!(joined_error, inference_error);
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(!pipeline.is_running());
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "aborted Whisper generation must not emit a late inference error"
+    );
+}
+
+#[tokio::test]
 async fn graceful_stop_waits_for_scheduled_final_delivery_acknowledgement() {
     let state = Arc::new(FakeState::default());
     state

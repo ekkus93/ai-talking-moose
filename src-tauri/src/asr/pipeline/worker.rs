@@ -152,7 +152,12 @@ pub(super) fn run_worker(
                 engine.updates_delivered(&updates);
             }
             Err(error) => {
-                record_terminal_error(metrics, event_callback, event_delivery, &error);
+                // An in-flight native inference can fail after the owner has
+                // aborted this generation. Preserve the failure for join(),
+                // but do not publish an ASR error into a retired conversation.
+                if !abort_requested.load(Ordering::SeqCst) {
+                    record_terminal_error(metrics, event_callback, event_delivery, &error);
+                }
                 terminal_error = Some(error);
                 break;
             }
