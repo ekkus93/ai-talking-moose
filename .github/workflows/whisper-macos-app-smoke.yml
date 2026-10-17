@@ -1,0 +1,117 @@
+name: Whisper-only macOS App Smoke
+
+# Pre-cutover, unsigned .app qualification for both Mac architectures.
+# Deliberately omit legacy Moonshine frameworks via a build-only Tauri
+# override. This does NOT alter the shipping config or approve WSP-500.
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/whisper-macos-app-smoke.yml
+      - src-tauri/build.rs
+      - src-tauri/tauri.conf.json
+      - src-tauri/Cargo.toml
+      - src-tauri/Cargo.lock
+      - src-tauri/src/asr/**
+      - src-tauri/src/main.rs
+      - scripts/collect_release_licenses.py
+      - scripts/check_whisper_provenance.py
+      - scripts/check_local_tts_packaging_policy.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whisper-app-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned-app:
+    name: Whisper-only unsigned app (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.4"
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
+      TALKING_MOOSE_BUILD_COMMIT: ${{ github.sha }}
+      TALKING_MOOSE_ALLOW_LIVE_API: "0"
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+    steps:
+      - name: Check out exact source and pinned native submodule
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Assert source identity and host architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          python3 scripts/check_whisper_provenance.py
+          python3 scripts/check_local_tts_packaging_policy.py
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.arch }}-whisper-app-${{ hashFiles('src-tauri/Cargo.lock') }}
+      - name: Install frontend dependencies and prepare notices
+        run: |
+          npm ci
+          python3 scripts/generate_app_icons.py
+          python3 scripts/collect_release_licenses.py
+      - name: Build unsigned app with only pinned static Whisper ASR
+        # Temporary acceptance override: no legacy Moonshine dylibs.
+        # The real shipping config and release workflow are not changed here.
+        env:
+          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+        run: npm run tauri build -- --bundles app
+      - name: Verify executable, native probe and absent Moonshine payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app" && test -d "$app"
+          bash scripts/verify_app_build_provenance.sh "$app" "$GITHUB_SHA"
+          executable="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)"
+          test -n "$executable"
+          lipo -archs "$executable" | grep -Fx "${{ matrix.arch }}"
+          "$executable" --whisper-native-smoke-test | grep -E '^whisper-native-runtime-version=.+$'
+          otool -L "$executable" > "$RUNNER_TEMP/whisper-app-dylibs.txt"
+          cat "$RUNNER_TEMP/whisper-app-dylibs.txt"
+          if grep -Ei 'libmoonshine|lib(whisper|ggml[^/]*)\\.dylib|/opt/homebrew/.*(whisper|ggml)' \
+            "$RUNNER_TEMP/whisper-app-dylibs.txt"; then
+            echo "Unexpected Moonshine or dynamic/developer Whisper dependency" >&2
+            exit 1
+          fi
+          if test -d "$app/Contents/Frameworks" && \
+             find "$app/Contents/Frameworks" -iname '*moonshine*' -print -quit | grep -q .; then
+            echo "Moonshine framework was bundled in Whisper-only app" >&2
+            exit 1
+          fi
+          if find "$app" -type f \( -name 'ggml-small.bin' -o -name '*.gguf' -o -name '*.onnx' -o -name '*.npz' \) \
+            -print -quit | grep -q .; then
+            echo "Model weights must not ship in the app bundle" >&2
+            exit 1
+          fi
+          echo "Unsigned Whisper-only app smoke passed for ${{ matrix.arch }} at $GITHUB_SHA"
+      # This job does NOT prove real model inference, physical microphone,
+      # enforced network denial, KittenTTS playback, signing or notarization.
