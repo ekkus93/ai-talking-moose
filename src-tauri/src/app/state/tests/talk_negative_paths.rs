@@ -144,3 +144,53 @@ async fn created_conversation_provider_keeps_its_original_selection_after_settin
     assert_eq!(error_of(&events).kind, ProviderErrorKind::Auth);
     assert_eq!(state.settings.read().text_provider, TextProvider::Openai);
 }
+
+#[tokio::test]
+async fn whisper_provider_snapshot_stays_non_live_after_switch_to_gemini_audio() {
+    let ollama = FakeHttp::spawn(OK, OLLAMA_OK);
+    let state = AppState::new_for_tests().unwrap();
+    assert!(!state.secrets.has_google_api_key());
+    let settings = base_settings(&ollama, TtsProvider::Google);
+    *state.settings.write() = settings.clone();
+
+    // Capture a non-Live Whisper conversation before changing all three
+    // independent routing choices. A later Gemini Live selection must not
+    // convert its existing microphone channel into a cloud audio session.
+    let provider = state.get_conversation_provider_for(&settings);
+    {
+        let mut current = state.settings.write();
+        current.asr_mode = AsrMode::GeminiLiveAudio;
+        current.text_provider = TextProvider::Google;
+        current.tts_provider = TtsProvider::Local;
+    }
+
+    let (sender, mut events) = tokio::sync::mpsc::channel(16);
+    let mut session = provider.connect(config(), sender).await.unwrap();
+    assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+    assert_eq!(
+        session.send_audio_chunk(&[0, 0]).await.unwrap_err().kind,
+        ProviderErrorKind::Setup,
+        "existing Whisper session must reject Live PCM after settings change"
+    );
+    assert!(events.try_recv().is_err(), "rejected PCM must emit no Live event");
+
+    session.send_text_turn("hello moose").await.unwrap();
+    let transcript = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("original text provider should respond");
+    assert!(matches!(
+        transcript,
+        Some(LiveServerEvent::ModelTranscript(ref t))
+            if t.text == "Ollama says hi." && t.is_final
+    ));
+    let failure = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("original Google TTS with no key must reject");
+    assert!(matches!(
+        failure,
+        Some(LiveServerEvent::Error(ref err)) if err.kind == ProviderErrorKind::Auth
+    ));
+    assert_eq!(ollama.hits().len(), 1, "must use the original Ollama provider");
+    assert_eq!(state.settings.read().asr_mode, AsrMode::GeminiLiveAudio);
+    session.close().await.unwrap();
+}
