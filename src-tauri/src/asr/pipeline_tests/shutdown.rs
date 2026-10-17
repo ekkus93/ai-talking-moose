@@ -406,3 +406,71 @@ async fn whisper_stop_drains_queued_pcm_in_order_and_delivers_one_final() {
         ]
     );
 }
+
+#[tokio::test]
+async fn whisper_abort_discards_queued_pcm_and_never_delivers_stop_time_final() {
+    let state = Arc::new(FakeState::default());
+    let gate = Arc::new(PushGate::default());
+    *state.push_gate.lock().unwrap() = Some(gate.clone());
+    state
+        .updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Partial {
+            segment_id: 104,
+            text: "in-flight Whisper partial".to_string(),
+            latency_ms: 1,
+        });
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 104,
+            text: "must not escape abort".to_string(),
+            latency_ms: 2,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let sender = pipeline.test_sender();
+    sender.try_send(vec![0, 0]).unwrap();
+    gate.wait_until_entered();
+    sender.try_send(vec![1, 0]).unwrap();
+    sender.try_send(vec![2, 0]).unwrap();
+    assert_eq!(pipeline.diagnostics().queue_depth, 2);
+
+    pipeline.request_abort();
+    *state.push_gate.lock().unwrap() = None;
+    gate.release();
+    pipeline.stop_and_join().await.unwrap();
+
+    assert!(!pipeline.is_running());
+    assert_eq!(pipeline.diagnostics().queue_depth, 0);
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.received_pcm.lock().unwrap().len(), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    let delivered = events.lock().unwrap();
+    assert!(delivered.iter().any(|event| matches!(
+        event,
+        AsrEvent::PartialTranscript { text } if text == "in-flight Whisper partial"
+    )));
+    assert!(!delivered
+        .iter()
+        .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })));
+}
