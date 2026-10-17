@@ -142,14 +142,19 @@ pub(super) fn run_worker(
 
         match inference_result {
             Ok(updates) => {
-                apply_transcript_updates(
-                    &updates,
-                    &mut transcript_state,
-                    metrics,
-                    event_callback,
-                    event_delivery,
-                );
-                engine.updates_delivered(&updates);
+                // Native inference may finish after the owner has cancelled
+                // this generation. Do not emit an outdated partial or final
+                // transcript after an explicit abort.
+                if !abort_requested.load(Ordering::SeqCst) {
+                    apply_transcript_updates(
+                        &updates,
+                        &mut transcript_state,
+                        metrics,
+                        event_callback,
+                        event_delivery,
+                    );
+                    engine.updates_delivered(&updates);
+                }
             }
             Err(error) => {
                 // An in-flight native inference can fail after the owner has

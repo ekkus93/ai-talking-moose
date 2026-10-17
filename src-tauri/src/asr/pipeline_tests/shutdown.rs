@@ -132,7 +132,7 @@ async fn sub_threshold_stop_final_crosses_normal_path_exactly_once() {
 }
 
 #[tokio::test]
-async fn abort_discards_queued_chunks_delivers_inflight_update_and_suppresses_stop_final() {
+async fn abort_discards_queued_chunks_and_all_inflight_updates() {
     let state = Arc::new(FakeState::default());
     let gate = Arc::new(PushGate::default());
     *state.push_gate.lock().unwrap() = Some(gate.clone());
@@ -181,13 +181,10 @@ async fn abort_discards_queued_chunks_delivers_inflight_update_and_suppresses_st
     assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
     assert!(!pipeline.is_running());
-    let delivered = events.lock().unwrap();
-    assert!(delivered.iter().any(|event| matches!(event,
-        LocalAsrPipelineEvent::PartialTranscript { text, .. } if text == "in-flight partial"
-    )));
-    assert!(!delivered.iter().any(|event| matches!(event,
-        LocalAsrPipelineEvent::FinalTranscript { text, .. } if text == "stop-time final"
-    )));
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "aborted worker must not publish late partials or stop-time finals"
+    );
 }
 
 #[test]
@@ -498,7 +495,7 @@ async fn whisper_stop_drains_queued_pcm_in_order_and_delivers_one_final() {
 }
 
 #[tokio::test]
-async fn whisper_abort_discards_queued_pcm_and_never_delivers_stop_time_final() {
+async fn whisper_abort_discards_queued_pcm_and_suppresses_inflight_transcripts() {
     let state = Arc::new(FakeState::default());
     let gate = Arc::new(PushGate::default());
     *state.push_gate.lock().unwrap() = Some(gate.clone());
@@ -555,12 +552,8 @@ async fn whisper_abort_discards_queued_pcm_and_never_delivers_stop_time_final() 
     assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
     assert_eq!(state.received_pcm.lock().unwrap().len(), 1);
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
-    let delivered = events.lock().unwrap();
-    assert!(delivered.iter().any(|event| matches!(
-        event,
-        AsrEvent::PartialTranscript { text } if text == "in-flight Whisper partial"
-    )));
-    assert!(!delivered
-        .iter()
-        .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })));
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "aborted Whisper worker must not publish late partials or finals"
+    );
 }
