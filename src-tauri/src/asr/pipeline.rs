@@ -359,7 +359,6 @@ impl LocalAsrPipeline {
             Ok(Ok(()))
         };
 
-
         self.running.store(false, Ordering::SeqCst);
         self.event_delivery.wait_until_idle().await;
         match result {
