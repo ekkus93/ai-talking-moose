@@ -19,6 +19,10 @@ on:
       # Requalify persisted Whisper/Gemini defaults and migration on both Macs.
       - src-tauri/src/app/state.rs
       - src-tauri/src/app/state/tests/settings_migration.rs
+      # Keep non-Live provider and macOS System Voice isolation under native CI.
+      - src-tauri/src/app/state/tests/talk_routing.rs
+      - src-tauri/src/app/state/tests/talk_routing_macos_system.rs
+      - src-tauri/src/app/state/tests/talk_negative_paths.rs
       - scripts/whisper_ffi_abi_probe.c
       - .github/workflows/whisper-macos-native-compile.yml
   workflow_dispatch:
@@ -133,13 +137,20 @@ jobs:
             asr::pipeline::tests -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             asr::whisper::installer::tests -- --test-threads=1
-      - name: Qualify macOS Whisper settings migration and provider preservation
-        # Deterministic SQLite/settings tests; no cloud keys or model downloads.
+      - name: Qualify macOS Whisper settings and non-Live provider isolation
+        # These are deterministic settings/routing checks, not audible TTS,
+        # real microphone, downloaded model, or packaged-app acceptance.
         env:
           TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
         run: |
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             app::state::tests::settings_migration -- --test-threads=1
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::talk_routing_macos_system -- --test-threads=1
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::talk_routing::whisper_with_macos_system_voice_keeps_every_text_provider_non_live -- --test-threads=1
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::talk_negative_paths::whisper_provider_snapshot_stays_non_live_after_switch_to_gemini_audio -- --test-threads=1
       - name: Verify required Whisper native runtime fails closed if archives are absent
         shell: bash
         env:
