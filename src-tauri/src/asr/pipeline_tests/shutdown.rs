@@ -259,8 +259,10 @@ fn whisper_abort_cleanup_failure_does_not_emit_post_cancel_error() {
     assert_eq!(error, stop_error);
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
     assert_eq!(state.pushes.load(Ordering::SeqCst), 0);
-    assert!(events.lock().unwrap().is_empty(),
-        "cancelled Whisper generation must not publish a late ASR error");
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "cancelled Whisper generation must not publish a late ASR error"
+    );
 }
 
 #[tokio::test]
