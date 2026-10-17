@@ -21,5 +21,18 @@ fn main() {
         }
     }
 
+    if std::env::args_os().any(|arg| arg == "--whisper-native-smoke-test") {
+        match talking_moose_lib::asr::whisper::native_probe::runtime_version() {
+            Ok(version) => {
+                println!("whisper-native-runtime-version={version}");
+                return;
+            }
+            Err(error) => {
+                eprintln!("whisper-native-smoke-error={error}");
+                std::process::exit(2);
+            }
+        }
+    }
+
     talking_moose_lib::run();
 }

@@ -1,0 +1,107 @@
+name: Whisper macOS Pre-Cutover App Smoke
+
+# Unsigned test-only app candidate to qualify the production Whisper static
+# linkage before removing Moonshine from the shipping app. NOT a release, nor
+# evidence of real microphone/audio, model installation, or notarization.
+on:
+  push:
+    branches: [master]
+    paths:
+      - src-tauri/build.rs
+      - src-tauri/src/main.rs
+      - src-tauri/src/asr/whisper/**
+      - src-tauri/tauri.conf.json
+      - .github/workflows/whisper-macos-precutover-app.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whisper-macos-precutover-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned-app:
+    name: Unsigned Whisper-linked app (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 110
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.4"
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
+      TALKING_MOOSE_BUILD_COMMIT: ${{ github.sha }}
+      TALKING_MOOSE_ALLOW_LIVE_API: "0"
+      TALKING_MOOSE_WHISPER_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: Check out exact pinned source
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Verify exact head and native architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          python3 scripts/check_whisper_provenance.py
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.arch }}-whisper-app-${{ hashFiles('src-tauri/Cargo.lock') }}
+      - name: Install frontend and generate app icons
+        run: |
+          npm ci
+          python3 scripts/generate_app_icons.py
+      - name: Build diagnostic unsigned .app with native Whisper and no legacy runtime
+        # Temporary CLI config only: do NOT modify the production Tauri bundle
+        # settings, omit KittenTTS dependencies, or remove Moonshine from source.
+        # This diagnostic bundle intentionally cannot qualify a shipping release.
+        run: |
+          npm run tauri build -- --bundles app --config '{"bundle":{"macOS":{"frameworks":[]},"resources":[]}}'
+      - name: Verify application executable's native Whisper linkage and source
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app" && test -d "$app"
+          bash scripts/verify_app_build_provenance.sh "$app" "$GITHUB_SHA"
+          bin="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)"
+          test -n "$bin" && test -x "$bin"
+          lipo -archs "$bin" | grep -Fx "${{ matrix.arch }}"
+          output="$("$bin" --whisper-native-smoke-test)"
+          printf '%s\n' "$output"
+          grep -E '^whisper-native-runtime-version=.+$' <<< "$output"
+          otool -L "$bin" > "$RUNNER_TEMP/whisper-app-dynamic-dependencies.txt"
+          cat "$RUNNER_TEMP/whisper-app-dynamic-dependencies.txt"
+          if grep -Ei 'lib(whisper|ggml[^/]*|moonshine)\\.dylib|/opt/homebrew|/Users/' \
+              "$RUNNER_TEMP/whisper-app-dynamic-dependencies.txt"; then
+            echo "Unexpected non-static Whisper or developer/Moonshine library dependency" >&2
+            exit 1
+          fi
+          if find "$app/Contents" -type f \
+              \( -name 'libmoonshine.dylib' -o -name 'ggml-small.bin' \) -print -quit | grep -q .; then
+            echo "Diagnostic app unexpectedly contains legacy native runtime or model weights" >&2
+            exit 1
+          fi
+          echo "Diagnostic unsigned macOS app: static Whisper FFI and exact source verified on ${{ matrix.arch }}."
+          echo "Not evidence of signed release, full KittenTTS packaging, physical mic, or real-model inference."
