@@ -93,7 +93,7 @@ jobs:
           grep -E '^whisper-native-runtime-version=.+$' <<< "$output"
           otool -L "$bin" > "$RUNNER_TEMP/whisper-app-dynamic-dependencies.txt"
           cat "$RUNNER_TEMP/whisper-app-dynamic-dependencies.txt"
-          if grep -Ei 'lib(whisper|ggml[^/]*|moonshine)\\.dylib|/opt/homebrew|/Users/' \
+          if grep -Ei 'lib(whisper|ggml[^/]*|moonshine)\.dylib|/opt/homebrew|/Users/' \
               "$RUNNER_TEMP/whisper-app-dynamic-dependencies.txt"; then
             echo "Unexpected non-static Whisper or developer/Moonshine library dependency" >&2
             exit 1

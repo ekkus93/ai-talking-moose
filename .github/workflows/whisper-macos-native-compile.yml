@@ -170,7 +170,7 @@ jobs:
           "$binary" probe-native
           lipo -archs "$binary" | grep -Fx "${{ matrix.arch }}"
           otool -L "$binary" > "$RUNNER_TEMP/whisper-release-dependencies.txt"
-          if grep -Ei 'lib(whisper|ggml[^/]*)\\.dylib|/opt/homebrew/.*(whisper|ggml)' \
+          if grep -Ei 'lib(whisper|ggml[^/]*)\.dylib|/opt/homebrew/.*(whisper|ggml)' \
               "$RUNNER_TEMP/whisper-release-dependencies.txt"; then
             echo "Release-profile Whisper unexpectedly depends on a dynamic developer library" >&2
             exit 1

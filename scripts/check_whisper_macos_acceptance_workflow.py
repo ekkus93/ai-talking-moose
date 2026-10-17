@@ -80,8 +80,49 @@ def check_workflow(text: str) -> None:
         compile(source, f"mac-whisper-acceptance-{index}", "exec")
 
 
+
+def check_precutover_app_workflow(text: str, native_compile: str, main_source: str) -> None:
+    """Keep diagnostic packaging native, two-arch, and explicitly non-release."""
+    required = {
+        "manual trigger": "workflow_dispatch:",
+        "Apple Silicon": "arch: arm64",
+        "Intel": "arch: x86_64",
+        "native source identity": "python3 scripts/check_whisper_provenance.py",
+        "required native linkage": 'TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"',
+        "test-only stripped bundle": """--config '{"bundle":{"macOS":{"frameworks":[]},"resources":[]}}'""",
+        "real executable native probe": "--whisper-native-smoke-test",
+        "app build provenance": "scripts/verify_app_build_provenance.sh",
+        "actual Mach-O dependencies": 'otool -L "$bin"',
+        "no downloaded model in app": "-name 'ggml-small.bin'",
+        "no Moonshine runtime in diagnostic app": "-name 'libmoonshine.dylib'",
+    }
+    for description, needle in required.items():
+        if needle not in text:
+            raise ValueError(f"Pre-cutover app smoke missing {description}: {needle}")
+
+    for forbidden in ("actions/upload-artifact@", "notarytool", "--bundles dmg"):
+        if forbidden in text:
+            raise ValueError(f"Pre-cutover diagnostic must not publish a release: {forbidden}")
+    if text.count("arch: arm64") != 1 or text.count("arch: x86_64") != 1:
+        raise ValueError("Pre-cutover smoke must run once per Mac architecture")
+    if r"\\.dylib" in text or r"\\.dylib" in native_compile:
+        raise ValueError("Dynamic-library audit is overescaped and might silently pass")
+    if r"\.dylib" not in text or r"\.dylib" not in native_compile:
+        raise ValueError("Dynamic-library audit must match literal .dylib suffixes")
+    if "--whisper-native-smoke-test" not in main_source:
+        raise ValueError("Packaged app executable lacks real native Whisper probe")
+    if "whisper::native_probe::runtime_version()" not in main_source:
+        raise ValueError("Packaged app smoke does not invoke real Whisper FFI")
+
+
 def main() -> int:
     check_workflow(WORKFLOW.read_text(encoding="utf-8"))
+    root = WORKFLOW.parents[2]
+    check_precutover_app_workflow(
+        (root / ".github/workflows/whisper-macos-precutover-app.yml").read_text(encoding="utf-8"),
+        (root / ".github/workflows/whisper-macos-native-compile.yml").read_text(encoding="utf-8"),
+        (root / "src-tauri/src/main.rs").read_text(encoding="utf-8"),
+    )
     print("macOS Whisper real-model acceptance workflow policy OK")
     return 0
 
