@@ -85,8 +85,18 @@ jobs:
           app="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app" && test -d "$app"
           bash scripts/verify_app_build_provenance.sh "$app" "$GITHUB_SHA"
-          bin="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)"
-          test -n "$bin" && test -x "$bin"
+          # Use the actual CFBundleExecutable, not an arbitrary bundled CLI.
+          # Additional acceptance binaries can also be executable and must not
+          # be mistaken for the production application.
+          bundle_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          case "$bundle_executable" in
+            ""|"."|".."|*/*)
+              echo "Invalid CFBundleExecutable in diagnostic app" >&2
+              exit 1
+              ;;
+          esac
+          bin="$app/Contents/MacOS/$bundle_executable"
+          test -f "$bin" && test -x "$bin"
           lipo -archs "$bin" | grep -Fx "${{ matrix.arch }}"
           output="$("$bin" --whisper-native-smoke-test)"
           printf '%s\n' "$output"

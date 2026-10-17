@@ -92,6 +92,8 @@ def check_precutover_app_workflow(text: str, native_compile: str, main_source: s
         "test-only stripped bundle": """--config '{"bundle":{"macOS":{"frameworks":[]},"resources":[]}}'""",
         "real executable native probe": "--whisper-native-smoke-test",
         "app build provenance": "scripts/verify_app_build_provenance.sh",
+        "read declared app executable": "Print :CFBundleExecutable",
+        "use declared app executable": 'bin="$app/Contents/MacOS/$bundle_executable"',
         "actual Mach-O dependencies": 'otool -L "$bin"',
         "no downloaded model in app": "-name 'ggml-small.bin'",
         "no Moonshine runtime in diagnostic app": "-name 'libmoonshine.dylib'",
@@ -103,6 +105,8 @@ def check_precutover_app_workflow(text: str, native_compile: str, main_source: s
     for forbidden in ("actions/upload-artifact@", "notarytool", "--bundles dmg"):
         if forbidden in text:
             raise ValueError(f"Pre-cutover diagnostic must not publish a release: {forbidden}")
+    if '-type f -perm -111 -print -quit' in text:
+        raise ValueError("Pre-cutover smoke must select the Info.plist application executable")
     if text.count("arch: arm64") != 1 or text.count("arch: x86_64") != 1:
         raise ValueError("Pre-cutover smoke must run once per Mac architecture")
     if r"\\.dylib" in text or r"\\.dylib" in native_compile:
