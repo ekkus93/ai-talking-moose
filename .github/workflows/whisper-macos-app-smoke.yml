@@ -78,11 +78,38 @@ jobs:
           npm ci
           python3 scripts/generate_app_icons.py
           python3 scripts/collect_release_licenses.py
+      - name: Prepare isolated Whisper-only app bundle config
+        # Tauri's TAURI_CONFIG merge does not clear the existing frameworks
+        # array: both architectures previously failed after successful Rust
+        # compilation when bundling the absent libmoonshine.dylib. Patch only
+        # this ephemeral runner checkout, never the committed shipping config.
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("src-tauri/tauri.conf.json")
+          config = json.loads(path.read_text(encoding="utf-8"))
+          mac = config["bundle"]["macOS"]
+          expected = [
+              "native/macos/libmoonshine.dylib",
+              "native/macos/libonnxruntime.1.23.2.dylib",
+          ]
+          if mac.get("frameworks") != expected:
+              raise SystemExit("Unexpected shipping frameworks: refusing to alter unreviewed dependencies")
+          if config["bundle"].get("resources") != ["native/macos/notices/"]:
+              raise SystemExit("Unexpected notice resources: refusing to weaken package policy")
+          mac["frameworks"] = []
+          path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+          assert json.loads(path.read_text(encoding="utf-8"))["bundle"]["macOS"]["frameworks"] == []
+          print("Ephemeral app-only config omits legacy Moonshine frameworks; committed config unchanged")
+          PY
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Build unsigned app with only pinned static Whisper ASR
-        # Temporary acceptance override: no legacy Moonshine dylibs.
-        # The real shipping config and release workflow are not changed here.
-        env:
-          TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
+        # No TAURI_CONFIG merge: the ephemeral config has an explicit empty
+        # frameworks array. Normal release packaging remains untouched.
         run: npm run tauri build -- --bundles app
       - name: Verify executable, native probe and absent Moonshine payload
         shell: bash
