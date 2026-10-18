@@ -8,8 +8,7 @@ use crate::asr::moonshine::{
 use crate::asr::whisper::{
     installer::{
         WhisperModelInstallCancellation, WhisperModelInstallErrorKind, WhisperModelInstallPhase,
-        WhisperModelInstallProgress,
-        WhisperModelInstallProgressCallback, WhisperModelInstaller,
+        WhisperModelInstallProgress, WhisperModelInstallProgressCallback, WhisperModelInstaller,
     },
     manifest,
     manifest::{WHISPER_RUNTIME_UNBUILT_MESSAGE, WHISPER_SMALL_DISPLAY_NAME},
