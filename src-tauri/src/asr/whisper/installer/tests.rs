@@ -248,6 +248,46 @@ async fn insufficient_space_fails_before_transport_starts() {
     no_staged_or_promoted_artifacts(&installer);
 }
 
+struct FailingDiskSpaceProbe;
+
+impl DiskSpaceProbe for FailingDiskSpaceProbe {
+    fn available_bytes(&self, _path: &Path) -> std::io::Result<Option<u64>> {
+        Err(std::io::Error::other(
+            "private capacity probe failure at /Users/example/private-models",
+        ))
+    }
+}
+
+#[tokio::test]
+async fn disk_capacity_probe_error_fails_closed_without_network_or_path_leak() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (mut installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    installer.disk_space = Arc::new(FailingDiskSpaceProbe);
+
+    let error = installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.kind, WhisperModelInstallErrorKind::Io);
+    assert_eq!(
+        error.message,
+        "The Whisper model installer could not check available disk space for the Whisper model."
+    );
+    assert!(!error.message.contains("/Users/example"));
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+    no_staged_or_promoted_artifacts(&installer);
+}
+
 #[tokio::test]
 async fn cancelled_before_download_never_calls_transport() {
     let temp = tempfile::TempDir::new().unwrap();

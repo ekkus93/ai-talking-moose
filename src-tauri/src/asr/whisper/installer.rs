@@ -514,7 +514,16 @@ impl WhisperModelInstaller {
                     available,
                 ));
             }
-            _ => {}
+            Err(_) => {
+                // An unreadable capacity probe is not proof that a 488 MB
+                // download can be staged safely. Fail before network I/O and
+                // avoid leaking a host path from the underlying OS error.
+                drop(guard);
+                return Err(WhisperModelInstallError::io(
+                    "check available disk space for the Whisper model",
+                ));
+            }
+            Ok(_) => {}
         }
 
         if cancellation.is_cancelled() {
