@@ -889,6 +889,87 @@ fn current_version_legacy_moonshine_selection_migrates_once_without_changing_pre
 }
 
 #[test]
+fn moonshine_upgrade_preserves_full_settings_snapshot_and_sanitizes_additive_data() {
+    for version in [8, CURRENT_SETTINGS_VERSION] {
+        for retired in [
+            AsrMode::MoonshineTinyStreaming,
+            AsrMode::MoonshineSmallStreaming,
+        ] {
+            let file = NamedTempFile::new().unwrap();
+            let path = file.path().to_string_lossy().to_string();
+            let mut original = AppSettings {
+                settings_version: version,
+                asr_mode: retired,
+                wake_word_enabled: true,
+                input_device: Some("selected-input".into()),
+                output_device: Some("selected-output".into()),
+                volume: 0.65,
+                text_provider: TextProvider::Ollama,
+                ollama_text_model: "selected-local-model".into(),
+                ollama_server_address: "http://127.0.0.1:11434".into(),
+                tts_provider: TtsProvider::Google,
+                google_tts_voice: "Kore".into(),
+                local_tts_voice: "SavedLocalVoice".into(),
+                system_tts_voice: "SavedSystemVoice".into(),
+                active_app_observation: true,
+                memory_enabled: true,
+                save_transcripts: true,
+                ..Default::default()
+            };
+            original.future_settings.insert(
+                "future_display_preference".into(),
+                serde_json::json!({
+                    "theme": "dark",
+                    "nested": [{"authorization": "private-value", "layout": "wide"}]
+                }),
+            );
+
+            let mut expected = original.clone();
+            expected.settings_version = CURRENT_SETTINGS_VERSION;
+            expected.asr_mode = AsrMode::WhisperSmall;
+            expected.sanitize_future_settings();
+            let expected_snapshot = serde_json::to_value(&expected).unwrap();
+
+            let db = Database::new(&path).unwrap();
+            db.set_setting("app_settings", &serde_json::to_string(&original).unwrap())
+                .unwrap();
+            drop(db);
+
+            let secrets =
+                SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+            let state = AppState::new_with_secret_store(Some(&path), secrets).unwrap();
+            assert_eq!(
+                serde_json::to_value(&*state.settings.read()).unwrap(),
+                expected_snapshot,
+                "only ASR, schema version and secret-shaped additive fields may change"
+            );
+            assert!(state.whisper_installer.verify_installed().unwrap().is_none());
+            let persisted = state.db.get_setting("app_settings").unwrap().unwrap();
+            assert!(!persisted.contains("private-value"));
+            assert!(persisted.contains("future_display_preference"));
+            let (decoded, migrated_again) = AppSettings::from_persisted_json(&persisted).unwrap();
+            assert!(!migrated_again);
+            assert_eq!(serde_json::to_value(decoded).unwrap(), expected_snapshot);
+            drop(state);
+
+            let secrets =
+                SecretStore::with_backend(Arc::new(MemorySecretBackend::default())).unwrap();
+            let restarted = AppState::new_with_secret_store(Some(&path), secrets).unwrap();
+            assert_eq!(
+                serde_json::to_value(&*restarted.settings.read()).unwrap(),
+                expected_snapshot
+            );
+            assert_eq!(
+                restarted.db.get_setting("app_settings").unwrap().unwrap(),
+                persisted,
+                "normalized SQLite settings must not be rewritten on restart"
+            );
+            assert!(restarted.whisper_installer.verify_installed().unwrap().is_none());
+        }
+    }
+}
+
+#[test]
 fn explicit_cloud_asr_and_missing_legacy_selection_remain_unchanged() {
     let original = AppSettings {
         asr_mode: AsrMode::GeminiLiveAudio,
