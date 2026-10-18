@@ -187,6 +187,83 @@ async fn abort_discards_queued_chunks_and_all_inflight_updates() {
     );
 }
 
+
+#[test]
+fn explicit_worker_abort_skips_final_inference_but_graceful_stop_preserves_it() {
+    struct FinalInferenceProbe {
+        graceful_stops: Arc<AtomicUsize>,
+        aborts: Arc<AtomicUsize>,
+    }
+
+    impl PipelineEngine for FinalInferenceProbe {
+        fn input_sample_rate_hz(&self) -> u32 {
+            LOCAL_ASR_INPUT_SAMPLE_RATE_HZ
+        }
+
+        fn push_pcm(&mut self, _pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
+            Ok(Vec::new())
+        }
+
+        fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
+            self.graceful_stops.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![StreamingTranscriptUpdate::Final {
+                segment_id: 0,
+                text: "graceful final transcript".to_string(),
+                latency_ms: 1,
+            }])
+        }
+
+        fn abort(&mut self) -> Result<(), AsrError> {
+            self.aborts.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    for was_aborted in [true, false] {
+        let graceful_stops = Arc::new(AtomicUsize::new(0));
+        let aborts = Arc::new(AtomicUsize::new(0));
+        let mut engine = FinalInferenceProbe {
+            graceful_stops: graceful_stops.clone(),
+            aborts: aborts.clone(),
+        };
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(2);
+        drop(sender);
+        let stop = AtomicBool::new(true);
+        let abort = AtomicBool::new(was_aborted);
+        let metrics = Mutex::new(crate::asr::runtime_metrics::RuntimeMetrics::new());
+        let delivery = Arc::new(LocalAsrEventDeliveryTracker::default());
+        let (callback, events) = callback_events();
+
+        super::super::run_worker(
+            &mut engine,
+            &mut receiver,
+            &stop,
+            &abort,
+            &metrics,
+            &callback,
+            &delivery,
+        )
+        .unwrap();
+
+        assert_eq!(aborts.load(Ordering::SeqCst), usize::from(was_aborted));
+        assert_eq!(
+            graceful_stops.load(Ordering::SeqCst),
+            usize::from(!was_aborted)
+        );
+        let emitted = events.lock().unwrap();
+        if was_aborted {
+            assert!(emitted.is_empty(), "cancelled Whisper must not emit a final");
+        } else {
+            assert!(
+                emitted
+                    .iter()
+                    .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })),
+                "graceful stop still delivers the final transcript"
+            );
+        }
+    }
+}
+
 #[test]
 fn worker_abort_before_first_chunk_skips_queued_audio_and_stops_engine_once() {
     let state = Arc::new(FakeState::default());

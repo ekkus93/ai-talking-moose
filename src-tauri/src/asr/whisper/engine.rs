@@ -259,6 +259,15 @@ impl PipelineEngine for WhisperEngine {
         self.transcribe_current(true)
     }
 
+    fn abort(&mut self) -> Result<(), AsrError> {
+        // Cancellation discards buffered PCM and never performs an expensive
+        // stop-time inference for a conversation that has been retired.
+        self.stopped = true;
+        self.audio_buffer.clear();
+        self.utterance.finish();
+        Ok(())
+    }
+
     fn updates_delivered(&mut self, updates: &[StreamingTranscriptUpdate]) {
         if updates.iter().any(|update| {
             matches!(

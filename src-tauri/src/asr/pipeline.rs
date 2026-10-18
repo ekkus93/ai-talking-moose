@@ -123,6 +123,12 @@ pub trait PipelineEngine: Send {
     fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError>;
     fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError>;
 
+    /// An explicit abort retires the generation without forwarding any final
+    /// transcript. Legacy engines can delegate native cleanup to stop().
+    fn abort(&mut self) -> Result<(), AsrError> {
+        self.stop().map(|_| ())
+    }
+
     /// Called after the pipeline has applied updates and synchronously emitted
     /// their events. Engines may release per-utterance state after final delivery.
     fn updates_delivered(&mut self, _updates: &[StreamingTranscriptUpdate]) {}

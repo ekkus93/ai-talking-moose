@@ -170,7 +170,14 @@ pub(super) fn run_worker(
     }
 
     let stop_started = Instant::now();
-    match engine.stop() {
+    // A dropped/cancelled generation must not spend another CPU inference pass
+    // finalizing audio that will never be delivered. Keep graceful stop intact.
+    let stop_result = if abort_requested.load(Ordering::SeqCst) {
+        engine.abort().map(|()| Vec::new())
+    } else {
+        engine.stop()
+    };
+    match stop_result {
         Ok(updates) => {
             metrics.lock().record_inference(0, stop_started.elapsed());
             if terminal_error.is_none() && !abort_requested.load(Ordering::SeqCst) {
