@@ -188,6 +188,85 @@ async fn abort_discards_queued_chunks_and_all_inflight_updates() {
 }
 
 #[test]
+fn failed_inference_retires_engine_without_running_stop_time_inference() {
+    struct FailingEngine {
+        final_inferences: Arc<AtomicUsize>,
+        aborts: Arc<AtomicUsize>,
+    }
+
+    impl PipelineEngine for FailingEngine {
+        fn input_sample_rate_hz(&self) -> u32 {
+            LOCAL_ASR_INPUT_SAMPLE_RATE_HZ
+        }
+
+        fn push_pcm(&mut self, _pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
+            Err(AsrError {
+                kind: AsrErrorKind::Inference,
+                message: "synthetic terminal inference failure".to_string(),
+                retryable: false,
+            })
+        }
+
+        fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
+            self.final_inferences.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![StreamingTranscriptUpdate::Final {
+                segment_id: 0,
+                text: "must not be inferred after failure".to_string(),
+                latency_ms: 1,
+            }])
+        }
+
+        fn abort(&mut self) -> Result<(), AsrError> {
+            self.aborts.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    let final_inferences = Arc::new(AtomicUsize::new(0));
+    let aborts = Arc::new(AtomicUsize::new(0));
+    let mut engine = FailingEngine {
+        final_inferences: final_inferences.clone(),
+        aborts: aborts.clone(),
+    };
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(2);
+    sender.try_send(vec![0, 0]).unwrap();
+    drop(sender);
+    let stop = AtomicBool::new(false);
+    let abort = AtomicBool::new(false);
+    let metrics = Mutex::new(crate::asr::runtime_metrics::RuntimeMetrics::new());
+    let delivery = Arc::new(LocalAsrEventDeliveryTracker::default());
+    let (callback, events) = callback_events();
+
+    let error = super::super::run_worker(
+        &mut engine,
+        &mut receiver,
+        &stop,
+        &abort,
+        &metrics,
+        &callback,
+        &delivery,
+    )
+    .expect_err("original inference failure must propagate to joining owner");
+
+    assert_eq!(error.kind, AsrErrorKind::Inference);
+    assert_eq!(error.message, "synthetic terminal inference failure");
+    assert_eq!(aborts.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        final_inferences.load(Ordering::SeqCst),
+        0,
+        "terminal inference failure must not trigger stop-time inference"
+    );
+    assert!(
+        !events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(event, AsrEvent::FinalTranscript { .. })),
+        "a failed inference must not deliver a final transcript"
+    );
+}
+
+#[test]
 fn explicit_worker_abort_skips_final_inference_but_graceful_stop_preserves_it() {
     struct FinalInferenceProbe {
         graceful_stops: Arc<AtomicUsize>,

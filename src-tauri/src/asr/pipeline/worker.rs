@@ -172,7 +172,9 @@ pub(super) fn run_worker(
     let stop_started = Instant::now();
     // A dropped/cancelled generation must not spend another CPU inference pass
     // finalizing audio that will never be delivered. Keep graceful stop intact.
-    let stop_result = if abort_requested.load(Ordering::SeqCst) {
+    let stop_result = if abort_requested.load(Ordering::SeqCst) || terminal_error.is_some() {
+        // After a terminal inference/input failure, a final transcript cannot
+        // be delivered. Retire native state without another costly inference.
         engine.abort().map(|()| Vec::new())
     } else {
         engine.stop()
