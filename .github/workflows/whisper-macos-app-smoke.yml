@@ -12,8 +12,15 @@ on:
       - src-tauri/tauri.conf.json
       - src-tauri/Cargo.toml
       - src-tauri/Cargo.lock
-      - src-tauri/src/asr/**
-      - src-tauri/src/main.rs
+      # Exercise the packaged app when capture/routing, TTS, or UI changes,
+      # not only when the ASR module itself changes.
+      - src-tauri/src/**
+      - src/**
+      - package.json
+      - package-lock.json
+      - src-tauri/capabilities/**
+      - scripts/verify_app_build_provenance.sh
+      - scripts/generate_app_icons.py
       - scripts/collect_release_licenses.py
       - scripts/check_whisper_provenance.py
       - scripts/check_local_tts_packaging_policy.py
