@@ -173,6 +173,7 @@ struct TranscribeReportContext {
     network_denial_probe_passed: bool,
     pipeline: WhisperPipelineAcceptanceMetrics,
     transcript: WhisperTranscriptReport,
+    model_load_wall_ms: u64,
     transcribe_wall_ms: u64,
     phase_wall_ms: u64,
     process_cpu_time_ms: u64,
@@ -222,6 +223,7 @@ fn build_transcribe_acceptance_report(
         },
         pipeline: context.pipeline,
         transcript: context.transcript,
+        model_load_wall_ms: context.model_load_wall_ms,
         transcribe_wall_ms: context.transcribe_wall_ms,
         phase_wall_ms: context.phase_wall_ms,
         process_cpu_time_ms: context.process_cpu_time_ms,
@@ -396,6 +398,8 @@ pub struct WhisperTranscribeAcceptanceReport {
     pub runtime: WhisperTranscribeRuntime,
     pub pipeline: WhisperPipelineAcceptanceMetrics,
     pub transcript: WhisperTranscriptReport,
+    /// Elapsed time for the first direct pinned-model load, excluding inference.
+    pub model_load_wall_ms: u64,
     pub transcribe_wall_ms: u64,
     pub phase_wall_ms: u64,
     pub process_cpu_time_ms: u64,
@@ -635,9 +639,11 @@ pub async fn transcribe_for_acceptance(
     let api: Box<dyn WhisperApi> = Box::new(NativeWhisperApi);
     let model_path_c =
         path_to_cstring(lease.model_path()).map_err(|error| error.message.to_string())?;
+    let model_load_started = Instant::now();
     let model = api
         .load_model(&model_path_c)
         .map_err(|error| error.message.to_string())?;
+    let model_load_wall_ms = elapsed_ms(model_load_started);
 
     let started = Instant::now();
     let transcript = api
@@ -712,6 +718,7 @@ pub async fn transcribe_for_acceptance(
             network_denial_probe_passed,
             pipeline,
             transcript: transcript_report,
+            model_load_wall_ms,
             transcribe_wall_ms,
             phase_wall_ms,
             process_cpu_time_ms,
@@ -894,6 +901,7 @@ mod tests {
                 text: "hello".to_string(),
                 transcription_ok: true,
             },
+            model_load_wall_ms: 17,
             transcribe_wall_ms: 2,
             phase_wall_ms: 3,
             process_cpu_time_ms: 0,
@@ -909,6 +917,7 @@ mod tests {
             json["pipeline"]["real_time_factor"],
             serde_json::Value::Null
         );
+        assert_eq!(json["model_load_wall_ms"], 17);
         assert_eq!(json["host_cpu"], serde_json::Value::Null);
         assert_eq!(json["resident_memory_bytes"], serde_json::Value::Null);
     }
@@ -958,6 +967,7 @@ mod tests {
                     overload_dropped_chunks: 0,
                 },
                 transcript,
+                model_load_wall_ms: 23,
                 transcribe_wall_ms: 1,
                 phase_wall_ms: 2,
                 process_cpu_time_ms: 0,
@@ -971,6 +981,7 @@ mod tests {
         assert_eq!(report.sample_count, 16);
         assert_eq!(report.duration_ms, 1);
         assert_eq!(report.corpus_bytes, 76);
+        assert_eq!(report.model_load_wall_ms, 23);
         assert!(report.runtime.whisper_native_linked);
         assert_eq!(
             validate_transcription_report(&report).unwrap_err(),

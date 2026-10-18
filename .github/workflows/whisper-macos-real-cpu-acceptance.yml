@@ -185,6 +185,7 @@ jobs:
           assert transcript["transcript"]["transcription_ok"] is True
           words = transcript["transcript"]["text"].lower()
           assert all(word in words for word in ("ask", "country", "you")), words
+          assert transcript["model_load_wall_ms"] > 0
           assert transcript["transcribe_wall_ms"] > 0
           assert transcript["peak_resident_memory_bytes"] > 0
           pipeline = transcript["pipeline"]
@@ -199,6 +200,7 @@ jobs:
           assert pipeline["overload_attempted_chunks"] == 64
           assert pipeline["overload_dropped_chunks"] > 0
           assert transcript["available_parallelism"] > 0
+          print("macOS Whisper direct model load (ms):", transcript["model_load_wall_ms"])
           print("macOS Whisper CPU acceptance metrics:", {key: pipeline[key] for key in (
               "first_partial_latency_ms", "first_final_latency_ms", "real_time_factor",
               "nominal_dropped_chunks", "overload_dropped_chunks")})
