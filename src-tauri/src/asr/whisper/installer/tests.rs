@@ -255,12 +255,8 @@ async fn unknown_disk_capacity_fails_closed_before_download() {
         fixture_chunks(FIXTURE_MODEL),
         FakeTransportBehavior::Complete,
     ));
-    let (installer, disk_space) = fixture_installer(
-        temp.path(),
-        FIXTURE_MODEL,
-        transport.clone(),
-        None,
-    );
+    let (installer, disk_space) =
+        fixture_installer(temp.path(), FIXTURE_MODEL, transport.clone(), None);
 
     let error = installer
         .install(&mut WhisperModelInstallCancellation::default(), &None)
