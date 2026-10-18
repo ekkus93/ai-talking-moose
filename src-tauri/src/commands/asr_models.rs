@@ -510,7 +510,12 @@ mod tests {
         assert_eq!(descriptor.revision, manifest::WHISPER_MODEL_REVISION);
         assert_eq!(descriptor.expected_bytes, manifest::WHISPER_MODEL_BYTES);
         assert!(!descriptor.active);
-        assert_eq!(descriptor.error_message, None);
+        // Unlinked CI/development builds must still disclose that native
+        // Whisper is unavailable; the catalog must not fabricate readiness.
+        assert_eq!(
+            descriptor.error_message,
+            manifest::model_descriptor(false).error_message
+        );
     }
 
     #[test]
