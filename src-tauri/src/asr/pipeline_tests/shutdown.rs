@@ -187,7 +187,6 @@ async fn abort_discards_queued_chunks_and_all_inflight_updates() {
     );
 }
 
-
 #[test]
 fn explicit_worker_abort_skips_final_inference_but_graceful_stop_preserves_it() {
     struct FinalInferenceProbe {
@@ -252,7 +251,10 @@ fn explicit_worker_abort_skips_final_inference_but_graceful_stop_preserves_it() 
         );
         let emitted = events.lock().unwrap();
         if was_aborted {
-            assert!(emitted.is_empty(), "cancelled Whisper must not emit a final");
+            assert!(
+                emitted.is_empty(),
+                "cancelled Whisper must not emit a final"
+            );
         } else {
             assert!(
                 emitted
