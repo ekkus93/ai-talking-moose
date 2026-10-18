@@ -990,6 +990,40 @@ async fn undeletable_marker_directory_preserves_model_on_delete_failure() {
     assert!(installer.marker_path().is_dir());
 }
 
+#[tokio::test]
+async fn unexpected_model_directory_preserves_contents_and_install_marker() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+    fs::create_dir(installer.model_path()).unwrap();
+    let unrelated = installer.model_path().join("unrelated.txt");
+    fs::write(&unrelated, b"preserve this file").unwrap();
+    fs::write(installer.marker_path(), b"marker").unwrap();
+
+    let error = installer.delete().await.unwrap_err();
+    assert_eq!(error.kind, WhisperModelInstallErrorKind::Io);
+    assert_eq!(
+        error.message,
+        "The Whisper model installer could not inspect the installed Whisper model before deletion."
+    );
+    assert!(installer.model_path().is_dir());
+    assert_eq!(fs::read(unrelated).unwrap(), b"preserve this file");
+    assert_eq!(fs::read(installer.marker_path()).unwrap(), b"marker");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn deleting_model_symlink_preserves_unrelated_target() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+    let unrelated = temp.path().join("unrelated-model.bin");
+    fs::write(&unrelated, b"unrelated model").unwrap();
+    std::os::unix::fs::symlink(&unrelated, installer.model_path()).unwrap();
+
+    installer.delete().await.unwrap();
+    assert!(fs::symlink_metadata(installer.model_path()).is_err());
+    assert_eq!(fs::read(unrelated).unwrap(), b"unrelated model");
+}
+
 #[test]
 fn public_error_mapping_covers_all_whisper_engine_failure_classes() {
     for (failure, expected) in [

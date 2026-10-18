@@ -13,13 +13,12 @@ pub(super) fn delete_model_path(path: &Path) -> Result<bool, WhisperModelInstall
         }
     };
 
-    if metadata.is_dir() && !metadata.file_type().is_symlink() {
-        fs::remove_dir_all(path)
-            .map_err(|_| WhisperModelInstallError::io("delete the Whisper model"))?;
-    } else {
-        fs::remove_file(path)
-            .map_err(|_| WhisperModelInstallError::io("delete the Whisper model"))?;
+    if metadata.file_type().is_dir() {
+        return Err(WhisperModelInstallError::io(
+            "inspect the installed Whisper model before deletion",
+        ));
     }
+    fs::remove_file(path).map_err(|_| WhisperModelInstallError::io("delete the Whisper model"))?;
 
     if let Some(parent) = path.parent() {
         if fs::read_dir(parent)
