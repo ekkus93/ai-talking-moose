@@ -626,9 +626,27 @@ impl WhisperModelInstaller {
         let model_id = manifest::WHISPER_SMALL_ID.to_string();
         let lock = install_operation_lock(&model_id);
         let _guard = lock.lock().await;
-        let model_path = self.model_path();
-        delete_model_path(&model_path)?;
-        let _ = fs::remove_file(self.marker_path());
+        let marker_path = self.marker_path();
+        match fs::symlink_metadata(&marker_path) {
+            Ok(metadata) if metadata.file_type().is_dir() => {
+                return Err(WhisperModelInstallError::io(
+                    "inspect the Whisper install marker before deletion",
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => {
+                return Err(WhisperModelInstallError::io(
+                    "inspect the Whisper install marker before deletion",
+                ));
+            }
+        }
+        delete_model_path(&self.model_path())?;
+        match fs::remove_file(marker_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(WhisperModelInstallError::io("delete the Whisper install marker")),
+        }
         Ok(())
     }
 }

@@ -973,6 +973,23 @@ async fn active_verified_model_lease_blocks_delete_until_released() {
     assert!(!installer.model_path().exists());
 }
 
+#[tokio::test]
+async fn undeletable_marker_directory_preserves_model_on_delete_failure() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+    fs::write(installer.model_path(), FIXTURE_MODEL).unwrap();
+    fs::create_dir(installer.marker_path()).unwrap();
+
+    let error = installer.delete().await.unwrap_err();
+    assert_eq!(error.kind, WhisperModelInstallErrorKind::Io);
+    assert_eq!(
+        error.message,
+        "The Whisper model installer could not inspect the Whisper install marker before deletion."
+    );
+    assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
+    assert!(installer.marker_path().is_dir());
+}
+
 #[test]
 fn public_error_mapping_covers_all_whisper_engine_failure_classes() {
     for (failure, expected) in [
