@@ -645,7 +645,11 @@ impl WhisperModelInstaller {
         match fs::remove_file(marker_path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(WhisperModelInstallError::io("delete the Whisper install marker")),
+            Err(_) => {
+                return Err(WhisperModelInstallError::io(
+                    "delete the Whisper install marker",
+                ))
+            }
         }
         Ok(())
     }
