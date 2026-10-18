@@ -121,6 +121,10 @@ impl WhisperUtteranceState {
         self.segment_id = self.segment_id.saturating_add(1);
     }
 
+    fn should_infer_final_on_stop(&self, has_audio: bool) -> bool {
+        self.active && has_audio && !self.final_update_pending_delivery
+    }
+
     fn acknowledge_final_delivery(&mut self, segment_id: u64) -> bool {
         if !self.final_update_pending_delivery || !self.active || self.segment_id != segment_id {
             return false;
@@ -240,8 +244,15 @@ impl PipelineEngine for WhisperEngine {
         }
         self.stopped = true;
 
-        if !self.utterance.active || self.audio_buffer.is_empty() {
-            self.audio_buffer.clear();
+        if !self
+            .utterance
+            .should_infer_final_on_stop(!self.audio_buffer.is_empty())
+        {
+            // An inferred final may still await event-delivery acknowledgement.
+            // Never infer the same segment twice when stop races that delivery.
+            if !self.utterance.final_update_pending_delivery {
+                self.audio_buffer.clear();
+            }
             return Ok(Vec::new());
         }
 
@@ -426,6 +437,34 @@ mod tests {
         assert!(state.acknowledge_final_delivery(0));
         assert!(!state.active);
         assert_eq!(state.segment_id, 1);
+    }
+
+    #[test]
+    fn stop_does_not_reinfer_a_final_waiting_for_delivery() {
+        let mut state = WhisperUtteranceState::default();
+        let voiced = speech(1_600);
+        assert_eq!(state.observe(&voiced, voiced.len()), InferenceAction::None);
+        assert!(state.should_infer_final_on_stop(true));
+
+        // Endpoint inference has already returned a final event, but the
+        // pipeline has not acknowledged synchronous delivery yet.
+        state.final_update_pending_delivery = true;
+        assert!(!state.should_infer_final_on_stop(true));
+        assert!(!state.acknowledge_final_delivery(1));
+        assert!(!state.should_infer_final_on_stop(true));
+        assert!(state.acknowledge_final_delivery(0));
+        assert!(!state.should_infer_final_on_stop(true));
+        assert_eq!(state.segment_id, 1);
+    }
+
+    #[test]
+    fn stop_finalizes_only_an_active_utterance_with_audio() {
+        let mut state = WhisperUtteranceState::default();
+        assert!(!state.should_infer_final_on_stop(true));
+        let voiced = speech(1_600);
+        assert_eq!(state.observe(&voiced, voiced.len()), InferenceAction::None);
+        assert!(!state.should_infer_final_on_stop(false));
+        assert!(state.should_infer_final_on_stop(true));
     }
 
     #[test]
