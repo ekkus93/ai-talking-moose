@@ -177,10 +177,8 @@ pub fn open_with_config(
         .load_model(&c_model_path)
         .map_err(|error| map_whisper_failure(WhisperFailure::ModelLoad(error.message)))?;
 
-    debug!(
-        "whisper_model_loaded {model_path}",
-        model_path = model_path.display(),
-    );
+    // The verified model path is user-specific app data; do not emit it to logs.
+    debug!("whisper_model_loaded");
 
     Ok(WhisperEngine {
         api,
