@@ -248,6 +248,35 @@ async fn insufficient_space_fails_before_transport_starts() {
     no_staged_or_promoted_artifacts(&installer);
 }
 
+#[tokio::test]
+async fn unknown_disk_capacity_fails_closed_before_download() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, disk_space) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        None,
+    );
+
+    let error = installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.kind, WhisperModelInstallErrorKind::Io);
+    assert_eq!(
+        error.message,
+        "The Whisper model installer could not check available disk space for the Whisper model."
+    );
+    assert_eq!(disk_space.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+    no_staged_or_promoted_artifacts(&installer);
+}
+
 struct FailingDiskSpaceProbe;
 
 impl DiskSpaceProbe for FailingDiskSpaceProbe {
