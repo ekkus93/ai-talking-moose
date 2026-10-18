@@ -46,6 +46,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Reject tracked Rust build outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          tracked = [
+              raw.decode("utf-8", errors="replace")
+              for raw in subprocess.check_output(
+                  ["git", "ls-files", "-z", "--", "src-tauri/target/"]
+              ).split(b"\0")
+              if raw
+          ]
+          print(f"tracked_cargo_target_files={len(tracked)}")
+          for filename in tracked[:250]:
+              print(f"tracked_cargo_target_path={filename}")
+          if len(tracked) > 250:
+              print(f"additional_tracked_cargo_target_files={len(tracked) - 250}")
+          if tracked:
+              raise SystemExit("Remove tracked Cargo target build artifacts from Git")
+          PY
+
       - name: Classify changed paths
         id: scope
         shell: bash
