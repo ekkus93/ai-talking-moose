@@ -15,6 +15,7 @@
 use chrono::Utc;
 use serde::Serialize;
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -75,13 +76,10 @@ fn linux_default_route_present() -> bool {
     })
 }
 
-#[cfg(not(target_os = "linux"))]
-fn linux_default_route_present() -> bool {
-    false
-}
-
-/// Probes for a denied network boundary. Returns true only when the default
-/// route is absent AND a short TCP connect to an unreachable address fails.
+/// Linux's existing no-default-route + socket probe is meaningful only when
+/// an external runner has separately enforced network namespace isolation.
+/// It must not be treated as evidence for macOS or other platforms.
+#[cfg(target_os = "linux")]
 fn network_denial_probe() -> bool {
     network_denial_probe_with(linux_default_route_present(), || {
         let address = SocketAddr::from(([1, 1, 1, 1], 443));
@@ -89,6 +87,15 @@ fn network_denial_probe() -> bool {
     })
 }
 
+/// macOS does not expose the Linux route/namespace proof used above. A TCP
+/// failure alone can be transient and is never proof of OS-enforced denial.
+/// Explicit macOS acceptance must supply a real enforcement mechanism first.
+#[cfg(not(target_os = "linux"))]
+fn network_denial_probe() -> bool {
+    false
+}
+
+#[cfg(any(test, target_os = "linux"))]
 fn network_denial_probe_with(
     default_route_present: bool,
     connect_succeeded: impl FnOnce() -> bool,
@@ -763,6 +770,14 @@ mod tests {
         assert!(!called);
         assert!(network_denial_probe_with(false, || false));
         assert!(!network_denial_probe_with(false, || true));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn unsupported_host_does_not_claim_enforced_network_isolation() {
+        assert!(!network_denial_probe());
+        assert!(check_network_requirement(true, network_denial_probe()).is_err());
+        assert!(check_network_requirement(false, network_denial_probe()).is_ok());
     }
 
     #[test]
