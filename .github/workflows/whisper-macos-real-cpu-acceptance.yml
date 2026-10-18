@@ -149,6 +149,22 @@ jobs:
             exit 1
           fi
           rm -f "$native_log"
+          # A second independent process must reopen the same verified user-data
+          # model and produce a real transcript without another download.
+          # This is repeated cold-start evidence, not same-session endurance.
+          repeat_log="$root/whisper-transcribe-repeat-native.log"
+          if ! "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe-repeat.json" > "$repeat_log" 2>&1; then
+            cat "$repeat_log" >&2
+            exit 1
+          fi
+          cat "$repeat_log"
+          grep -Fq 'whisper_init_with_params_no_state: use gpu    = 0' "$repeat_log"
+          grep -Fq 'whisper_init_with_params_no_state: flash attn = 0' "$repeat_log"
+          if grep -Fq 'whisper_backend_init_gpu: using' "$repeat_log"; then
+            echo "Repeated native Whisper run unexpectedly selected a GPU backend" >&2
+            exit 1
+          fi
+          rm -f "$repeat_log"
           "$binary" delete "$model" "$reports/delete.json"
           test ! -e "$model/ggml-small.bin"
           echo "report_dir=$reports" >> "$GITHUB_OUTPUT"
@@ -165,6 +181,7 @@ jobs:
           delete_before_reinstall = json.loads((root / "delete-before-reinstall.json").read_text())
           install = json.loads((root / "install.json").read_text())
           transcript = json.loads((root / "transcribe.json").read_text())
+          repeated = json.loads((root / "transcribe-repeat.json").read_text())
           deletion = json.loads((root / "delete.json").read_text())
           expected_hash = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
           expected_source = "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774"
@@ -198,6 +215,7 @@ jobs:
           assert pipeline["processed_audio_ms"] > 0
           assert pipeline["inference_wall_time_ms"] > 0
           assert pipeline["overload_attempted_chunks"] == 64
+
           assert pipeline["overload_dropped_chunks"] > 0
           assert transcript["available_parallelism"] > 0
           print("macOS Whisper direct model load (ms):", transcript["model_load_wall_ms"])
@@ -205,6 +223,29 @@ jobs:
               "first_partial_latency_ms", "first_final_latency_ms", "real_time_factor",
               "nominal_dropped_chunks", "overload_dropped_chunks")})
           assert transcript["network_denied_required"] is False
+          # Verify the repeated cold start independently: pinned model, no
+          # runtime/provider fallback, meaningful text and exactly one final.
+          assert repeated["git_sha"] == sha
+          assert repeated["sha256"] == expected_hash
+          assert repeated["source_commit"] == expected_source
+          assert repeated["expected_bytes"] == 487601967
+          assert repeated["host_arch"] == rust_arch
+          assert repeated["runtime"]["whisper_native_linked"] is True
+          assert repeated["status"] == "pass"
+          assert repeated["transcript"]["transcription_ok"] is True
+          repeat_words = repeated["transcript"]["text"].lower()
+          assert all(word in repeat_words for word in ("ask", "country", "you")), repeat_words
+          assert repeated["model_load_wall_ms"] > 0
+          assert repeated["transcribe_wall_ms"] > 0
+          assert repeated["peak_resident_memory_bytes"] > 0
+          assert repeated["pipeline"]["final_event_count"] == 1
+          assert repeated["pipeline"]["partial_event_count"] >= 1
+          assert repeated["pipeline"]["queue_capacity_chunks"] == 56
+          assert repeated["pipeline"]["nominal_dropped_chunks"] == 0
+          assert repeated["network_denied_required"] is False
+          print("Repeated cold-start model load (ms):", repeated["model_load_wall_ms"])
+          print("Repeated cold-start inference (ms):", repeated["transcribe_wall_ms"])
+          print("Repeated cold-start pipeline RTF:", repeated["pipeline"]["real_time_factor"])
           assert deletion["removed"] is True
           print("Real pinned-model macOS Whisper transcription verified; egress isolation and physical mic remain unqualified.")
           PY
