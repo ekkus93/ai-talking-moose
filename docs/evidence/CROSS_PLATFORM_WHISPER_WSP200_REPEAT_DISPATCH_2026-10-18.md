@@ -1,8 +1,8 @@
 # WSP-200: repeated real-CPU macOS transcription — workflow and dispatch evidence
 
-**Observed:** 2026-10-18T22:12:15.767Z (UTC)  
-**Repository:** `ekkus93/ai-talking-moose`  
-**Implemented source:** `de8b2ae89b5fef250e68797aaddb21a96e4d3f7a` (`test(whisper): measure repeat cold-start genuine Mac transcription`).  
+**Observed:** 2026-10-18T22:12:15.767Z (UTC)
+**Repository:** `ekkus93/ai-talking-moose`
+**Implemented source:** `de8b2ae89b5fef250e68797aaddb21a96e4d3f7a` (`test(whisper): measure repeat cold-start genuine Mac transcription`).
 **Changed workflow:** `.github/workflows/whisper-macos-real-cpu-acceptance.yml`.
 
 ## Change and qualification boundary
