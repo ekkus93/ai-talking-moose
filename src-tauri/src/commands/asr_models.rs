@@ -7,7 +7,8 @@ use crate::asr::moonshine::{
 };
 use crate::asr::whisper::{
     installer::{
-        WhisperModelInstallCancellation, WhisperModelInstallPhase, WhisperModelInstallProgress,
+        WhisperModelInstallCancellation, WhisperModelInstallErrorKind, WhisperModelInstallPhase,
+        WhisperModelInstallProgress,
         WhisperModelInstallProgressCallback, WhisperModelInstaller,
     },
     manifest,
@@ -146,6 +147,25 @@ pub(super) async fn load_descriptor(
     .map_err(|_| "Moonshine model verification worker terminated unexpectedly.".to_string())
 }
 
+/// Verification failures must not all be reported as corrupted weights:
+/// invalid bundled metadata is incompatible, while I/O/runtime failures are
+/// operational errors that should not prompt an unnecessary model download.
+fn whisper_verification_error_state(kind: WhisperModelInstallErrorKind) -> AsrModelInstallState {
+    match kind {
+        WhisperModelInstallErrorKind::CorruptInstall
+        | WhisperModelInstallErrorKind::SizeMismatch
+        | WhisperModelInstallErrorKind::Sha256Mismatch => AsrModelInstallState::Corrupt,
+        WhisperModelInstallErrorKind::IncompatibleInstall
+        | WhisperModelInstallErrorKind::InvalidManifest => AsrModelInstallState::Incompatible,
+        WhisperModelInstallErrorKind::Io
+        | WhisperModelInstallErrorKind::InsufficientDiskSpace
+        | WhisperModelInstallErrorKind::Network
+        | WhisperModelInstallErrorKind::Http
+        | WhisperModelInstallErrorKind::Cancelled
+        | WhisperModelInstallErrorKind::Promotion => AsrModelInstallState::Failed,
+    }
+}
+
 /// Build a Whisper Small descriptor that reflects the real local install state
 /// by querying the Whisper installer rather than assuming `NotInstalled`.
 pub(super) fn whisper_descriptor(
@@ -163,13 +183,7 @@ pub(super) fn whisper_descriptor(
             descriptor.install_state = AsrModelInstallState::NotInstalled;
         }
         Err(error) => {
-            descriptor.install_state = if error.kind
-                == crate::asr::whisper::installer::WhisperModelInstallErrorKind::IncompatibleInstall
-            {
-                AsrModelInstallState::Incompatible
-            } else {
-                AsrModelInstallState::Corrupt
-            };
+            descriptor.install_state = whisper_verification_error_state(error.kind);
             descriptor.error_message = Some(error.message);
         }
     }
@@ -485,6 +499,55 @@ mod tests {
         assert_eq!(descriptor.expected_bytes, 51_441_771);
         assert_eq!(descriptor.runtime_release, "v0.1.3");
         assert!(!descriptor.active);
+    }
+
+    #[test]
+    fn whisper_descriptor_reports_missing_model_without_fabricating_installation() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let installer = WhisperModelInstaller::new(temp.path()).unwrap();
+        let descriptor = whisper_descriptor(&installer, false);
+        assert_eq!(descriptor.install_state, AsrModelInstallState::NotInstalled);
+        assert_eq!(descriptor.installed_bytes, None);
+        assert_eq!(descriptor.revision, manifest::WHISPER_MODEL_REVISION);
+        assert_eq!(descriptor.expected_bytes, manifest::WHISPER_MODEL_BYTES);
+        assert!(!descriptor.active);
+        assert_eq!(descriptor.error_message, None);
+    }
+
+    #[test]
+    fn whisper_catalog_distinguishes_corrupt_incompatible_and_operational_failures() {
+        for kind in [
+            WhisperModelInstallErrorKind::CorruptInstall,
+            WhisperModelInstallErrorKind::SizeMismatch,
+            WhisperModelInstallErrorKind::Sha256Mismatch,
+        ] {
+            assert_eq!(
+                whisper_verification_error_state(kind),
+                AsrModelInstallState::Corrupt
+            );
+        }
+        for kind in [
+            WhisperModelInstallErrorKind::IncompatibleInstall,
+            WhisperModelInstallErrorKind::InvalidManifest,
+        ] {
+            assert_eq!(
+                whisper_verification_error_state(kind),
+                AsrModelInstallState::Incompatible
+            );
+        }
+        for kind in [
+            WhisperModelInstallErrorKind::Io,
+            WhisperModelInstallErrorKind::InsufficientDiskSpace,
+            WhisperModelInstallErrorKind::Network,
+            WhisperModelInstallErrorKind::Http,
+            WhisperModelInstallErrorKind::Cancelled,
+            WhisperModelInstallErrorKind::Promotion,
+        ] {
+            assert_eq!(
+                whisper_verification_error_state(kind),
+                AsrModelInstallState::Failed
+            );
+        }
     }
 
     #[test]
