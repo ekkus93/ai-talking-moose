@@ -769,6 +769,57 @@ fn interrupted_legacy_copy_is_cleaned_and_can_be_retried() {
 }
 
 #[tokio::test]
+async fn cancelled_install_waiting_for_verified_model_lease_returns_without_mutation() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    let installer = Arc::new(installer);
+    installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    let original_marker = fs::read(installer.marker_path()).unwrap();
+
+    let operation_lock = install_operation_lock(manifest::WHISPER_SMALL_ID);
+    let lease = WhisperVerifiedModelLease {
+        model_path: installer.model_path(),
+        _operation_guard: operation_lock.lock_owned().await,
+    };
+    let cancellation = WhisperModelInstallCancellation::default();
+    let task_cancellation = cancellation.clone();
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let waiting_installer = installer.clone();
+    let task = tokio::spawn(async move {
+        let mut cancellation = task_cancellation;
+        started_tx.send(()).unwrap();
+        waiting_installer.install(&mut cancellation, &None).await
+    });
+    started_rx.await.unwrap();
+    assert!(!task.is_finished(), "installer should initially wait for the lease");
+
+    cancellation.cancel();
+    let outcome = tokio::time::timeout(std::time::Duration::from_secs(2), task)
+        .await
+        .expect("cancelled installer must not wait for the model lease")
+        .unwrap();
+    assert_eq!(outcome.unwrap_err().kind, WhisperModelInstallErrorKind::Cancelled);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
+    assert_eq!(fs::read(installer.marker_path()).unwrap(), original_marker);
+
+    drop(lease);
+    assert!(installer.verify_installed().unwrap().is_some());
+}
+
+#[tokio::test]
 async fn active_verified_model_lease_serializes_reinstall_without_replacing_weights() {
     let temp = tempfile::TempDir::new().unwrap();
     let transport = Arc::new(FakeTransport::new(

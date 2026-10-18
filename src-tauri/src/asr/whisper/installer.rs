@@ -480,7 +480,17 @@ impl WhisperModelInstaller {
     ) -> Result<WhisperModelInstallOutcome, WhisperModelInstallError> {
         let model_id = manifest::WHISPER_SMALL_ID.to_string();
         let lock = install_operation_lock(&model_id);
-        let guard = lock.lock().await;
+        // A running inference session may hold the verified-model lease for
+        // an extended period. A cancelled installer must not remain queued
+        // behind that lease or begin a download after cancellation.
+        let guard = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => return Err(WhisperModelInstallError::cancelled()),
+            guard = lock.lock() => guard,
+        };
+        if cancellation.is_cancelled() {
+            return Err(WhisperModelInstallError::cancelled());
+        }
 
         self.ensure_install_root()?;
 
