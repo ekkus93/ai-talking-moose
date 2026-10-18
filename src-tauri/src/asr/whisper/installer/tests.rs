@@ -803,14 +803,20 @@ async fn cancelled_install_waiting_for_verified_model_lease_returns_without_muta
         waiting_installer.install(&mut cancellation, &None).await
     });
     started_rx.await.unwrap();
-    assert!(!task.is_finished(), "installer should initially wait for the lease");
+    assert!(
+        !task.is_finished(),
+        "installer should initially wait for the lease"
+    );
 
     cancellation.cancel();
     let outcome = tokio::time::timeout(std::time::Duration::from_secs(2), task)
         .await
         .expect("cancelled installer must not wait for the model lease")
         .unwrap();
-    assert_eq!(outcome.unwrap_err().kind, WhisperModelInstallErrorKind::Cancelled);
+    assert_eq!(
+        outcome.unwrap_err().kind,
+        WhisperModelInstallErrorKind::Cancelled
+    );
     assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
     assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
     assert_eq!(fs::read(installer.marker_path()).unwrap(), original_marker);
