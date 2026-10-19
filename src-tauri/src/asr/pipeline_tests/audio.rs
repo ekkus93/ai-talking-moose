@@ -215,3 +215,80 @@ async fn whisper_inference_failure_after_partial_never_emits_a_stale_final() {
         "failed Whisper inference must not promote a partial transcript to a final"
     );
 }
+
+#[tokio::test]
+async fn whisper_malformed_pcm_after_partial_aborts_without_stale_final() {
+    let state = Arc::new(FakeState::default());
+    state.block_push.store(true, Ordering::SeqCst);
+    state
+        .updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Partial {
+            segment_id: 42,
+            text: "unfinished".to_string(),
+            latency_ms: 1,
+        });
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 42,
+            text: "must not finalize".to_string(),
+            latency_ms: 2,
+        });
+
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let sender = pipeline.test_sender();
+    sender.try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    // Queue malformed PCM before a valid chunk while the first inference is
+    // blocked. A terminal audio error must retire the worker, not replay
+    // queued audio or synthesize a final from the earlier partial.
+    sender.try_send(vec![1, 2, 3]).unwrap();
+    sender.try_send(vec![0, 0]).unwrap();
+    state.block_push.store(false, Ordering::SeqCst);
+    wait_until(|| !pipeline.is_running());
+
+    assert_eq!(
+        pipeline.stop_and_join().await.unwrap_err().kind,
+        AsrErrorKind::AudioInput
+    );
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    let recorded = events.lock().unwrap();
+    assert_eq!(
+        recorded.as_slice(),
+        [
+            AsrEvent::SpeechStarted { monotonic_ms: None },
+            AsrEvent::PartialTranscript {
+                text: "unfinished".to_string(),
+            },
+            AsrEvent::Error {
+                error: AsrError {
+                    kind: AsrErrorKind::AudioInput,
+                    message: "Local ASR received a malformed 16-bit PCM chunk.".to_string(),
+                    retryable: true,
+                },
+            },
+        ]
+    );
+}
