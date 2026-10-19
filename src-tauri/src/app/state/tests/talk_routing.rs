@@ -612,3 +612,64 @@ async fn whisper_with_macos_system_voice_keeps_every_text_provider_non_live() {
         session.close().await.unwrap();
     }
 }
+
+/// A missing selected cloud-text key must not invoke native macOS System
+/// speech synthesis. This tests routing/events, not audible playback.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn whisper_macos_system_voice_missing_text_key_fails_without_synthesis() {
+    use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
+
+    let state = AppState::new_for_tests().unwrap();
+    assert!(!state.secrets.has_google_api_key());
+    assert!(!state.secrets.has_openai_api_key());
+
+    for text_provider in [TextProvider::Google, TextProvider::Openai] {
+        let settings = AppSettings {
+            asr_mode: AsrMode::WhisperSmall,
+            text_provider,
+            tts_provider: TtsProvider::System,
+            ..AppSettings::default()
+        };
+        let (sender, mut events) = tokio::sync::mpsc::channel(8);
+        let mut session = state
+            .get_conversation_provider_for(&settings)
+            .connect(
+                LiveSessionConfig {
+                    model: "selected-text-model".into(),
+                    voice_name: Some("system_default".into()),
+                    system_instruction: None,
+                    sample_rate_in: 16_000,
+                    sample_rate_out: 24_000,
+                    tools: vec![],
+                },
+                sender,
+            )
+            .await
+            .expect("Whisper with System voice must use non-Live Talk");
+        assert!(matches!(
+            events.recv().await,
+            Some(LiveServerEvent::Connected)
+        ));
+        session
+            .send_text_turn("private system voice no-key turn")
+            .await
+            .unwrap();
+        let next = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+            .await
+            .expect("missing text credentials must fail promptly");
+        match next {
+            Some(LiveServerEvent::Error(error)) => {
+                assert_eq!(error.kind, ProviderErrorKind::Auth, "{text_provider:?}");
+                assert!(!error.message.contains("private system voice no-key turn"));
+            }
+            _ => panic!("{text_provider:?} must fail without TTS or a completed turn"),
+        }
+        let late = tokio::time::timeout(std::time::Duration::from_millis(30), events.recv()).await;
+        assert!(
+            !matches!(late, Ok(Some(_))),
+            "{text_provider:?} must not synthesize or complete after auth failure"
+        );
+        session.close().await.unwrap();
+    }
+}
