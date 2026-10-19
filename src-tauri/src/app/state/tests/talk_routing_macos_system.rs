@@ -116,3 +116,89 @@ async fn system_voice_never_synthesizes_after_missing_selected_text_credentials(
         session.close().await.unwrap();
     }
 }
+/// A macOS profile migrating either historical Moonshine mode must retain its
+/// independently selected System Voice, text provider, and privacy preferences.
+/// This covers persisted data and non-Live routing without invoking audio I/O,
+/// a real voice, model installation, or remote text generation.
+#[tokio::test]
+async fn migrated_moonshine_profile_keeps_macos_system_voice_and_privacy_non_live() {
+    let state = AppState::new_for_tests().unwrap();
+    assert!(crate::ai::system_tts::is_supported());
+
+    for legacy_asr in [
+        AsrMode::MoonshineTinyStreaming,
+        AsrMode::MoonshineSmallStreaming,
+    ] {
+        for text_provider in [
+            TextProvider::Local,
+            TextProvider::Google,
+            TextProvider::Openai,
+            TextProvider::Ollama,
+            TextProvider::LlamaServer,
+        ] {
+            let before = AppSettings {
+                asr_mode: legacy_asr,
+                text_provider,
+                tts_provider: TtsProvider::System,
+                system_tts_voice: "system_default".into(),
+                memory_enabled: true,
+                save_transcripts: false,
+                active_app_observation: true,
+                ..AppSettings::default()
+            };
+            let persisted = serde_json::to_string(&before).unwrap();
+            let (migrated, changed) = AppSettings::from_persisted_json(&persisted).unwrap();
+            assert!(changed, "{legacy_asr:?} should migrate");
+            assert_eq!(migrated.asr_mode, AsrMode::WhisperSmall);
+            assert_eq!(migrated.text_provider, text_provider);
+            assert_eq!(migrated.tts_provider, TtsProvider::System);
+            assert_eq!(migrated.system_tts_voice, "system_default");
+            assert!(migrated.memory_enabled);
+            assert!(!migrated.save_transcripts);
+            assert!(migrated.active_app_observation);
+
+            let saved = serde_json::to_string(&migrated).unwrap();
+            assert!(!saved.contains("moonshine_"));
+            let (restored, migrated_again) = AppSettings::from_persisted_json(&saved).unwrap();
+            assert!(!migrated_again, "saved profile must be stable after restart");
+            assert_eq!(restored.asr_mode, AsrMode::WhisperSmall);
+            assert_eq!(restored.text_provider, text_provider);
+            assert_eq!(restored.tts_provider, TtsProvider::System);
+            assert_eq!(restored.system_tts_voice, "system_default");
+            assert!(restored.memory_enabled);
+            assert!(!restored.save_transcripts);
+            assert!(restored.active_app_observation);
+
+            let (sender, mut events) = tokio::sync::mpsc::channel(4);
+            let mut session = state
+                .get_conversation_provider_for(&restored)
+                .connect(
+                    LiveSessionConfig {
+                        model: "selected-model".into(),
+                        voice_name: Some(restored.system_tts_voice.clone()),
+                        system_instruction: None,
+                        sample_rate_in: 16_000,
+                        sample_rate_out: 24_000,
+                        tools: vec![],
+                    },
+                    sender,
+                )
+                .await
+                .expect("migrated Mac System Voice must use the non-Live adapter");
+            assert!(
+                matches!(events.recv().await, Some(LiveServerEvent::Connected)),
+                "{legacy_asr:?} {text_provider:?}"
+            );
+            assert_eq!(
+                session.send_audio_chunk(&[0, 0]).await.unwrap_err().kind,
+                ProviderErrorKind::Setup,
+                "{legacy_asr:?} {text_provider:?} must not send PCM to Gemini Live"
+            );
+            assert!(
+                events.try_recv().is_err(),
+                "rejected PCM must not publish an audio or transcript event"
+            );
+            session.close().await.unwrap();
+        }
+    }
+}
