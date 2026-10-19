@@ -173,6 +173,8 @@ struct TranscribeReportContext {
     network_denial_probe_passed: bool,
     pipeline: WhisperPipelineAcceptanceMetrics,
     transcript: WhisperTranscriptReport,
+    same_context_repeat_transcript: WhisperTranscriptReport,
+    same_context_repeat_transcribe_wall_ms: u64,
     model_load_wall_ms: u64,
     transcribe_wall_ms: u64,
     phase_wall_ms: u64,
@@ -187,7 +189,9 @@ fn build_transcribe_acceptance_report(
     wav: &wav::WavSamples,
     context: TranscribeReportContext,
 ) -> WhisperTranscribeAcceptanceReport {
-    let status = if context.transcript.transcription_ok {
+    let status = if context.transcript.transcription_ok
+        && context.same_context_repeat_transcript.transcription_ok
+    {
         "pass"
     } else {
         "fail"
@@ -223,6 +227,8 @@ fn build_transcribe_acceptance_report(
         },
         pipeline: context.pipeline,
         transcript: context.transcript,
+        same_context_repeat_transcript: context.same_context_repeat_transcript,
+        same_context_repeat_transcribe_wall_ms: context.same_context_repeat_transcribe_wall_ms,
         model_load_wall_ms: context.model_load_wall_ms,
         transcribe_wall_ms: context.transcribe_wall_ms,
         phase_wall_ms: context.phase_wall_ms,
@@ -235,7 +241,7 @@ fn build_transcribe_acceptance_report(
 }
 
 fn validate_transcription_report(report: &WhisperTranscribeAcceptanceReport) -> Result<(), String> {
-    if report.transcript.transcription_ok {
+    if report.transcript.transcription_ok && report.same_context_repeat_transcript.transcription_ok {
         Ok(())
     } else {
         Err("Whisper transcription returned empty output".to_string())
@@ -398,6 +404,9 @@ pub struct WhisperTranscribeAcceptanceReport {
     pub runtime: WhisperTranscribeRuntime,
     pub pipeline: WhisperPipelineAcceptanceMetrics,
     pub transcript: WhisperTranscriptReport,
+    /// Second inference on the same pinned native context, without reloading weights.
+    pub same_context_repeat_transcript: WhisperTranscriptReport,
+    pub same_context_repeat_transcribe_wall_ms: u64,
     /// Elapsed time for the first direct pinned-model load, excluding inference.
     pub model_load_wall_ms: u64,
     pub transcribe_wall_ms: u64,
@@ -650,6 +659,13 @@ pub async fn transcribe_for_acceptance(
         .transcribe(&model, &wav.samples)
         .map_err(|error| error.message.to_string())?;
     let transcribe_wall_ms = elapsed_ms(started);
+    // Exercise a second real utterance on the *same* native model context.
+    // This complements, but does not replace, separate-process cold-start CI.
+    let repeat_started = Instant::now();
+    let same_context_repeat = api
+        .transcribe(&model, &wav.samples)
+        .map_err(|error| error.message.to_string())?;
+    let same_context_repeat_transcribe_wall_ms = elapsed_ms(repeat_started);
     let phase_wall_ms = elapsed_ms(phase_started);
 
     let cpu_after = process_cpu_time_micros();
@@ -692,6 +708,10 @@ pub async fn transcribe_for_acceptance(
     let mut transcript_report = summarize_transcript_segments(&transcript.segments);
     transcript_report.duration_ms = duration_ms;
     transcript_report.no_speech_prob = transcript.no_speech_prob;
+    let mut same_context_repeat_transcript =
+        summarize_transcript_segments(&same_context_repeat.segments);
+    same_context_repeat_transcript.duration_ms = duration_ms;
+    same_context_repeat_transcript.no_speech_prob = same_context_repeat.no_speech_prob;
     // Release the direct FFI model lease before starting the production worker;
     // both paths intentionally serialize model-owned operations through the
     // install/runtime lease.
@@ -718,6 +738,8 @@ pub async fn transcribe_for_acceptance(
             network_denial_probe_passed,
             pipeline,
             transcript: transcript_report,
+            same_context_repeat_transcript,
+            same_context_repeat_transcribe_wall_ms,
             model_load_wall_ms,
             transcribe_wall_ms,
             phase_wall_ms,
@@ -901,6 +923,14 @@ mod tests {
                 text: "hello".to_string(),
                 transcription_ok: true,
             },
+            same_context_repeat_transcript: WhisperTranscriptReport {
+                duration_ms: 1,
+                no_speech_prob: 0.0,
+                num_segments: 1,
+                text: "hello again".to_string(),
+                transcription_ok: true,
+            },
+            same_context_repeat_transcribe_wall_ms: 3,
             model_load_wall_ms: 17,
             transcribe_wall_ms: 2,
             phase_wall_ms: 3,
@@ -918,6 +948,8 @@ mod tests {
             serde_json::Value::Null
         );
         assert_eq!(json["model_load_wall_ms"], 17);
+        assert_eq!(json["same_context_repeat_transcribe_wall_ms"], 3);
+        assert_eq!(json["same_context_repeat_transcript"]["text"], "hello again");
         assert_eq!(json["host_cpu"], serde_json::Value::Null);
         assert_eq!(json["resident_memory_bytes"], serde_json::Value::Null);
     }
@@ -967,6 +999,8 @@ mod tests {
                     overload_dropped_chunks: 0,
                 },
                 transcript,
+                same_context_repeat_transcript: summarize_transcript_segments(&[]),
+                same_context_repeat_transcribe_wall_ms: 4,
                 model_load_wall_ms: 23,
                 transcribe_wall_ms: 1,
                 phase_wall_ms: 2,
@@ -982,6 +1016,7 @@ mod tests {
         assert_eq!(report.duration_ms, 1);
         assert_eq!(report.corpus_bytes, 76);
         assert_eq!(report.model_load_wall_ms, 23);
+        assert_eq!(report.same_context_repeat_transcribe_wall_ms, 4);
         assert!(report.runtime.whisper_native_linked);
         assert_eq!(
             validate_transcription_report(&report).unwrap_err(),
