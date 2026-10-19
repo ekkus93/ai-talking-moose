@@ -159,6 +159,15 @@ jobs:
             app::state::tests::talk_routing::all_text_providers_with_local_asr_connect_without_gemini_live -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             app::state::tests::talk_routing::explicit_live_asr_is_separate_from_every_standalone_provider_pair -- --test-threads=1
+          # Exercise credential and local-endpoint fail-closed paths on
+          # actual macOS runners, not only the Linux unit-test matrix.
+          # No live provider credentials, microphone or TTS output are used.
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::talk_routing::missing_openai_key_in_non_live_talk_does_not_fall_back -- --test-threads=1
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::talk_routing::missing_google_text_key_in_whisper_non_live_talk_never_starts_tts -- --test-threads=1
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::talk_routing::invalid_loopback_server_cannot_fall_back_to_cloud_or_any_standalone_voice -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             app::state::tests::talk_routing::whisper_with_macos_system_voice_keeps_every_text_provider_non_live -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
