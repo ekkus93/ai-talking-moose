@@ -149,18 +149,18 @@ jobs:
           (deny network*)
           SEATBELT
           sandbox-exec -f "$sandbox_profile" python3 -c '
-import errno
-import socket
-try:
-    with socket.socket() as stream:
-        stream.settimeout(1)
-        stream.connect(("127.0.0.1", 9))
-except OSError as error:
-    if error.errno in (errno.EPERM, errno.EACCES):
-        raise SystemExit(0)
-    raise SystemExit(f"network probe failed for a non-policy reason: {error.errno}")
-raise SystemExit("Seatbelt did not deny the loopback connection")
-'
+          import errno
+          import socket
+          try:
+              with socket.socket() as stream:
+                  stream.settimeout(1)
+                  stream.connect(("127.0.0.1", 9))
+          except OSError as error:
+              if error.errno in (errno.EPERM, errno.EACCES):
+                  raise SystemExit(0)
+              raise SystemExit(f"network probe failed for a non-policy reason: {error.errno}")
+          raise SystemExit("Seatbelt did not deny the loopback connection")
+          '
           # Capture upstream native diagnostics so real-model acceptance proves
           # the CPU-only baseline rather than silently falling back to Metal.
           native_log="$root/whisper-transcribe-native.log"

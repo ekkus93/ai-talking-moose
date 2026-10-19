@@ -109,7 +109,7 @@ fn network_denial_probe() -> bool {
     let sandbox_denies_egress = unsafe {
         sandbox_check(
             std::process::id() as std::ffi::c_int,
-            b"network-outbound\\0".as_ptr().cast(),
+            b"network-outbound\0".as_ptr().cast(),
             0,
         ) == 1
     };
