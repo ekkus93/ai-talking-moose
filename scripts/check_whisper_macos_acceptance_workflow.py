@@ -56,8 +56,38 @@ def check_workflow(text: str) -> None:
             raise ValueError(f"Mac real-model workflow must not trigger on {event}")
     if text.count("arch: arm64") != 1 or text.count("arch: x86_64") != 1:
         raise ValueError("Mac acceptance matrix must contain exactly one job per architecture")
-    if "sudo unshare --net" in text or "--require-network-denied" in text:
-        raise ValueError("Mac workflow cannot claim Linux namespace-based egress isolation")
+    if "sudo unshare --net" in text:
+        raise ValueError("Mac workflow must not claim Linux namespace-based egress isolation")
+
+    # macOS uses a separate Seatbelt policy, not Linux network namespaces.
+    # Protect both *successful* real-model transcription runs: no bare CLI
+    # run, unprotected repeat, socket-only probe, or JSON assertion without
+    # a required enforced network boundary can count as offline acceptance.
+    required_sandbox = {
+        "macOS Seatbelt profile": "(deny network*)",
+        "explicit sandbox availability": "command -v sandbox-exec",
+        "preflight under sandbox": 'sandbox-exec -f "$sandbox_profile" python3 -c',
+        "permission-denied preflight": "errno.EPERM, errno.EACCES",
+        "first inference under sandbox": (
+            'sandbox-exec -f "$sandbox_profile" "$binary" transcribe '
+            '"$model" third_party/whisper.cpp/samples/jfk.wav '
+            '"$reports/transcribe.json" --require-network-denied'
+        ),
+        "repeated inference under sandbox": (
+            'sandbox-exec -f "$sandbox_profile" "$binary" transcribe '
+            '"$model" third_party/whisper.cpp/samples/jfk.wav '
+            '"$reports/transcribe-repeat.json" --require-network-denied'
+        ),
+        "first probe required": 'assert transcript["network_denied_required"] is True',
+        "first probe passed": 'assert transcript["network_denial_probe_passed"] is True',
+        "repeat probe required": 'assert repeated["network_denied_required"] is True',
+        "repeat probe passed": 'assert repeated["network_denial_probe_passed"] is True',
+    }
+    for description, snippet in required_sandbox.items():
+        if snippet not in text:
+            raise ValueError(f"Mac offline qualification missing {description}: {snippet}")
+    if text.count("--require-network-denied") != 2:
+        raise ValueError("Only the two sandboxed genuine-model transcriptions may require denial")
     if re.search(r"^\s*path:.*(?:ggml-small[.]bin|/models/)", text, re.MULTILINE):
         raise ValueError("Mac acceptance must not upload model weights")
 
