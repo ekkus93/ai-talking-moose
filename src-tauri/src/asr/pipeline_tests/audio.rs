@@ -292,3 +292,61 @@ async fn whisper_malformed_pcm_after_partial_aborts_without_stale_final() {
         ]
     );
 }
+
+#[tokio::test]
+async fn whisper_graceful_stop_with_malformed_queued_pcm_fails_without_final() {
+    let state = Arc::new(FakeState::default());
+    let gate = Arc::new(PushGate::default());
+    *state.push_gate.lock().unwrap() = Some(gate.clone());
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 99,
+            text: "must not finalize invalid audio".to_string(),
+            latency_ms: 1,
+        });
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let sender = pipeline.test_sender();
+    sender.try_send(vec![0, 0]).unwrap();
+    gate.wait_until_entered();
+    sender.try_send(vec![1, 2, 3]).unwrap();
+    // Graceful stop must drain accepted PCM, but a malformed queued chunk
+    // terminates the worker without invoking stop-time final inference.
+    pipeline.request_stop();
+    *state.push_gate.lock().unwrap() = None;
+    gate.release();
+
+    let error = pipeline.stop_and_join().await.unwrap_err();
+    assert_eq!(error.kind, AsrErrorKind::AudioInput);
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(!pipeline.is_running());
+    assert!(matches!(
+        events.lock().unwrap().as_slice(),
+        [AsrEvent::Error {
+            error: AsrError {
+                kind: AsrErrorKind::AudioInput,
+                ..
+            }
+        }]
+    ));
+}
