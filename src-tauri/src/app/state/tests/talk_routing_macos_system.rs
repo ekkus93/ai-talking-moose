@@ -202,3 +202,82 @@ async fn migrated_moonshine_profile_keeps_macos_system_voice_and_privacy_non_liv
         }
     }
 }
+
+
+/// Switching the current profile to Gemini Live cannot mutate an already
+/// captured Whisper + macOS System Voice provider into a cloud audio session.
+/// A newly selected Gemini Live provider still requires explicit Google auth.
+/// Deterministic routing only: no microphone, credentials, or audible TTS.
+#[tokio::test]
+async fn captured_whisper_system_voice_stays_local_after_switch_to_gemini_live() {
+    let state = AppState::new_for_tests().unwrap();
+    assert!(crate::ai::system_tts::is_supported());
+    assert!(!state.secrets.has_google_api_key());
+
+    let original = AppSettings {
+        asr_mode: AsrMode::WhisperSmall,
+        text_provider: TextProvider::Ollama,
+        tts_provider: TtsProvider::System,
+        system_tts_voice: "system_default".into(),
+        ..AppSettings::default()
+    };
+    *state.settings.write() = original.clone();
+    let captured = state.get_conversation_provider_for(&original);
+
+    {
+        let mut settings = state.settings.write();
+        settings.asr_mode = AsrMode::GeminiLiveAudio;
+        settings.text_provider = TextProvider::Google;
+        settings.tts_provider = TtsProvider::Local;
+    }
+    assert_eq!(state.settings.read().asr_mode, AsrMode::GeminiLiveAudio);
+
+    let (sender, mut events) = tokio::sync::mpsc::channel(8);
+    let mut session = captured
+        .connect(
+            LiveSessionConfig {
+                model: "original-local-model".into(),
+                voice_name: Some(original.system_tts_voice.clone()),
+                system_instruction: None,
+                sample_rate_in: 16_000,
+                sample_rate_out: 24_000,
+                tools: vec![],
+            },
+            sender,
+        )
+        .await
+        .expect("previously captured Whisper session must stay non-Live");
+    assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+    assert_eq!(
+        session.send_audio_chunk(&[0, 0]).await.unwrap_err().kind,
+        ProviderErrorKind::Setup,
+        "an existing local Whisper session must never turn into Gemini Live"
+    );
+    assert!(events.try_recv().is_err(), "no audio or transcript was emitted");
+    session.close().await.unwrap();
+
+    // A freshly selected Gemini Live session must not fall back to Whisper
+    // when Google Live credentials are absent.
+    let selected_now = state.settings.read().clone();
+    let (live_sender, mut live_events) = tokio::sync::mpsc::channel(8);
+    let attempt = state
+        .get_conversation_provider_for(&selected_now)
+        .connect(
+            LiveSessionConfig {
+                model: "selected-live-model".into(),
+                voice_name: None,
+                system_instruction: None,
+                sample_rate_in: 16_000,
+                sample_rate_out: 24_000,
+                tools: vec![],
+            },
+            live_sender,
+        )
+        .await;
+    let error = match attempt {
+        Ok(_) => panic!("explicit Live without Google credentials must fail"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind, ProviderErrorKind::Auth);
+    assert!(live_events.try_recv().is_err(), "failed Live startup has no events");
+}
