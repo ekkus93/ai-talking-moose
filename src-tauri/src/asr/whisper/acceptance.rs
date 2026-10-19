@@ -103,6 +103,18 @@ unsafe extern "C" {
     ) -> std::ffi::c_int;
 }
 
+// Treat a failed socket connection as policy evidence only if Seatbelt itself
+// independently denies outbound network access. Timeout, refused connection
+// and unrelated I/O errors must all fail closed.
+#[cfg(target_os = "macos")]
+fn macos_network_denial_proven(
+    sandbox_denies_egress: bool,
+    connection: Result<(), std::io::ErrorKind>,
+) -> bool {
+    sandbox_denies_egress
+        && matches!(connection, Err(std::io::ErrorKind::PermissionDenied))
+}
+
 #[cfg(target_os = "macos")]
 fn network_denial_probe() -> bool {
     // SANDBOX_FILTER_NONE = 0, operation is the Seatbelt network policy.
@@ -118,12 +130,13 @@ fn network_denial_probe() -> bool {
     }
     // 127.0.0.1:9 needs no DNS or external service. A refused connection or
     // timeout is *not* a pass; a kernel permission denial is required.
-    TcpStream::connect_timeout(
+    let connection = TcpStream::connect_timeout(
         &SocketAddr::from(([127, 0, 0, 1], 9)),
         Duration::from_millis(500),
     )
-    .err()
-    .is_some_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied)
+    .map(|_| ())
+    .map_err(|error| error.kind());
+    macos_network_denial_proven(sandbox_denies_egress, connection)
 }
 
 /// Unsupported platforms do not have a qualified kernel network-denial probe.
@@ -843,6 +856,62 @@ mod tests {
         assert!(!called);
         assert!(network_denial_probe_with(false, || false));
         assert!(!network_denial_probe_with(false, || true));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_offline_proof_requires_both_kernel_denial_and_permission_denied() {
+        use std::io::ErrorKind;
+
+        assert!(macos_network_denial_proven(
+            true,
+            Err(ErrorKind::PermissionDenied)
+        ));
+        assert!(!macos_network_denial_proven(
+            false,
+            Err(ErrorKind::PermissionDenied)
+        ));
+        for connection in [
+            Ok(()),
+            Err(ErrorKind::ConnectionRefused),
+            Err(ErrorKind::TimedOut),
+            Err(ErrorKind::NotConnected),
+            Err(ErrorKind::Other),
+        ] {
+            assert!(
+                !macos_network_denial_proven(true, connection),
+                "a connection failure alone is not Seatbelt enforcement proof"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn unsandboxed_mac_requires_egress_denial_before_model_or_report_access() {
+        // CI runners should be unrestricted. If another macOS sandbox already
+        // confines the process, this test still checks fail-closed behavior
+        // only when the runtime cannot establish a denied boundary.
+        if network_denial_probe() {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let report = root.path().join("reports/real-transcript.json");
+        let missing_model = root.path().join("never-installed-model");
+        let missing_corpus = root.path().join("never-installed-corpus.wav");
+        let failure = transcribe_for_acceptance(
+            &missing_model,
+            &missing_corpus,
+            &report,
+            true,
+        )
+        .await
+        .expect_err("without enforced network denial, stop before any model I/O");
+        assert_eq!(
+            failure,
+            "real-corpus transcription acceptance requires an OS-level denied network boundary"
+        );
+        assert!(!missing_model.exists());
+        assert!(!report.exists());
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]

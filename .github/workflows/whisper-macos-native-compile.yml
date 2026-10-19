@@ -139,6 +139,10 @@ jobs:
             asr::pipeline::tests -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             asr::whisper::installer::tests -- --test-threads=1
+          # Mac-only Seatbelt kernel/socket denial and early-failure tests.
+          # No model download or real inference occurs in these unit tests.
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            asr::whisper::acceptance::tests -- --test-threads=1
       - name: Qualify macOS Whisper settings and non-Live provider isolation
         # These are deterministic settings/routing checks, not audible TTS,
         # real microphone, downloaded model, or packaged-app acceptance.
