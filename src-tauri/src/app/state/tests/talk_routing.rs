@@ -79,6 +79,78 @@ async fn all_text_providers_with_local_asr_connect_without_gemini_live() {
     }
 }
 
+/// A persisted Moonshine profile must reach the same local Whisper
+/// conversation boundary as a fresh profile after its ASR-only migration.
+/// No model weights, keys, microphones, text API calls or synthesis are used.
+#[tokio::test]
+async fn migrated_moonshine_profiles_keep_selected_text_and_tts_non_live() {
+    use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
+
+    let state = AppState::new_for_tests().unwrap();
+    assert!(!state.secrets.has_google_api_key());
+
+    for legacy_asr in [
+        AsrMode::MoonshineTinyStreaming,
+        AsrMode::MoonshineSmallStreaming,
+    ] {
+        for text_provider in [
+            TextProvider::Local,
+            TextProvider::Google,
+            TextProvider::Openai,
+            TextProvider::Ollama,
+            TextProvider::LlamaServer,
+        ] {
+            for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
+                let before = AppSettings {
+                    asr_mode: legacy_asr,
+                    text_provider,
+                    tts_provider,
+                    ..AppSettings::default()
+                };
+                let persisted = serde_json::to_string(&before).unwrap();
+                let (migrated, changed) = AppSettings::from_persisted_json(&persisted).unwrap();
+                assert!(changed, "{legacy_asr:?} must migrate");
+                assert_eq!(migrated.asr_mode, AsrMode::WhisperSmall);
+                assert_eq!(migrated.text_provider, text_provider);
+                assert_eq!(migrated.tts_provider, tts_provider);
+
+                let persisted_after = serde_json::to_string(&migrated).unwrap();
+                assert!(!persisted_after.contains("moonshine_"));
+                let (restored, changed_again) =
+                    AppSettings::from_persisted_json(&persisted_after).unwrap();
+                assert!(!changed_again, "migration must survive restart unchanged");
+                assert_eq!(restored.asr_mode, AsrMode::WhisperSmall);
+                assert_eq!(restored.text_provider, text_provider);
+                assert_eq!(restored.tts_provider, tts_provider);
+
+                let (sender, mut events) = tokio::sync::mpsc::channel(4);
+                let mut session = state
+                    .get_conversation_provider_for(&restored)
+                    .connect(
+                        LiveSessionConfig {
+                            model: "selected-model".into(),
+                            voice_name: None,
+                            system_instruction: None,
+                            sample_rate_in: 16_000,
+                            sample_rate_out: 24_000,
+                            tools: vec![],
+                        },
+                        sender,
+                    )
+                    .await
+                    .expect("migrated local ASR must not require Gemini Live authentication");
+                assert!(matches!(events.recv().await, Some(LiveServerEvent::Connected)));
+                assert_eq!(
+                    session.send_audio_chunk(&[0, 0]).await.unwrap_err().kind,
+                    ProviderErrorKind::Setup,
+                    "{legacy_asr:?} {text_provider:?} {tts_provider:?} must not route PCM to Live"
+                );
+                session.close().await.unwrap();
+            }
+        }
+    }
+}
+
 /// Every installed local ASR architecture must preserve the separate non-Live
 /// text/TTS routing boundary. A provider choice never turns microphone PCM
 /// into Gemini Live traffic merely because it is an external text provider.
