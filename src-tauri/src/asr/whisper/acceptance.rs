@@ -241,7 +241,8 @@ fn build_transcribe_acceptance_report(
 }
 
 fn validate_transcription_report(report: &WhisperTranscribeAcceptanceReport) -> Result<(), String> {
-    if report.transcript.transcription_ok && report.same_context_repeat_transcript.transcription_ok {
+    if report.transcript.transcription_ok && report.same_context_repeat_transcript.transcription_ok
+    {
         Ok(())
     } else {
         Err("Whisper transcription returned empty output".to_string())
@@ -949,7 +950,10 @@ mod tests {
         );
         assert_eq!(json["model_load_wall_ms"], 17);
         assert_eq!(json["same_context_repeat_transcribe_wall_ms"], 3);
-        assert_eq!(json["same_context_repeat_transcript"]["text"], "hello again");
+        assert_eq!(
+            json["same_context_repeat_transcript"]["text"],
+            "hello again"
+        );
         assert_eq!(json["host_cpu"], serde_json::Value::Null);
         assert_eq!(json["resident_memory_bytes"], serde_json::Value::Null);
     }
