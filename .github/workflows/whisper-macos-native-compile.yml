@@ -152,6 +152,8 @@ jobs:
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             app::state::tests::talk_routing_macos_system -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+            app::state::tests::talk_routing::migrated_moonshine_profiles_keep_selected_text_and_tts_non_live -- --test-threads=1
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             app::state::tests::talk_routing::whisper_with_macos_system_voice_keeps_every_text_provider_non_live -- --test-threads=1
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
             app::state::tests::talk_negative_paths::whisper_provider_snapshot_stays_non_live_after_switch_to_gemini_audio -- --test-threads=1
