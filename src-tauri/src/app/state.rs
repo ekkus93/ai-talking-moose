@@ -359,7 +359,6 @@ impl AppSettings {
         for legacy in ["provider", "text_model", "tts_model", "tts_voice", "microphone_permission_granted"] {
             settings.future_settings.remove(legacy);
         }
-
         // Unknown future fields are preserved except credentials, including
         // credentials nested inside otherwise harmless additive settings.
         // Detect removals so startup rewrites the sanitized JSON to SQLite.
@@ -710,7 +709,6 @@ impl AppState {
 
     pub fn get_live_provider(&self) -> Arc<dyn RealtimeConversationProvider> {
         let key = self.secrets.get_google_api_key().unwrap_or_default();
-
         Arc::new(GoogleLiveProvider::new(GoogleAuth::new(key)))
     }
 

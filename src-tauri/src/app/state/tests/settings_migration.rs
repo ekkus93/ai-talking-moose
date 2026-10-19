@@ -348,7 +348,6 @@ fn migrated_text_provider_settings_are_idempotent() {
         local_text_model: "local-catalog-id".to_string(),
         ..Default::default()
     };
-
     let json = serde_json::to_string(&original).unwrap();
 
     let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
@@ -699,7 +698,6 @@ fn legacy_moonshine_sqlite_selection_rewrites_once_without_installing_whisper() 
             memory_enabled: true,
             save_transcripts: true,
             ..Default::default()
-
         };
         let file = NamedTempFile::new().unwrap();
         let path = file.path().to_string_lossy().to_string();
