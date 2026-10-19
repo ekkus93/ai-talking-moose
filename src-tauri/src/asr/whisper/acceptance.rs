@@ -111,8 +111,7 @@ fn macos_network_denial_proven(
     sandbox_denies_egress: bool,
     connection: Result<(), std::io::ErrorKind>,
 ) -> bool {
-    sandbox_denies_egress
-        && matches!(connection, Err(std::io::ErrorKind::PermissionDenied))
+    sandbox_denies_egress && matches!(connection, Err(std::io::ErrorKind::PermissionDenied))
 }
 
 #[cfg(target_os = "macos")]
@@ -898,14 +897,9 @@ mod tests {
         let report = root.path().join("reports/real-transcript.json");
         let missing_model = root.path().join("never-installed-model");
         let missing_corpus = root.path().join("never-installed-corpus.wav");
-        let failure = transcribe_for_acceptance(
-            &missing_model,
-            &missing_corpus,
-            &report,
-            true,
-        )
-        .await
-        .expect_err("without enforced network denial, stop before any model I/O");
+        let failure = transcribe_for_acceptance(&missing_model, &missing_corpus, &report, true)
+            .await
+            .expect_err("without enforced network denial, stop before any model I/O");
         assert_eq!(
             failure,
             "real-corpus transcription acceptance requires an OS-level denied network boundary"
