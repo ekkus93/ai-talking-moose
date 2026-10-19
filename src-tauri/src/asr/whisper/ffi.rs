@@ -521,6 +521,15 @@ mod tests {
     }
 
     #[test]
+    fn reported_inference_threads_reflect_actual_native_linkage() {
+        let threads = NativeWhisperApi::configured_inference_threads();
+        #[cfg(whisper_native_linked)]
+        assert!(matches!(threads, Some(n) if n > 0));
+        #[cfg(not(whisper_native_linked))]
+        assert_eq!(threads, None);
+    }
+
+    #[test]
     fn context_params_layout_matches_compiler_probe() {
         assert_eq!(std::mem::size_of::<WhisperContextParams>(), 48);
         assert_eq!(std::mem::offset_of!(WhisperContextParams, dtw_aheads), 24);
