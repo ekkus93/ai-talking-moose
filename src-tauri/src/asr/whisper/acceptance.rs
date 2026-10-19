@@ -15,7 +15,7 @@
 use chrono::Utc;
 use serde::Serialize;
 use std::fs;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -87,10 +87,47 @@ fn network_denial_probe() -> bool {
     })
 }
 
-/// macOS does not expose the Linux route/namespace proof used above. A TCP
-/// failure alone can be transient and is never proof of OS-enforced denial.
-/// Explicit macOS acceptance must supply a real enforcement mechanism first.
-#[cfg(not(target_os = "linux"))]
+// macOS Seatbelt supplies an OS-enforced process policy. Do not accept a
+// failed TCP connection by itself: it could be a DNS, timeout or firewall
+// failure. A denied kernel sandbox_check *and* EPERM/EACCES on an actual
+// loopback connect are both required before describing inference as offline.
+// The optional manual acceptance workflow creates this sandbox only after the
+// explicit model download, then runs the same native process inside it.
+#[cfg(target_os = "macos")]
+#[link(name = "sandbox")]
+unsafe extern "C" {
+    fn sandbox_check(
+        pid: std::ffi::c_int,
+        operation: *const std::ffi::c_char,
+        filter_type: std::ffi::c_int,
+    ) -> std::ffi::c_int;
+}
+
+#[cfg(target_os = "macos")]
+fn network_denial_probe() -> bool {
+    // SANDBOX_FILTER_NONE = 0, operation is the Seatbelt network policy.
+    let sandbox_denies_egress = unsafe {
+        sandbox_check(
+            std::process::id() as std::ffi::c_int,
+            b"network-outbound\\0".as_ptr().cast(),
+            0,
+        ) == 1
+    };
+    if !sandbox_denies_egress {
+        return false;
+    }
+    // 127.0.0.1:9 needs no DNS or external service. A refused connection or
+    // timeout is *not* a pass; a kernel permission denial is required.
+    TcpStream::connect_timeout(
+        &SocketAddr::from(([127, 0, 0, 1], 9)),
+        Duration::from_millis(500),
+    )
+    .err()
+    .is_some_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied)
+}
+
+/// Unsupported platforms do not have a qualified kernel network-denial probe.
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn network_denial_probe() -> bool {
     false
 }
@@ -808,7 +845,7 @@ mod tests {
         assert!(!network_denial_probe_with(false, || true));
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     #[test]
     fn unsupported_host_does_not_claim_enforced_network_isolation() {
         assert!(!network_denial_probe());

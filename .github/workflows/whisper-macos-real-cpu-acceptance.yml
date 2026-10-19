@@ -134,10 +134,37 @@ jobs:
           test ! -e "$reports/corrupt-model.json"
           rm -f "$model/ggml-small.bin" "$root/missing-model.log" "$root/corrupt-model.log"
           "$binary" install "$model" "$reports/install.json"
+          # Invoke the inference process under macOS Seatbelt after the
+          # explicit verified model installation. The process-level probe
+          # requires both kernel sandbox denial and a permission-denied socket
+          # connection; a failed network request alone is not acceptable.
+          command -v sandbox-exec >/dev/null || {
+            echo "macOS Seatbelt sandbox-exec is unavailable; egress acceptance cannot pass" >&2
+            exit 1
+          }
+          sandbox_profile="$root/network-denied.sb"
+          cat > "$sandbox_profile" <<'SEATBELT'
+          (version 1)
+          (allow default)
+          (deny network*)
+          SEATBELT
+          sandbox-exec -f "$sandbox_profile" python3 -c '
+import errno
+import socket
+try:
+    with socket.socket() as stream:
+        stream.settimeout(1)
+        stream.connect(("127.0.0.1", 9))
+except OSError as error:
+    if error.errno in (errno.EPERM, errno.EACCES):
+        raise SystemExit(0)
+    raise SystemExit(f"network probe failed for a non-policy reason: {error.errno}")
+raise SystemExit("Seatbelt did not deny the loopback connection")
+'
           # Capture upstream native diagnostics so real-model acceptance proves
           # the CPU-only baseline rather than silently falling back to Metal.
           native_log="$root/whisper-transcribe-native.log"
-          if ! "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json" > "$native_log" 2>&1; then
+          if ! sandbox-exec -f "$sandbox_profile" "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json" --require-network-denied > "$native_log" 2>&1; then
             cat "$native_log" >&2
             exit 1
           fi
@@ -153,7 +180,7 @@ jobs:
           # model and produce a real transcript without another download.
           # This is repeated cold-start evidence, not same-session endurance.
           repeat_log="$root/whisper-transcribe-repeat-native.log"
-          if ! "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe-repeat.json" > "$repeat_log" 2>&1; then
+          if ! sandbox-exec -f "$sandbox_profile" "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe-repeat.json" --require-network-denied > "$repeat_log" 2>&1; then
             cat "$repeat_log" >&2
             exit 1
           fi
@@ -230,7 +257,8 @@ jobs:
           print("macOS Whisper CPU acceptance metrics:", {key: pipeline[key] for key in (
               "first_partial_latency_ms", "first_final_latency_ms", "real_time_factor",
               "nominal_dropped_chunks", "overload_dropped_chunks")})
-          assert transcript["network_denied_required"] is False
+          assert transcript["network_denied_required"] is True
+          assert transcript["network_denial_probe_passed"] is True
           # Verify the repeated cold start independently: pinned model, no
           # runtime/provider fallback, meaningful text and exactly one final.
           assert repeated["git_sha"] == sha
@@ -255,13 +283,14 @@ jobs:
           assert repeated["pipeline"]["partial_event_count"] >= 1
           assert repeated["pipeline"]["queue_capacity_chunks"] == 56
           assert repeated["pipeline"]["nominal_dropped_chunks"] == 0
-          assert repeated["network_denied_required"] is False
+          assert repeated["network_denied_required"] is True
+          assert repeated["network_denial_probe_passed"] is True
           print("Repeated cold-start model load (ms):", repeated["model_load_wall_ms"])
           print("Repeated cold-start inference (ms):", repeated["transcribe_wall_ms"])
           print("Repeated process same-context inference (ms):", repeated["same_context_repeat_transcribe_wall_ms"])
           print("Repeated cold-start pipeline RTF:", repeated["pipeline"]["real_time_factor"])
           assert deletion["removed"] is True
-          print("Real pinned-model macOS Whisper transcription verified; egress isolation and physical mic remain unqualified.")
+          print("Real pinned-model macOS Whisper transcription verified under Seatbelt network denial; physical mic remains unqualified.")
           PY
       - name: Upload JSON evidence only (never model weights)
         if: always()
