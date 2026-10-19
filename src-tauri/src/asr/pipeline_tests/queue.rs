@@ -180,3 +180,26 @@ async fn whisper_ingress_rejects_newest_chunk_and_drains_older_pcm_in_order() {
     }
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn whisper_empty_pcm_does_not_infer_or_reorder_following_audio() {
+    let state = Arc::new(FakeState::default());
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
+    let sender = pipeline.test_sender();
+
+    // An empty capture buffer is not a spoken utterance and must not reach
+    // native inference or displace the following valid 16-bit PCM sample.
+    sender.try_send(Vec::new()).unwrap();
+    sender
+        .try_send(AudioResampler::i16_to_bytes(&[i16::MIN, i16::MAX]))
+        .unwrap();
+    pipeline.stop_and_join().await.unwrap();
+
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        state.received_pcm.lock().unwrap().as_slice(),
+        &[AudioResampler::i16_to_f32(&[i16::MIN, i16::MAX])]
+    );
+}
