@@ -20,3 +20,12 @@ Connected runtime at observation: semantic version `0.6.2`, exact build `0acea4b
 - Cause unresolved: the error alone does **not** establish a missing profile, permission defect, safety denial or GitHub API failure. Actionable follow-up: expose allowed validation profile names (secret-free) and structured rejection reasons/operation IDs to callers; then safely dispatch the configured manual Mac real-CPU profile, or have the owner run it explicitly.
 
 Neither incident establishes a platform-level safety denial. Reconcile remote state before considering any later write/dispatch. Preserve no-model-upload and exact-head integrity requirements.
+
+## Incident 3 — manual Seatbelt acceptance dispatch still not confirmed after reconnect
+
+- UTC observation: `2026-10-19T20:06:10.937Z`. Connected Ralph runtime `0.6.2`, build `0acea4b23362e2ccecab8f6c9db4418b162426cf`, instance `5c4e195cb21747e5ab7fdec92490e86f`, auth mode `app`; `ralph_ping` returned `pong`.
+- Method: `dispatch_validation`. Sanitized shape: `repo=ekkus93/ai-talking-moose`, `ref=867945a37129ae736fa9573ea480a375672f0d3d` (observed master), `profile=whisper_macos_real_cpu`. No source bodies, credentials or model contents transmitted.
+- Exact error: `INVALID_ARGUMENT: Error code: INVALID_ARGUMENT; Error: RuntimeException: Error calling MCP tool: [TextContent(type='text', text='Error executing tool dispatch_validation', annotations=None, meta=None)]`. No operation ID or CI run ID surfaced.
+- Immediate read-only reconciliation: `get_repo_state(master)` remained `867945a37129ae736fa9573ea480a375672f0d3d`; `get_ci_runs` for that SHA returned only push CI `39245728475` (success), **no confirmed manual workflow-dispatch run**. This is an ambiguous Ralph/MCP tool failure, not evidence of a platform safety denial, missing authorization, stale-head write, GitHub rejection or an ASR test failure. No duplicate dispatch was attempted.
+- Related exact-source CI: Mac native `39244418942`, unsigned Whisper app `39244418993`, pre-cutover app `39244419064` all passed at parent source `e36be4fc829b9a2f6659f1eea42779bea8da61b2`; Moonshine legacy ASR-015 `39244418953` failed at native runtime preparation. No weight-backed Seatbelt result exists from this attempt.
+- Actionable investigation: expose permitted validation profiles and structured preflight/dispatch errors, and preserve operation IDs/run receipts on ambiguous dispatch failure. Do not infer the underlying failure layer from this generic message. Retry only after verifying profile authorization/configuration and remote run state.
