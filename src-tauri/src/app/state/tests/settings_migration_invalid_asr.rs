@@ -14,6 +14,7 @@ fn malformed_asr_selector_types_fail_closed_and_leave_sqlite_unchanged() {
         serde_json::json!([]),
         serde_json::json!({}),
         serde_json::json!("moonshine_unrecognized"),
+        serde_json::json!("synthetic-asr-canary-not-for-logs"),
     ] {
         let file = NamedTempFile::new().unwrap();
         let path = file.path().to_string_lossy().to_string();
@@ -33,8 +34,12 @@ fn malformed_asr_selector_types_fail_closed_and_leave_sqlite_unchanged() {
             Err(error) => error,
         };
         assert!(
-            error.contains("failed to decode persisted app settings"),
+            error.contains("failed to decode persisted app settings: persisted settings are invalid: unsupported ASR selection"),
             "invalid ASR selector {invalid:?} was not rejected: {error}"
+        );
+        assert!(
+            !error.contains("synthetic-asr-canary-not-for-logs"),
+            "startup diagnostics must not echo untrusted ASR selector contents"
         );
 
         let reopened = Database::new(&path).unwrap();

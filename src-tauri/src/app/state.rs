@@ -292,6 +292,17 @@ impl AppSettings {
                 fields.insert("asr_mode".to_string(), serde_json::json!("whisper_small"));
             }
         }
+        // Reject malformed/unknown selectors without echoing their original
+        // value in a serde error. Persisted JSON may contain private data, and
+        // startup diagnostics must not reproduce untrusted selector strings.
+        // Both historical Moonshine values have already migrated above.
+        if value.get("asr_mode").is_some_and(|mode| {
+            !matches!(mode.as_str(), Some("whisper_small" | "gemini_live_audio"))
+        }) {
+            return Err(PersistedSettingsError::Invalid(
+                "unsupported ASR selection".to_string(),
+            ));
+        }
         let had_asr_mode = value.get("asr_mode").is_some();
         let had_wake_word_enabled = value.get(WAKE_WORD_ENABLED_FIELD).is_some();
         let had_wake_word_phrase = value.get(WAKE_WORD_PHRASE_FIELD).is_some();
@@ -348,6 +359,7 @@ impl AppSettings {
         for legacy in ["provider", "text_model", "tts_model", "tts_voice", "microphone_permission_granted"] {
             settings.future_settings.remove(legacy);
         }
+
         // Unknown future fields are preserved except credentials, including
         // credentials nested inside otherwise harmless additive settings.
         // Detect removals so startup rewrites the sanitized JSON to SQLite.
@@ -698,6 +710,7 @@ impl AppState {
 
     pub fn get_live_provider(&self) -> Arc<dyn RealtimeConversationProvider> {
         let key = self.secrets.get_google_api_key().unwrap_or_default();
+
         Arc::new(GoogleLiveProvider::new(GoogleAuth::new(key)))
     }
 
