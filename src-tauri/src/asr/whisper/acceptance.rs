@@ -169,6 +169,7 @@ struct TranscribeReportContext {
     host_arch: String,
     host_cpu: Option<String>,
     available_parallelism: usize,
+    configured_inference_threads: Option<i32>,
     network_denied_required: bool,
     network_denial_probe_passed: bool,
     pipeline: WhisperPipelineAcceptanceMetrics,
@@ -219,6 +220,7 @@ fn build_transcribe_acceptance_report(
         host_arch: context.host_arch,
         host_cpu: context.host_cpu,
         available_parallelism: context.available_parallelism,
+        configured_inference_threads: context.configured_inference_threads,
         network_denied_required: context.network_denied_required,
         network_denial_probe_passed: context.network_denial_probe_passed,
         status: status.to_string(),
@@ -399,6 +401,8 @@ pub struct WhisperTranscribeAcceptanceReport {
     pub host_arch: String,
     pub host_cpu: Option<String>,
     pub available_parallelism: usize,
+    /// n_threads from the same pinned whisper_full_default_params used by inference.
+    pub configured_inference_threads: Option<i32>,
     pub network_denied_required: bool,
     pub network_denial_probe_passed: bool,
     pub status: String,
@@ -646,6 +650,7 @@ pub async fn transcribe_for_acceptance(
     let baseline_resident_memory_bytes = current_resident_memory_bytes();
     let phase_started = Instant::now();
 
+    let configured_inference_threads = NativeWhisperApi::configured_inference_threads();
     let api: Box<dyn WhisperApi> = Box::new(NativeWhisperApi);
     let model_path_c =
         path_to_cstring(lease.model_path()).map_err(|error| error.message.to_string())?;
@@ -735,6 +740,7 @@ pub async fn transcribe_for_acceptance(
             available_parallelism: std::thread::available_parallelism()
                 .map(std::num::NonZeroUsize::get)
                 .unwrap_or(1),
+            configured_inference_threads,
             network_denied_required: require_network_denied,
             network_denial_probe_passed,
             pipeline,
@@ -891,6 +897,7 @@ mod tests {
             host_arch: "x86_64".to_string(),
             host_cpu: None,
             available_parallelism: 1,
+            configured_inference_threads: Some(4),
             network_denied_required: true,
             network_denial_probe_passed: true,
             status: "pass".to_string(),
@@ -949,6 +956,7 @@ mod tests {
             serde_json::Value::Null
         );
         assert_eq!(json["model_load_wall_ms"], 17);
+        assert_eq!(json["configured_inference_threads"], 4);
         assert_eq!(json["same_context_repeat_transcribe_wall_ms"], 3);
         assert_eq!(
             json["same_context_repeat_transcript"]["text"],
@@ -980,6 +988,7 @@ mod tests {
                 host_arch: "test-arch".to_string(),
                 host_cpu: None,
                 available_parallelism: 1,
+                configured_inference_threads: None,
                 network_denied_required: true,
                 network_denial_probe_passed: true,
                 pipeline: WhisperPipelineAcceptanceMetrics {
@@ -1020,6 +1029,7 @@ mod tests {
         assert_eq!(report.duration_ms, 1);
         assert_eq!(report.corpus_bytes, 76);
         assert_eq!(report.model_load_wall_ms, 23);
+        assert_eq!(report.configured_inference_threads, None);
         assert_eq!(report.same_context_repeat_transcribe_wall_ms, 4);
         assert!(report.runtime.whisper_native_linked);
         assert_eq!(

@@ -222,6 +222,9 @@ jobs:
 
           assert pipeline["overload_dropped_chunks"] > 0
           assert transcript["available_parallelism"] > 0
+          assert transcript["configured_inference_threads"] is not None
+          assert transcript["configured_inference_threads"] > 0
+          print("macOS Whisper configured inference threads:", transcript["configured_inference_threads"])
           print("macOS Whisper direct model load (ms):", transcript["model_load_wall_ms"])
           print("macOS Whisper same-context repeat inference (ms):", transcript["same_context_repeat_transcribe_wall_ms"])
           print("macOS Whisper CPU acceptance metrics:", {key: pipeline[key] for key in (
@@ -241,6 +244,7 @@ jobs:
           repeat_words = repeated["transcript"]["text"].lower()
           assert all(word in repeat_words for word in ("ask", "country", "you")), repeat_words
           assert repeated["model_load_wall_ms"] > 0
+          assert repeated["configured_inference_threads"] == transcript["configured_inference_threads"]
           assert repeated["same_context_repeat_transcribe_wall_ms"] > 0
           assert repeated["same_context_repeat_transcript"]["transcription_ok"] is True
           repeated_same_context_words = repeated["same_context_repeat_transcript"]["text"].lower()

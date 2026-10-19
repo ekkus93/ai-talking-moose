@@ -293,6 +293,22 @@ impl NativeWhisperApi {
         params.flash_attn = false;
     }
 
+    /// Native whisper.cpp greedy inference thread count, not OS parallelism.
+    /// The actual inference call uses the same pinned default-params API and
+    /// does not override n_threads, so this describes both direct and worker
+    /// transcription. Without native linkage, do not invent a thread count.
+    pub(crate) fn configured_inference_threads() -> Option<i32> {
+        #[cfg(whisper_native_linked)]
+        {
+            // SAFETY: the pinned C API returns the full parameters by value.
+            Some(unsafe { whisper_full_default_params(WHISPER_SAMPLING_GREEDY) }.n_threads)
+        }
+        #[cfg(not(whisper_native_linked))]
+        {
+            None
+        }
+    }
+
     #[cfg(whisper_native_linked)]
     fn language_ptr() -> *const c_char {
         WHISPER_LANGUAGE_EN.as_ptr() as *const c_char
