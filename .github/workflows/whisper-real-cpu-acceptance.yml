@@ -222,6 +222,11 @@ jobs:
           assert install["installed_bytes"] == install["expected_bytes"]
           assert transcribe["runtime"]["whisper_native_linked"] is True
           assert transcribe["network_denial_probe_passed"] is True
+          assert transcribe["configured_inference_threads"] is not None
+          assert transcribe["configured_inference_threads"] > 0
+          assert transcribe["same_context_repeat_transcribe_wall_ms"] > 0
+          assert transcribe["same_context_repeat_transcript"]["transcription_ok"] is True
+          assert transcribe["same_context_repeat_transcript"]["text"].strip()
           assert transcribe["transcript"]["transcription_ok"] is True
           assert 0.0 <= transcribe["transcript"]["no_speech_prob"] <= 1.0
           assert transcribe["transcript"]["num_segments"] >= 0
