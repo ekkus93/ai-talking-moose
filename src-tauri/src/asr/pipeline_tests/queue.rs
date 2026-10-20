@@ -253,3 +253,46 @@ async fn whisper_full_wake_handoff_can_retry_after_queue_drains_without_duplicat
     );
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn whisper_wake_handoff_rejected_during_graceful_stop_preserves_queued_pcm() {
+    let state = Arc::new(FakeState::default());
+    state.block_push.store(true, Ordering::SeqCst);
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
+    let sender = pipeline.test_sender();
+    let first = [111_i16, -222];
+    let queued = [333_i16, -444];
+    sender
+        .try_send(AudioResampler::i16_to_bytes(&first))
+        .unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    sender
+        .try_send(AudioResampler::i16_to_bytes(&queued))
+        .unwrap();
+    assert_eq!(pipeline.diagnostics().queue_depth, 1);
+
+    // A stop request closes the owned ingress even while native inference is
+    // still finishing. Wake-word handoff must not re-open that generation.
+    pipeline.request_stop();
+    let handoff =
+        WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, vec![555, -666]).unwrap();
+    let error = pipeline.prime_wake_handoff(handoff).unwrap_err();
+    assert_eq!(error.kind, AsrErrorKind::InvalidState);
+    assert!(error.retryable);
+    assert_eq!(pipeline.diagnostics().queue_depth, 0);
+
+    state.block_push.store(false, Ordering::SeqCst);
+    pipeline.stop_and_join().await.unwrap();
+    let received = state.received_pcm.lock().unwrap();
+    assert_eq!(
+        received.as_slice(),
+        &[
+            AudioResampler::i16_to_f32(&first),
+            AudioResampler::i16_to_f32(&queued),
+        ],
+        "stop must drain accepted PCM without accepting a late wake handoff"
+    );
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(!pipeline.is_running());
+}
