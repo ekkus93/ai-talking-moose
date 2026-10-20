@@ -1,7 +1,7 @@
 name: Whisper macOS Real CPU Acceptance
 
 # Explicit, network-using 488 MB model installation; never part of ordinary CI.
-# Real transcription here is NOT evidence of denied network egress or a live mic.
+# Real transcription qualifies offline egress ONLY when the manual Seatbelt\n# wrapper and both independent kernel/socket denial proofs succeed on each Mac.\n# This workflow does not exercise a live microphone or physical playback.
 on:
   workflow_dispatch:
 
@@ -283,6 +283,18 @@ jobs:
           assert repeated["pipeline"]["partial_event_count"] >= 1
           assert repeated["pipeline"]["queue_capacity_chunks"] == 56
           assert repeated["pipeline"]["nominal_dropped_chunks"] == 0
+          # Repeat acceptance must independently verify the same bounded
+          # inference/overload contract as the first cold start. Do not let
+          # a successful first report mask degraded repeated model execution.
+          assert repeated["pipeline"]["first_partial_latency_ms"] is not None
+          assert repeated["pipeline"]["first_final_latency_ms"] is not None
+          assert repeated["pipeline"]["first_final_latency_ms"] >= repeated["pipeline"]["first_partial_latency_ms"]
+          assert repeated["pipeline"]["processed_audio_ms"] > 0
+          assert repeated["pipeline"]["inference_wall_time_ms"] > 0
+          assert repeated["pipeline"]["overload_attempted_chunks"] == 64
+          assert repeated["pipeline"]["overload_dropped_chunks"] > 0
+          assert repeated["available_parallelism"] > 0
+          assert repeated["configured_inference_threads"] > 0
           assert repeated["network_denied_required"] is True
           assert repeated["network_denial_probe_passed"] is True
           print("Repeated cold-start model load (ms):", repeated["model_load_wall_ms"])
