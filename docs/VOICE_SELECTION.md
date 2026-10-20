@@ -16,9 +16,9 @@ Talking Moose V1 now has three separate voice ownership domains. Do not collapse
 | Google standalone TTS | `google_tts_voice` | Google Gemini TTS REST request | Used for typed replies, ambient remarks, canned reactions, and voice auditions when `tts_provider = google`. |
 | Local Talk and standalone TTS | `local_tts_voice` | Local KittenTTS runtime | Used for local-first Talk replies and standalone speech when `tts_provider = local`. Requires installed and verified Local TTS assets. |
 | System Voices | `system_tts_voice` | Installed macOS AVSpeechSynthesizer voices | Available on macOS; unsupported platforms fail closed with no fallback. |
-| Gemini Live conversation voice | `live_voice` | Google Gemini Live WebSocket session | Used when Google text generation or Gemini Live audio ASR is selected. Changing it is conversation-restart-sensitive and independent of standalone TTS voice settings. |
+| Gemini Live conversation voice | `live_voice` | Google Gemini Live WebSocket session | Used **only** when Gemini Live audio ASR is explicitly selected. Choosing Google text with local Whisper ASR does not start Live or use this voice. Changing it is conversation-restart-sensitive and independent of standalone TTS voice settings. |
 
-The provider selector chooses standalone TTS. With local ASR and non-Google text, non-Live Talk uses the selected standalone TTS provider; selecting Google TTS sends generated speech text to Google even when text generation is local. macOS System Voices use OS-installed voices through AVSpeechSynthesizer and synthesize locally. Gemini Live is a separate cloud audio conversation path.
+The provider selector chooses standalone TTS. With local Whisper ASR and **any** selected non-Live text provider (including Google text), Talk uses the independently selected standalone TTS provider; selecting Google TTS sends generated speech text to Google even when text generation is local. macOS System Voices use OS-installed voices through AVSpeechSynthesizer and synthesize locally. Gemini Live is a separate cloud audio conversation path.
 
 ## Google standalone default
 
@@ -53,7 +53,7 @@ Human listening was not performed for the V1 Local default decision. The owner e
 
 The automated ASR proxy is defined in `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md` and implemented by `.github/workflows/kittentts-asr-voice-audition.yml`.
 
-It synthesizes all eight Local KittenTTS voices, transcribes them with pinned Moonshine Tiny, ranks passing voices by WER/content-recall evidence, and publishes a recommended objective candidate.
+The **historical 2026-09-14** acceptance workflow synthesized all eight Local KittenTTS voices and transcribed them with pinned Moonshine Tiny; its recorded WER/content-recall ranking selected an ASR-proxy candidate. This is not a current Whisper Small validation or human audition result.
 
 The exact PR-head ASR audition run `34821757481` passed on `037a0f0a61e13c76ddc0f9a16ef88adb2f38f141`. The exact post-merge `master` ASR audition run `34848251323` passed on `21fac6785f008b1d5ab7f46e9125c76ca4c087ad`. Both runs selected `Luna` as the deterministic objective ASR recommendation.
 
@@ -92,7 +92,7 @@ Local KittenTTS exposes truthful rate handling through its provider/runtime path
 
 ## Automated ASR evidence and human audition
 
-The KittenTTS-to-Moonshine Tiny automated ASR smoke passed for all eight Kitten voices on macOS arm64. That proves the voices are machine-recognizable under the smoke-test phrase and configured WER/content-recall gates.
+The **historical** KittenTTS-to-Moonshine Tiny automated ASR smoke passed for all eight Kitten voices on macOS arm64 at its recorded source/model configuration. It established recognition of that smoke-test phrase under its WER/content-recall gates, **not** current Whisper ASR compatibility, physical playback, or macOS System Voice quality.
 
 The ASR voice-audition proxy turned that all-eight-voice evidence into a deterministic objective recommendation. `Luna` was selected because it tied for perfect WER and content recall with `Bruno`, `Hugo`, and `Leo`, then won by Local KittenTTS catalog-order tie-breaker.
 

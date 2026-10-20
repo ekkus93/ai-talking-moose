@@ -1,11 +1,11 @@
 # Whisper.cpp Local ASR Pipeline
 
-**Status:** Current production behavior has passed local gates, ordinary CI, and real-CPU acceptance on Linux x86_64.
+**Status:** Historical Linux x86_64 real-CPU acceptance and separate macOS arm64/x86_64 model-backed CPU inference are recorded at their exact source SHAs. At `8b4c505c28b22b5c37885d513e4eaa1115569b43`, [main CI 39378458759](https://github.com/ekkus93/ai-talking-moose/actions/runs/39378458759), [Mac native compile 39378458637](https://github.com/ekkus93/ai-talking-moose/actions/runs/39378458637), and [unsigned Mac app 39378458746](https://github.com/ekkus93/ai-talking-moose/actions/runs/39378458746) passed. These are **not** current exact-head real-weight transcription, verified Seatbelt-denied inference, sustained Intel performance, physical mic/TTS, or signed release acceptance; see `docs/CROSS_PLATFORM_WHISPER_ASR_TODO_2026-10-15.md` and `docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_REPEAT_REAL_CPU_2026-10-18.md`.
 **Production source:** `29759a18d7c91c26113d33e16a55c6d7f80bdb0d`; exact acceptance checkout `cf3280ea1d4e91d298828e4935e3369f8cbd6be6` is a documentation-only descendant.
 **Initial qualification:** run `37744371559`, job `113202252940`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`.
 **Post-qualification review:** completed in `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`; evidence is in `docs/evidence/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_2026-10-08.md` (run `37756211710`, job `113241297405`).
 
-This document describes the current production pipeline behavior. Historical qualification evidence applies only to its recorded source checkout and does not qualify later source changes.
+This document describes the production pipeline and its cross-platform port while legacy Moonshine compatibility/native packaging remains present. New Linux/macOS profiles select Whisper Small, but select/install is not permission for a download or cloud fallback. Historical model-backed qualification applies only to its recorded source checkout and does not qualify later changes.
 It supersedes implementation-state claims in `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md`; the dated document remains historical context.
 
 ## Provenance and runtime identity
@@ -132,7 +132,7 @@ Real-CPU performance claims below apply only to the exact historical checkout in
 
 ## Acceptance workflow contract
 
-The real-CPU workflow must remain manually invoked and separate from ordinary CI. It may download the real model only in that explicit acceptance context. Ordinary CI may compile and syntax-check the embedded evidence validator, but it must not download real Whisper model artifacts.
+The real-CPU workflows remain manually invoked and separate from ordinary CI. They may download the real model only in that explicit acceptance context. The separate macOS arm64/Intel workflow must demonstrate both kernel Seatbelt network-denial evidence and the fail-closed socket denial **during genuine weight-backed transcription**; policy/unit checks alone do not qualify macOS offline acceptance. The configured Ralph Bridge profile `whisper_macos_real_cpu` has repeatedly returned generic `INVALID_ARGUMENT` with no manual run receipt (see `docs/evidence/RALPH_BRIDGE_INCIDENTS_2026-10-19.md`); treat the enforced offline gate as OPEN. Ordinary CI may compile and syntax-check the embedded validator but must not download real Whisper model artifacts.
 
 Acceptance evidence must record, at minimum:
 

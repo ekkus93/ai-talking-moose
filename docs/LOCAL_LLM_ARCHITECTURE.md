@@ -23,7 +23,7 @@ Talk selects its conversation pipeline from one saved settings snapshot. With lo
 - `ollama` — `LoopbackTextModel` using Ollama's native `/api/chat` endpoint;
 - `llama_server` — `LoopbackTextModel` using `/v1/chat/completions`.
 
-The external adapters are implemented, including model-readiness checks; macOS System TTS, end-to-end routing-combination coverage, and full platform acceptance remain outstanding. Ollama and llama-server use separate request/response mappings, do not start local processes or pull weights, and reject non-loopback destinations, redirects, and proxy routing. Their configured servers may independently log prompts. OpenAI sends text to OpenAI with an independent credential. A failure stays with the selected provider.
+The external adapters are implemented, including model-readiness checks. Native macOS System Voices use the separately qualified AVSpeechSynthesizer PCM adapter, but human audible-completion, speech-bubble, full routing-combination and release acceptance remain outstanding. Ollama and llama-server use separate request/response mappings, do not start local processes or pull weights, and reject non-loopback destinations, redirects, and proxy routing. Their configured servers may independently log prompts. OpenAI sends text to OpenAI with an independent credential. A failure stays with the selected provider.
 
 Fresh profiles default to **Local** text generation with `smollm2-360m-instruct-q4-k-m` selected and **Local** TTS with KittenTTS selected. Profiles with no saved provider choice migrate to Local; a saved Google selection remains unchanged. Selection does not install or download either model.
 
@@ -118,7 +118,7 @@ Real CPU acceptance proves generation after installation while the process is in
 Local providers do not imply that every app capability is offline:
 
 - Gemini Live is used only when Gemini Live audio ASR is explicitly selected;
-- local Moonshine/Whisper ASR keeps microphone PCM local, and local Talk conversations hand finalized transcripts to the selected Local text model;
+- local Whisper Small ASR keeps microphone PCM local on Linux/macOS, and non-Live Talk hands finalized transcripts to the explicitly selected text provider (Local, Google, OpenAI, Ollama or llama-server); legacy Moonshine remains a separately gated compatibility/runtime dependency during cutover;
 - Google TTS receives text when Google TTS is used for standalone speech;
 - Google text generation is available when the user explicitly selects the Google text provider;
 - OpenAI text generation sends selected prompt context to OpenAI with the independent OpenAI key;
@@ -131,13 +131,14 @@ These boundaries are documented in `docs/PRIVACY.md` and must stay synchronized 
 Local-first Talk path:
 
 ```text
-Microphone -> Moonshine/Whisper local ASR -> Local TextModel -> KittenTTS -> Rust playback
+Microphone -> Whisper Small local ASR -> Local TextModel -> KittenTTS -> Rust playback
 ```
 
 The local provider emits a completed text response followed by synthesized PCM through the existing lifecycle. It does not stream generated text or invoke provider tools. Interruption suppresses stale output and cancels active TTS synthesis.
 
-Google Live path (explicit selection):
+Google Live path (explicit Gemini Live *audio ASR* selection only):
 
+```text
 Microphone -> Gemini Live -> Rust playback
 ```
 
