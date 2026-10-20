@@ -4,7 +4,7 @@
 
 1. **Local-first and data minimization.** Screen contents, OCR, keystrokes, clipboard contents, browser history, and arbitrary files are not collected by V1.
 2. **Conservative fresh-profile defaults.** Active-application observation, cross-conversation memory, and transcript retention start **Off**. Users may explicitly enable each feature later.
-3. **No silent cloud escalation.** A selected local capability never authorizes an implicit cloud substitute. Moonshine ASR failures do not upload microphone audio to Google, Local text failures do not fall back to Google or Fake text generation, and Local TTS failures do not fall back to Google TTS.
+3. **No silent cloud escalation.** A selected local capability never authorizes an implicit cloud substitute. Whisper ASR and legacy Moonshine failures do not upload microphone audio to Google, Local text failures do not fall back to Google or Fake text generation, and Local TTS failures do not fall back to Google TTS.
 4. **Explicit network actions.** Selecting a Local ASR/text/TTS model is configuration only. Missing model weights or Local TTS runtime artifacts are downloaded only after an explicit user install action and integrity verification.
 5. **Independent credentials.** On macOS, Google and OpenAI API keys use separate Keychain entries. On Linux, both keys are session-only. Neither key belongs in SQLite, persisted settings, browser storage, or normal logs.
 6. **Complete private-data reset.** Users can inspect and delete saved memories and can use **Forget Everything** to purge persisted memory/transcript data and reset transient derived observation state. Ordinary preferences, separately installed model files, and the separately managed Keychain credential are preserved.
@@ -12,12 +12,12 @@
 
 ## 2. Speech-recognition privacy
 
-Talking Moose supports four ASR choices:
+On Linux and macOS, the supported, newly selectable ASR choices are local **Whisper Small** (the fresh-profile default) and separately opt-in **Gemini Live Audio**. Moonshine Tiny/Small remain in legacy compatibility and native packaging paths pending their two-stage removal gate; they are not offered as new local ASR selections:
 
 | ASR choice | Microphone audio | Transcript text |
 | --- | --- | --- |
-| Moonshine Tiny Streaming | Processed locally | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
-| Moonshine Small Streaming | Processed locally | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
+| Moonshine Tiny Streaming (legacy/internal; not newly selectable) | Processed locally | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
+| Moonshine Small Streaming (legacy/internal; not newly selectable) | Processed locally | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
 | Local Whisper.cpp Small | Processed locally on the host | Finalized text goes only to the explicitly selected text provider (Local, Google, OpenAI, Ollama, or llama-server) |
 | Google Gemini Live Audio | Streamed to Google during the active conversation | Google processes the corresponding conversation content |
 
@@ -27,7 +27,7 @@ Local Whisper.cpp uses a pinned whisper.cpp source commit and a user-downloaded,
 
 If the selected Whisper model is absent, corrupt, unsupported, or fails at runtime, local ASR fails explicitly. It does not fall back to Gemini Live, Moonshine, Fake, or any other cloud provider.
 
-The platform's local ASR mode is the default for a new profile. Models are downloaded only after an explicit user action; selecting a missing model is not permission to download it or switch to cloud ASR automatically.
+**Whisper Small** is the new-profile ASR default on Linux and macOS. Persisted Moonshine mode selections migrate to Whisper without installing Whisper model weights, copying Moonshine model artifacts, or authorizing a cloud connection. Models are downloaded only after an explicit user action; selecting a missing model is not permission to download it or switch to cloud ASR automatically.
 
 ## 3. Text-generation privacy
 
@@ -93,7 +93,7 @@ The V1 settings baseline for a newly created profile is:
 - Window-title observation: **Off**
 - Cross-conversation memory: **Off**
 - Local transcript retention: **Off**
-- ASR: **Moonshine Tiny Streaming**
+- ASR: **Whisper Small** (Linux/macOS; selected but not automatically installed)
 - Raw-audio retention: **Never enabled in V1**
 
 An upgraded profile keeps explicit pre-existing choices where migration can do so safely. Profiles without a saved text-provider selector migrate to Local text generation; a saved explicit Google selection remains Google. Profiles created before the ASR selector preserve the former Gemini Live audio behavior until the user explicitly changes ASR mode.

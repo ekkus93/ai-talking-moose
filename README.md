@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml/badge.svg)](https://github.com/ekkus93/ai-talking-moose/actions/workflows/ci.yml)
 
-> A modern reimagining of the classic 1986 Macintosh desktop character, built with Tauri 2, React, TypeScript, Rust, local Moonshine and Whisper ASR, local llama.cpp text generation, Local KittenTTS standalone speech, and Google Gemini.
+> A modern reimagining of the classic 1986 Macintosh desktop character, built with Tauri 2, React, TypeScript, Rust, local Whisper Small ASR (with legacy Moonshine retained pending cutover), local llama.cpp text generation, Local KittenTTS standalone speech, and Google Gemini.
 
 ---
 
@@ -11,7 +11,7 @@
 **Talking Moose AI** lives directly on your desktop inside a deliberately retro-styled Macintosh window. Rather than being a corporate support chatbot, the Moose is a dry-witted, humorous desktop character.
 
 - **Real-time spoken conversation:** Click the Moose to start a voice conversation.
-- **Local or cloud speech recognition:** Moonshine Tiny/Small and Whisper Small provide local ASR; partial transcripts stay local and finalized text goes to the selected conversation provider. Local is the default; Gemini Live audio is an explicit cloud mode.
+- **Local or cloud speech recognition:** Whisper Small is the supported local ASR choice on Linux and macOS, including fresh profiles; it requires an explicit verified model install. Gemini Live audio is an opt-in cloud mode, never a fallback. Moonshine Tiny/Small remain in legacy compatibility/native packaging paths until the separately qualified cutover; they are not new-profile choices.
 - **Instant barge-in:** Interrupt the Moose while he is talking and the active response is stopped and flushed.
 - **Local-first AI:** New profiles use Local text, Local TTS, and platform-local ASR by default. SmolLM2 360M and KittenTTS are selected but never downloaded until the user explicitly chooses **Download & Verify**. Google Gemini remains optional.
 - **Standalone speech providers:** Typed replies, ambient remarks, canned reactions, and voice auditions can use Google Gemini TTS, Local KittenTTS, or macOS System Voices. Local KittenTTS is CPU-only, English-only in V1, and runs synthesis offline after explicit download and verification. System Voices use macOS AVSpeechSynthesizer and installed voices; Linux has no System TTS fallback.
@@ -25,7 +25,7 @@
 
 - **Frontend:** React 18, TypeScript, Tailwind CSS, Lucide icons, Zustand
 - **Desktop shell/backend:** Tauri 2, Rust, Tokio, CPAL, Rusqlite, Tokio-Tungstenite
-- **Speech recognition:** Local Moonshine streaming ASR and local Whisper Small batch ASR, plus optional Gemini Live cloud audio
+- **Speech recognition:** Local Whisper Small batch ASR on Linux and macOS, explicit Gemini Live cloud audio, and temporarily retained legacy Moonshine runtime paths pending the gated migration/removal
 - **Text generation:** Provider-neutral `TextModel` routing for built-in Local, Google Gemini, OpenAI Responses, Ollama, and llama-server.
 - **Voice conversation:** Gemini Live is a separate cloud audio path; non-Live Talk with local ASR composes the selected text and standalone TTS providers, including Google text without a Gemini Live audio connection.
 - **Standalone speech output:** Provider-neutral Google Gemini TTS, Local KittenTTS, and macOS System Voices routing for typed replies, ambient remarks, canned reactions, and auditions. Local KittenTTS uses the Rust-owned CPU runtime and adapts 24 kHz PCM into the existing audio playback/mouth-animation path; macOS System Voices capture AVSpeechSynthesizer PCM into that playback path.
@@ -100,13 +100,13 @@ Install the Xcode Command Line Tools:
 xcode-select --install
 ```
 
-CMake is also required to compile the pinned Local LLM llama.cpp binding. Local native-ASR packaging additionally requires Git LFS and Python 3 to prepare the pinned Moonshine runtime. These are build-time tools; the finished application does not depend on a separately installed llama.cpp, Homebrew library path, or other developer-machine runtime path. Before a local Tauri bundle build, run:
+CMake is also required to compile the pinned Local LLM llama.cpp binding and pinned whisper.cpp native runtime (statically linked for macOS arm64/Intel). During the pre-cutover phase, local macOS packaging **still** requires Git LFS and Python 3 to prepare the retained Moonshine native runtime. These are build-time tools; the finished application does not depend on a separately installed llama.cpp, whisper.cpp, Homebrew library path, or other developer-machine runtime path. Before a local Tauri bundle build, run:
 
 ```bash
 bash scripts/prepare_moonshine_macos.sh "$(uname -m)"
 ```
 
-The script verifies the pinned Moonshine source revision and architecture-specific ONNX Runtime checksum, then stages the two dylibs that Tauri embeds under the application `Contents/Frameworks` directory. The macOS bundle jobs in CI run this preparation and the clean-environment native-load smoke check on both Apple Silicon and Intel runners.
+The script verifies the **legacy Moonshine** source revision and architecture-specific ONNX Runtime checksum, then stages its two dylibs under application `Contents/Frameworks` while the removal safety gate is open. The Whisper runtime is built separately from pinned source and linked statically; this step does **not** install Whisper model weights. The Mac smoke jobs qualify build/bundle properties on both architectures, not physical microphone/TTS or Seatbelt-denied model-backed inference. Moonshine and its framework dependencies must not be deleted until WSP-200/300/400 cutover gates pass; separately owned KittenTTS ONNX dependencies remain required.
 
 ---
 
@@ -249,7 +249,7 @@ cargo build --manifest-path src-tauri/Cargo.toml --release
 
 ### Tauri application bundle
 
-On macOS, generate the deterministic release icons and prepare the pinned native Moonshine runtime before invoking Tauri:
+On macOS, generate release icons and prepare the still-required **legacy** Moonshine runtime before invoking Tauri. Whisper compiles from pinned source during the build; model weights are explicitly installed into user data at runtime, not packaged:
 
 ```bash
 python3 scripts/generate_app_icons.py
@@ -433,7 +433,7 @@ Real Local-model acceptance is deliberately separate from ordinary CI:
 
 Do not move either heavyweight acceptance path into ordinary CI without revisiting the model-weight-free CI policy documented in `docs/LOCAL_LLM_ARCHITECTURE.md`.
 
-The V1 deployment target is macOS 13.4 on both Intel and Apple Silicon, matching the pinned ONNX Runtime 1.23.2 runtime floor.
+The current pre-cutover deployment target remains macOS 13.4 on both Intel and Apple Silicon. Do not lower this floor based on Whisper compilation alone: the remaining legacy Moonshine and independently required KittenTTS runtime dependencies must be evaluated first.
 
 ---
 
