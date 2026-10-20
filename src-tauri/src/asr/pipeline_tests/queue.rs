@@ -296,3 +296,57 @@ async fn whisper_wake_handoff_rejected_during_graceful_stop_preserves_queued_pcm
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
     assert!(!pipeline.is_running());
 }
+
+#[tokio::test]
+async fn whisper_wake_handoff_after_abort_is_rejected_without_replaying_pcm() {
+    let state = Arc::new(FakeState::default());
+    state.block_push.store(true, Ordering::SeqCst);
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let sender = pipeline.test_sender();
+    sender
+        .try_send(AudioResampler::i16_to_bytes(&[111]))
+        .unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    sender
+        .try_send(AudioResampler::i16_to_bytes(&[222]))
+        .unwrap();
+    assert_eq!(pipeline.diagnostics().queue_depth, 1);
+
+    // A retired generation must reject new wake audio and discard queued
+    // PCM, even when the native inference thread has not yet returned.
+    pipeline.request_abort();
+    let handoff =
+        WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, vec![333]).unwrap();
+    let error = pipeline.prime_wake_handoff(handoff).unwrap_err();
+    assert_eq!(error.kind, AsrErrorKind::InvalidState);
+    assert!(error.retryable);
+
+    state.block_push.store(false, Ordering::SeqCst);
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(events.lock().unwrap().is_empty());
+    assert!(!pipeline.is_running());
+    assert_eq!(
+        state.received_pcm.lock().unwrap().as_slice(),
+        &[AudioResampler::i16_to_f32(&[111])],
+        "aborted queued PCM and rejected wake handoff must not reach inference"
+    );
+}
