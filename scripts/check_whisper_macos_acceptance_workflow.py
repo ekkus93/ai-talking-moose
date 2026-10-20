@@ -63,8 +63,29 @@ def check_workflow(text: str) -> None:
     # Protect both *successful* real-model transcription runs: no bare CLI
     # run, unprotected repeat, socket-only probe, or JSON assertion without
     # a required enforced network boundary can count as offline acceptance.
+    # Inspect the actual executable heredoc body, not arbitrary text.
+    # A comment or disconnected copy of "(deny network*)" must not make a
+    # network-permissive Seatbelt profile pass this policy check.
+    profile_start = re.compile(
+        r"""^[ \t]*cat > "\$sandbox_profile" <<'SEATBELT'[ \t]*$""",
+        flags=re.MULTILINE,
+    )
+    starts = list(profile_start.finditer(text))
+    if len(starts) != 1:
+        raise ValueError("macOS Seatbelt profile must be defined exactly once")
+    remainder = text[starts[0].end() :]
+    profile_end = re.search(r"^[ \t]*SEATBELT[ \t]*$", remainder, flags=re.MULTILINE)
+    if profile_end is None:
+        raise ValueError("macOS Seatbelt profile heredoc is not terminated")
+    profile_lines = [
+        line.strip()
+        for line in remainder[: profile_end.start()].splitlines()
+        if line.strip()
+    ]
+    if profile_lines != ["(version 1)", "(allow default)", "(deny network*)"]:
+        raise ValueError("macOS Seatbelt profile must enforce network denial")
+
     required_sandbox = {
-        "macOS Seatbelt profile": "(deny network*)",
         "explicit sandbox availability": "command -v sandbox-exec",
         "preflight under sandbox": 'sandbox-exec -f "$sandbox_profile" python3 -c',
         "permission-denied preflight": "errno.EPERM, errno.EACCES",

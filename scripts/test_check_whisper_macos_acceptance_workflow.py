@@ -23,6 +23,33 @@ class MacWhisperNetworkPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "macOS Seatbelt profile"):
             check_workflow(changed)
 
+    def test_comment_cannot_masquerade_as_network_denial(self) -> None:
+        # A raw substring search would accept this permissive policy.
+        original = "          (deny network*)\n"
+        self.assertIn(original, self.workflow)
+        changed = self.workflow.replace(
+            original, "          (allow network*)\n          # (deny network*)\n", 1
+        )
+        with self.assertRaisesRegex(ValueError, "macOS Seatbelt profile"):
+            check_workflow(changed)
+
+    def test_decoy_network_denial_outside_policy_is_rejected(self) -> None:
+        original = "          (deny network*)\n"
+        self.assertIn(original, self.workflow)
+        changed = self.workflow.replace(original, "          (allow network*)\n", 1)
+        changed = changed.replace(
+            "          SEATBELT\n", "          SEATBELT\n          # (deny network*)\n", 1
+        )
+        with self.assertRaisesRegex(ValueError, "macOS Seatbelt profile"):
+            check_workflow(changed)
+
+    def test_duplicate_seatbelt_policy_declaration_is_rejected(self) -> None:
+        original = """          cat > "$sandbox_profile" <<'SEATBELT'"""
+        self.assertIn(original, self.workflow)
+        changed = self.workflow.replace(original, original + "\n" + original, 1)
+        with self.assertRaisesRegex(ValueError, "macOS Seatbelt profile"):
+            check_workflow(changed)
+
     def test_unprotected_primary_transcription_is_rejected(self) -> None:
         sandboxed = 'sandbox-exec -f "$sandbox_profile" "$binary" transcribe '
         self.assertEqual(self.workflow.count(sandboxed), 2)
