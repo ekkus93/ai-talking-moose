@@ -350,3 +350,64 @@ async fn whisper_graceful_stop_with_malformed_queued_pcm_fails_without_final() {
         }]
     ));
 }
+
+#[tokio::test]
+async fn whisper_abort_discards_malformed_queued_pcm_without_audio_error() {
+    let state = Arc::new(FakeState::default());
+    let gate = Arc::new(PushGate::default());
+    *state.push_gate.lock().unwrap() = Some(gate.clone());
+    state
+        .updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Partial {
+            segment_id: 101,
+            text: "retired partial".to_string(),
+            latency_ms: 1,
+        });
+    state
+        .stop_updates
+        .lock()
+        .unwrap()
+        .push(StreamingTranscriptUpdate::Final {
+            segment_id: 101,
+            text: "retired final".to_string(),
+            latency_ms: 2,
+        });
+
+    let (callback, events) = callback_events();
+    let worker_state = state.clone();
+    let mut pipeline = LocalAsrPipeline::start_architecture(
+        LocalAsrArchitecture::WhisperSmall,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        move || {
+            Ok(Box::new(FakeEngine {
+                state: worker_state,
+                sample_rate: LOCAL_ASR_INPUT_SAMPLE_RATE_HZ,
+            }) as Box<dyn PipelineEngine>)
+        },
+        callback,
+        WORKER_STARTUP_TIMEOUT,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let sender = pipeline.test_sender();
+    sender.try_send(vec![0, 0]).unwrap();
+    gate.wait_until_entered();
+    // A retired generation must discard queued input before PCM decoding;
+    // malformed audio may be reported for graceful stop, but not after abort.
+    sender.try_send(vec![1, 2, 3]).unwrap();
+    sender.try_send(vec![0, 0]).unwrap();
+    pipeline.request_abort();
+    *state.push_gate.lock().unwrap() = None;
+    gate.release();
+
+    pipeline.stop_and_join().await.unwrap();
+    assert_eq!(state.pushes.load(Ordering::SeqCst), 1);
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+    assert!(!pipeline.is_running());
+    assert!(pipeline.diagnostics().last_error.is_none());
+    assert!(events.lock().unwrap().is_empty(), "retired Whisper generation must not emit transcripts or errors");
+}
