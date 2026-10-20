@@ -203,3 +203,53 @@ async fn whisper_empty_pcm_does_not_infer_or_reorder_following_audio() {
         &[AudioResampler::i16_to_f32(&[i16::MIN, i16::MAX])]
     );
 }
+
+#[tokio::test]
+async fn whisper_full_wake_handoff_can_retry_after_queue_drains_without_duplication() {
+    let state = Arc::new(FakeState::default());
+    state.block_push.store(true, Ordering::SeqCst);
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
+    let sender = pipeline.test_sender();
+
+    sender.try_send(vec![0, 0]).unwrap();
+    wait_until(|| state.pushes.load(Ordering::SeqCst) == 1);
+    for _ in 0..WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS {
+        sender.try_send(vec![0, 0]).unwrap();
+    }
+
+    let handoff_samples = vec![1234, -2345, 3456];
+    let handoff =
+        WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, handoff_samples.clone())
+            .unwrap();
+    let error = pipeline.prime_wake_handoff(handoff.clone()).unwrap_err();
+    assert_eq!(error.kind, AsrErrorKind::AudioInput);
+    assert_eq!(
+        pipeline.diagnostics().queue_depth,
+        WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
+        "a rejected wake handoff must not occupy a queue slot"
+    );
+
+    state.block_push.store(false, Ordering::SeqCst);
+    wait_until(|| pipeline.diagnostics().queue_depth == 0);
+    pipeline.prime_wake_handoff(handoff).unwrap();
+    pipeline.stop_and_join().await.unwrap();
+
+    let received = state.received_pcm.lock().unwrap();
+    let expected_pcm = AudioResampler::i16_to_f32(&handoff_samples);
+    assert_eq!(received.len(), WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS + 2);
+    assert_eq!(
+        received.last().map(Vec::as_slice),
+        Some(expected_pcm.as_slice()),
+        "the accepted retry must retain its exact sample order"
+    );
+    assert_eq!(
+        received
+            .iter()
+            .filter(|pcm| pcm.as_slice() == expected_pcm.as_slice())
+            .count(),
+        1,
+        "a rejected handoff must not be replayed or duplicated"
+    );
+    assert_eq!(state.stops.load(Ordering::SeqCst), 1);
+}
