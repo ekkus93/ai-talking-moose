@@ -332,8 +332,7 @@ async fn whisper_wake_handoff_after_abort_is_rejected_without_replaying_pcm() {
     // A retired generation must reject new wake audio and discard queued
     // PCM, even when the native inference thread has not yet returned.
     pipeline.request_abort();
-    let handoff =
-        WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, vec![333]).unwrap();
+    let handoff = WakeCommandHandoffAudio::new(LOCAL_ASR_INPUT_SAMPLE_RATE_HZ, vec![333]).unwrap();
     let error = pipeline.prime_wake_handoff(handoff).unwrap_err();
     assert_eq!(error.kind, AsrErrorKind::InvalidState);
     assert!(error.retryable);
