@@ -409,5 +409,8 @@ async fn whisper_abort_discards_malformed_queued_pcm_without_audio_error() {
     assert_eq!(state.stops.load(Ordering::SeqCst), 1);
     assert!(!pipeline.is_running());
     assert!(pipeline.diagnostics().last_error.is_none());
-    assert!(events.lock().unwrap().is_empty(), "retired Whisper generation must not emit transcripts or errors");
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "retired Whisper generation must not emit transcripts or errors"
+    );
 }
