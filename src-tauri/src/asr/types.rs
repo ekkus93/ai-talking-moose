@@ -179,6 +179,33 @@ mod tests {
     }
 
     #[test]
+    fn invalid_serialized_asr_modes_fail_closed_without_provider_fallback() {
+        for invalid in [
+            "",
+            "whisper_small ",
+            "WhisperSmall",
+            "gemini_live_audio ",
+            "local_asr",
+            "moonshine_unknown",
+        ] {
+            let encoded = serde_json::to_string(invalid).unwrap();
+            assert!(
+                serde_json::from_str::<AsrMode>(&encoded).is_err(),
+                "unknown ASR mode {invalid:?} must not silently select Whisper or cloud audio"
+            );
+        }
+        assert!(serde_json::from_str::<AsrMode>("null").is_err());
+        assert_eq!(
+            serde_json::from_str::<AsrMode>(r#""whisper_small""#).unwrap(),
+            AsrMode::WhisperSmall
+        );
+        assert_eq!(
+            serde_json::from_str::<AsrMode>(r#""gemini_live_audio""#).unwrap(),
+            AsrMode::GeminiLiveAudio
+        );
+    }
+
+    #[test]
     fn asr_mode_has_stable_serialized_names() {
         assert_eq!(
             serde_json::to_string(&AsrMode::MoonshineTinyStreaming).unwrap(),
