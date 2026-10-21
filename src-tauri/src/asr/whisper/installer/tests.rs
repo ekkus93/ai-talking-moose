@@ -624,10 +624,15 @@ async fn cancelled_install_waiting_for_concurrent_download_returns_without_side_
     let mut second_cancellation = cancellation.clone();
     let second = tokio::spawn(async move {
         started_tx.send(()).unwrap();
-        second_installer.install(&mut second_cancellation, &None).await
+        second_installer
+            .install(&mut second_cancellation, &None)
+            .await
     });
     started_rx.await.unwrap();
-    assert!(!second.is_finished(), "the other download still holds the model lock");
+    assert!(
+        !second.is_finished(),
+        "the other download still holds the model lock"
+    );
 
     cancellation.cancel();
     let result = tokio::time::timeout(std::time::Duration::from_secs(2), second)
@@ -638,7 +643,10 @@ async fn cancelled_install_waiting_for_concurrent_download_returns_without_side_
         result.unwrap_err().kind,
         WhisperModelInstallErrorKind::Cancelled
     );
-    assert!(!first.is_finished(), "cancelling the waiter must not abort the first install");
+    assert!(
+        !first.is_finished(),
+        "cancelling the waiter must not abort the first install"
+    );
     assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
     assert!(!installer.model_path().exists());
     assert!(!installer.marker_path().exists());
@@ -649,7 +657,10 @@ async fn cancelled_install_waiting_for_concurrent_download_returns_without_side_
         .expect("the first download should complete after release")
         .unwrap()
         .unwrap();
-    assert_eq!(outcome.disposition, WhisperModelInstallDisposition::Installed);
+    assert_eq!(
+        outcome.disposition,
+        WhisperModelInstallDisposition::Installed
+    );
     assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
     assert!(installer.verify_installed().unwrap().is_some());
 }
