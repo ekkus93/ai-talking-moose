@@ -8,6 +8,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[path = "tests/io_failures.rs"]
 mod io_failures;
 
+#[cfg(unix)]
+#[path = "tests/marker_symlink.rs"]
+mod marker_symlink;
+
 #[derive(Clone)]
 enum FakeTransportBehavior {
     Complete,
