@@ -109,6 +109,31 @@ def check_workflow(text: str) -> None:
             raise ValueError(f"Mac offline qualification missing {description}: {snippet}")
     if text.count("--require-network-denied") != 2:
         raise ValueError("Only the two sandboxed genuine-model transcriptions may require denial")
+
+    # Match the executable shell commands, not arbitrary substrings. A
+    # commented copy of a sandboxed command must never authorize an actual
+    # unprotected model-backed transcription. Keep the two intentionally
+    # unprotected *negative* missing/corrupt-model probes fail-closed.
+    expected_transcriptions = {
+        'if "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/missing-model.json" > "$root/missing-model.log" 2>&1; then',
+        'if "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/corrupt-model.json" > "$root/corrupt-model.log" 2>&1; then',
+        'if ! sandbox-exec -f "$sandbox_profile" "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe.json" --require-network-denied > "$native_log" 2>&1; then',
+        'if ! sandbox-exec -f "$sandbox_profile" "$binary" transcribe "$model" third_party/whisper.cpp/samples/jfk.wav "$reports/transcribe-repeat.json" --require-network-denied > "$repeat_log" 2>&1; then',
+    }
+    active_transcriptions = [
+        line.strip()
+        for line in text.splitlines()
+        if '"$binary" transcribe ' in line and not line.lstrip().startswith("#")
+    ]
+    if (
+        len(active_transcriptions) != len(expected_transcriptions)
+        or set(active_transcriptions) != expected_transcriptions
+    ):
+        raise ValueError(
+            "macOS Whisper active transcription commands must preserve the "
+            "two guarded negative probes and two Seatbelt-protected real runs"
+        )
+
     if re.search(r"^\s*path:.*(?:ggml-small[.]bin|/models/)", text, re.MULTILINE):
         raise ValueError("Mac acceptance must not upload model weights")
 

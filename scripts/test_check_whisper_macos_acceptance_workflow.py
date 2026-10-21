@@ -81,5 +81,61 @@ class MacWhisperNetworkPolicyTests(unittest.TestCase):
             check_workflow(changed)
 
 
+    def test_commented_sandbox_command_cannot_mask_unprotected_real_inference(self) -> None:
+        for report in ("transcribe.json", "transcribe-repeat.json"):
+            with self.subTest(report=report):
+                original = next(
+                    line for line in self.workflow.splitlines()
+                    if "if ! sandbox-exec" in line and f'"$reports/{report}"' in line
+                )
+                bare = original.replace('sandbox-exec -f "$sandbox_profile" ', "", 1)
+                bare = bare.replace(" --require-network-denied", "", 1)
+                # The decoy preserves all required raw substrings and the
+                # original flag count, but is only a shell comment.
+                changed = self.workflow.replace(
+                    original, bare + "\n          # " + original.strip(), 1
+                )
+                with self.assertRaisesRegex(ValueError, "active transcription"):
+                    check_workflow(changed)
+
+    def test_extra_unprotected_real_inference_fails_closed(self) -> None:
+        marker = '          "$binary" delete "$model" "$reports/delete.json"'
+        self.assertIn(marker, self.workflow)
+        extra = (
+            '          "$binary" transcribe "$model" '
+            'third_party/whisper.cpp/samples/jfk.wav "$reports/extra.json"'
+        )
+        changed = self.workflow.replace(marker, extra + "\n" + marker, 1)
+        with self.assertRaisesRegex(ValueError, "active transcription"):
+            check_workflow(changed)
+
+    def test_missing_model_negative_probe_must_remain_guarded(self) -> None:
+        original = next(
+            line for line in self.workflow.splitlines()
+            if 'if "$binary" transcribe ' in line and "missing-model.json" in line
+        )
+        changed = self.workflow.replace(original, original.replace("if ", "", 1), 1)
+        with self.assertRaisesRegex(ValueError, "active transcription"):
+            check_workflow(changed)
+
+    def test_policy_changes_remain_classified_as_ci_plumbing(self) -> None:
+        ci = (WORKFLOW.parents[2] / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+        classifier = next(
+            line for line in ci.splitlines()
+            if ".github/workflows/*|.github/actions/*|" in line
+        )
+        for path in (
+            "scripts/check_whisper_macos_acceptance_workflow.py",
+            "scripts/test_check_whisper_macos_acceptance_workflow.py",
+        ):
+            self.assertIn(path, classifier)
+        self.assertIn(
+            "python3 -m unittest scripts.test_check_whisper_macos_acceptance_workflow",
+            ci,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
