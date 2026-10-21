@@ -20,6 +20,23 @@ WORKFLOW = (
 
 
 def check_workflow(text: str) -> None:
+
+    # The 488 MB weight-backed acceptance is opt-in. Checking a few known
+    # event names is insufficient: issue_comment, workflow_call, inline YAML
+    # sequences, and new GitHub events could silently make it automatic.
+    # Require exactly one top-level mapping with one bare manual trigger.
+    on_headers = list(re.finditer(r"(?m)^on:[ \\t]*(?:#[^\\r\\n]*)?$", text))
+    if len(on_headers) != 1:
+        raise ValueError("Mac real-model workflow must be manual-only (on mapping)")
+    trigger_entries = []
+    for line in text[on_headers[0].end() :].splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line[0] not in (" ", "\\t"):
+            break
+        trigger_entries.append(line.strip())
+    if trigger_entries != ["workflow_dispatch:"]:
+        raise ValueError("Mac real-model workflow must be manual-only (workflow_dispatch)")
     required = {
         "manual dispatch": "workflow_dispatch:",
         "arm64 target": "arch: arm64",
