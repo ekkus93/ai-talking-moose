@@ -221,6 +221,48 @@ async fn verified_install_is_preserved_and_failed_replacement_transport_is_skipp
 }
 
 #[tokio::test]
+async fn verified_model_remains_usable_with_zero_free_disk_without_network() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let initial_transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (initial_installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        initial_transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    initial_installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    let marker = fs::read(initial_installer.marker_path()).unwrap();
+
+    // Reusing a verified model must not probe free space or attempt a download.
+    let offline_transport = Arc::new(FakeTransport::new(
+        Vec::new(),
+        FakeTransportBehavior::FailBefore(WhisperModelInstallError::network()),
+    ));
+    let (reuse_installer, disk_space) =
+        fixture_installer(temp.path(), FIXTURE_MODEL, offline_transport.clone(), Some(0));
+    let outcome = reuse_installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        outcome.disposition,
+        WhisperModelInstallDisposition::AlreadyInstalled
+    );
+    assert_eq!(disk_space.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(offline_transport.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(initial_transport.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fs::read(reuse_installer.model_path()).unwrap(), FIXTURE_MODEL);
+    assert_eq!(fs::read(reuse_installer.marker_path()).unwrap(), marker);
+}
+
+#[tokio::test]
 async fn insufficient_space_fails_before_transport_starts() {
     let temp = tempfile::TempDir::new().unwrap();
     let transport = Arc::new(FakeTransport::new(
