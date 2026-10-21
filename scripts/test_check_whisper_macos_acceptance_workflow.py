@@ -17,6 +17,19 @@ class MacWhisperNetworkPolicyTests(unittest.TestCase):
     def test_current_manual_workflow_preserves_sandbox_contract(self) -> None:
         check_workflow(self.workflow)
 
+    def test_architectures_cannot_swap_runner_families(self) -> None:
+        arm = "          - arch: arm64\\n            runner: macos-15\\n"
+        intel = "          - arch: x86_64\\n            runner: macos-15-intel\\n"
+        self.assertIn(arm, self.workflow)
+        self.assertIn(intel, self.workflow)
+        swapped = self.workflow.replace(
+            arm, arm.replace("runner: macos-15\\n", "runner: macos-15-intel\\n"), 1
+        ).replace(
+            intel, intel.replace("runner: macos-15-intel\\n", "runner: macos-15\\n"), 1
+        )
+        with self.assertRaisesRegex(ValueError, "architecture-to-runner"):
+            check_workflow(swapped)
+
     def test_missing_seatbelt_network_deny_fails_closed(self) -> None:
         changed = self.workflow.replace("(deny network*)", "(allow network*)", 1)
         self.assertNotEqual(changed, self.workflow)
