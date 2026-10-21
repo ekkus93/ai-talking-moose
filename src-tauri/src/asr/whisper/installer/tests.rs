@@ -244,8 +244,12 @@ async fn verified_model_remains_usable_with_zero_free_disk_without_network() {
         Vec::new(),
         FakeTransportBehavior::FailBefore(WhisperModelInstallError::network()),
     ));
-    let (reuse_installer, disk_space) =
-        fixture_installer(temp.path(), FIXTURE_MODEL, offline_transport.clone(), Some(0));
+    let (reuse_installer, disk_space) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        offline_transport.clone(),
+        Some(0),
+    );
     let outcome = reuse_installer
         .install(&mut WhisperModelInstallCancellation::default(), &None)
         .await
@@ -258,7 +262,10 @@ async fn verified_model_remains_usable_with_zero_free_disk_without_network() {
     assert_eq!(disk_space.calls.load(Ordering::SeqCst), 0);
     assert_eq!(offline_transport.calls.load(Ordering::SeqCst), 0);
     assert_eq!(initial_transport.calls.load(Ordering::SeqCst), 1);
-    assert_eq!(fs::read(reuse_installer.model_path()).unwrap(), FIXTURE_MODEL);
+    assert_eq!(
+        fs::read(reuse_installer.model_path()).unwrap(),
+        FIXTURE_MODEL
+    );
     assert_eq!(fs::read(reuse_installer.marker_path()).unwrap(), marker);
 }
 
