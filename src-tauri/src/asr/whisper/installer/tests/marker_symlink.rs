@@ -76,7 +76,10 @@ async fn reinstall_replaces_untrusted_marker_symlink_without_touching_external_d
         .install(&mut WhisperModelInstallCancellation::default(), &None)
         .await
         .unwrap();
-    assert_eq!(outcome.disposition, WhisperModelInstallDisposition::Installed);
+    assert_eq!(
+        outcome.disposition,
+        WhisperModelInstallDisposition::Installed
+    );
     assert_eq!(transport.calls.load(Ordering::SeqCst), 2);
     assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
     assert!(fs::symlink_metadata(installer.marker_path())
