@@ -263,10 +263,12 @@ impl AppSettings {
     /// without an ASR selector migrate to Gemini Live audio because that was their only path.
     pub fn from_persisted_json(json: &str) -> Result<(Self, bool), PersistedSettingsError> {
         let mut value: serde_json::Value = serde_json::from_str(json)?;
-        if let Some(persisted_version) = value
-            .get("settings_version")
-            .and_then(serde_json::Value::as_u64)
-        {
+        // Reject malformed versions before decoding or rewriting any legacy
+        // ASR selection. Never include untrusted persisted values in errors.
+        if let Some(version) = value.get("settings_version") {
+            let persisted_version = version.as_u64().ok_or_else(|| {
+                PersistedSettingsError::Invalid("unsupported settings version".to_string())
+            })?;
             if persisted_version > u64::from(CURRENT_SETTINGS_VERSION) {
                 return Err(PersistedSettingsError::FutureVersion {
                     found: persisted_version,

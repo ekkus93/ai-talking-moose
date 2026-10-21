@@ -1,6 +1,7 @@
 mod app_state_runtime;
 mod settings_migration;
 mod settings_migration_invalid_asr;
+mod settings_migration_invalid_version;
 mod talk_routing;
 mod provider_secret_isolation;
 mod text_provider_no_fallback;
