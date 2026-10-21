@@ -89,3 +89,49 @@ async fn reinstall_replaces_untrusted_marker_symlink_without_touching_external_d
     assert!(installer.verify_installed().unwrap().is_some());
     assert_eq!(fs::read(&outside_marker).unwrap(), external_bytes);
 }
+
+#[tokio::test]
+async fn reinstall_replaces_untrusted_model_symlink_without_touching_external_data() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let transport = Arc::new(FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    ));
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    assert!(installer.verify_installed().unwrap().is_some());
+
+    let external_model = temp.path().join("unrelated-model.bin");
+    let external_bytes = b"external model data must remain unchanged";
+    fs::write(&external_model, external_bytes).unwrap();
+    fs::remove_file(installer.model_path()).unwrap();
+    symlink(&external_model, installer.model_path()).unwrap();
+
+    assert_eq!(
+        installer.verify_installed().unwrap_err().kind,
+        WhisperModelInstallErrorKind::CorruptInstall
+    );
+    assert_eq!(fs::read(&external_model).unwrap(), external_bytes);
+
+    let result = installer
+        .install(&mut WhisperModelInstallCancellation::default(), &None)
+        .await
+        .unwrap();
+    assert_eq!(result.disposition, WhisperModelInstallDisposition::Installed);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 2);
+    assert!(fs::symlink_metadata(installer.model_path())
+        .unwrap()
+        .file_type()
+        .is_file());
+    assert_eq!(fs::read(installer.model_path()).unwrap(), FIXTURE_MODEL);
+    assert!(installer.verify_installed().unwrap().is_some());
+    assert_eq!(fs::read(&external_model).unwrap(), external_bytes);
+}
