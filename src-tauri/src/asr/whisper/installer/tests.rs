@@ -588,6 +588,63 @@ async fn concurrent_install_calls_download_and_promote_only_once() {
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
 }
 
+/// Deletion must serialize with an active model download, not just with a
+/// previously verified model lease. It must never see or leave half-promoted
+/// weights or a stale verification marker.
+#[tokio::test]
+async fn delete_queued_during_download_waits_for_promotion_then_cleans_model_and_marker() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let mut fake = FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    );
+    fake.gate = Some((entered.clone(), release.clone()));
+    let transport = Arc::new(fake);
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    let installer = Arc::new(installer);
+
+    let installing = installer.clone();
+    let install_task = tokio::spawn(async move {
+        installing
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+    });
+    entered.notified().await;
+
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let deleting = installer.clone();
+    let delete_task = tokio::spawn(async move {
+        let _ = started_tx.send(());
+        deleting.delete().await
+    });
+    started_rx.await.unwrap();
+
+    assert!(!delete_task.is_finished(), "delete must wait for the download lock");
+    assert!(!installer.model_path().exists());
+    assert!(!installer.marker_path().exists());
+
+    release.notify_one();
+    let installed = install_task.await.unwrap().unwrap();
+    assert_eq!(installed.disposition, WhisperModelInstallDisposition::Installed);
+    tokio::time::timeout(std::time::Duration::from_secs(5), delete_task)
+        .await
+        .expect("queued delete must complete after download")
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    assert!(!installer.model_path().exists());
+    assert!(!installer.marker_path().exists());
+    assert!(installer.verify_installed().unwrap().is_none());
+}
+
 #[test]
 fn ensure_install_root_creates_clean_profile_directory() {
     let temp = tempfile::TempDir::new().unwrap();
