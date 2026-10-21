@@ -143,6 +143,71 @@ class MacWhisperNetworkPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "active transcription"):
             check_workflow(changed)
 
+    def test_native_whisper_cannot_be_skipped_by_ci_checkout(self) -> None:
+        import re
+
+        ci = (WORKFLOW.parents[2] / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+        for job in ("rust-clippy", "rust-tests", "backend-contract", "canonical-check-all"):
+            with self.subTest(job=job):
+                match = re.search(
+                    rf"(?ms)^  {re.escape(job)}:\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)",
+                    ci,
+                )
+                self.assertIsNotNone(match, f"missing CI job {job}")
+                section = match.group(1)
+                self.assertRegex(
+                    section,
+                    r'(?m)^    env:\n      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"        ci = (WORKFLOW.parents[2] / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+        marker = "\n  canonical-check-all:\n"
+        self.assertEqual(ci.count(marker), 1)
+        canonical = ci.split(marker, 1)[1]
+        for required in (
+            "bash scripts/prepare_ubuntu_apt.sh",
+            "components: rustfmt, clippy",
+            "run: npm ci",
+            'CARGO_BUILD_JOBS: "2"',
+            "run: npm run check:all",
+            "python3 scripts/check_whisper_macos_acceptance_workflow.py",
+            "python3 -m unittest scripts.test_check_whisper_macos_acceptance_workflow",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, canonical)
+
+    def test_policy_changes_remain_classified_as_ci_plumbing(self) -> None:
+        ci = (WORKFLOW.parents[2] / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+        classifier = next(
+            line for line in ci.splitlines()
+            if ".github/workflows/*|.github/actions/*|" in line
+        )
+        for path in (
+            "scripts/check_whisper_macos_acceptance_workflow.py",
+            "scripts/test_check_whisper_macos_acceptance_workflow.py",
+        ):
+            self.assertIn(path, classifier)
+        self.assertIn(
+            "python3 -m unittest scripts.test_check_whisper_macos_acceptance_workflow",
+            ci,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+,
+                )
+                self.assertIn(
+                    "      - name: Check out repository\n"
+                    "        uses: actions/checkout@v7\n"
+                    "        with:\n"
+                    "          submodules: true\n",
+                    section,
+                )
+
     def test_full_validation_executes_real_canonical_checks(self) -> None:
         ci = (WORKFLOW.parents[2] / ".github/workflows/ci.yml").read_text(
             encoding="utf-8"

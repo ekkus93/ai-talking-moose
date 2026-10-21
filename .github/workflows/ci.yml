@@ -329,10 +329,14 @@ jobs:
     needs: classify
     if: needs.classify.outputs.rust_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
+    env:
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
     timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Install Linux build dependencies
         run: |
           bash scripts/prepare_ubuntu_apt.sh
@@ -371,10 +375,14 @@ jobs:
     needs: classify
     if: needs.classify.outputs.rust_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
+    env:
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
     timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Install Linux build dependencies
         run: |
           bash scripts/prepare_ubuntu_apt.sh
@@ -403,10 +411,14 @@ jobs:
     needs: classify
     if: needs.classify.outputs.contract_needed == 'true' && needs.classify.outputs.full_validation != 'true'
     runs-on: ubuntu-latest
+    env:
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
     timeout-minutes: 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -640,10 +652,14 @@ jobs:
     needs: classify
     if: needs.classify.outputs.full_validation == 'true'
     runs-on: ubuntu-latest
+    env:
+      TALKING_MOOSE_REQUIRE_WHISPER_NATIVE: "1"
     timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
