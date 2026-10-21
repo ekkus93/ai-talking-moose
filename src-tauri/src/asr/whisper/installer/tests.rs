@@ -626,13 +626,19 @@ async fn delete_queued_during_download_waits_for_promotion_then_cleans_model_and
     });
     started_rx.await.unwrap();
 
-    assert!(!delete_task.is_finished(), "delete must wait for the download lock");
+    assert!(
+        !delete_task.is_finished(),
+        "delete must wait for the download lock"
+    );
     assert!(!installer.model_path().exists());
     assert!(!installer.marker_path().exists());
 
     release.notify_one();
     let installed = install_task.await.unwrap().unwrap();
-    assert_eq!(installed.disposition, WhisperModelInstallDisposition::Installed);
+    assert_eq!(
+        installed.disposition,
+        WhisperModelInstallDisposition::Installed
+    );
     tokio::time::timeout(std::time::Duration::from_secs(5), delete_task)
         .await
         .expect("queued delete must complete after download")
