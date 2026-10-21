@@ -94,7 +94,7 @@ class MacWhisperNetworkPolicyTests(unittest.TestCase):
         self.assertIn(original, self.workflow)
         changed = self.workflow.replace(
             original,
-            '          if False:\\n              ' + original.strip(),
+            '          if False:\n              ' + original.strip(),
             1,
         )
         with self.assertRaisesRegex(ValueError, "executable top-level"):
