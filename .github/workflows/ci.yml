@@ -649,3 +649,35 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Install Linux build dependencies
+        run: |
+          bash scripts/prepare_ubuntu_apt.sh
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libasound2-dev \
+            libayatana-appindicator3-dev libclang-dev librsvg2-dev \
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Generate app icons
+        run: python3 scripts/generate_app_icons.py
+      - name: Run canonical frontend, Rust and generated-contract checks
+        env:
+          CARGO_BUILD_JOBS: "2"
+        run: npm run check:all
+      - name: Qualify macOS Whisper acceptance policy and negative tests
+        run: |
+          python3 scripts/check_whisper_macos_acceptance_workflow.py
+          python3 -m unittest scripts.test_check_whisper_macos_acceptance_workflow
