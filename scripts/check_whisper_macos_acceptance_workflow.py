@@ -8,6 +8,7 @@ submodule/provenance checks, or substitution of compile-only for inference.
 
 from __future__ import annotations
 
+import ast
 import re
 import textwrap
 from pathlib import Path
@@ -154,6 +155,35 @@ def check_workflow(text: str) -> None:
         raise ValueError("Mac acceptance requires executable JSON assertions")
     for index, source in enumerate(blocks, start=1):
         compile(source, f"mac-whisper-acceptance-{index}", "exec")
+
+    # The raw-workflow string checks above are necessary but not sufficient:
+    # comments, string literals, and unexecuted nested blocks can contain
+    # matching text without checking a single inference report. All four
+    # attestations must be executable, top-level assertions in ONE program.
+    required_proofs = {
+        "primary network requirement": 'assert transcript["network_denied_required"] is True',
+        "primary denied probe": 'assert transcript["network_denial_probe_passed"] is True',
+        "repeated network requirement": 'assert repeated["network_denied_required"] is True',
+        "repeated denied probe": 'assert repeated["network_denial_probe_passed"] is True',
+    }
+    expected_nodes = {
+        label: ast.dump(ast.parse(statement).body[0], include_attributes=False)
+        for label, statement in required_proofs.items()
+    }
+    for source in blocks:
+        module = ast.parse(source)
+        top_level_assertions = {
+            ast.dump(node, include_attributes=False)
+            for node in module.body
+            if isinstance(node, ast.Assert)
+        }
+        if set(expected_nodes.values()).issubset(top_level_assertions):
+            break
+    else:
+        raise ValueError(
+            "macOS offline qualification requires executable top-level "
+            "network-denial assertions for both independent inference reports"
+        )
 
 
 

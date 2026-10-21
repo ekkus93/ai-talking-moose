@@ -75,6 +75,31 @@ class MacWhisperNetworkPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "first probe passed"):
             check_workflow(changed)
 
+    def test_commented_network_denial_assertion_is_not_evidence(self) -> None:
+        original = '          assert transcript["network_denial_probe_passed"] is True'
+        self.assertIn(original, self.workflow)
+        changed = self.workflow.replace(original, '          # ' + original.strip(), 1)
+        with self.assertRaisesRegex(ValueError, "executable top-level"):
+            check_workflow(changed)
+
+    def test_literal_string_cannot_masquerade_as_attestation(self) -> None:
+        original = '          assert repeated["network_denied_required"] is True'
+        self.assertIn(original, self.workflow)
+        changed = self.workflow.replace(original, '          ' + repr(original.strip()), 1)
+        with self.assertRaisesRegex(ValueError, "executable top-level"):
+            check_workflow(changed)
+
+    def test_unreachable_conditional_assertion_is_not_evidence(self) -> None:
+        original = '          assert repeated["network_denial_probe_passed"] is True'
+        self.assertIn(original, self.workflow)
+        changed = self.workflow.replace(
+            original,
+            '          if False:\\n              ' + original.strip(),
+            1,
+        )
+        with self.assertRaisesRegex(ValueError, "executable top-level"):
+            check_workflow(changed)
+
     def test_linux_namespace_substitution_is_rejected(self) -> None:
         changed = self.workflow + "\n# sudo unshare --net\n"
         with self.assertRaisesRegex(ValueError, "Linux namespace-based"):
