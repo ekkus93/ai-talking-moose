@@ -60,7 +60,7 @@ def check_workflow(text: str) -> None:
     # Merely finding both runner names is insufficient: swapping the two
     # matrix runners would make each architecture execute on the wrong host.
     arch_runners = re.findall(
-        r"(?m)^[ \\t]*- arch: (arm64|x86_64)\\r?\\n[ \\t]+runner: ([a-z0-9-]+)[ \\t]*$",
+        r"(?m)^[ \t]*- arch: (arm64|x86_64)\r?\n[ \t]+runner: ([a-z0-9-]+)[ \t]*$",
         text,
     )
     if sorted(arch_runners) != sorted(
