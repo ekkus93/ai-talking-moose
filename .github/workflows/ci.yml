@@ -139,7 +139,7 @@ jobs:
                 fi
 
                 case "$path" in
-                  .github/workflows/*|.github/actions/*|scripts/run_backend_failure_matrix.sh|scripts/run_backend_stress_matrix.sh)
+                  .github/workflows/*|.github/actions/*|scripts/run_backend_failure_matrix.sh|scripts/run_backend_stress_matrix.sh|scripts/check_whisper_macos_acceptance_workflow.py|scripts/test_check_whisper_macos_acceptance_workflow.py)
                     is_ci=true
                     ci_needed=true
                     ;;
