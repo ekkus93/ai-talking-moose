@@ -18,18 +18,18 @@ class MacWhisperNetworkPolicyTests(unittest.TestCase):
         check_workflow(self.workflow)
 
     def test_real_model_gate_rejects_nonmanual_github_triggers(self) -> None:
-        original = "on:\\n  workflow_dispatch:\\n"
+        original = "on:\n  workflow_dispatch:\n"
         self.assertEqual(self.workflow.count(original), 1)
         mutations = {
-            "unrecognized event": "on:\\n  workflow_dispatch:\\n  issue_comment:\\n",
-            "reusable workflow": "on:\\n  workflow_dispatch:\\n  workflow_call:\\n",
-            "release event": "on:\\n  workflow_dispatch:\\n  release:\\n",
-            "inline trigger list": "on: [workflow_dispatch, push]\\n",
-            "sequence trigger list": "on:\\n  - workflow_dispatch\\n  - push\\n",
-            "duplicate mapping": "on:\\n  workflow_dispatch:\\non:\\n  push:\\n",
+            "unrecognized event": "on:\n  workflow_dispatch:\n  issue_comment:\n",
+            "reusable workflow": "on:\n  workflow_dispatch:\n  workflow_call:\n",
+            "release event": "on:\n  workflow_dispatch:\n  release:\n",
+            "inline trigger list": "on: [workflow_dispatch, push]\n",
+            "sequence trigger list": "on:\n  - workflow_dispatch\n  - push\n",
+            "duplicate mapping": "on:\n  workflow_dispatch:\non:\n  push:\n",
             "manual with implicit extra configuration": (
-                "on:\\n  workflow_dispatch:\\n    inputs:\\n"
-                "      source:\\n        type: string\\n"
+                "on:\n  workflow_dispatch:\n    inputs:\n"
+                "      source:\n        type: string\n"
             ),
         }
         for reason, replacement in mutations.items():
