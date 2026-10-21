@@ -588,6 +588,72 @@ async fn concurrent_install_calls_download_and_promote_only_once() {
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
 }
 
+/// Cancelling a second installer must work while an earlier download still
+/// owns the model lock. The cancelled waiter must not start network I/O or
+/// interfere with promotion of the first install.
+#[tokio::test]
+async fn cancelled_install_waiting_for_concurrent_download_returns_without_side_effects() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let mut fake = FakeTransport::new(
+        fixture_chunks(FIXTURE_MODEL),
+        FakeTransportBehavior::Complete,
+    );
+    fake.gate = Some((entered.clone(), release.clone()));
+    let transport = Arc::new(fake);
+    let (installer, _) = fixture_installer(
+        temp.path(),
+        FIXTURE_MODEL,
+        transport.clone(),
+        Some(FIXTURE_MODEL.len() as u64),
+    );
+    let installer = Arc::new(installer);
+
+    let first_installer = installer.clone();
+    let first = tokio::spawn(async move {
+        first_installer
+            .install(&mut WhisperModelInstallCancellation::default(), &None)
+            .await
+    });
+    entered.notified().await;
+
+    let cancellation = WhisperModelInstallCancellation::default();
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let second_installer = installer.clone();
+    let mut second_cancellation = cancellation.clone();
+    let second = tokio::spawn(async move {
+        started_tx.send(()).unwrap();
+        second_installer.install(&mut second_cancellation, &None).await
+    });
+    started_rx.await.unwrap();
+    assert!(!second.is_finished(), "the other download still holds the model lock");
+
+    cancellation.cancel();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), second)
+        .await
+        .expect("cancelled waiter must not wait for the active download")
+        .unwrap();
+    assert_eq!(
+        result.unwrap_err().kind,
+        WhisperModelInstallErrorKind::Cancelled
+    );
+    assert!(!first.is_finished(), "cancelling the waiter must not abort the first install");
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    assert!(!installer.model_path().exists());
+    assert!(!installer.marker_path().exists());
+
+    release.notify_one();
+    let outcome = tokio::time::timeout(std::time::Duration::from_secs(5), first)
+        .await
+        .expect("the first download should complete after release")
+        .unwrap()
+        .unwrap();
+    assert_eq!(outcome.disposition, WhisperModelInstallDisposition::Installed);
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    assert!(installer.verify_installed().unwrap().is_some());
+}
+
 /// Deletion must serialize with an active model download, not just with a
 /// previously verified model lease. It must never see or leave half-promoted
 /// weights or a stale verification marker.
