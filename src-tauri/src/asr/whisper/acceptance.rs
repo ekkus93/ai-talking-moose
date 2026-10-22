@@ -419,6 +419,10 @@ pub struct WhisperPipelineAcceptanceMetrics {
     pub average_cpu_utilization_percent: Option<f32>,
     pub peak_resident_memory_bytes: Option<u64>,
     pub nominal_dropped_chunks: u64,
+    /// Maximum measured queue depth during production-cadence PCM replay.
+    pub nominal_peak_queue_depth_chunks: usize,
+    /// Audio timeline position of the first rejected nominal 100 ms chunk.
+    pub first_nominal_drop_at_audio_ms: Option<u64>,
     pub overload_attempted_chunks: u64,
     pub overload_accepted_chunks: u64,
     pub overload_dropped_chunks: u64,
@@ -550,13 +554,20 @@ async fn production_pipeline_metrics(
         .map_err(|error| error.message)?;
 
     let mut nominal_dropped_chunks = 0_u64;
-    for chunk in samples.chunks(1_600) {
+    let mut nominal_peak_queue_depth_chunks = 0_usize;
+    let mut first_nominal_drop_at_audio_ms = None;
+    for (chunk_index, chunk) in samples.chunks(1_600).enumerate() {
         let accepted = pipeline
             .try_send_pcm_for_acceptance(pcm_f32_to_i16_le(chunk))
             .map_err(|error| error.message)?;
         if !accepted {
             nominal_dropped_chunks = nominal_dropped_chunks.saturating_add(1);
+            first_nominal_drop_at_audio_ms
+                .get_or_insert((chunk_index as u64).saturating_mul(100));
         }
+        // Observe the bounded queue without changing its backpressure policy.
+        nominal_peak_queue_depth_chunks =
+            nominal_peak_queue_depth_chunks.max(pipeline.diagnostics().queue_depth);
         // Feed at the production 100 ms cadence so nominal drop evidence is
         // meaningful rather than an artificial producer burst.
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -632,6 +643,8 @@ async fn production_pipeline_metrics(
         average_cpu_utilization_percent: diagnostics.average_cpu_utilization_percent,
         peak_resident_memory_bytes: diagnostics.peak_resident_memory_bytes,
         nominal_dropped_chunks,
+        nominal_peak_queue_depth_chunks,
+        first_nominal_drop_at_audio_ms,
         overload_attempted_chunks,
         overload_accepted_chunks,
         overload_dropped_chunks,
@@ -1020,6 +1033,8 @@ mod tests {
                 average_cpu_utilization_percent: None,
                 peak_resident_memory_bytes: None,
                 nominal_dropped_chunks: 0,
+                nominal_peak_queue_depth_chunks: 0,
+                first_nominal_drop_at_audio_ms: None,
                 overload_attempted_chunks: 0,
                 overload_accepted_chunks: 0,
                 overload_dropped_chunks: 0,
@@ -1051,6 +1066,11 @@ mod tests {
         let json = serde_json::to_value(report).unwrap();
         assert_eq!(json["transcript"]["text"], "hello");
         assert_eq!(json["pipeline"]["processed_audio_ms"], 7);
+        assert_eq!(json["pipeline"]["nominal_peak_queue_depth_chunks"], 0);
+        assert_eq!(
+            json["pipeline"]["first_nominal_drop_at_audio_ms"],
+            serde_json::Value::Null
+        );
         assert_eq!(
             json["pipeline"]["real_time_factor"],
             serde_json::Value::Null
@@ -1107,6 +1127,8 @@ mod tests {
                     average_cpu_utilization_percent: None,
                     peak_resident_memory_bytes: None,
                     nominal_dropped_chunks: 0,
+                    nominal_peak_queue_depth_chunks: 0,
+                    first_nominal_drop_at_audio_ms: None,
                     overload_attempted_chunks: 0,
                     overload_accepted_chunks: 0,
                     overload_dropped_chunks: 0,
