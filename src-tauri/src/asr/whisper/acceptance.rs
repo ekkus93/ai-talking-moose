@@ -562,8 +562,7 @@ async fn production_pipeline_metrics(
             .map_err(|error| error.message)?;
         if !accepted {
             nominal_dropped_chunks = nominal_dropped_chunks.saturating_add(1);
-            first_nominal_drop_at_audio_ms
-                .get_or_insert((chunk_index as u64).saturating_mul(100));
+            first_nominal_drop_at_audio_ms.get_or_insert((chunk_index as u64).saturating_mul(100));
         }
         // Observe the bounded queue without changing its backpressure policy.
         nominal_peak_queue_depth_chunks =
