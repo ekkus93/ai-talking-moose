@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "phase": "install",
+  "generated_at_utc": "2026-10-22T22:09:34.407283+00:00",
+  "git_sha": "6009d63c249db22b73f35af535d1d21ae879b084",
+  "model_id": "whisper-small-ggml",
+  "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+  "source_commit": "60c0be6ac8fa71b1a2ae2dd938a31a34a508e774",
+  "artifact_filename": "ggml-small.bin",
+  "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+  "expected_bytes": 487601967,
+  "installed_bytes": 487601967,
+  "disposition": "installed",
+  "magic": "lmgg",
+  "quantization": "f16",
+  "license": "MIT",
+  "production_installer_verified": true
+}
