@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "phase": "delete",
+  "removed": true,
+  "model_path": "/Users/runner/work/_temp/whisper-macos-real-arm64/models/whisper/whisper-small/ggml-small.bin"
+}
