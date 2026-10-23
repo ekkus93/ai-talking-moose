@@ -26,6 +26,12 @@ if find "$app_path/Contents" \
     \( -iname '*moonshine*' -o -name 'ggml-small.bin' \) -print -quit | grep -q .; then
   fail "bundle contains retired ASR runtime/resources or Whisper model weights"
 fi
+# Shipping native dependencies are statically linked. KittenTTS downloads its
+# separately verified runtime into user data; it is never a bundled framework.
+if find "$app_path/Contents" \
+    \( -iname '*.dylib' -o -iname '*.framework' \) -print -quit | grep -q .; then
+  fail "bundle contains an unexpected dynamic library or framework"
+fi
 
 info_plist="$app_path/Contents/Info.plist"
 [[ -f "$info_plist" ]] || fail "bundle is missing Contents/Info.plist"
@@ -35,6 +41,17 @@ case "$bundle_executable" in
 esac
 executable="$app_path/Contents/MacOS/$bundle_executable"
 [[ -f "$executable" && -x "$executable" ]] || fail "declared application executable is missing"
+
+# Acceptance bundles may contain helper executables. Verify every shipped
+# Mach-O, including helpers, so a safe main binary cannot conceal an unsafe
+# architecture, deployment target or developer-machine dependency elsewhere.
+binaries=("$executable")
+while IFS= read -r -d '' candidate; do
+  [[ "$candidate" == "$executable" ]] && continue
+  if file -b "$candidate" | grep -q 'Mach-O'; then
+    binaries+=("$candidate")
+  fi
+done < <(find "$app_path/Contents" -type f -print0)
 
 developer_load_paths() {
   local binary="$1"
@@ -49,7 +66,7 @@ developer_load_paths() {
   } | grep -E '/opt/homebrew|/usr/local|/Users/|/private/tmp|/var/folders' || true
 }
 
-for binary in "$executable"; do
+for binary in "${binaries[@]}"; do
   archs="$(lipo -archs "$binary")"
   [[ " $archs " == *" $arch "* ]] || fail "$binary does not contain architecture $arch"
   bad_load_paths="$(developer_load_paths "$binary")"
@@ -62,7 +79,7 @@ done
 # Every shipped Mach-O must remain compatible with the deployment floor pinned in
 # the application bundle configuration. Support both modern LC_BUILD_VERSION and
 # older LC_VERSION_MIN_MACOSX load commands.
-for binary in "$executable"; do
+for binary in "${binaries[@]}"; do
   min_version="$(otool -l "$binary" | awk '
     $1 == "cmd" && $2 == "LC_BUILD_VERSION" { build = 1; legacy = 0; next }
     $1 == "cmd" && $2 == "LC_VERSION_MIN_MACOSX" { legacy = 1; build = 0; next }
@@ -81,9 +98,11 @@ if parts(actual) > parts(maximum):
 PY2
 done
 
-if otool -L "$executable" | grep -Ei 'lib(moonshine|whisper|ggml[^/]*)\.dylib|libonnxruntime\.1\.23\.2\.dylib'; then
-  fail "executable loads retired ASR libraries or dynamically linked Whisper"
-fi
+for binary in "${binaries[@]}"; do
+  if otool -L "$binary" | grep -Ei 'lib(moonshine|whisper|ggml[^/]*)\.dylib|libonnxruntime\.1\.23\.2\.dylib'; then
+    fail "$binary loads retired ASR libraries or dynamically linked Whisper"
+  fi
+done
 
 notice_root="$app_path/Contents/Resources/native/macos/notices"
 [[ -f "$notice_root/TALKING_MOOSE_LICENSE" ]] || fail "Talking Moose project license is missing from bundle"

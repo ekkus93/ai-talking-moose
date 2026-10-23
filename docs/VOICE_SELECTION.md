@@ -55,6 +55,8 @@ The automated ASR proxy is defined in `docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITI
 
 The **historical 2026-09-14** acceptance workflow synthesized all eight Local KittenTTS voices and transcribed them with pinned Moonshine Tiny; its recorded WER/content-recall ranking selected an ASR-proxy candidate. This is not a current Whisper Small validation or human audition result.
 
+The replacement Whisper Small roundtrip and audition workflows passed at `c3d32fc213fc9a52cc3cb229af77925565429997`: all eight voices scored WER 0 and content recall 1 on the fixed phrase under network denial. The new proxy recommends Bella by catalog order because all voices tie; it does **not** override the existing owner-approved Luna default. Exact runs, artifacts and limitations are recorded in [the closeout evidence](evidence/CROSS_PLATFORM_WHISPER_CLOSEOUT_2026-10-23.md).
+
 The exact PR-head ASR audition run `34821757481` passed on `037a0f0a61e13c76ddc0f9a16ef88adb2f38f141`. The exact post-merge `master` ASR audition run `34848251323` passed on `21fac6785f008b1d5ab7f46e9125c76ca4c087ad`. Both runs selected `Luna` as the deterministic objective ASR recommendation.
 
 ASR proxy evidence must not be described as subjective listening evidence. It does not measure naturalness, comedic timing, timbre preference, or fatigue.

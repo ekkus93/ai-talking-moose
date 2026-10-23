@@ -3,7 +3,7 @@
 > **Owner override, 2026-10-22:** The owner explicitly instructed removal of Moonshine before the remaining WSP-200/300/400 acceptance gates. Removal proceeds under that instruction; outstanding performance, physical-device, and release acceptance are still open. Earlier gating language below records the original plan.
 
 **Date:** 2026-10-15
-**Status:** Open — architecture authorized; implementation and acceptance outstanding
+**Status:** Whisper implementation and Moonshine runtime removal landed; automated acceptance recorded, physical/performance/release acceptance still open
 **Specification:** `docs/CROSS_PLATFORM_WHISPER_ASR_SPEC_2026-10-15.md`
 **Repository:** `ekkus93/ai-talking-moose`, direct-to-`master` workflow
 **Current baseline:** `2582159ee36dd8690e7443822d0da4be4e911d9a`
@@ -11,6 +11,25 @@
 **Related active checklist:** `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md`
 
 Check a box **only** when a concrete implementation and its stated evidence exist at an observed commit. Record exact SHA, workflow/run and job conclusions, target/arch, commands, numerical measurements where requested, and limitations. A cancelled run, successful docs-only gate, generated stub transcript, or compilation without running inference is not sufficient proof. No item is completed merely because this TODO was committed.
+
+## Current execution checkpoint — 2026-10-23
+
+See [source-bound closeout evidence](evidence/CROSS_PLATFORM_WHISPER_CLOSEOUT_2026-10-23.md).
+All eight workflows at `c3d32fc213fc9a52cc3cb229af77925565429997` passed,
+including both-architecture unsigned apps, System TTS and real arm64
+KittenTTS-to-Whisper roundtrip. Older pending/failure/retention statements in
+**dated checkpoints below are historical**, not the current status. New bundle
+hardening and dependency updates require their own verification.
+
+The owner previously authorized direct GitHub CLI operation without Ralph
+Bridge and explicitly overrode the deletion prerequisite. Those instructions
+supersede the corresponding original operating rules below. Operational rules
+are recurring obligations, not unimplemented feature tasks.
+
+**Assistance required:** physical Mac/Linux acceptance, Apple release secrets,
+and an Intel performance/release decision. The development audit still has
+7 findings after compatible fixes; it is not declared clean. Signed release,
+human listening and sustained performance boxes remain open.
 
 ## Ralph Loop operating rules
 
@@ -81,15 +100,17 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 - [x] Make `AsrMode::WhisperSmall` the fresh-profile local ASR default on Linux and macOS. Retain explicit `GeminiLiveAudio` cloud mode with no implicit selection. (`AsrMode` platform cfg and `AppSettings::default`/migration tests, exact-source main CI `38893284623` at `fe3ddc642b73f57aa88ab8ccd1cb0ad4272f3934`: Rust quality, Rust tests, generated contract all passed. This is a code/defaults gate, not physical Mac app acceptance.)
 - [x] Design an idempotent migration for persisted `moonshine_tiny_streaming` and `moonshine_small_streaming` to `whisper_small`. Decide and document settings-version treatment and preserve unknown/additive fields. (Design: `docs/evidence/CROSS_PLATFORM_WHISPER_SETTINGS_MIGRATION_DESIGN_2026-10-15.md`; implementation now rewrites legacy values in `AppSettings::from_persisted_json` under settings schema v9. Full direct-IPC, restart, Mac and model-state qualification remains open in the following checkboxes.)
-- [ ] Ensure migration **does not** claim a Whisper model is installed, download weights, silently enable cloud, substitute Moonshine model files, overwrite API/voice/TTS/text selections, or lose privacy/memory flags.
-- [ ] Test fresh Linux/Mac profiles, both persisted Moonshine variants, explicit saved Whisper, explicit Gemini Live, corrupted/invalid/future-version values, and save/restart round trips. Confirm removed choices are never resurrected.
+- [x] Ensure migration **does not** claim a Whisper model is installed, download weights, silently enable cloud, substitute Moonshine model files, overwrite API/voice/TTS/text selections, or lose privacy/memory flags.
+- [x] Test fresh Linux/Mac profiles, both persisted Moonshine variants, explicit saved Whisper, explicit Gemini Live, corrupted/invalid/future-version values, and save/restart round trips. Confirm removed choices are never resurrected.
 - [ ] Make ASR catalog/commands/diagnostics truthfully show Whisper availability, download state, model revision, batch partial semantics and runtime errors on both Macs. Preserve install/delete/session ownership rules.
 - [x] Update Voice/AI Control Panel and onboarding to expose only supported ASR choices; preserve clear local/cloud disclosure, no fallback and optional explicit download. Remove obsolete Moonshine UI from active choices only after WSP-200. (Whisper-only local selector, explicit Gemini Live, onboarding optional install and truthful batch diagnostics; frontend CI `38893061667` passed at `ba6f871acd496db4f6fa584e32852c9f2834ea38`. Evidence: `docs/evidence/CROSS_PLATFORM_WHISPER_WSP300_UI_2026-10-16.md`. This does not qualify packaged Mac app or WSP-300 as a whole.)
-- [ ] Update TypeScript/Rust type switches, IPC fixtures, backend contract generation and tests. Preserve provider snapshots, Gemini Live isolation and settings compatibility.
+- [x] Update TypeScript/Rust type switches, IPC fixtures, backend contract generation and tests. Preserve provider snapshots, Gemini Live isolation and settings compatibility.
 
 **WSP-300 direct-IPC gap corrected (2026-10-16):** At `bde643a71498e22f9b5d06632d03eadc74dca906`, the shared settings validation boundary rejects new Moonshine Tiny/Small selections, while startup migration still decodes both historical persisted enum variants into `whisper_small`; the obsolete macOS-only Whisper rejection was removed. Formatting and regression coverage were completed through `ab30cca6438d88b9853ac2deccc7b5cda6d3ff27`. Exact-head main CI `38897533479` passed Rust tests, Rust quality, and generated contract; Wake Word audit `38897533475` and lifecycle `38897533476` passed. SQLite migration tests preserve existing provider/privacy flags, reject unknown ASR values, verify idempotence, and do not download/install Whisper weights. See `docs/evidence/CROSS_PLATFORM_WHISPER_WSP300_IPC_2026-10-16.md`. The enum variants remain decodable *only* for legacy migration; they are not valid new settings writes. macOS packaged-app/physical acceptance and complete WSP-300 provider matrix are still open.
 
 **WSP-300 macOS System Voice migration matrix (2026-10-19):** Exact source `4f54c340d5733246540af58f20112c7c6fe4a4f4` adds a macOS-only regression for both persisted Moonshine selections migrating to Whisper Small across all five supported standalone text providers with selected System Voices. The deterministic test checks System Voice/text ownership, memory/privacy choices, save/restart stability and rejection of Gemini Live PCM forwarding without model downloads or audible synthesis. [Main CI 39222715411](https://github.com/ekkus93/ai-talking-moose/actions/runs/39222715411) **passed** Rust tests, Rust quality and generated contract at that exact source; [native macOS run 39222715385](https://github.com/ekkus93/ai-talking-moose/actions/runs/39222715385) ARM64 job `117961730399` **passed**, Intel job `117961730941` was **in progress** at evidence capture; [unsigned-app smoke 39222715398](https://github.com/ekkus93/ai-talking-moose/actions/runs/39222715398) ARM64 job `117961703086` **passed**, Intel job `117961703490` was **in progress**. **Pending is not a pass**; recheck both Intel jobs at the same source. This does **not** prove genuine model inference in the app, physical microphone, audible System TTS, offline egress denial, performance, full WSP-300/400 completion or authorize Moonshine removal. KittenTTS/ONNX remains untouched.
+
+**Automated WSP-300 reconciliation (2026-10-23):** Checked migration/contract items are backed by the named settings, SQLite and IPC rejection tests in closeout evidence: Linux CI `39902352829` at `c3d32fc2` and both-Mac native settings tests `39895042644` at `f9d7310c`. These are deterministic fixture tests; catalog/ownership behavior in the physical packaged app remains separate.
 
 **Gate WSP-300:** installed and freshly created Mac/Linux profiles select usable Whisper or deliberately surface missing-model error; legacy Moonshine settings migrate predictably without silent network behavior.
 
@@ -98,10 +119,12 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 - [ ] Reuse existing shared `LocalAsrPipeline::start_whisper`, one CPAL microphone, 16 kHz mono PCM, bounded 56-chunk Whisper queue and drop-newest policy; delete duplicated engine selection branches only when the unified path is proven.
 - [ ] Verify local wake-word handoff (pre-roll ordering, wake/command split and microphone ownership), no double capture, delayed partials, local finalization and no duplicated or reordered `AsrEvent`.
 - [ ] Verify conversation start, stop, barge-in, user-selected input/output devices, permissions, cancellation and stale-generation suppression. Ensure worker joins and active leases prevent unsafe model replacement.
-- [ ] Update non-Live Talk routing/negative tests for **Whisper Small × each supported text provider × supported standalone TTS**. Keep fail-closed no-key/no-model/no-voice cases and immutable snapshot assertions. Do not delete an old Moonshine matrix test without a replacement covering the new supported mode.
-- [ ] Test explicit Gemini Live audio separately: no accidental Live connection from local Whisper selection, no silent fallback, and correctly disclosed provider scope.
+- [x] Update non-Live Talk routing/negative tests for **Whisper Small × each supported text provider × supported standalone TTS**. Keep fail-closed no-key/no-model/no-voice cases and immutable snapshot assertions. Do not delete an old Moonshine matrix test without a replacement covering the new supported mode.
+- [x] Test explicit Gemini Live audio separately: no accidental Live connection from local Whisper selection, no silent fallback, and correctly disclosed provider scope.
 - [ ] Verify typed replies, ambient responses, actual TTS playback and speech-bubble lifecycle are not regressed; distinguish automated event tests from physical playback evidence.
-- [ ] Record tests for model missing/corrupt, native unavailable, mic unavailable, queue overflow, malformed PCM, repeated start/stop, cancellation and in-flight provider switch.
+- [x] Record tests for model missing/corrupt, native unavailable, mic unavailable, queue overflow, malformed PCM, repeated start/stop, cancellation and in-flight provider switch.
+
+**Automated WSP-400 reconciliation (2026-10-23):** Checked routing/error items refer to deterministic tests, including `whisper_asr_keeps_all_external_text_and_voice_pairs_non_live`, explicit Live isolation, selected-key/endpoint failures, settings snapshots, model/queue/cancel regressions and Mac System routing. Linux CI `39902352829`, native Mac tests `39895042644` and System TTS routing `39902375294` record their source-bound scopes. Physical capture/playback and genuine-model sustained lifecycle remain open.
 
 **Gate WSP-400:** correct single-engine app routing across targets; no loss of previous ELSV-400 or privacy guarantees.
 
@@ -147,11 +170,14 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 - [x] Remove `src-tauri/src/asr/moonshine/`, Moonshine factories/types, architecture variants and default branches, old installers/commands, native load probes and active Moonshine test fixtures; keep useful provider-neutral tests.
 - [x] Remove the Moonshine-specific build/link logic from `src-tauri/build.rs`, `TALKING_MOOSE_MOONSHINE_LIB_DIR` and Moonshine cfg; use only the cross-platform Whisper native build.
 - [x] Remove `scripts/prepare_moonshine_macos.sh`, `src-tauri/native/moonshine-runtime.json` and generated/staged Moonshine dylibs/notices from the shipping path; delete deprecated provenance validators and wrappers only if no other feature uses them.
-- [ ] Update `src-tauri/tauri.conf.json`: eliminate Moonshine-only `bundle.macOS.frameworks` entries and resources; forbid unused dynamic lib payloads. Verify static whisper.cpp license notice still ships.
-- [ ] Remove Moonshine build/source/LFS references from `.github/workflows/ci.yml`, `.github/workflows/release.yml`, Mac smoke, native architecture checkers, release verifier, package policy and dependency-license reports. Replace with real Whisper provenance/native checks, **never** simply relax a gate.
+- [x] Update `src-tauri/tauri.conf.json`: eliminate Moonshine-only `bundle.macOS.frameworks` entries and resources; verify static whisper.cpp license notice ships. (Removal `f9d7310c`; both-architecture unsigned bundle verification at `c3d32fc2`, runs `39902352871` and `39902375294`.)
+- [ ] Qualify the strengthened whole-bundle verifier and its real-Mach-O negative tests on both Macs; reject every unexpected dylib/framework and unsafe helper. (Implemented in the current loop; fresh remote execution required.)
+- [x] Remove Moonshine build/source/LFS references from `.github/workflows/ci.yml`, `.github/workflows/release.yml`, Mac smoke, native architecture checkers, release verifier, package policy and dependency-license reports. Replace with real Whisper provenance/native checks, **never** simply relax a gate.
 - [x] Remove obsolete Moonshine model installation UI/progress, API calls, test data, generated contract variants and user-facing instructions. Keep archived Moonshine benchmarking/incident evidence clearly labeled historical if useful.
 - [ ] Preserve separately owned `ort` and verified ONNX Runtime artifacts required by **KittenTTS**. Verify `Local KittenTTS` downloads, offline synthesis, playback, no fallback and packaging policy before and after deletion.
-- [ ] Search the entire tracked repository again for Moonshine/legacy enum variants/dylib paths. Every remaining match must be archived history or have a documented reason. Check no third-party submodule/source or license needed by Whisper was accidentally removed.
+- [x] Search the entire tracked repository again for Moonshine/legacy enum variants/dylib paths. Every remaining match must be archived history or have a documented reason. Check no third-party submodule/source or license needed by Whisper was accidentally removed.
+
+**Removal follow-up (2026-10-23):** Real KittenTTS-to-Whisper roundtrip and audition passed at `c3d32fc2` for all eight voices under network denial; physical playback remains open. The entire tracked residual-reference census and dispositions are archived in the closeout evidence.
 
 **Removal implementation (owner override, 2026-10-22):** Source/runtime deletion and current selectors are implemented. Verification and residual-reference dispositions are tracked in `docs/evidence/MOONSHINE_REMOVAL_2026-10-22.md`. Unchecked hardware/release and KittenTTS real-acceptance checks remain open.
 
@@ -160,12 +186,12 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 ## WSP-600 — CI, native release and documentation reconciliation
 
 - [ ] Run exact-head `CARGO_BUILD_JOBS=2 npm run check:all`, `npm run check:generated-trees`, `python3 scripts/check_local_llm_packaging_policy.py`, `python3 scripts/check_local_tts_packaging_policy.py`, provenance, licensing and audited dependency gates; repair all failures.
-- [ ] Extend `.github/workflows/whisper-real-cpu-acceptance.yml` or add clearly named Mac acceptance jobs for arm64 and Intel. Keep weight downloads in explicit/manual acceptance, not in ordinary CI; preserve Linux network-denied proof and report Mac egress limitations truthfully.
+- [x] Extend `.github/workflows/whisper-real-cpu-acceptance.yml` or add clearly named Mac acceptance jobs for arm64 and Intel. Keep weight downloads in explicit/manual acceptance, not in ordinary CI; preserve Linux network-denied proof and report Mac egress limitations truthfully.
 - [ ] Run ordinary macOS arm64 and x86_64 checks at the **exact current head**: CMake compile/static link, native availability, frontend/backend, contract, Tauri unsigned `.app`, architecture/loader/provenance smoke and clean-machine startup.
 - [ ] Update release workflow, `scripts/verify_macos_bundle.sh`, `scripts/verify_macos_release.sh`, `docs/MACOS_RELEASE.md`, deployment-target assumptions, notarization/signing license inventory and P13 physical acceptance to assert Whisper native presence and Moonshine absence. Determine macOS minimum from the *remaining* dependencies; do not lower 13.4 without evidence.
 - [ ] Verify no home-machine rpath or library dependencies, no unexpected native dylib, no shipped ASR GGML weights, no secret/log/database artifact, and valid notarization/Gatekeeper checks on both architectures.
-- [ ] Update `README.md`, `docs/PRIVACY.md`, `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md`, `docs/LOCAL_LLM_ARCHITECTURE.md`, `docs/VOICE_SELECTION.md`, onboarding, settings copy and third-party notices to describe the unified Whisper behavior and Gemini Live exception.
-- [ ] Reconcile `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md`: replace outdated Moonshine routing assumptions, retain exact qualified non-Live test coverage for new ASR domain, and **leave physical macOS System TTS audition/bubble and ELSV-900 release gates open** until actually observed.
+- [x] Update `README.md`, `docs/PRIVACY.md`, `docs/WHISPER_CPP_LOCAL_ASR_PIPELINE.md`, `docs/LOCAL_LLM_ARCHITECTURE.md`, `docs/VOICE_SELECTION.md`, onboarding, settings copy and third-party notices to describe the unified Whisper behavior and Gemini Live exception.
+- [x] Reconcile `docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md`: replace outdated Moonshine routing assumptions, retain exact qualified non-Live test coverage for new ASR domain, and **leave physical macOS System TTS audition/bubble and ELSV-900 release gates open** until actually observed.
 - [ ] Record exact commit, CI workflow/run IDs, relevant job conclusions and source/model hashes for Linux x86_64, macOS arm64 and macOS x86_64. Do not count superseded/cancelled/docs-only CI as a production qualification pass.
 
 **Gate WSP-600:** CI and release artifacts fully verify Whisper on all supported targets, with complete up-to-date platform documentation and no weakened checks.
@@ -216,6 +242,6 @@ Record each phase's completion here or link a dedicated file under `docs/evidenc
 | WSP-200 | `999a04e3aefaa9b93f30ad0c53b188009f9f228c` (two-arch real-corpus evidence, other gates open) | macOS ARM64 and x86_64 CPU-only | Run `38886320925`, jobs `116924832423` / `116924832215` | Both passed pinned install and real JFK transcript with CPU-only logs; ARM64 2,319 ms, Intel 11,502 ms transcribe wall; peak RSS 865,730,560 / 843,063,296 bytes | Enforced macOS network denial, packaged app, native lifecycle matrix and physical mic still unqualified |
 | WSP-300 | `ba6f871acd496db4f6fa584e32852c9f2834ea38` (UI); `fe3ddc642b73f57aa88ab8ccd1cb0ad4272f3934` (defaults); `ab30cca6438d88b9853ac2deccc7b5cda6d3ff27` (IPC/SQLite regressions) | Frontend and Linux Rust unit tests | CI `38893061667` frontend success; CI `38893284623` defaults quality/tests/contract success; CI `38897533479` Rust quality/tests/contract success; Wake audit `38897533475` + lifecycle `38897533476` success | Whisper-only UI, retired modes rejected on new settings writes, both persisted Moonshine variants migrate to Whisper once without implicit model installation; explicit Gemini Live preserved | Native macOS packaged app, complete provider/routing matrix, ASR-015 replacement, physical Mac acceptance still open |
 | WSP-400 | `bfbfa4d3b8b10155f68e93c1c8e3ab29865e5011` (automated partial regressions) | Linux Rust unit/integration fixtures for Whisper | CI `38933055120` Rust tests/quality/contract; Wake audit `38933054996`, lifecycle `38933055145`: all success | Whisper final-text isolation, wake PCM ordering/queue overload, cancel/barge-in/stale callbacks and cloud negative checks | Real-model full session, macOS native lifecycle, physical mic/TTS/provider matrix and app acceptance still open |
-| WSP-500 | Pending | Pending | Pending | Pending | Pending |
-| WSP-600 | Pending | Pending | Pending | Pending | Pending |
+| WSP-500 | `f9d7310c` removal; `c3d32fc2` acceptance fixes | Linux and both Macs; real KittenTTS roundtrip arm64 | CI `39902352829`, app `39902352871`, System TTS `39902375294`, KittenTTS `39902352938` / `39902352795` | Runtime/build/selector removal; eight voices WER 0, recall 1 | New whole-bundle hardening needs fresh execution; physical playback remains open |
+| WSP-600 | `c3d32fc213fc9a52cc3cb229af77925565429997` | Linux x86_64; macOS arm64/x86_64 unsigned bundles | Eight passing runs listed in closeout evidence | Ordinary scope passed; canonical/full matrix skipped in push CI | Current-source manual replay, 7 development audit findings, signing/notarization and physical acceptance remain open |
 | WSP-700 | Pending | Pending | Pending | Pending | Pending |

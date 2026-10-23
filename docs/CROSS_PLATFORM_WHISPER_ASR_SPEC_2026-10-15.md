@@ -3,7 +3,7 @@
 > **Owner override, 2026-10-22:** The owner explicitly instructed removal of Moonshine before the remaining WSP-200/300/400 acceptance gates. Removal proceeds under that instruction; outstanding performance, physical-device, and release acceptance are still open. Earlier gating language below records the original plan.
 
 **Date:** 2026-10-15
-**Status:** Approved architecture, implementation not started
+**Status:** Whisper implementation and owner-authorized Moonshine removal landed; performance, physical-device and release acceptance remain open. See the current checklist and `docs/evidence/CROSS_PLATFORM_WHISPER_CLOSEOUT_2026-10-23.md`.
 **Repository:** `ekkus93/ai-talking-moose`
 **Authoritative implementation checklist:** `docs/CROSS_PLATFORM_WHISPER_ASR_TODO_2026-10-15.md`
 **Related completed Linux work:** `docs/WHISPER_CPP_LOCAL_ASR_SPEC.md`, `docs/WHISPER_CPP_LOCAL_ASR_TODO.md`

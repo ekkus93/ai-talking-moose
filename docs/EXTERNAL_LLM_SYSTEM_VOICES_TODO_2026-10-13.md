@@ -9,7 +9,13 @@ Check an item only after its implementation and named evidence exist. Keep the a
 **Current state (2026-10-15):** ELSV-100/200/300/400/600 are implementation-qualified by the focused tests and CI records below. Native macOS System Voices are implemented and qualified by automated arm64 `AVSpeechSynthesizer` and routing acceptance; Linux System Voices correctly fail closed. **The remaining unchecked ELSV-500/900 items require physical human-audition/bubble-completion evidence and complete macOS Tauri release-smoke verification.** See `docs/ELSV_SYSTEM_TTS_PHYSICAL_AUDITION_2026-10-15.md`. The dated checkpoint sections below are historical; earlier claims that System TTS is not implemented are superseded by the 2026-10-15 checkpoints. No unauditioned speech quality or physical playback success is claimed.
 
 
-## Cross-platform Whisper ASR ownership reconciliation — 2026-10-20
+## Current Whisper reconciliation — 2026-10-23
+
+Moonshine removal was explicitly authorized by the owner and implemented in `f9d7310c`; the earlier retention instructions in dated checkpoints below are superseded. At `c3d32fc213fc9a52cc3cb229af77925565429997`, macOS System TTS acceptance run `39902375294` passed native arm64 synthesis/routing and unsigned Tauri app smoke on arm64 and Intel. KittenTTS Whisper roundtrip run `39902352938` and voice audition run `39902352795` also passed, independently preserving KittenTTS ONNX ownership. Both current ASR modes and provider isolation remain covered by ordinary tests. See [closeout evidence](evidence/CROSS_PLATFORM_WHISPER_CLOSEOUT_2026-10-23.md).
+
+ELSV-500 human listening, output-device and bubble-completion observations, plus ELSV-900 signed/notarized release and physical acceptance, remain **open**. An automated WAV or unsigned bundle is not evidence of those observations. The new ASR proxy does not change the owner-approved Luna default.
+
+## Historical cross-platform Whisper ASR ownership reconciliation — 2026-10-20
 
 The authoritative active ASR migration specification is `docs/CROSS_PLATFORM_WHISPER_ASR_SPEC_2026-10-15.md` and the execution/acceptance checklist is `docs/CROSS_PLATFORM_WHISPER_ASR_TODO_2026-10-15.md`. They supersede the **historical** Moonshine-as-default or Moonshine-specific non-Live Talk assumptions in this file without changing the separately owned external text/TTS, macOS System Voices, or KittenTTS obligations. Current Linux/macOS fresh-profile local ASR is Whisper Small; the selectable cloud audio exception is **explicit Gemini Live ASR**. Google text alone must never open a Gemini Live microphone session or select the Live voice. Preserve both non-Live text/TTS snapshot isolation and the independently saved `local_tts_voice`, `google_tts_voice`, `system_tts_voice` and `live_voice` fields.
 

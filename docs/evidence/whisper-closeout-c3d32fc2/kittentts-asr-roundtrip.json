@@ -1,0 +1,70 @@
+{
+  "all_passed": true,
+  "asr_model_id": "whisper-small-ggml",
+  "asr_model_revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+  "content_recall_floor": 0.7,
+  "network_denied_during_round_trip": true,
+  "phrase": "The talking moose reads seven blue books beside the quiet river.",
+  "platform": "macos-arm64",
+  "qualified_sha": "c3d32fc213fc9a52cc3cb229af77925565429997",
+  "tts_model_id": "KittenML/kitten-tts-mini-0.8",
+  "voices": [
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Bella",
+      "word_error_rate": 0.0
+    },
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Jasper",
+      "word_error_rate": 0.0
+    },
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Luna",
+      "word_error_rate": 0.0
+    },
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Bruno",
+      "word_error_rate": 0.0
+    },
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Rosie",
+      "word_error_rate": 0.0
+    },
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Hugo",
+      "word_error_rate": 0.0
+    },
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Kiki",
+      "word_error_rate": 0.0
+    },
+    {
+      "content_word_recall": 1.0,
+      "passed": true,
+      "transcript": "The Talking Moose reads seven blue books beside the quiet river.",
+      "voice": "Leo",
+      "word_error_rate": 0.0
+    }
+  ],
+  "wer_limit": 0.4
+}

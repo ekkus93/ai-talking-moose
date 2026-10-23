@@ -1,0 +1,722 @@
+{
+  "schema_version": 1,
+  "head_sha": "c3d32fc213fc9a52cc3cb229af77925565429997",
+  "tracked_path_count": 905,
+  "matched_file_count": 176,
+  "skipped": [
+    {
+      "path": "third_party/whisper.cpp",
+      "reason": "symlink, gitlink or nonregular"
+    }
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/full-validation-label.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/kittentts-p0-spike.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/local-llm-p13-packaging-acceptance.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/macos-system-tts-acceptance.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/whisper-macos-app-smoke.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/whisper-macos-native-compile.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/whisper-macos-precutover-app.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/whisper-macos-real-cpu-acceptance.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/whisper-real-cpu-acceptance.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".github/workflows/wwr-kws-c-api-probe.yml",
+      "owner": "ci_workflows"
+    },
+    {
+      "path": ".gitignore",
+      "owner": "git_hygiene"
+    },
+    {
+      "path": "AGENTS.md",
+      "owner": "developer_guidance"
+    },
+    {
+      "path": "README.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/CODEX_HANDOFF_WHISPER_MACOS_DISPATCH_BLOCKER_2026-10-21.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/CROSS_PLATFORM_WHISPER_ASR_SPEC_2026-10-15.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/CROSS_PLATFORM_WHISPER_ASR_TODO_2026-10-15.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/ELSV_SYSTEM_TTS_PHYSICAL_AUDITION_2026-10-15.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/EXTERNAL_LLM_SYSTEM_VOICES_TODO_2026-10-13.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/KITTENTTS_CLOSEOUT_EVIDENCE_2026-09-12.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/LARGE_CODE_FILES_REFACTOR_TODO.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/LOCAL_LLM_ARCHITECTURE.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/LOCAL_LLM_IMPLEMENTATION_NOTES.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/LOCAL_TTS_ASR_PROXY_DEFAULT_VOICE_CLOSEOUT_2026-09-14.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/LOCAL_TTS_AUTOMATED_ASR_VOICE_AUDITION_2026-09-14.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/LOCAL_TTS_HUMAN_VOICE_AUDITION_2026-09-14.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MACOS_P2_P3_PHYSICAL_ACCEPTANCE.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MACOS_RELEASE.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MASTER_CODE_REVIEW_REMEDIATION_SPEC_2026-09-30.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MASTER_CODE_REVIEW_REMEDIATION_TODO_2026-09-30.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_CPU_BENCHMARK.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_GEMINI_HANDOFF.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_LOCAL_ASR_PIPELINE.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_MODEL_INSTALLER.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_MODEL_INSTALL_RETRY_POLICY.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_NATIVE.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_REGRESSION_SUITE.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/MOONSHINE_TRANSCRIPT_STATE.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/PRIVACY.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_FINAL_20260828.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_LOCAL_LLM_20260903.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_LOCAL_LLM_P14_20260902.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P0_P1_20260905.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P10_20260909.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_LOCAL_LLM_REMEDIATION_P9_20260909.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_P11_20260823.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_P12_20260823.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_P13_20260823.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_P3A_20260823.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RECONCILIATION_REMAINING_NON_MAC_20260828.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/REVIEW_QUESTIONS(20260824-143800).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/REVIEW_RESPONSES(20260824-143800).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/RUST_SAFETY_AUDIT.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/SPEC(20260818-015058).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/SPEC(20260818-163800).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/SPEC(20260824-142233).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/SPEC(20260828-125605).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/SPEC(20260831-081800).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/SPEC(20260905-141500).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/SPEC(20260909-120003).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/TODO(20260818-163801).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/TODO(20260831-081800).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/TODO(20260905-141500).md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/VOICE_SELECTION.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WAKE_WORD_V1_POST_CLOSEOUT_REMEDIATION_SPEC_2026-09-25.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WAKE_WORD_V1_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-25.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WHISPER_CPP_CPU_BENCHMARK.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WHISPER_CPP_LOCAL_ASR_CODEX_HANDOFF_2026-10-07.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_SPEC_2026-10-08.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_SPEC_2026-10-07.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WHISPER_CPP_LOCAL_ASR_POST_REVIEW_REMEDIATION_TODO_2026-10-07.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WHISPER_CPP_LOCAL_ASR_SPEC.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/WHISPER_CPP_LOCAL_ASR_TODO.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_BASELINE_2026-10-15.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_CURRENT_QUALIFICATION_BOUNDARIES_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_LEASE_DELETE_WRITE_INCIDENT_2026-10-21.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MACOS_GATE_MATRIX_2026-10-15.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MACOS_REAL_CPU_SEATBELT_2026-10-22.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MACOS_REAL_CPU_SUCCESS_2026-10-16.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MACOS_REAL_MODEL_PARTIAL_2026-10-15.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MACOS_SEATBELT_GATE_2026-10-19.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MAC_NATIVE_ABI_2026-10-15.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MANUAL_TRIGGER_POLICY_2026-10-21.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_MIGRATED_NON_LIVE_ROUTING_2026-10-19.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_SETTINGS_MIGRATION_DESIGN_2026-10-15.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP100_RELEASE_PROFILE_2026-10-16.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP100_VALIDATION_2026-10-16.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_ACTIVE_MODEL_LEASE_REINSTALL_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_DISPATCH_2026-10-15.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_EXACT_HEAD_REAL_CPU_2026-10-18.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_INSTALLER_DELETE_GUARD_2026-10-18.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_REPEAT_DISPATCH_2026-10-18.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP200_REPEAT_REAL_CPU_2026-10-18.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP300_DEFAULT_2026-10-16.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP300_IPC_2026-10-16.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP300_UI_2026-10-16.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_ABORT_CLEANUP_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_ABORT_INFLIGHT_INFERENCE_ERROR_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_ABORT_QUEUE_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_ABORT_SUCCESSFUL_INFERENCE_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_INGRESS_FIFO_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_OPENAI_MISSING_KEY_TTS_ISOLATION_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_PRIVACY_WORKER_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_TYPED_PREFLIGHT_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/CROSS_PLATFORM_WHISPER_WSP400_WHISPER_STOP_DRAIN_2026-10-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/MCR-000_MASTER_REVIEW_BASELINE_2026-09-30.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/MCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-10-01.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/MCR-950_FINAL_QUALIFICATION_EVIDENCE_2026-10-01.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/MOONSHINE_REMOVAL_2026-10-22.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/RALPH_BRIDGE_INCIDENTS_2026-10-19.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/RALPH_BRIDGE_WHISPER_DISPATCH_2026-10-20.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WHISPER_CPP_LOCAL_ASR_PROGRESS_2026-10-07.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WHISPER_CPP_LOCAL_ASR_PROGRESS_2026-10-08.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-000_POST_CLOSEOUT_BASELINE_2026-09-25.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-110_120_SETTINGS_LISTENER_EVIDENCE_2026-09-27.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-110_SETTINGS_ROLLBACK_STATUS_2026-09-27.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-120_SETTINGS_CHANGE_TESTS_2026-09-27.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-310_COMMAND_FIXTURE_KWS_2026-09-27.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-310_FIRST_COMMAND_WORD_BOUNDARY_2026-09-26.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-900_AUDIT_WORKING_NOTES_2026-09-28.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-900_FINAL_SOURCE_PRIVACY_SECURITY_AUDIT_2026-09-28.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WPCR-950_960_FINAL_QUALIFICATION_2026-09-28.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-110_SHERPA_RUNTIME_IDENTITY_2026-09-17.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-300_310_400_ACTIVATION_SEAM_AUDIT_2026-09-23.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-300_MICROPHONE_ROUTING_AUDIT_2026-09-18.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-300_PRODUCTION_ROUTING_PROGRESS_2026-09-21.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-310_COMMAND_ASR_INGRESS_SEAM_2026-09-22.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-900_SOURCE_PRIVACY_AUDIT_PASS1_2026-09-22.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-900_SOURCE_PRIVACY_AUDIT_PASS1_2026-09-24.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/WWR-900_SOURCE_PRIVACY_SECURITY_AUDIT_2026-09-23.md",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/asr015/20260823/asr015-records.jsonl",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39701495688/arm64/transcribe-repeat.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39701495688/arm64/transcribe.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39701495688/x86_64/transcribe-repeat.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39701495688/x86_64/transcribe.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39860766151/arm64/transcribe-repeat.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39860766151/arm64/transcribe.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39860766151/x86_64/transcribe-repeat.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/evidence/whisper-macos-real-cpu-39860766151/x86_64/transcribe.json",
+      "owner": "historical_evidence"
+    },
+    {
+      "path": "docs/releases/v0.1.0.md",
+      "owner": "documentation"
+    },
+    {
+      "path": "memory.md",
+      "owner": "historical_handoff"
+    },
+    {
+      "path": "scripts/audit_whisper_migration_references.py",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/check_local_tts_packaging_policy.py",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/check_whisper_macos_acceptance_workflow.py",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/freeze-wake-word-runtime-identities.py",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/freeze_wake_word_runtime_identity.py",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/prepare_macos_notices.sh",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/run_p13_macos_release_acceptance.sh",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/validate_release_metadata.py",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "scripts/verify_macos_bundle.sh",
+      "owner": "release_tooling"
+    },
+    {
+      "path": "src-tauri/build.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/ai/local_tts/runtime/engine/archive.rs",
+      "owner": "kitten_tts"
+    },
+    {
+      "path": "src-tauri/src/app/state.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/app/state/tests/settings_migration.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/app/state/tests/settings_migration_invalid_asr.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/app/state/tests/settings_migration_invalid_version.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/app/state/tests/talk_routing.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/app/state/tests/talk_routing_macos_system.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/app/wake_word_engine/artifacts.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/app/wake_word_settings.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/asr/types.rs",
+      "owner": "asr_backend"
+    },
+    {
+      "path": "src-tauri/src/asr/whisper/acceptance.rs",
+      "owner": "asr_backend"
+    },
+    {
+      "path": "src-tauri/src/asr/whisper/engine.rs",
+      "owner": "asr_backend"
+    },
+    {
+      "path": "src-tauri/src/asr/whisper/ffi.rs",
+      "owner": "asr_backend"
+    },
+    {
+      "path": "src-tauri/src/asr/whisper/manifest.rs",
+      "owner": "asr_backend"
+    },
+    {
+      "path": "src-tauri/src/commands/asr_models.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/commands/settings.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/conversation/session/local_asr.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/src/conversation/session/tests/local_asr.rs",
+      "owner": "app_native"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "owner": "app_native"
+    },
+    {
+      "path": "src/test/AsrSettingsPanel.accessibility.test.tsx",
+      "owner": "frontend"
+    },
+    {
+      "path": "src/test/SettingsModal.test.tsx",
+      "owner": "frontend"
+    },
+    {
+      "path": "tests/test_freeze_wake_word_runtime_identity.py",
+      "owner": "wake_word_tests"
+    },
+    {
+      "path": "wake-word-artifacts.json",
+      "owner": "wake_word_assets"
+    }
+  ],
+  "limitations": [
+    "Path ownership is an inventory, not inference or physical acceptance.",
+    "Residual Moonshine references are reviewed in the closeout document; this census includes Whisper and deployment-floor tokens too."
+  ]
+}

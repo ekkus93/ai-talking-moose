@@ -12,6 +12,8 @@ on:
       - "src-tauri/src/ai/system_tts/**"
       - "src-tauri/src/ai/system_tts_*.rs"
       - "src-tauri/src/bin/system_tts_acceptance.rs"
+      - "scripts/verify_macos_bundle.sh"
+      - "scripts/test_verify_macos_bundle.sh"
   push:
     branches:
       - master
@@ -20,6 +22,8 @@ on:
       - "src-tauri/src/ai/system_tts.rs"
       - "src-tauri/src/ai/system_tts/**"
       - "src-tauri/src/bin/system_tts_acceptance.rs"
+      - "scripts/verify_macos_bundle.sh"
+      - "scripts/test_verify_macos_bundle.sh"
   workflow_dispatch:
 
 permissions:

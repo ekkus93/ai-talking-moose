@@ -96,6 +96,7 @@ jobs:
           app="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app" && test -d "$app"
           bash scripts/verify_app_build_provenance.sh "$app" "$GITHUB_SHA"
+          bash scripts/test_verify_macos_bundle.sh "$app" "${{ matrix.arch }}"
           bundle_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
           test -n "$bundle_executable"
           case "$bundle_executable" in

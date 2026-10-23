@@ -140,7 +140,7 @@ Local KittenTTS behavior:
 - **Playback:** once Local KittenTTS produces PCM, the existing playback and amplitude-driven mouth-animation path is reused.
 - **Voice:** Local KittenTTS has its own voice setting (`local_tts_voice`) and eight provider-owned voice IDs: `Bella`, `Jasper`, `Luna`, `Bruno`, `Rosie`, `Hugo`, `Kiki`, and `Leo`.
 
-The historical automated KittenTTS-to-Moonshine ASR smoke passed for all eight voices. The current smoke uses Whisper Small and requires fresh acceptance; neither result selects the final Moose default voice. Human audition remains tracked separately as KCR-330 / KTT-805.
+The automated KittenTTS-to-Whisper Small smoke passed for all eight voices at `c3d32fc2`, with zero word error on the fixed phrase under network denial. See [acceptance evidence](docs/evidence/CROSS_PLATFORM_WHISPER_CLOSEOUT_2026-10-23.md). This does not change the owner-approved Luna default or establish physical playback or subjective voice quality.
 
 ## Local Text Quick Start
 

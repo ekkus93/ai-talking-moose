@@ -1,0 +1,21 @@
+{
+  "source_sha": "c3d32fc213fc9a52cc3cb229af77925565429997",
+  "artifacts": [
+    {
+      "id": 12479352491,
+      "name": "kittentts-asr-roundtrip-c3d32fc213fc9a52cc3cb229af77925565429997",
+      "size_in_bytes": 5671,
+      "digest": "sha256:902354338057bb3acac346d0a13b7851cb51dacec599176a6e331ef4c11d304c"
+    },
+    {
+      "id": 12479816531,
+      "name": "kittentts-asr-voice-audition-c3d32fc213fc9a52cc3cb229af77925565429997",
+      "size_in_bytes": 5955,
+      "digest": "sha256:d9c3414e4d27db97171c371fece9a8f410bbb551cec7fd7656cbf6c8cceac5b5"
+    }
+  ],
+  "json_sha256": {
+    "kittentts-asr-roundtrip.json": "60d2848c6e45f4efd288b30024d67b6958c290a86dfd74814f9486b7dc3f0903",
+    "kittentts-asr-voice-audition.json": "d685b5668a59e8d88c4a7d0541b1a5222307f04d6907b4bb89d690f2fa51d4f4"
+  }
+}

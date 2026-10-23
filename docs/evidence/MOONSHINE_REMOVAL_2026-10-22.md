@@ -36,3 +36,15 @@ The measured Intel RTF above 1 remains an open performance limitation. Physical 
 ## Source and CI follow-up
 
 Removal implementation is committed as `f9d7310cf1a4c38d7c85180211eb48b2136d0a36`. Its Wake Word source security, required-gates, and documentation audits passed. The privacy audit exposed pre-existing paths to symbols moved into `wake_word_engine/types.rs` and `wake_word_acceptance/performance.rs`; the follow-up updates the audit to inspect current modules and recognize `tests.rs` as test code. All original sanitizer/privacy assertions remain enforced, and the corrected audit passes locally. macOS native/app and KittenTTS acceptance runs are still queued or running at this observation.
+
+## Completed acceptance follow-up — 2026-10-23
+
+At `c3d32fc213fc9a52cc3cb229af77925565429997`, all eight affected workflows
+passed. Both Mac unsigned apps and System TTS bundle verification passed;
+real KittenTTS synthesis through Whisper recognized all eight voices under
+network denial with WER 0 and content recall 1. The proxy does not alter the
+owner-approved Luna default. See
+[CROSS_PLATFORM_WHISPER_CLOSEOUT_2026-10-23.md](CROSS_PLATFORM_WHISPER_CLOSEOUT_2026-10-23.md)
+for exact runs, archived JSON, hashes, residual-reference review and open gates.
+The preceding queued/running observation is historical. Physical playback,
+sustained Intel performance and signed/notarized release remain open.
