@@ -202,11 +202,13 @@ fn whisper_transcribe_generated_audio(engine: &mut WhisperEngine, pcm: &[f32]) -
     let chunk_samples = usize::try_from(WHISPER_INPUT_SAMPLE_RATE_HZ / 10).unwrap();
     let mut updates = Vec::new();
     for chunk in pcm.chunks(chunk_samples) {
-        updates.extend(
-            engine
-                .push_pcm(chunk)
-                .expect("Whisper failed while consuming generated KittenTTS audio"),
-        );
+        let chunk_updates = engine
+            .push_pcm(chunk)
+            .expect("Whisper failed while consuming generated KittenTTS audio");
+        // Match the production worker: consume and acknowledge each batch
+        // before submitting more PCM, including after an utterance endpoint.
+        engine.updates_delivered(&chunk_updates);
+        updates.extend(chunk_updates);
     }
 
     // Give the batch decoder a clean utterance boundary before stopping its
@@ -214,11 +216,11 @@ fn whisper_transcribe_generated_audio(engine: &mut WhisperEngine, pcm: &[f32]) -
     // no microphone or speaker loopback is involved.
     let silence = vec![0.0_f32; chunk_samples];
     for _ in 0..8 {
-        updates.extend(
-            engine
-                .push_pcm(&silence)
-                .expect("Whisper failed while consuming round-trip trailing silence"),
-        );
+        let chunk_updates = engine
+            .push_pcm(&silence)
+            .expect("Whisper failed while consuming round-trip trailing silence");
+        engine.updates_delivered(&chunk_updates);
+        updates.extend(chunk_updates);
     }
     assert!(
         updates
@@ -227,7 +229,6 @@ fn whisper_transcribe_generated_audio(engine: &mut WhisperEngine, pcm: &[f32]) -
         "Whisper silence endpoint must finalize each generated utterance"
     );
 
-    engine.updates_delivered(&updates);
     updates
         .iter()
         .filter_map(|update| match update {

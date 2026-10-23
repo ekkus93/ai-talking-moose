@@ -27,12 +27,14 @@ if find "$app_path/Contents" \
   fail "bundle contains retired ASR runtime/resources or Whisper model weights"
 fi
 
-executables=()
-while IFS= read -r executable_path; do
-  executables+=("$executable_path")
-done < <(find "$app_path/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print)
-[[ ${#executables[@]} -eq 1 ]] || fail "expected exactly one executable under Contents/MacOS"
-executable="${executables[0]}"
+info_plist="$app_path/Contents/Info.plist"
+[[ -f "$info_plist" ]] || fail "bundle is missing Contents/Info.plist"
+bundle_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
+case "$bundle_executable" in
+  ""|.*|*/*) fail "invalid CFBundleExecutable" ;;
+esac
+executable="$app_path/Contents/MacOS/$bundle_executable"
+[[ -f "$executable" && -x "$executable" ]] || fail "declared application executable is missing"
 
 developer_load_paths() {
   local binary="$1"
