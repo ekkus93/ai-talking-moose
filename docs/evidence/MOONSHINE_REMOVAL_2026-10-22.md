@@ -32,3 +32,7 @@ Whisper provenance, macOS acceptance-workflow policy, release metadata, Local LL
 `CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 npm run check:rust` passed Rustfmt, Clippy with all targets/features, 1,071 unit tests, and every integration/helper target. The generated backend contract was regenerated and its drift/shape gate passed. Failure and stress matrix discovery passed for 25 and eight scenarios respectively. Native macOS build/bundle results and real KittenTTS-to-Whisper voice acceptance must be recorded separately; earlier Whisper acceptance is bound to its original SHA.
 
 The measured Intel RTF above 1 remains an open performance limitation. Physical microphone/playback, sustained thermal behavior, and signed/notarized release acceptance remain open.
+
+## Source and CI follow-up
+
+Removal implementation is committed as `f9d7310cf1a4c38d7c85180211eb48b2136d0a36`. Its Wake Word source security, required-gates, and documentation audits passed. The privacy audit exposed pre-existing paths to symbols moved into `wake_word_engine/types.rs` and `wake_word_acceptance/performance.rs`; the follow-up updates the audit to inspect current modules and recognize `tests.rs` as test code. All original sanitizer/privacy assertions remain enforced, and the corrected audit passes locally. macOS native/app and KittenTTS acceptance runs are still queued or running at this observation.

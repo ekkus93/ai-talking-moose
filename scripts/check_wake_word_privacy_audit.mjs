@@ -24,7 +24,7 @@ const rustStringLiterals = (source) =>
   [...source.matchAll(/"(?:\\.|[^"\\])*"/gu)].map((match) => match[0]);
 
 const isTestOnlyRustPath = (path) =>
-  path.endsWith("_tests.rs") || path.includes("/tests/");
+  path.endsWith("_tests.rs") || path.endsWith("/tests.rs") || path.includes("/tests/");
 
 const wakeProductionFiles = [
   ...listRustFiles("src-tauri/src/app").filter((path) => path.includes("/wake_word")),
@@ -46,7 +46,10 @@ const docsPath = "docs/WAKE_WORD_V1_CURRENT_BEHAVIOR.md";
 const corpusPath = "docs/wake-word-corpus.json";
 
 const diagnostics = read(diagnosticsPath);
-const engine = read(enginePath);
+const engine = [
+  read(enginePath),
+  ...listRustFiles("src-tauri/src/app/wake_word_engine").map(read),
+].join("\n");
 const docs = read(docsPath);
 const corpus = JSON.parse(read(corpusPath));
 
@@ -96,7 +99,7 @@ const forbiddenErrorLiteralFragments = ["credential", "secret", "api_key", "tran
 const forbiddenErrorFormattingFragments = ["{path}", "{file}", "{model_dir}", "{runtime_dir}", "{:?}"];
 const allowedDebugFormatting = new Map([
   [
-    "src-tauri/src/app/wake_word_acceptance.rs",
+    "src-tauri/src/app/wake_word_acceptance/performance.rs",
     ["format!(\"{:?}\", final_snapshot.phase)"],
   ],
 ]);
