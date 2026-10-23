@@ -18,6 +18,9 @@ on:
       - package-lock.json
       - src-tauri/capabilities/**
       - scripts/verify_app_build_provenance.sh
+      - scripts/verify_macos_bundle.sh
+      - scripts/test_verify_macos_bundle.sh
+      - scripts/prepare_macos_notices.sh
       - scripts/generate_app_icons.py
       - scripts/collect_release_licenses.py
       - scripts/check_whisper_provenance.py
