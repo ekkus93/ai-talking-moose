@@ -23,7 +23,7 @@ async fn shutdown_preserves_last_local_asr_diagnostics_for_selected_mode() {
     }
 
     let manager = ConversationManager::new();
-    *manager.active_asr_mode.lock() = Some(AsrMode::MoonshineTinyStreaming);
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
     manager
         .local_asr_lifecycle()
         .attach(
@@ -51,15 +51,15 @@ async fn shutdown_preserves_last_local_asr_diagnostics_for_selected_mode() {
         .await;
 
     let (snapshot, dropped_chunks) = manager
-        .last_local_asr_diagnostics(AsrMode::MoonshineTinyStreaming)
-        .expect("Tiny diagnostics should survive resource teardown");
+        .last_local_asr_diagnostics(AsrMode::WhisperSmall)
+        .expect("Whisper diagnostics should survive resource teardown");
     assert_eq!(snapshot.first_partial_latency_ms, Some(42));
     assert_eq!(snapshot.real_time_factor, Some(0.4));
     assert!(!snapshot.streaming);
     assert!(snapshot.metrics_snapshot);
     assert_eq!(dropped_chunks, 0);
     assert!(manager
-        .last_local_asr_diagnostics(AsrMode::MoonshineSmallStreaming)
+        .last_local_asr_diagnostics(AsrMode::GeminiLiveAudio)
         .is_none());
 }
 
@@ -178,7 +178,6 @@ fn stable_request(
             tools: vec![],
         },
         asr_mode: AsrMode::GeminiLiveAudio,
-        moonshine_installer: None,
         whisper_installer: None,
         capture: Arc::new(SyncMutex::new(AudioCapture::new_mock())),
         input_device: None,

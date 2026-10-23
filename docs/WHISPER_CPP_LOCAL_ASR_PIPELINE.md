@@ -5,7 +5,7 @@
 **Initial qualification:** run `37744371559`, job `113202252940`; see `docs/evidence/WHISPER_CPP_LOCAL_ASR_QUALIFICATION_2026-10-08.md`.
 **Post-qualification review:** completed in `docs/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_REVIEW_TODO_2026-10-08.md`; evidence is in `docs/evidence/WHISPER_CPP_LOCAL_ASR_POST_QUALIFICATION_2026-10-08.md` (run `37756211710`, job `113241297405`).
 
-This document describes the production pipeline and its cross-platform port while legacy Moonshine compatibility/native packaging remains present. New Linux/macOS profiles select Whisper Small, but select/install is not permission for a download or cloud fallback. Historical model-backed qualification applies only to its recorded source checkout and does not qualify later changes.
+This document describes the production Whisper pipeline on Linux and macOS. New Linux/macOS profiles select Whisper Small, but select/install is not permission for a download or cloud fallback. Historical model-backed qualification applies only to its recorded source checkout and does not qualify later changes.
 It supersedes implementation-state claims in `docs/LOCAL_ASR_WHISPER_HANDOFF_2026-10-03.md`; the dated document remains historical context.
 
 ## Provenance and runtime identity
@@ -60,7 +60,7 @@ Cancellation, download, HTTP, disk-space, and promotion failures belong to the e
 
 ## Startup and dependency isolation
 
-`prepare_local_asr()` resolves mode-specific installer/runtime dependencies inside the selected ASR-mode branch. Whisper startup requires the Whisper installer plus shared local-ASR pipeline dependencies; it must not fail merely because a Moonshine-only installer dependency is unavailable.
+`prepare_local_asr()` starts the Whisper installer/runtime only for local ASR; explicit Gemini Live audio bypasses local inference.
 
 The production startup path is fail-closed before microphone capture. A selected local ASR mode must create and verify its pipeline before the existing authoritative microphone capture object is started.
 
@@ -69,7 +69,7 @@ The production startup path is fail-closed before microphone capture. A selected
 Whisper uses the shared `LocalAsrPipeline` bounded-worker path:
 
 - One authoritative capture source feeds a bounded local-ASR ingress queue.
-- Moonshine ingress has capacity eight chunks (about 800 ms). Whisper has capacity 56 chunks (about 5.6 seconds) because each partial runs synchronous whole-utterance inference; the larger Whisper-only queue absorbs that bounded CPU pause while preserving the Moonshine queue budget.
+- Whisper ingress has capacity 56 chunks (about 5.6 seconds) because each partial runs synchronous whole-utterance inference; the queue absorbs that bounded CPU pause.
 - Native model loading and inference run on a dedicated OS worker, not on the async caller thread and not on the CPAL callback thread.
 - The worker emits provider-neutral `AsrEvent` values into the conversation layer.
 

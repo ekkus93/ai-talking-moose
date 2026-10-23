@@ -28,9 +28,9 @@ The Google text-model catalog/default is not the same thing as the application's
   instruction, transcription, tool declarations, session resumption, and context-window
   compression.
 - **Audio framing:** Gemini Live Cloud Audio mode sends 16-bit PCM at 16 kHz mono as base64 audio
-  frames. Moonshine modes never upload microphone PCM.
-- **Local-ASR text turns:** final Moonshine transcripts are sent as text turns; partial transcripts
-  remain local UI state. See `MOONSHINE_GEMINI_HANDOFF.md`.
+  frames. Whisper mode never upload microphone PCM.
+- **Local-ASR text turns:** final Whisper transcripts are sent as text turns; partial transcripts
+  remain local UI state. See `WHISPER_CPP_LOCAL_ASR_PIPELINE.md`.
 - **Output streaming:** returned audio is 24 kHz PCM and is queued through Rust CPAL playback.
 
 ## 3. Setup acknowledgement is the readiness gate

@@ -175,7 +175,7 @@ def main() -> int:
     validate_build_policy(repo_root)
     validate_ffi_safety(repo_root)
     validate_release_notice_policy_text(
-        (repo_root / "scripts/prepare_moonshine_macos.sh").read_text(encoding="utf-8")
+        (repo_root / "scripts/prepare_macos_notices.sh").read_text(encoding="utf-8")
     )
 
     print(

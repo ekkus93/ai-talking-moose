@@ -44,6 +44,7 @@ jobs:
       - name: Check out repository history
         uses: actions/checkout@v7
         with:
+          submodules: true
           fetch-depth: 0
 
       - name: Reject tracked Rust build outputs
@@ -179,7 +180,7 @@ jobs:
                 esac
 
                 case "$path" in
-                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/src/ai/local_tts/*|src-tauri/icons/*|src-tauri/resources/*|src-tauri/native/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/check_local_tts_packaging_policy.py|scripts/prepare_moonshine_macos.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
+                  src-tauri/tauri.conf.json|src-tauri/Cargo.toml|src-tauri/Cargo.lock|src-tauri/src/ai/local_tts/*|src-tauri/icons/*|src-tauri/resources/*|src-tauri/native/*|scripts/generate_app_icons.py|scripts/validate_release_metadata.py|scripts/collect_release_licenses.py|scripts/check_local_llm_packaging_policy.py|scripts/check_local_tts_packaging_policy.py|scripts/prepare_macos_notices.sh|scripts/verify_macos_bundle.sh|scripts/verify_app_build_provenance.sh|scripts/verify_macos_release.sh|scripts/run_p13_macos_release_acceptance.sh|package.json|package-lock.json)
                     release_needed=true
                     handled=true
                     ;;
@@ -248,6 +249,7 @@ jobs:
       - name: Check out repository history
         uses: actions/checkout@v7
         with:
+          submodules: true
           fetch-depth: 0
       - name: Validate documentation diff
         shell: bash
@@ -269,6 +271,7 @@ jobs:
       - name: Check out repository history
         uses: actions/checkout@v7
         with:
+          submodules: true
           fetch-depth: 0
       - name: Validate CI diff and shell syntax
         shell: bash
@@ -296,6 +299,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -358,7 +363,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       - name: Validate native runtime manifest
-        run: python3 scripts/validate_moonshine_runtime_manifest.py
+        run: python3 scripts/check_whisper_provenance.py
       - name: Verify Whisper source, model, and license provenance
         run: |
           python3 scripts/check_whisper_provenance.py
@@ -466,6 +471,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Install Linux llama.cpp build dependencies
         if: matrix.os == 'linux'
         run: |
@@ -497,6 +504,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -523,6 +532,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -546,7 +557,7 @@ jobs:
             scripts/check_local_tts_packaging_policy.py \
             scripts/measure_local_llm_bundle_impact.py
           bash -n scripts/prepare_ubuntu_apt.sh
-          bash -n scripts/prepare_moonshine_macos.sh
+          bash -n scripts/prepare_macos_notices.sh
           bash -n scripts/verify_macos_bundle.sh
           bash -n scripts/verify_app_build_provenance.sh
           bash -n scripts/verify_macos_release.sh
@@ -582,6 +593,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -605,10 +618,11 @@ jobs:
         run: python3 scripts/generate_app_icons.py
       - name: Validate release metadata and icon set
         run: python3 scripts/validate_release_metadata.py
-      - name: Validate Moonshine runtime provenance
-        run: python3 scripts/validate_moonshine_runtime_manifest.py
-      - name: Build pinned Moonshine native runtime
-        run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+      - name: Validate Whisper runtime provenance
+        run: python3 scripts/check_whisper_provenance.py
+      - name: Stage application and Whisper notices
+        run: bash scripts/prepare_macos_notices.sh
+
       - name: Collect dependency license texts
         run: python3 scripts/collect_release_licenses.py
       - name: Build unsigned macOS application smoke bundle
@@ -633,6 +647,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo downloads

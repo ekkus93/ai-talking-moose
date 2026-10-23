@@ -1,8 +1,6 @@
 name: Whisper-only macOS App Smoke
 
-# Pre-cutover, unsigned .app qualification for both Mac architectures.
-# Deliberately omit legacy Moonshine frameworks via a build-only Tauri
-# override. This does NOT alter the shipping config or approve WSP-500.
+# Unsigned production .app qualification for both Mac architectures.
 on:
   push:
     branches: [master]
@@ -85,38 +83,11 @@ jobs:
           npm ci
           python3 scripts/generate_app_icons.py
           python3 scripts/collect_release_licenses.py
-      - name: Prepare isolated Whisper-only app bundle config
-        # Tauri's TAURI_CONFIG merge does not clear the existing frameworks
-        # array: both architectures previously failed after successful Rust
-        # compilation when bundling the absent libmoonshine.dylib. Patch only
-        # this ephemeral runner checkout, never the committed shipping config.
-        shell: bash
+      - name: Validate production bundle configuration and stage notices
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          path = Path("src-tauri/tauri.conf.json")
-          config = json.loads(path.read_text(encoding="utf-8"))
-          mac = config["bundle"]["macOS"]
-          expected = [
-              "native/macos/libmoonshine.dylib",
-              "native/macos/libonnxruntime.1.23.2.dylib",
-          ]
-          if mac.get("frameworks") != expected:
-              raise SystemExit("Unexpected shipping frameworks: refusing to alter unreviewed dependencies")
-          if config["bundle"].get("resources") != ["native/macos/notices/"]:
-              raise SystemExit("Unexpected notice resources: refusing to weaken package policy")
-          mac["frameworks"] = []
-          path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-          assert json.loads(path.read_text(encoding="utf-8"))["bundle"]["macOS"]["frameworks"] == []
-          print("Ephemeral app-only config omits legacy Moonshine frameworks; committed config unchanged")
-          PY
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-      - name: Build unsigned app with only pinned static Whisper ASR
-        # No TAURI_CONFIG merge: the ephemeral config has an explicit empty
-        # frameworks array. Normal release packaging remains untouched.
+          python3 scripts/validate_release_metadata.py
+          bash scripts/prepare_macos_notices.sh
+      - name: Build unsigned app with pinned static Whisper ASR
         run: npm run tauri build -- --bundles app
       - name: Verify executable, native probe and absent Moonshine payload
         shell: bash

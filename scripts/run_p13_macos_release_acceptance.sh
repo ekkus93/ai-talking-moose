@@ -100,13 +100,13 @@ printf 'Do not mark physical checks PASS from source tests or ordinary CI.\n'
 
 prompt_result 'V1R-130' 'Confirm Finder/System Information shows final Talking Moose AI name/version/icon and the app launches on this supported macOS version.'
 prompt_result 'V1R-132' 'Confirm draft release notes/checksums match the downloaded architecture artifact and the bundled license/notices are inspectable.'
-prompt_result 'V1R-133' 'Upgrade a representative legacy profile: DB/settings migrate, plaintext key moves to Keychain, legacy ASR routing remains Gemini Live, and no surprise Moonshine download occurs.'
+prompt_result 'V1R-133' 'Upgrade a representative legacy profile: DB/settings migrate, plaintext key moves to Keychain, legacy ASR routing remains Gemini Live, saved Moonshine selections become Whisper without downloading weights.'
 prompt_result 'V1R-134-FIRST-RUN' 'On a clean install: launch, onboarding, secure key restart, and explicit microphone permission flow all work.'
-prompt_result 'V1R-134-LOCAL-ASR' 'Fresh profile defaults Tiny; Tiny and Small download/verify/install/transcribe/remove work; packet/log evidence shows Moonshine raw mic audio stays local; missing/corrupt model has no cloud fallback; explicit Gemini Live switch works.'
+prompt_result 'V1R-134-LOCAL-ASR' 'Fresh profile defaults Whisper Small; explicit download/verify/install/transcribe/remove work; packet/log evidence shows raw mic audio stays local; missing/corrupt model has no cloud fallback; explicit Gemini Live switch works.'
 prompt_result 'V1R-134-AUDIO' 'Input/output selection, rate/pitch, transcripts, mouth animation, barge-in, Stop, Mute shutdown, and Dismiss shutdown work.'
 prompt_result 'V1R-134-PRIVACY' 'Quiet hours, talkativeness, active-app Off/On, observer truthfulness, memory Off/On/forget, transcript Off, and clear/reset flows work.'
-prompt_result 'V1R-134-FAILURE' 'Invalid key/network, no-device/permission denial, Moonshine missing/corrupt/ABI failure, interrupted/out-of-disk model install, and Google outage leave truthful recoverable UI/settings.'
-prompt_result 'V1R-134-PACKAGING' 'Clean-machine DMG install works; packaged Moonshine/ONNX loads without developer paths; Tiny transcribes; no development secrets/logs/test DB are bundled.'
+prompt_result 'V1R-134-FAILURE' 'Invalid key/network, no-device/permission denial, Whisper missing/corrupt/ABI failure, interrupted/out-of-disk model install, and Google outage leave truthful recoverable UI/settings.'
+prompt_result 'V1R-134-PACKAGING' 'Clean-machine DMG install works; packaged static Whisper loads without developer paths; Whisper Small transcribes; no development secrets/logs/test DB are bundled.'
 
 provenance_end="$(bash scripts/verify_app_build_provenance.sh "$app_path" "$expected_commit")"
 executable_sha256_end="$(printf '%s\n' "$provenance_end" | awk -F= '$1 == "executable-sha256" {print $2; exit}')"

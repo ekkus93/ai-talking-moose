@@ -536,7 +536,7 @@ describe("mooseStore State Management", () => {
 
   it("surfaces a rejected local ASR startup error in conversationError", async () => {
     const userFacingError =
-      "Local Moonshine ASR is selected, but the model installer is unavailable. No microphone audio was sent.";
+      "Local Whisper ASR is selected, but the model installer is unavailable. No microphone audio was sent.";
 
     // The Rust side sends a user-facing message and owns the connecting/listening
     // lifecycle; it emits the failed lifecycle event before the command rejects,
@@ -552,7 +552,7 @@ describe("mooseStore State Management", () => {
   });
 
   it("normalizes a raw string rejection into conversationError", async () => {
-    const rawString = "Local Moonshine ASR could not start";
+    const rawString = "Local Whisper ASR could not start";
 
     // Tauri commands return Result<(), String>, so a plain string rejection is
     // the real-world path; the typeof-e===string branch is what runs.
@@ -577,13 +577,13 @@ describe("mooseStore State Management", () => {
 
     useMooseStore.setState({
       conversationLifecycle: "failed",
-      conversationError: "Local Moonshine ASR could not start",
+      conversationError: "Local Whisper ASR could not start",
     });
 
     // A "failed" transition must not wipe the startup error.
     handlers.get("moose://conversation/lifecycle")?.("failed");
     expect(useMooseStore.getState().conversationError).toBe(
-      "Local Moonshine ASR could not start",
+      "Local Whisper ASR could not start",
     );
 
     // Every other lifecycle transition clears it.
@@ -603,7 +603,7 @@ describe("mooseStore State Management", () => {
 
   it("does not set conversationError when the lifecycle is already idle (stale banner guard)", async () => {
     vi.spyOn(tauriBridge, "startConversation").mockRejectedValueOnce(
-      new Error("Local Moonshine ASR could not start"),
+      new Error("Local Whisper ASR could not start"),
     );
     useMooseStore.setState({ conversationLifecycle: "idle" });
 

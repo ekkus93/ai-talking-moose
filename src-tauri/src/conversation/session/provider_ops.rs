@@ -129,14 +129,7 @@ impl ConversationManager {
             || self.generation.load(Ordering::SeqCst) != generation
             || !self.local_asr.accepts_callback(generation).await
             || self.active_session_id.lock().as_deref() != Some(expected_session_id)
-            || !matches!(
-                *self.active_asr_mode.lock(),
-                Some(
-                    AsrMode::MoonshineTinyStreaming
-                        | AsrMode::MoonshineSmallStreaming
-                        | AsrMode::WhisperSmall
-                )
-            )
+            || !matches!(*self.active_asr_mode.lock(), Some(AsrMode::WhisperSmall))
         {
             return Ok(false);
         }
@@ -164,14 +157,7 @@ impl ConversationManager {
         if !self.is_in_conversation.load(Ordering::SeqCst)
             || self.generation.load(Ordering::SeqCst) != generation
             || self.active_session_id.lock().as_deref() != Some(expected_session_id)
-            || !matches!(
-                *self.active_asr_mode.lock(),
-                Some(
-                    AsrMode::MoonshineTinyStreaming
-                        | AsrMode::MoonshineSmallStreaming
-                        | AsrMode::WhisperSmall
-                )
-            )
+            || !matches!(*self.active_asr_mode.lock(), Some(AsrMode::WhisperSmall))
         {
             return Ok(false);
         }

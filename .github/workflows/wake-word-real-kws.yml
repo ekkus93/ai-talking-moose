@@ -97,9 +97,9 @@ jobs:
           bash scripts/prepare_ubuntu_apt.sh
           sudo apt-get install -y --no-install-recommends build-essential clang cmake libasound2-dev libayatana-appindicator3-dev libclang-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev
       - uses: dtolnay/rust-toolchain@stable
-      - name: Prepare pinned Moonshine build prerequisites on macOS
-        if: matrix.label == 'macos-arm64'
-        run: bash scripts/prepare_moonshine_macos.sh arm64
+      - name: Stage application and Whisper notices
+        run: bash scripts/prepare_macos_notices.sh
+
       - uses: actions/cache@v4
         with:
           path: |

@@ -35,10 +35,6 @@ const LOCAL_LLM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_TTS_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const WAKE_LISTENER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub fn moonshine_native_smoke_check() -> Result<i32, String> {
-    asr::moonshine::native_runtime_smoke_check().map_err(|error| error.message)
-}
-
 fn persistent_database_path(app_data_dir: &Path) -> io::Result<PathBuf> {
     std::fs::create_dir_all(app_data_dir).map_err(|error| {
         io::Error::new(

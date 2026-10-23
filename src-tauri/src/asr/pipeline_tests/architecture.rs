@@ -57,19 +57,13 @@ async fn whisper_mock_microphone_feeds_one_authoritative_16khz_worker() {
 }
 
 #[tokio::test]
-async fn small_pipeline_uses_same_bounded_worker_and_reports_small_architecture() {
+async fn whisper_pipeline_reports_architecture_and_processes_pcm() {
     let state = Arc::new(FakeState::default());
-    let mut pipeline = fake_pipeline_for_architecture(
-        LocalAsrArchitecture::MoonshineSmallStreaming,
-        state.clone(),
-    )
-    .await;
+    let mut pipeline =
+        fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state.clone()).await;
 
     let diagnostics = pipeline.diagnostics();
-    assert_eq!(
-        diagnostics.architecture,
-        LocalAsrArchitecture::MoonshineSmallStreaming
-    );
+    assert_eq!(diagnostics.architecture, LocalAsrArchitecture::WhisperSmall);
     assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
     assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
 
@@ -99,10 +93,7 @@ async fn pipeline_diagnostics_report_bound_and_running_state() {
     let state = Arc::new(FakeState::default());
     let mut pipeline = fake_pipeline(state).await;
     let diagnostics = pipeline.diagnostics();
-    assert_eq!(
-        diagnostics.architecture,
-        LocalAsrArchitecture::MoonshineTinyStreaming
-    );
+    assert_eq!(diagnostics.architecture, LocalAsrArchitecture::WhisperSmall);
     assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
     assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
     assert_eq!(diagnostics.queue_depth, 0);

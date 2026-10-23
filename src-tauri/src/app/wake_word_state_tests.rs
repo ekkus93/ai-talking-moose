@@ -105,12 +105,6 @@ impl SherpaKwsEngine for TestWakeEngine {
 
 #[test]
 fn wake_v1_supports_local_command_asr_modes() {
-    assert!(wake_word_asr_mode_supported(
-        AsrMode::MoonshineTinyStreaming
-    ));
-    assert!(wake_word_asr_mode_supported(
-        AsrMode::MoonshineSmallStreaming
-    ));
     assert!(wake_word_asr_mode_supported(AsrMode::WhisperSmall));
     assert!(!wake_word_asr_mode_supported(AsrMode::GeminiLiveAudio));
 }

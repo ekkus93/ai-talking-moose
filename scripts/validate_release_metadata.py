@@ -141,7 +141,6 @@ def main() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     package_lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
     tauri = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
-    native_runtime = json.loads((ROOT / "src-tauri/native/moonshine-runtime.json").read_text(encoding="utf-8"))
     cargo_manifest = ROOT / "src-tauri/Cargo.toml"
     cargo_version = parse_cargo_package_value(cargo_manifest, "version")
     cargo_name = parse_cargo_package_value(cargo_manifest, "name")
@@ -199,14 +198,8 @@ def main() -> None:
     if macos.get("entitlements") is not None:
         fail("V1 direct-download release intentionally requires no custom macOS entitlements")
 
-    runtime_macos = native_runtime.get("macos", {})
-    for arch in ("arm64", "x86_64"):
-        runtime_minimum = runtime_macos.get(arch, {}).get("minimum_macos")
-        if runtime_minimum != EXPECTED_MIN_MACOS:
-            fail(
-                f"native runtime minimum for {arch} must be {EXPECTED_MIN_MACOS}, "
-                f"got {runtime_minimum!r}"
-            )
+    if macos.get("frameworks"):
+        fail("Whisper is statically linked; no legacy ASR frameworks may be bundled")
 
     info_plist = ROOT / "src-tauri/Info.plist"
     try:
@@ -225,9 +218,9 @@ def main() -> None:
     if not microphone_description or not microphone_description.strip():
         fail("NSMicrophoneUsageDescription is missing or empty")
 
-    prepare_script = (ROOT / "scripts/prepare_moonshine_macos.sh").read_text(encoding="utf-8")
-    if '-DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target"' not in prepare_script:
-        fail("Moonshine native build no longer applies the provenance deployment target")
+    build_script = (ROOT / "src-tauri/build.rs").read_text(encoding="utf-8")
+    if '.arg(format!("-DCMAKE_OSX_DEPLOYMENT_TARGET={deployment_target}"))' not in build_script:
+        fail("Whisper native build no longer applies the macOS deployment target")
 
     if args.tag and args.tag != f"v{version}":
         fail(f"tag {args.tag!r} does not match application version v{version}")

@@ -47,15 +47,7 @@ impl LocalAsrDiagnosticsStore {
             mode,
             LocalAsrRuntimeDiagnostics {
                 input_sample_rate_hz: 16_000,
-                queue_capacity: local_asr_queue_capacity(match mode {
-                    AsrMode::WhisperSmall => LocalAsrArchitecture::WhisperSmall,
-                    AsrMode::MoonshineSmallStreaming => {
-                        LocalAsrArchitecture::MoonshineSmallStreaming
-                    }
-                    AsrMode::MoonshineTinyStreaming | AsrMode::GeminiLiveAudio => {
-                        LocalAsrArchitecture::MoonshineTinyStreaming
-                    }
-                }),
+                queue_capacity: local_asr_queue_capacity(LocalAsrArchitecture::WhisperSmall),
                 last_error: Some(error),
                 ..LocalAsrRuntimeDiagnostics::default()
             },
@@ -97,7 +89,6 @@ impl LocalAsrPreparationTestGate {
 pub(super) struct LocalAsrPreparation {
     pub(super) generation: u64,
     pub(super) asr_mode: AsrMode,
-    pub(super) installer: Option<Arc<MoonshineModelInstaller>>,
     pub(super) whisper_installer: Option<Arc<crate::asr::whisper::WhisperModelInstaller>>,
     pub(super) session_id: String,
     pub(super) capture: Arc<SyncMutex<AudioCapture>>,
@@ -160,7 +151,6 @@ impl ConversationManager {
         let LocalAsrPreparation {
             generation,
             asr_mode,
-            installer,
             whisper_installer,
             session_id,
             capture,
@@ -201,32 +191,6 @@ impl ConversationManager {
         );
 
         let pipeline_result = match asr_mode {
-            AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => {
-                let installer = match installer {
-                    Some(installer) => installer,
-                    None => {
-                        let message = concat!(
-                            "Local Moonshine ASR is selected, but the model installer is unavailable. ",
-                            "No microphone audio was sent."
-                        )
-                        .to_string();
-                        self.local_asr_diagnostics.remember_error(
-                            asr_mode,
-                            AsrError {
-                                kind: AsrErrorKind::RuntimeUnavailable,
-                                message: message.clone(),
-                                retryable: false,
-                            },
-                        );
-                        return Err(message);
-                    }
-                };
-                if asr_mode == AsrMode::MoonshineTinyStreaming {
-                    LocalAsrPipeline::start_tiny(installer, event_callback).await
-                } else {
-                    LocalAsrPipeline::start_small(installer, event_callback).await
-                }
-            }
             AsrMode::WhisperSmall => {
                 let whisper_installer = match whisper_installer {
                     Some(whisper_installer) => whisper_installer,
@@ -327,10 +291,7 @@ pub(super) fn local_asr_event_callback(
 }
 
 fn is_local_mode(mode: AsrMode) -> bool {
-    matches!(
-        mode,
-        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming | AsrMode::WhisperSmall
-    )
+    matches!(mode, AsrMode::WhisperSmall)
 }
 
 #[cfg(test)]
@@ -341,7 +302,7 @@ mod tests {
     fn diagnostics_store_is_scoped_by_mode_and_preserves_errors() {
         let store = LocalAsrDiagnosticsStore::default();
         store.remember_snapshot(
-            AsrMode::MoonshineTinyStreaming,
+            AsrMode::WhisperSmall,
             LocalAsrRuntimeDiagnostics {
                 input_sample_rate_hz: 16_000,
                 streaming: true,
@@ -352,16 +313,16 @@ mod tests {
         );
 
         let (snapshot, dropped_chunks) = store
-            .get(AsrMode::MoonshineTinyStreaming)
-            .expect("Tiny snapshot should be retained");
+            .get(AsrMode::WhisperSmall)
+            .expect("Whisper snapshot should be retained");
         assert!(!snapshot.streaming);
         assert!(snapshot.metrics_snapshot);
         assert_eq!(snapshot.first_partial_latency_ms, Some(42));
         assert_eq!(dropped_chunks, 3);
-        assert!(store.get(AsrMode::MoonshineSmallStreaming).is_none());
+        assert!(store.get(AsrMode::GeminiLiveAudio).is_none());
 
         store.remember_error(
-            AsrMode::MoonshineTinyStreaming,
+            AsrMode::WhisperSmall,
             AsrError {
                 kind: AsrErrorKind::Inference,
                 message: "boom".to_string(),
@@ -370,7 +331,7 @@ mod tests {
         );
         assert_eq!(
             store
-                .get(AsrMode::MoonshineTinyStreaming)
+                .get(AsrMode::WhisperSmall)
                 .unwrap()
                 .0
                 .last_error
@@ -381,7 +342,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn whisper_preparation_does_not_require_moonshine_installer() {
+    async fn whisper_preparation_records_missing_model_or_runtime_error() {
         let manager = ConversationManager::new();
         let temp = tempfile::TempDir::new().unwrap();
         let whisper_installer = Arc::new(
@@ -398,7 +359,6 @@ mod tests {
             .prepare_local_asr(LocalAsrPreparation {
                 generation: 1,
                 asr_mode: AsrMode::WhisperSmall,
-                installer: None,
                 whisper_installer: Some(whisper_installer),
                 session_id: "session".to_string(),
                 capture: Arc::new(SyncMutex::new(AudioCapture::new())),

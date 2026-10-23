@@ -4,7 +4,6 @@ use crate::ai::google::{
 use crate::ai::local::local_model_entry;
 use crate::ai::local_tts::{validate_local_tts_model, validate_local_tts_voice};
 use crate::app::state::AppSettings;
-use crate::asr::AsrMode;
 use crate::audio::devices::AudioDeviceInfo;
 use crate::character::behavior::BehaviorEngine;
 use crate::character::idle_banter::{
@@ -85,19 +84,6 @@ pub(crate) fn validate_app_settings(settings: &AppSettings) -> Result<(), String
             bounded_identifier(name, value, 256)?;
         }
         Ok(())
-    }
-
-    // Persisted Moonshine values are migrated at startup, but a fresh IPC
-    // settings write must never reactivate a retired local ASR engine.
-    // Keep this check at the shared policy boundary, before persistence.
-    if matches!(
-        settings.asr_mode,
-        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming
-    ) {
-        return Err(
-            "Moonshine ASR is retired; select Whisper Small or explicit Gemini Live audio."
-                .to_string(),
-        );
     }
 
     validate_live_model(&settings.live_model)?;

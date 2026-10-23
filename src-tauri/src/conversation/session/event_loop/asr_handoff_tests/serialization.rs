@@ -75,11 +75,11 @@ impl LocalAsrResource for FinalOnStopDispatchResource {
 async fn local_final_does_not_wait_for_global_operation_lock() {
     let manager = ConversationManager::new();
     let generation = 55;
-    let session_id = "serialized-moonshine-session";
+    let session_id = "serialized-whisper-session";
     manager.generation.store(generation, Ordering::SeqCst);
     manager.is_in_conversation.store(true, Ordering::SeqCst);
     *manager.active_session_id.lock() = Some(session_id.to_string());
-    *manager.active_asr_mode.lock() = Some(AsrMode::MoonshineTinyStreaming);
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
     *manager.lifecycle.write() = ConversationLifecycle::Listening;
     let _stop_count = attach_counting_local_asr(&manager, generation).await;
 

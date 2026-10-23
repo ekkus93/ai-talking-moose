@@ -16,7 +16,7 @@ Real Local LLM acceptance is also **not** an ordinary test. Do not add GGUF down
 
 This project is privacy-by-design; treat these as hard constraints, not suggestions:
 
-- No silent escalation from local Moonshine ASR to cloud Gemini Live microphone upload.
+- No silent escalation from local Whisper ASR to cloud Gemini Live microphone upload.
 - No silent fallback from Local text generation to Google or Fake.
 - Selecting a Local ASR/LLM model does not authorize a download; model installation is an explicit user action.
 - Fresh-profile privacy defaults remain Off for active-app observation, memory, and transcript retention.

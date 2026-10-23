@@ -6,7 +6,7 @@ async fn stale_local_final_transcript_cannot_reach_newer_session() {
     manager.generation.store(62, Ordering::SeqCst);
     manager.is_in_conversation.store(true, Ordering::SeqCst);
     *manager.active_session_id.lock() = Some("new-session".to_string());
-    *manager.active_asr_mode.lock() = Some(AsrMode::MoonshineTinyStreaming);
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
     *manager.lifecycle.write() = ConversationLifecycle::Listening;
     let _stop_count = attach_counting_local_asr(&manager, 62).await;
 

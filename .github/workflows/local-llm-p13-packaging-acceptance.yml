@@ -40,6 +40,7 @@ jobs:
       - name: Check out requested source with history
         uses: actions/checkout@v7
         with:
+          submodules: true
           fetch-depth: 0
 
       - name: Verify requested source and baseline ancestry
@@ -104,6 +105,7 @@ jobs:
           npm ci
           python3 scripts/generate_app_icons.py
           python3 scripts/validate_release_metadata.py
+          # Historical baseline owns its original ASR preparation scripts.
           python3 scripts/validate_moonshine_runtime_manifest.py
           bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
           python3 scripts/collect_release_licenses.py
@@ -119,12 +121,13 @@ jobs:
           set -euo pipefail
           repo="${{ steps.worktrees.outputs.current }}"
           cd "$repo"
+          git submodule update --init --recursive
           npm ci
           python3 scripts/generate_app_icons.py
           python3 scripts/validate_release_metadata.py
           python3 scripts/check_local_llm_packaging_policy.py
-          python3 scripts/validate_moonshine_runtime_manifest.py
-          bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+          python3 scripts/check_whisper_provenance.py
+          bash scripts/prepare_macos_notices.sh
           python3 scripts/collect_release_licenses.py
           npm run tauri build -- --bundles app
           app_path="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"

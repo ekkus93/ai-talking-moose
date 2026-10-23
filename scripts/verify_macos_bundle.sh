@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-manifest="$repo_root/src-tauri/native/moonshine-runtime.json"
+config="$repo_root/src-tauri/tauri.conf.json"
 app_path="${1:-}"
 arch="${2:-$(uname -m)}"
 require_signature="${3:-}"
@@ -16,19 +16,16 @@ fail() {
 [[ -n "$app_path" && -d "$app_path" ]] || fail "usage: $0 /path/to/App.app [arm64|x86_64] [--require-signature]"
 case "$arch" in arm64|x86_64) ;; *) fail "unsupported architecture: $arch" ;; esac
 
-IFS=$'\t' read -r ort_version max_macos_target < <(python3 - "$manifest" "$arch" <<'PY'
+max_macos_target="$(python3 - "$config" <<'PYCONFIG'
 import json, sys
-data = json.load(open(sys.argv[1], encoding="utf-8"))
-entry = data["macos"][sys.argv[2]]
-print(f"{data['onnxruntime']['version']}\t{entry['minimum_macos']}")
-PY
-)
-[[ -n "$ort_version" && -n "$max_macos_target" ]] || fail "invalid native runtime provenance manifest"
-frameworks="$app_path/Contents/Frameworks"
-moonshine="$frameworks/libmoonshine.dylib"
-ort="$frameworks/libonnxruntime.$ort_version.dylib"
-[[ -f "$moonshine" ]] || fail "bundle is missing $moonshine"
-[[ -f "$ort" ]] || fail "bundle is missing $ort"
+print(json.load(open(sys.argv[1], encoding="utf-8"))["bundle"]["macOS"]["minimumSystemVersion"])
+PYCONFIG
+)"
+[[ -n "$max_macos_target" ]] || fail "missing macOS deployment floor"
+if find "$app_path/Contents" \
+    \( -iname '*moonshine*' -o -name 'ggml-small.bin' \) -print -quit | grep -q .; then
+  fail "bundle contains retired ASR runtime/resources or Whisper model weights"
+fi
 
 executables=()
 while IFS= read -r executable_path; do
@@ -50,7 +47,7 @@ developer_load_paths() {
   } | grep -E '/opt/homebrew|/usr/local|/Users/|/private/tmp|/var/folders' || true
 }
 
-for binary in "$executable" "$moonshine" "$ort"; do
+for binary in "$executable"; do
   archs="$(lipo -archs "$binary")"
   [[ " $archs " == *" $arch "* ]] || fail "$binary does not contain architecture $arch"
   bad_load_paths="$(developer_load_paths "$binary")"
@@ -61,9 +58,9 @@ for binary in "$executable" "$moonshine" "$ort"; do
 done
 
 # Every shipped Mach-O must remain compatible with the deployment floor pinned in
-# the native runtime provenance manifest. Support both modern LC_BUILD_VERSION and
+# the application bundle configuration. Support both modern LC_BUILD_VERSION and
 # older LC_VERSION_MIN_MACOSX load commands.
-for binary in "$executable" "$moonshine" "$ort"; do
+for binary in "$executable"; do
   min_version="$(otool -l "$binary" | awk '
     $1 == "cmd" && $2 == "LC_BUILD_VERSION" { build = 1; legacy = 0; next }
     $1 == "cmd" && $2 == "LC_VERSION_MIN_MACOSX" { legacy = 1; build = 0; next }
@@ -82,16 +79,15 @@ if parts(actual) > parts(maximum):
 PY2
 done
 
-otool -L "$executable" | grep -F '@rpath/libmoonshine.dylib' >/dev/null \
-  || fail "application executable does not load Moonshine through @rpath"
-otool -L "$moonshine" | grep -F "@rpath/libonnxruntime.$ort_version.dylib" >/dev/null \
-  || fail "Moonshine does not load ONNX Runtime through @rpath"
+if otool -L "$executable" | grep -Ei 'lib(moonshine|whisper|ggml[^/]*)\.dylib|libonnxruntime\.1\.23\.2\.dylib'; then
+  fail "executable loads retired ASR libraries or dynamically linked Whisper"
+fi
 
 notice_root="$app_path/Contents/Resources/native/macos/notices"
 [[ -f "$notice_root/TALKING_MOOSE_LICENSE" ]] || fail "Talking Moose project license is missing from bundle"
 [[ -f "$notice_root/THIRD_PARTY_NOTICES.md" ]] || fail "third-party notice inventory is missing from bundle"
-license_count="$(find "$notice_root/MoonshineRuntime" -type f 2>/dev/null | wc -l | tr -d ' ')"
-(( license_count >= 5 )) || fail "bundled native notice set is incomplete"
+[[ -f "$notice_root/WhisperRuntime/WHISPER_CPP_LICENSE" ]] \
+  || fail "pinned Whisper runtime license is missing from bundle"
 
 local_llm_notice="$notice_root/LocalLlmRuntime/LLAMA_CPP_LICENSE"
 local_llm_binding_notice="$notice_root/LocalLlmRuntime/LLAMA_CPP_RS_LICENSE_MIT"
@@ -117,27 +113,20 @@ smoke_output="$(
   env -i \
     HOME="${HOME:-/tmp}" \
     PATH='/usr/bin:/bin:/usr/sbin:/sbin' \
-    "$executable" --moonshine-native-smoke-test
+    "$executable" --whisper-native-smoke-test
 )"
 printf '%s\n' "$smoke_output"
-grep -E '^moonshine-runtime-version=[0-9]+$' <<<"$smoke_output" >/dev/null \
-  || fail "bundled executable failed Moonshine native runtime smoke check"
+grep -E '^whisper-native-runtime-version=.+$' <<<"$smoke_output" >/dev/null \
+  || fail "bundled executable failed Whisper native runtime smoke check"
 
-# The linker can leave an ad-hoc signature on Contents/MacOS/<binary> even when
-# the .app bundle itself has never been resource-sealed. `codesign -dv App.app`
-# may therefore succeed for an otherwise unsigned bundle. Treat the bundle as
-# signed only when the resource seal exists; always verify the staged native
-# dylib signatures created by prepare_moonshine_macos.sh.
-codesign --verify --strict "$moonshine"
-codesign --verify --strict "$ort"
-
+# An ad-hoc executable signature alone does not seal the application resources.
 bundle_seal="$app_path/Contents/_CodeSignature/CodeResources"
 if [[ -f "$bundle_seal" ]]; then
   codesign --verify --strict --deep "$app_path"
 elif [[ "$require_signature" == '--require-signature' ]]; then
   fail "signed bundle required, but application has no resource-sealed signature"
 else
-  printf 'Bundle has no resource-sealed signature; native dylib signatures verified for smoke CI.\n'
+  printf 'Bundle has no resource-sealed signature; unsigned app verified for smoke CI.\n'
 fi
 
-printf 'Verified self-contained Moonshine runtime bundle for macOS %s.\n' "$arch"
+printf 'Verified static Whisper runtime bundle for macOS %s.\n' "$arch"

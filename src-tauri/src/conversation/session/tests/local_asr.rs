@@ -149,7 +149,7 @@ async fn whisper_missing_model_blocks_provider_connect_and_microphone_capture() 
     let connect_count = Arc::new(AtomicUsize::new(0));
     let mut request = test_request(false);
     request.asr_mode = AsrMode::WhisperSmall;
-    request.moonshine_installer = None;
+
     request.whisper_installer = Some(Arc::new(
         crate::asr::whisper::WhisperModelInstaller::new(
             temp.path()
@@ -186,7 +186,7 @@ async fn barge_in_keeps_current_local_asr_active() {
     manager.generation.store(generation, Ordering::SeqCst);
     manager.is_in_conversation.store(true, Ordering::SeqCst);
     *manager.active_session_id.lock() = Some("local-barge-session".to_string());
-    *manager.active_asr_mode.lock() = Some(AsrMode::MoonshineTinyStreaming);
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
     *manager.lifecycle.write() = ConversationLifecycle::Responding;
 
     let local_asr_stop_count = attach_counting_local_asr(&manager, generation).await;
@@ -241,7 +241,7 @@ async fn whisper_stop_during_preparation_cannot_connect_or_reanimate_session() {
     let lifecycle_events = Arc::new(SyncMutex::new(Vec::new()));
     let mut request = test_request(false);
     request.asr_mode = AsrMode::WhisperSmall;
-    request.moonshine_installer = None;
+
     request.provider = Arc::new(ConnectCountingProvider {
         connect_count: connect_count.clone(),
     });
@@ -338,7 +338,7 @@ async fn cancelled_local_asr_preparation_failure_cannot_emit_stale_error_state()
     let state_events = Arc::new(SyncMutex::new(Vec::new()));
     let lifecycle_events = Arc::new(SyncMutex::new(Vec::new()));
     let mut request = test_request(false);
-    request.asr_mode = AsrMode::MoonshineTinyStreaming;
+    request.asr_mode = AsrMode::WhisperSmall;
     let capture = request.capture.clone();
     let playback = request.playback.clone();
     let state_events_for_callback = state_events.clone();
@@ -399,7 +399,7 @@ async fn blocked_local_asr_preparation_does_not_hold_operation_lock_against_stop
 
     let connect_count = Arc::new(AtomicUsize::new(0));
     let mut request = test_request(false);
-    request.asr_mode = AsrMode::MoonshineTinyStreaming;
+    request.asr_mode = AsrMode::WhisperSmall;
     request.provider = Arc::new(ConnectCountingProvider {
         connect_count: connect_count.clone(),
     });
@@ -446,7 +446,7 @@ async fn cancelled_wake_local_asr_start_cannot_mutate_newer_committed_session() 
     manager.set_local_asr_preparation_test_gate(Some(gate.clone()));
 
     let mut stale_request = test_request(false);
-    stale_request.asr_mode = AsrMode::MoonshineTinyStreaming;
+    stale_request.asr_mode = AsrMode::WhisperSmall;
     let stale_capture = stale_request.capture.clone();
     let stale_playback = stale_request.playback.clone();
     let stale_handoff = WakeCommandHandoffAudio::new(16_000, vec![101, 202, 303, 404]).unwrap();
@@ -517,7 +517,7 @@ async fn cancelled_wake_local_asr_start_cannot_mutate_newer_committed_session() 
 }
 
 #[tokio::test]
-async fn whisper_preparation_does_not_require_moonshine_installer() {
+async fn whisper_preparation_records_whisper_runtime_or_model_failure() {
     let manager = ConversationManager::new();
     let temp = tempfile::TempDir::new().unwrap();
     let whisper_installer = Arc::new(
@@ -536,9 +536,8 @@ async fn whisper_preparation_does_not_require_moonshine_installer() {
         .prepare_local_asr(LocalAsrPreparation {
             generation: 73,
             asr_mode: AsrMode::WhisperSmall,
-            installer: None,
             whisper_installer: Some(whisper_installer),
-            session_id: "whisper-without-moonshine".to_string(),
+            session_id: "whisper-missing-model".to_string(),
             capture,
             playback,
             state_callback: Arc::new(|_| {}),

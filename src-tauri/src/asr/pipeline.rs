@@ -1,6 +1,5 @@
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrResource;
-use crate::asr::moonshine::{MoonshineModelInstaller, MoonshineSmallEngine, MoonshineTinyEngine};
 use crate::asr::runtime_metrics::RuntimeMetrics;
 use crate::asr::transcript_state::{StreamingTranscriptUpdate, TranscriptStateMachine};
 use crate::asr::types::LocalAsrArchitecture;
@@ -23,23 +22,21 @@ use tracing::debug;
 mod worker;
 use worker::{run_worker, StartupWorkerGuard};
 
-/// Hard bound for microphone chunks waiting on local Moonshine inference.
+/// Hard bound for microphone chunks waiting on local Whisper inference.
 ///
-/// `AudioCapture` emits 100 ms chunks at the requested target rate, so eight
-/// queued chunks cap waiting microphone audio at roughly 800 ms. The producer
+/// `AudioCapture` emits 100 ms chunks at the requested target rate, so 56
+/// queued chunks cap waiting microphone audio at roughly 5.6 seconds. The producer
 /// never blocks the CPAL callback: when this queue is full, the newest chunk is
 /// dropped by `AudioCapture`, which owns the authoritative overload counter.
-pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 8;
+pub const LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 56;
 
 /// Whisper runs whole-utterance CPU inference for each partial. Keep up to 5.6
 /// seconds queued during that synchronous work so normal capture is not lost.
-pub const WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = 56;
+pub const WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS: usize = LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
 
 pub const fn local_asr_queue_capacity(architecture: LocalAsrArchitecture) -> usize {
     match architecture {
         LocalAsrArchitecture::WhisperSmall => WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
-        LocalAsrArchitecture::MoonshineTinyStreaming
-        | LocalAsrArchitecture::MoonshineSmallStreaming => LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
     }
 }
 
@@ -134,29 +131,14 @@ pub trait PipelineEngine: Send {
     fn updates_delivered(&mut self, _updates: &[StreamingTranscriptUpdate]) {}
 }
 
-impl PipelineEngine for MoonshineTinyEngine {
-    fn input_sample_rate_hz(&self) -> u32 {
-        MoonshineTinyEngine::input_sample_rate_hz(self)
-    }
-
-    fn push_pcm(&mut self, pcm: &[f32]) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
-        MoonshineTinyEngine::push_pcm(self, pcm)
-    }
-
-    fn stop(&mut self) -> Result<Vec<StreamingTranscriptUpdate>, AsrError> {
-        MoonshineTinyEngine::stop(self)?;
-        Ok(Vec::new())
-    }
-}
-
-/// Bounded microphone-to-Moonshine Tiny/Small pipeline.
+/// Bounded microphone-to-Whisper pipeline.
 ///
 /// The pipeline does not create another microphone. `start_capture` starts the
 /// caller-owned authoritative `AudioCapture` and gives it this pipeline's
 /// bounded ingress sender. AudioCapture performs device-format conversion,
 /// downmixing, and resampling before emitting 16-bit mono PCM at 16 kHz.
 /// The dedicated OS worker converts those bounded chunks to `f32` and performs
-/// all native Moonshine inference off Tokio and off the CPAL callback thread.
+/// all native Whisper inference off Tokio and off the CPAL callback thread.
 pub struct LocalAsrPipeline {
     architecture: LocalAsrArchitecture,
     input_sample_rate_hz: u32,
@@ -171,46 +153,6 @@ pub struct LocalAsrPipeline {
 }
 
 impl LocalAsrPipeline {
-    /// Start the production Moonshine Tiny worker. Model verification and
-    /// native engine construction occur on the dedicated worker thread.
-    pub async fn start_tiny(
-        installer: Arc<MoonshineModelInstaller>,
-        event_callback: LocalAsrPipelineEventCallback,
-    ) -> Result<Self, AsrError> {
-        Self::start_architecture(
-            LocalAsrArchitecture::MoonshineTinyStreaming,
-            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
-            move || {
-                MoonshineTinyEngine::open(&installer)
-                    .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
-            },
-            event_callback,
-            PRODUCTION_WORKER_STARTUP_TIMEOUT,
-            None,
-        )
-        .await
-    }
-
-    /// Start the production Moonshine Small worker with the same bounded queue,
-    /// transcript state machine, lifecycle, and local-only microphone contract.
-    pub async fn start_small(
-        installer: Arc<MoonshineModelInstaller>,
-        event_callback: LocalAsrPipelineEventCallback,
-    ) -> Result<Self, AsrError> {
-        Self::start_architecture(
-            LocalAsrArchitecture::MoonshineSmallStreaming,
-            LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
-            move || {
-                MoonshineSmallEngine::open_small(&installer)
-                    .map(|engine| Box::new(engine) as Box<dyn PipelineEngine>)
-            },
-            event_callback,
-            PRODUCTION_WORKER_STARTUP_TIMEOUT,
-            None,
-        )
-        .await
-    }
-
     /// Start the production Whisper.cpp `whisper-small` worker with the same
     /// bounded queue, transcript state machine, lifecycle, and local-only
     /// microphone contract.
@@ -232,7 +174,7 @@ impl LocalAsrPipeline {
         .await
     }
 
-    /// Prime the shared local ASR ingress (Whisper or legacy Moonshine) with
+    /// Prime the local Whisper ASR ingress with
     /// exact wake pre-roll and post-trigger PCM before microphone ownership
     /// transfers to `start_capture`. The bounded queue preserves chronological
     /// ordering without acoustic trimming or a second inference path.
@@ -397,7 +339,7 @@ impl LocalAsrPipeline {
         F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
     {
         Self::start_architecture(
-            LocalAsrArchitecture::MoonshineTinyStreaming,
+            LocalAsrArchitecture::WhisperSmall,
             LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
             factory,
             event_callback,
@@ -417,7 +359,7 @@ impl LocalAsrPipeline {
         F: FnOnce() -> Result<Box<dyn PipelineEngine>, AsrError> + Send + 'static,
     {
         Self::start_architecture(
-            LocalAsrArchitecture::MoonshineTinyStreaming,
+            LocalAsrArchitecture::WhisperSmall,
             LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
             factory,
             event_callback,
@@ -454,8 +396,6 @@ impl LocalAsrPipeline {
         let worker_callback = event_callback.clone();
         let worker = thread::Builder::new()
             .name(match architecture {
-                LocalAsrArchitecture::MoonshineTinyStreaming => "moonshine-tiny-asr".to_string(),
-                LocalAsrArchitecture::MoonshineSmallStreaming => "moonshine-small-asr".to_string(),
                 LocalAsrArchitecture::WhisperSmall => "whisper-small-asr".to_string(),
             })
             .spawn(move || {

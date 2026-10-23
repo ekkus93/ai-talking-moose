@@ -254,36 +254,10 @@ fn only_final_live_transcript_roles_are_persistable() {
 }
 
 #[test]
-fn missing_moonshine_tiny_model_fails_before_microphone_capture() {
-    let mut app_state = AppState::new_for_tests().unwrap();
-    app_state.settings.write().asr_mode = AsrMode::MoonshineTinyStreaming;
-    app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
-    let capture = app_state.audio_capture.clone();
-
-    let app = mock_builder()
-        .manage(app_state)
-        .invoke_handler(tauri::generate_handler![start_conversation])
-        .build(mock_context(noop_assets()))
-        .unwrap();
-    let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
-        .build()
-        .unwrap();
-
-    let error = get_ipc_response(&webview, ipc_request("start_conversation", json!({})))
-        .expect_err("missing Tiny model must fail closed before microphone capture");
-
-    assert!(error
-        .as_str()
-        .unwrap()
-        .contains("No microphone audio was sent"));
-    assert!(!capture.lock().is_active());
-}
-
-#[test]
-fn missing_moonshine_small_model_fails_before_microphone_capture() {
+fn missing_whisper_small_model_fails_before_microphone_capture() {
     let mut app_state = AppState::new_for_tests().unwrap();
     app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
-    app_state.settings.write().asr_mode = AsrMode::MoonshineSmallStreaming;
+    app_state.settings.write().asr_mode = AsrMode::WhisperSmall;
     let capture = app_state.audio_capture.clone();
 
     let app = mock_builder()
@@ -299,8 +273,8 @@ fn missing_moonshine_small_model_fails_before_microphone_capture() {
         .expect_err("missing Small model must fail closed before microphone capture");
 
     let error = error.as_str().unwrap();
-    assert!(error.contains("Moonshine Small"));
-    assert!(error.contains("No microphone audio was sent"));
+    assert!(error.contains("Whisper"));
+    assert!(error.contains("not installed"));
     assert!(!capture.lock().is_active());
 }
 

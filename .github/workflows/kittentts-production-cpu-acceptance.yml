@@ -123,13 +123,14 @@ jobs:
       ORT_SHA256: ${{ matrix.ort_sha256 }}
       ACCEPTANCE_LABEL: ${{ matrix.label }}
       EXPECTED_SHA: ${{ needs.guard.outputs.expected_sha }}
-      # A standalone KittenTTS CPU test does not package Moonshine dylibs.
+      # The standalone KittenTTS CPU test uses installer-owned runtime assets.
       # KittenTTS installs and verifies its OWN pinned ONNX Runtime archive.
       TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
     steps:
       - name: Check out exact acceptance head
         uses: actions/checkout@v7
         with:
+          submodules: true
           ref: ${{ needs.guard.outputs.expected_sha }}
 
       - name: Verify acceptance metadata matches the production catalog

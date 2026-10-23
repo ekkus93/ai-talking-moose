@@ -132,9 +132,7 @@ describe("WakeWordSettingsPanel", () => {
     expect(screen.getByText(/local\/offline keyword/i)).toBeInTheDocument();
     expect(screen.getByText(/locally active/i)).toBeInTheDocument();
     expect(screen.getByText(/not full-time cloud/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/local Moonshine command ASR/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/local Whisper command ASR/i)).toBeInTheDocument();
     expect(screen.getByText(/developer-prepared/i)).toBeInTheDocument();
     expect(screen.getByText(/clean install fails closed/i)).toBeInTheDocument();
     expect(screen.getByText(/no barge-in support/i)).toBeInTheDocument();
@@ -220,7 +218,7 @@ describe("WakeWordSettingsPanel", () => {
       await screen.findByText(/listener: failed closed/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/check local Moonshine ASR mode/i),
+      screen.getByText(/check local Whisper ASR mode/i),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/\/tmp|users\/|appdata/i),
@@ -237,7 +235,7 @@ describe("WakeWordSettingsPanel", () => {
     expect(wakeToggle()).toBeChecked();
     expect(
       screen.getByText(
-        "Enabled — runtime starts only after developer-prepared local KWS artifacts, local Moonshine ASR policy, and lifecycle state permit.",
+        "Enabled — runtime starts only after developer-prepared local KWS artifacts, local Whisper ASR policy, and lifecycle state permit.",
       ),
     ).toBeInTheDocument();
   });

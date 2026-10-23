@@ -111,7 +111,7 @@ def check_full_validation_bundle_smoke() -> None:
         "npm run tauri build -- --debug --bundles app --target",
         "bash scripts/verify_macos_bundle.sh",
         "bash scripts/verify_app_build_provenance.sh",
-        "Cache pinned Moonshine native runtime",
+        "Stage application and Whisper notices",
     ):
         if token not in text:
             fail(f"explicit full-validation bundle smoke is missing {token!r}")

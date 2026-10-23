@@ -27,7 +27,7 @@ const behaviorRequirements = [
   "Live enable/disable changes are applied to the authoritative runtime",
   "one-stream production microphone routing",
   "WWR-630 accepted performance evidence",
-  "Wake-triggered command activation is limited to local Moonshine streaming command ASR",
+  "Wake-triggered command activation is limited to local Whisper Small command ASR",
   "unsupported command ASR modes such as Gemini Live audio remain available to ordinary manual interaction",
   "developer-prepared rather than clean-install user-ready",
   "empty app data fails closed until artifacts are prepared and verified",
@@ -51,9 +51,9 @@ const architectureRequirements = [
   "Linux x86_64 and macOS arm64 real-KWS acceptance passed",
   "post-closeout review reopened production integration requirements",
   "WAKE_WORD_V1_POST_CLOSEOUT_REMEDIATION_TODO_2026-09-25.md",
-  "Wake Word V1 supports this handoff only for local Moonshine streaming command ASR",
+  "Wake Word V1 supports this handoff only for local Whisper Small command ASR",
   "Unsupported modes such as Gemini Live audio are rejected before listener startup or Wake enablement",
-  "local Moonshine command-ASR ingress boundary for Wake-triggered handoff audio",
+  "local Whisper command-ASR ingress boundary for Wake-triggered handoff audio",
   "selected provisioning model is developer-prepared",
   "clean app-data install with missing model/runtime files must fail closed",
   "app does not silently download Wake artifacts",
@@ -80,14 +80,13 @@ for (const token of runtimeEvidence) {
 
 const wakePolicyEvidence = [
   "wake_word_asr_mode_supported",
-  "AsrMode::MoonshineTinyStreaming",
-  "AsrMode::MoonshineSmallStreaming",
-  "AsrMode::GeminiLiveAudio",
-  "Wake Word V1 requires local Moonshine command ASR",
+  "AsrMode::WhisperSmall",
+  "matches!(mode, AsrMode::WhisperSmall)",
+  "Choose a local command ASR mode (Whisper Small)",
 ];
 for (const token of wakePolicyEvidence) {
   if (!wakeWordState.includes(token)) {
-    fail(`local-Moonshine Wake policy lacks source evidence ${token}`);
+    fail(`local-Whisper Wake policy lacks source evidence ${token}`);
   }
 }
 
@@ -95,7 +94,7 @@ const uiRequirements = [
   "Wake Word V1 uses local/offline keyword spotting.",
   "The microphone remains locally active while listening.",
   "Wake detection is not full-time cloud transcription.",
-  "Wake-triggered commands require local Moonshine command ASR.",
+  "Wake-triggered commands require local Whisper command ASR.",
   "Wake model/runtime artifacts are developer-prepared; a clean install",
   "fails closed until the pinned artifacts are prepared and verified.",
   "Wake Word V1 has no barge-in support while Moose talks.",
@@ -215,4 +214,4 @@ for (const pattern of forbiddenClaims) {
   }
 }
 
-console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, local-Moonshine Wake ASR policy, developer-prepared artifact provisioning, UI disclosures, README truthfulness boundary, gate boundaries, and accepted performance status are consistent.");
+console.log("Wake Word documentation audit: behavior, architecture, source-backed live toggle, local-Whisper Wake ASR policy, developer-prepared artifact provisioning, UI disclosures, README truthfulness boundary, gate boundaries, and accepted performance status are consistent.");

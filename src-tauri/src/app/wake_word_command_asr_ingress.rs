@@ -10,7 +10,7 @@ pub(crate) trait WakeCommandAsrIngress {
     fn accept_wake_handoff(&mut self, audio: WakeCommandHandoffAudio) -> Result<(), String>;
 }
 
-/// The production local command-ASR path consumes Wake audio through the same bounded Moonshine
+/// The production local command-ASR path consumes Wake audio through the same bounded Whisper
 /// ingress used by normal microphone capture. This implementation deliberately does not create a
 /// second ASR pipeline or microphone stream: it only primes the already-running pipeline before
 /// the authoritative capture owner is attached to that pipeline.

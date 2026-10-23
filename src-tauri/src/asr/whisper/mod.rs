@@ -1,7 +1,7 @@
 //! Whisper.cpp local ASR support.
 //!
-//! Whisper is a local-only command-ASR engine. It shares the bounded microphone
-//! queue and transcript state machine with Moonshine but runs a batch whisper.cpp
+//! Whisper is a local-only command-ASR engine. It uses the bounded microphone
+//! queue and shared transcript state machine, running batch whisper.cpp
 //! inference over the queued PCM instead of a streaming endpoint. The whisper.cpp
 //! C runtime is built from source via CMake in `src-tauri/build.rs`; model weights
 //! are user-downloaded and never committed.

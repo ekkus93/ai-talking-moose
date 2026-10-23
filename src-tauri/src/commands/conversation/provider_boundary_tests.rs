@@ -27,14 +27,14 @@ fn ipc_request(command: &str, body: serde_json::Value) -> InvokeRequest {
 }
 
 #[test]
-fn local_text_selection_does_not_change_moonshine_voice_preflight() {
+fn local_text_selection_does_not_change_whisper_voice_preflight() {
     let mut app_state = AppState::new_for_tests().unwrap();
     app_state.audio_capture = Arc::new(parking_lot::Mutex::new(AudioCapture::new_mock()));
     {
         let mut settings = app_state.settings.write();
         settings.text_provider = TextProvider::Local;
         settings.local_text_model = "missing-local-model".to_string();
-        settings.asr_mode = AsrMode::MoonshineTinyStreaming;
+        settings.asr_mode = AsrMode::WhisperSmall;
     }
     let capture = app_state.audio_capture.clone();
 
@@ -48,11 +48,11 @@ fn local_text_selection_does_not_change_moonshine_voice_preflight() {
         .unwrap();
 
     let error = get_ipc_response(&webview, ipc_request("start_conversation", json!({})))
-        .expect_err("Local text selection must not bypass Moonshine voice preflight");
+        .expect_err("Local text selection must not bypass Whisper voice preflight");
     let error = error.as_str().unwrap();
 
-    assert!(error.contains("Moonshine Tiny"));
-    assert!(error.contains("No microphone audio was sent"));
+    assert!(error.contains("Whisper"));
+    assert!(error.contains("not installed"));
     assert!(!error.contains("selected conversation model is unavailable"));
     assert!(!capture.lock().is_active());
 }

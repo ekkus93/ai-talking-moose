@@ -118,7 +118,7 @@ Real CPU acceptance proves generation after installation while the process is in
 Local providers do not imply that every app capability is offline:
 
 - Gemini Live is used only when Gemini Live audio ASR is explicitly selected;
-- local Whisper Small ASR keeps microphone PCM local on Linux/macOS, and non-Live Talk hands finalized transcripts to the explicitly selected text provider (Local, Google, OpenAI, Ollama or llama-server); legacy Moonshine remains a separately gated compatibility/runtime dependency during cutover;
+- local Whisper Small ASR keeps microphone PCM local on Linux/macOS, and non-Live Talk hands finalized transcripts to the explicitly selected text provider (Local, Google, OpenAI, Ollama or llama-server); saved Moonshine selections migrate to Whisper without implicit downloads;
 - Google TTS receives text when Google TTS is used for standalone speech;
 - Google text generation is available when the user explicitly selects the Google text provider;
 - OpenAI text generation sends selected prompt context to OpenAI with the independent OpenAI key;

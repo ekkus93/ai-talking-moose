@@ -4,12 +4,12 @@ use super::*;
 async fn local_final_transcript_becomes_one_attributed_gemini_text_turn() {
     let manager = ConversationManager::new();
     let generation = 51;
-    let session_id = "moonshine-session";
+    let session_id = "whisper-session";
     manager.generation.store(generation, Ordering::SeqCst);
     manager.is_in_conversation.store(true, Ordering::SeqCst);
     manager.output_suppressed.store(true, Ordering::SeqCst);
     *manager.active_session_id.lock() = Some(session_id.to_string());
-    *manager.active_asr_mode.lock() = Some(AsrMode::MoonshineTinyStreaming);
+    *manager.active_asr_mode.lock() = Some(AsrMode::WhisperSmall);
     *manager.lifecycle.write() = ConversationLifecycle::Listening;
     let _stop_count = attach_counting_local_asr(&manager, generation).await;
 

@@ -20,11 +20,7 @@ async fn unavailable_system_voice_blocks_all_local_asr_and_text_connections() {
         .secrets
         .set_openai_api_key("saved-openai-test-key".into())
         .unwrap();
-    for asr_mode in [
-        AsrMode::WhisperSmall,
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
-    ] {
+    for asr_mode in [AsrMode::WhisperSmall] {
         for text_provider in [
             TextProvider::Local,
             TextProvider::Google,

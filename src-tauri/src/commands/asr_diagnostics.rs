@@ -1,26 +1,18 @@
-use super::asr_models::{
-    architecture_for_mode, load_descriptor, load_whisper_descriptor, model_in_use,
-};
+use super::asr_models::{load_whisper_descriptor, model_in_use};
 use crate::app::state::AppState;
 use crate::asr::pipeline::local_asr_queue_capacity;
 use crate::asr::types::LocalAsrRuntimeDiagnostics;
 use crate::asr::{AsrDiagnostics, AsrMode, AsrModelDescriptor};
 use tauri::State;
 
-fn empty_local_runtime(mode: AsrMode) -> LocalAsrRuntimeDiagnostics {
+fn empty_local_runtime() -> LocalAsrRuntimeDiagnostics {
     LocalAsrRuntimeDiagnostics {
         input_sample_rate_hz: 16_000,
         streaming: false,
         queue_depth: 0,
-        queue_capacity: local_asr_queue_capacity(match mode {
-            AsrMode::WhisperSmall => crate::asr::types::LocalAsrArchitecture::WhisperSmall,
-            AsrMode::MoonshineSmallStreaming => {
-                crate::asr::types::LocalAsrArchitecture::MoonshineSmallStreaming
-            }
-            AsrMode::MoonshineTinyStreaming | AsrMode::GeminiLiveAudio => {
-                crate::asr::types::LocalAsrArchitecture::MoonshineTinyStreaming
-            }
-        }),
+        queue_capacity: local_asr_queue_capacity(
+            crate::asr::types::LocalAsrArchitecture::WhisperSmall,
+        ),
         ..LocalAsrRuntimeDiagnostics::default()
     }
 }
@@ -59,42 +51,8 @@ fn compose_asr_diagnostics(
             resident_memory_bytes: None,
             peak_resident_memory_bytes: None,
         },
-        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => {
-            let runtime = runtime.unwrap_or_else(|| empty_local_runtime(selected_mode));
-            AsrDiagnostics {
-                selected_mode,
-                engine_name: descriptor.map_or_else(
-                    || "Moonshine local ASR".to_string(),
-                    |model| model.display_name.clone(),
-                ),
-                model_id: descriptor.map(|model| model.id.clone()),
-                model_revision: descriptor.map(|model| model.revision.clone()),
-                install_state: descriptor.map(|model| model.install_state),
-                input_sample_rate_hz: runtime.input_sample_rate_hz,
-                streaming: runtime.streaming,
-                metrics_snapshot: runtime.metrics_snapshot,
-                cpu_threads: std::thread::available_parallelism()
-                    .ok()
-                    .map(std::num::NonZero::get),
-                queue_depth: runtime.queue_depth,
-                queue_capacity: runtime.queue_capacity,
-                dropped_chunks,
-                last_error: runtime.last_error,
-                first_partial_latency_ms: runtime.first_partial_latency_ms,
-                first_final_latency_ms: runtime.first_final_latency_ms,
-                last_transcription_latency_ms: runtime.last_transcription_latency_ms,
-                processed_audio_ms: runtime.processed_audio_ms,
-                inference_wall_time_ms: runtime.inference_wall_time_ms,
-                real_time_factor: runtime.real_time_factor,
-                process_cpu_time_ms: runtime.process_cpu_time_ms,
-                average_cpu_utilization_percent: runtime.average_cpu_utilization_percent,
-                baseline_resident_memory_bytes: runtime.baseline_resident_memory_bytes,
-                resident_memory_bytes: runtime.resident_memory_bytes,
-                peak_resident_memory_bytes: runtime.peak_resident_memory_bytes,
-            }
-        }
         AsrMode::WhisperSmall => {
-            let runtime = runtime.unwrap_or_else(|| empty_local_runtime(selected_mode));
+            let runtime = runtime.unwrap_or_else(empty_local_runtime);
             AsrDiagnostics {
                 selected_mode,
                 engine_name: descriptor.map_or_else(
@@ -145,40 +103,9 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
             capture_diagnostics.sample_rate_hz,
         ));
     }
-    if selected_mode == AsrMode::WhisperSmall {
-        let active = model_in_use(state.inner(), selected_mode);
-        let descriptor = load_whisper_descriptor(state.whisper_installer.clone(), active).await?;
-        let (runtime, local_dropped_chunks) =
-            if state.conversation_mgr.active_asr_mode() == Some(selected_mode) {
-                (
-                    state
-                        .conversation_mgr
-                        .local_asr_lifecycle()
-                        .diagnostics()
-                        .await,
-                    dropped_chunks,
-                )
-            } else if let Some((runtime, snapshot_dropped_chunks)) = state
-                .conversation_mgr
-                .last_local_asr_diagnostics(selected_mode)
-            {
-                (Some(runtime), snapshot_dropped_chunks)
-            } else {
-                (None, 0)
-            };
 
-        return Ok(compose_asr_diagnostics(
-            selected_mode,
-            Some(&descriptor),
-            runtime,
-            local_dropped_chunks,
-            capture_diagnostics.sample_rate_hz,
-        ));
-    }
-    let architecture = architecture_for_mode(selected_mode)?;
     let active = model_in_use(state.inner(), selected_mode);
-    let descriptor =
-        load_descriptor(state.moonshine_installer.clone(), architecture, active).await?;
+    let descriptor = load_whisper_descriptor(state.whisper_installer.clone(), active).await?;
     let (runtime, local_dropped_chunks) =
         if state.conversation_mgr.active_asr_mode() == Some(selected_mode) {
             (
@@ -210,22 +137,18 @@ pub async fn get_asr_diagnostics(state: State<'_, AppState>) -> Result<AsrDiagno
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::asr::pipeline::{
-        LOCAL_ASR_QUEUE_CAPACITY_CHUNKS, WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS,
-    };
+    use crate::asr::pipeline::WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS;
     use crate::asr::whisper::manifest;
     use crate::asr::AsrModelInstallState;
 
     fn descriptor(mode: AsrMode) -> AsrModelDescriptor {
         AsrModelDescriptor {
             id: match mode {
-                AsrMode::MoonshineTinyStreaming => "moonshine-tiny-streaming-en",
-                AsrMode::MoonshineSmallStreaming => "moonshine-small-streaming-en",
                 AsrMode::WhisperSmall => "whisper-small-ggml",
                 AsrMode::GeminiLiveAudio => unreachable!("cloud mode has no local descriptor"),
             }
             .to_string(),
-            display_name: "Moonshine local ASR".to_string(),
+            display_name: "Whisper.cpp local ASR".to_string(),
             mode,
             install_state: AsrModelInstallState::Installed,
             revision: "test-revision".to_string(),
@@ -239,20 +162,15 @@ mod tests {
 
     #[test]
     fn inactive_local_diagnostics_report_contract_without_fabricated_measurements() {
-        let descriptor = descriptor(AsrMode::MoonshineTinyStreaming);
-        let diagnostics = compose_asr_diagnostics(
-            AsrMode::MoonshineTinyStreaming,
-            Some(&descriptor),
-            None,
-            3,
-            None,
-        );
-        assert_eq!(
-            diagnostics.model_id.as_deref(),
-            Some("moonshine-tiny-streaming-en")
-        );
+        let descriptor = descriptor(AsrMode::WhisperSmall);
+        let diagnostics =
+            compose_asr_diagnostics(AsrMode::WhisperSmall, Some(&descriptor), None, 3, None);
+        assert_eq!(diagnostics.model_id.as_deref(), Some("whisper-small-ggml"));
         assert_eq!(diagnostics.input_sample_rate_hz, 16_000);
-        assert_eq!(diagnostics.queue_capacity, LOCAL_ASR_QUEUE_CAPACITY_CHUNKS);
+        assert_eq!(
+            diagnostics.queue_capacity,
+            WHISPER_LOCAL_ASR_QUEUE_CAPACITY_CHUNKS
+        );
         assert_eq!(diagnostics.dropped_chunks, 3);
         assert!(!diagnostics.streaming);
         assert!(!diagnostics.metrics_snapshot);
@@ -263,7 +181,7 @@ mod tests {
 
     #[test]
     fn active_local_diagnostics_preserve_runtime_metrics() {
-        let descriptor = descriptor(AsrMode::MoonshineSmallStreaming);
+        let descriptor = descriptor(AsrMode::WhisperSmall);
         let runtime = LocalAsrRuntimeDiagnostics {
             input_sample_rate_hz: 16_000,
             streaming: true,
@@ -284,7 +202,7 @@ mod tests {
             peak_resident_memory_bytes: Some(250),
         };
         let diagnostics = compose_asr_diagnostics(
-            AsrMode::MoonshineSmallStreaming,
+            AsrMode::WhisperSmall,
             Some(&descriptor),
             Some(runtime),
             1,

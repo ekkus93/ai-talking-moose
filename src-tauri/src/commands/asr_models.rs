@@ -1,10 +1,5 @@
 use crate::app::settings_policy::settings_runtime_lock;
 use crate::app::state::AppState;
-use crate::asr::moonshine::{
-    model_manifest_info, MoonshineModelArchitecture, MoonshineModelInstallCancellation,
-    MoonshineModelInstallErrorKind, MoonshineModelInstallPhase, MoonshineModelInstallProgress,
-    MoonshineModelInstallProgressCallback, MoonshineModelInstaller,
-};
 use crate::asr::whisper::{
     installer::{
         WhisperModelInstallCancellation, WhisperModelInstallErrorKind, WhisperModelInstallPhase,
@@ -56,94 +51,6 @@ pub struct AsrModelProgressEvent {
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
     pub current_file: Option<String>,
-}
-
-pub(super) fn architecture_for_mode(mode: AsrMode) -> Result<MoonshineModelArchitecture, String> {
-    match mode {
-        AsrMode::MoonshineTinyStreaming => Ok(MoonshineModelArchitecture::TinyStreaming),
-        AsrMode::MoonshineSmallStreaming => Ok(MoonshineModelArchitecture::SmallStreaming),
-        AsrMode::WhisperSmall => {
-            Err("Whisper Small local ASR does not use a local Moonshine model.".to_string())
-        }
-        AsrMode::GeminiLiveAudio => {
-            Err("Gemini Live cloud ASR does not use a local Moonshine model.".to_string())
-        }
-    }
-}
-
-fn mode_for_architecture(architecture: MoonshineModelArchitecture) -> AsrMode {
-    match architecture {
-        MoonshineModelArchitecture::TinyStreaming => AsrMode::MoonshineTinyStreaming,
-        MoonshineModelArchitecture::SmallStreaming => AsrMode::MoonshineSmallStreaming,
-    }
-}
-
-fn descriptor_for_architecture(
-    installer: &MoonshineModelInstaller,
-    architecture: MoonshineModelArchitecture,
-    active: bool,
-) -> AsrModelDescriptor {
-    let info = model_manifest_info(architecture);
-    let mode = mode_for_architecture(architecture);
-    let (install_state, installed_bytes, error_message) =
-        match installer.verify_installed(architecture) {
-            Ok(Some(outcome)) => (
-                AsrModelInstallState::Installed,
-                Some(outcome.installed_bytes),
-                None,
-            ),
-            Ok(None) => (AsrModelInstallState::NotInstalled, None, None),
-            Err(error)
-                if matches!(
-                    error.kind,
-                    MoonshineModelInstallErrorKind::CorruptInstall
-                        | MoonshineModelInstallErrorKind::SizeMismatch
-                        | MoonshineModelInstallErrorKind::Sha256Mismatch
-                        | MoonshineModelInstallErrorKind::Crc32cMismatch
-                ) =>
-            {
-                (AsrModelInstallState::Corrupt, None, Some(error.message))
-            }
-            Err(error)
-                if matches!(
-                    error.kind,
-                    MoonshineModelInstallErrorKind::InvalidManifest
-                        | MoonshineModelInstallErrorKind::UnsupportedArtifact
-                ) =>
-            {
-                (
-                    AsrModelInstallState::Incompatible,
-                    None,
-                    Some(error.message),
-                )
-            }
-            Err(error) => (AsrModelInstallState::Failed, None, Some(error.message)),
-        };
-
-    AsrModelDescriptor {
-        id: info.id.to_string(),
-        display_name: info.display_name.to_string(),
-        mode,
-        install_state,
-        revision: info.revision.to_string(),
-        runtime_release: info.runtime_release.to_string(),
-        installed_bytes,
-        expected_bytes: info.expected_bytes,
-        active,
-        error_message,
-    }
-}
-
-pub(super) async fn load_descriptor(
-    installer: Arc<MoonshineModelInstaller>,
-    architecture: MoonshineModelArchitecture,
-    active: bool,
-) -> Result<AsrModelDescriptor, String> {
-    tokio::task::spawn_blocking(move || {
-        descriptor_for_architecture(installer.as_ref(), architecture, active)
-    })
-    .await
-    .map_err(|_| "Moonshine model verification worker terminated unexpectedly.".to_string())
 }
 
 /// Verification failures must not all be reported as corrupted weights:
@@ -255,21 +162,12 @@ fn ensure_mode_supported(mode: AsrMode) -> Result<(), String> {
             "Gemini Live is a cloud audio mode and has no local ASR model to install or delete."
                 .to_string(),
         ),
-        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming => Err(
-            "Moonshine local ASR has been replaced by Whisper Small. Install or verify Whisper Small in Settings."
-                .to_string(),
-        ),
     }
 }
 
 fn ensure_model_mutation_allowed(state: &AppState, mode: AsrMode) -> Result<(), String> {
     if model_in_use(state, mode) {
-        let display_name = if mode == AsrMode::WhisperSmall {
-            WHISPER_SMALL_DISPLAY_NAME.to_string()
-        } else {
-            let architecture = architecture_for_mode(mode)?;
-            model_manifest_info(architecture).display_name.to_string()
-        };
+        let display_name = WHISPER_SMALL_DISPLAY_NAME;
         return Err(format!(
             "{} is currently active. Stop the conversation before changing this model.",
             display_name
@@ -315,48 +213,11 @@ pub async fn install_asr_model<R: Runtime>(
     ensure_mode_supported(mode)?;
     let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
 
-    if mode == AsrMode::WhisperSmall {
-        return install_whisper(state.inner(), app).await;
-    }
-
-    let architecture = architecture_for_mode(mode)?;
-
-    let progress_app = app.clone();
-    let progress: MoonshineModelInstallProgressCallback =
-        Arc::new(move |progress: MoonshineModelInstallProgress| {
-            let install_state = match progress.phase {
-                MoonshineModelInstallPhase::Downloading => AsrModelInstallState::Downloading,
-                MoonshineModelInstallPhase::Verifying => AsrModelInstallState::Verifying,
-            };
-            let _ = progress_app.emit(
-                MODEL_PROGRESS_EVENT,
-                AsrModelProgressEvent {
-                    mode,
-                    install_state,
-                    downloaded_bytes: progress.downloaded_bytes,
-                    total_bytes: progress.total_bytes,
-                    current_file: progress.current_file,
-                },
-            );
-        });
-
-    state
-        .moonshine_installer
-        .install_with_progress(
-            architecture,
-            &MoonshineModelInstallCancellation::default(),
-            progress,
-        )
-        .await
-        .map_err(|error| error.message)?;
-
-    let active = model_in_use(state.inner(), mode);
-    load_descriptor(state.moonshine_installer.clone(), architecture, active).await
+    install_whisper(state.inner(), app).await
 }
 
 /// Installs the Whisper Small `ggml-small.bin` weight through the local Whisper
-/// installer and streams `moose://asr/model-progress` events, mirroring the
-/// Moonshine install UX. Fails closed when the Whisper runtime is unbuilt.
+/// installer and streams `moose://asr/model-progress` events. Fails closed when the Whisper runtime is unbuilt.
 async fn install_whisper<R: Runtime>(
     state: &AppState,
     app: tauri::AppHandle<R>,
@@ -423,35 +284,18 @@ pub async fn delete_asr_model(
     ensure_mode_supported(mode)?;
     let _settings_guard = acquire_model_mutation_guard(state.inner(), mode).await?;
 
-    if mode == AsrMode::WhisperSmall {
-        state
-            .whisper_installer
-            .delete()
-            .await
-            .map_err(|error| error.message)?;
-        let active = model_in_use(state.inner(), mode);
-        return load_whisper_descriptor(state.whisper_installer.clone(), active).await;
-    }
-
-    let architecture = architecture_for_mode(mode)?;
     state
-        .moonshine_installer
-        .delete_installed(architecture)
+        .whisper_installer
+        .delete()
         .await
         .map_err(|error| error.message)?;
     let active = model_in_use(state.inner(), mode);
-    load_descriptor(state.moonshine_installer.clone(), architecture, active).await
+    load_whisper_descriptor(state.whisper_installer.clone(), active).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn cloud_mode_has_no_local_model_architecture() {
-        let error = architecture_for_mode(AsrMode::GeminiLiveAudio).unwrap_err();
-        assert!(error.contains("does not use a local Moonshine model"));
-    }
 
     #[test]
     fn whisper_install_cancellation_targets_only_the_registered_install() {
@@ -469,35 +313,6 @@ mod tests {
         };
         drop(registration);
         assert!(!cancel_active_whisper_install(&slot));
-    }
-
-    #[test]
-    fn local_modes_map_to_distinct_model_architectures() {
-        assert_eq!(
-            architecture_for_mode(AsrMode::MoonshineTinyStreaming).unwrap(),
-            MoonshineModelArchitecture::TinyStreaming
-        );
-        assert_eq!(
-            architecture_for_mode(AsrMode::MoonshineSmallStreaming).unwrap(),
-            MoonshineModelArchitecture::SmallStreaming
-        );
-    }
-
-    #[test]
-    fn descriptor_uses_pinned_manifest_metadata_for_missing_model() {
-        let temp = tempfile::TempDir::new().unwrap();
-        let installer = MoonshineModelInstaller::new(temp.path()).unwrap();
-        let descriptor = descriptor_for_architecture(
-            &installer,
-            MoonshineModelArchitecture::TinyStreaming,
-            false,
-        );
-
-        assert_eq!(descriptor.install_state, AsrModelInstallState::NotInstalled);
-        assert_eq!(descriptor.revision, "quantized_26_07_30");
-        assert_eq!(descriptor.expected_bytes, 51_441_771);
-        assert_eq!(descriptor.runtime_release, "v0.1.3");
-        assert!(!descriptor.active);
     }
 
     #[test]
@@ -567,24 +382,6 @@ mod tests {
 
     #[test]
     fn active_or_connecting_local_model_is_blocked_from_mutation() {
-        assert!(model_is_in_use(
-            Some(AsrMode::MoonshineTinyStreaming),
-            false,
-            AsrMode::GeminiLiveAudio,
-            AsrMode::MoonshineTinyStreaming
-        ));
-        assert!(model_is_in_use(
-            None,
-            true,
-            AsrMode::MoonshineSmallStreaming,
-            AsrMode::MoonshineSmallStreaming
-        ));
-        assert!(!model_is_in_use(
-            Some(AsrMode::MoonshineTinyStreaming),
-            true,
-            AsrMode::MoonshineTinyStreaming,
-            AsrMode::MoonshineSmallStreaming
-        ));
         // Production Whisper mode must retain the same active-session and
         // in-flight-start protections as the legacy model selectors.
         assert!(model_is_in_use(
@@ -648,24 +445,11 @@ mod tests {
     }
 
     #[test]
-    fn retired_moonshine_modes_cannot_be_installed_or_deleted() {
-        for mode in [
-            AsrMode::MoonshineTinyStreaming,
-            AsrMode::MoonshineSmallStreaming,
-        ] {
-            let error = ensure_mode_supported(mode).expect_err("Moonshine is retired");
-            assert!(error.contains("replaced by Whisper Small"));
-        }
+    fn only_whisper_has_a_local_model_to_install_or_delete() {
         assert!(ensure_mode_supported(AsrMode::WhisperSmall).is_ok());
         let cloud_error = ensure_mode_supported(AsrMode::GeminiLiveAudio).unwrap_err();
         assert!(cloud_error.contains("no local ASR model"));
         assert!(!cloud_error.contains("Moonshine"));
-    }
-
-    #[test]
-    fn whisper_mode_has_no_moonshine_model_architecture() {
-        let error = architecture_for_mode(AsrMode::WhisperSmall).unwrap_err();
-        assert!(error.contains("does not use a local Moonshine model"));
     }
 
     #[test]

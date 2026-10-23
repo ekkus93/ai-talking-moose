@@ -2,7 +2,6 @@ use crate::ai::traits::{LiveSession, RealtimeConversationProvider};
 use crate::ai::types::*;
 use crate::app::wake_word_command_handoff::WakeCommandHandoffAudio;
 use crate::asr::lifecycle::LocalAsrLifecycle;
-use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::pipeline::LocalAsrPipeline;
 use crate::asr::{AsrEvent, AsrMode};
 use crate::audio::capture::AudioCapture;
@@ -119,7 +118,7 @@ pub struct ConversationStartRequest {
     pub provider: Arc<dyn RealtimeConversationProvider>,
     pub config: LiveSessionConfig,
     pub asr_mode: AsrMode,
-    pub moonshine_installer: Option<Arc<MoonshineModelInstaller>>,
+
     pub whisper_installer: Option<Arc<crate::asr::whisper::WhisperModelInstaller>>,
     pub capture: Arc<SyncMutex<AudioCapture>>,
     pub input_device: Option<String>,

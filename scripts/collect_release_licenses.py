@@ -3,8 +3,8 @@
 
 Production npm packages and Rust crates reachable for either shipped macOS target
 must have either packaged license/notice text or an explicit declared license
-expression. Native Moonshine/ONNX notices are staged separately by
-prepare_moonshine_macos.sh. The statically linked llama.cpp runtime also has a
+expression. Whisper notices are staged separately by
+prepare_macos_notices.sh. The statically linked llama.cpp runtime also has a
 checked-in native notice, while its Rust binding crates must remain present in
 this generated dependency inventory. Local TTS's linked Rust dependencies are
 likewise required here; installer-downloaded model/runtime assets are documented
@@ -336,7 +336,7 @@ def main() -> None:
         "Generated at release build time from installed production npm packages and "
         "the non-dev Cargo dependency graphs filtered for both shipped macOS targets.",
         "",
-        "Native Moonshine/ONNX and Local LLM native-runtime notices live beside "
+        "Whisper and Local LLM native-runtime notices live beside "
         "this directory. Linked Local TTS Rust dependencies are included here; "
         "installer-downloaded Local TTS model/runtime assets are documented in "
         "docs/LOCAL_TTS_ASSET_LICENSES.md because they are not application-bundle resources. "

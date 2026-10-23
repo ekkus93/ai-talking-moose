@@ -104,7 +104,7 @@ fn callback_events() -> (
 }
 
 async fn fake_pipeline(state: Arc<FakeState>) -> LocalAsrPipeline {
-    fake_pipeline_for_architecture(LocalAsrArchitecture::MoonshineTinyStreaming, state).await
+    fake_pipeline_for_architecture(LocalAsrArchitecture::WhisperSmall, state).await
 }
 
 async fn fake_pipeline_for_architecture(

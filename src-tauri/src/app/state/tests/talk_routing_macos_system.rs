@@ -9,8 +9,7 @@ async fn system_voice_is_non_live_for_all_local_asr_text_pairs() {
     assert!(crate::ai::system_tts::is_supported());
     for asr_mode in [
         AsrMode::WhisperSmall,
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        AsrMode::WhisperSmall,
     ] {
         for text_provider in [
             TextProvider::Local,
@@ -126,8 +125,7 @@ async fn migrated_moonshine_profile_keeps_macos_system_voice_and_privacy_non_liv
     assert!(crate::ai::system_tts::is_supported());
 
     for legacy_asr in [
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        "moonshine_tiny_streaming", "moonshine_small_streaming",
     ] {
         for text_provider in [
             TextProvider::Local,
@@ -137,7 +135,7 @@ async fn migrated_moonshine_profile_keeps_macos_system_voice_and_privacy_non_liv
             TextProvider::LlamaServer,
         ] {
             let before = AppSettings {
-                asr_mode: legacy_asr,
+                asr_mode: AsrMode::WhisperSmall,
                 text_provider,
                 tts_provider: TtsProvider::System,
                 system_tts_voice: "system_default".into(),
@@ -146,7 +144,9 @@ async fn migrated_moonshine_profile_keeps_macos_system_voice_and_privacy_non_liv
                 active_app_observation: true,
                 ..AppSettings::default()
             };
-            let persisted = serde_json::to_string(&before).unwrap();
+            let mut persisted = serde_json::to_value(&before).unwrap();
+                persisted["asr_mode"] = serde_json::json!(legacy_asr);
+                let persisted = serde_json::to_string(&persisted).unwrap();
             let (migrated, changed) = AppSettings::from_persisted_json(&persisted).unwrap();
             assert!(changed, "{legacy_asr:?} should migrate");
             assert_eq!(migrated.asr_mode, AsrMode::WhisperSmall);

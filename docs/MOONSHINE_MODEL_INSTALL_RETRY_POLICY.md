@@ -1,3 +1,5 @@
+> **Historical documentation:** Moonshine was removed on 2026-10-22 by explicit owner instruction. These instructions and results describe the retired implementation. Current ASR uses Whisper Small; see `WHISPER_CPP_LOCAL_ASR_PIPELINE.md`.
+
 # Moonshine Model Installation Policy
 
 Talking Moose installs Moonshine model weights only after an explicit user action. Model payloads are fetched over HTTPS from the pinned `download.moonshine.ai` model directory, streamed into a per-attempt `.partial` staging directory, and verified against the immutable manifest before promotion.

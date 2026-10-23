@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn moonshine_mode_never_calls_provider_audio_upload_api() {
+async fn whisper_mode_never_calls_provider_audio_upload_api() {
     let manager = ConversationManager::new();
     let audio_upload_count = Arc::new(AtomicUsize::new(0));
     let text_turns = Arc::new(SyncMutex::new(Vec::new()));
@@ -11,11 +11,11 @@ async fn moonshine_mode_never_calls_provider_audio_upload_api() {
     }));
 
     manager
-        .forward_microphone_chunk(0, AsrMode::MoonshineTinyStreaming, &[1, 2, 3, 4])
+        .forward_microphone_chunk(0, AsrMode::WhisperSmall, &[1, 2, 3, 4])
         .await
         .unwrap();
     manager
-        .forward_microphone_chunk(0, AsrMode::MoonshineSmallStreaming, &[5, 6, 7, 8])
+        .forward_microphone_chunk(0, AsrMode::WhisperSmall, &[5, 6, 7, 8])
         .await
         .unwrap();
 

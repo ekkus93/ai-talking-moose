@@ -1,7 +1,7 @@
 name: Whisper macOS Pre-Cutover App Smoke
 
 # Unsigned test-only app candidate to qualify the production Whisper static
-# linkage before removing Moonshine from the shipping app. NOT a release, nor
+# linkage in the shipping app configuration. NOT a release, nor
 # evidence of real microphone/audio, model installation, or notarization.
 on:
   push:
@@ -74,7 +74,7 @@ jobs:
           python3 scripts/generate_app_icons.py
       - name: Build diagnostic unsigned .app with native Whisper and no legacy runtime
         # Temporary CLI config only: do NOT modify the production Tauri bundle
-        # settings, omit KittenTTS dependencies, or remove Moonshine from source.
+        # settings or omit KittenTTS dependencies.
         # This diagnostic bundle intentionally cannot qualify a shipping release.
         run: |
           npm run tauri build -- --bundles app --config '{"bundle":{"macOS":{"frameworks":[]},"resources":[]}}'

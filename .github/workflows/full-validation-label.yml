@@ -57,6 +57,7 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@v7
         with:
+          submodules: true
           ref: ${{ needs.guard.outputs.expected_sha }}
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -107,6 +108,7 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@v7
         with:
+          submodules: true
           ref: ${{ needs.guard.outputs.expected_sha }}
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -134,6 +136,7 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@v7
         with:
+          submodules: true
           ref: ${{ needs.guard.outputs.expected_sha }}
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -158,7 +161,7 @@ jobs:
             scripts/check_local_tts_packaging_policy.py \
             scripts/measure_local_llm_bundle_impact.py
           bash -n scripts/prepare_ubuntu_apt.sh
-          bash -n scripts/prepare_moonshine_macos.sh
+          bash -n scripts/prepare_macos_notices.sh
           bash -n scripts/verify_macos_bundle.sh
           bash -n scripts/verify_app_build_provenance.sh
           bash -n scripts/verify_macos_release.sh
@@ -195,6 +198,7 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@v7
         with:
+          submodules: true
           ref: ${{ needs.guard.outputs.expected_sha }}
       - name: Install Linux llama.cpp build dependencies
         if: matrix.os == 'linux'
@@ -236,6 +240,7 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@v7
         with:
+          submodules: true
           ref: ${{ needs.guard.outputs.expected_sha }}
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -280,28 +285,11 @@ jobs:
       - name: Validate release metadata and native runtime manifest
         run: |
           python3 scripts/validate_release_metadata.py
-          python3 scripts/validate_moonshine_runtime_manifest.py
+          python3 scripts/check_whisper_provenance.py
           python3 scripts/check_local_tts_packaging_policy.py
-      - name: Cache pinned Moonshine native runtime
-        id: moonshine-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            src-tauri/native/macos/libmoonshine.dylib
-            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
-            src-tauri/native/macos/notices/MoonshineRuntime
-            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
-            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
-          key: moonshine-macos-${{ matrix.arch }}-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
-      - name: Prepare pinned Moonshine native runtime
-        if: steps.moonshine-cache.outputs.cache-hit != 'true'
-        run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
-      - name: Verify prepared runtime architecture
-        run: |
-          test -s src-tauri/native/macos/libmoonshine.dylib
-          test -s src-tauri/native/macos/libonnxruntime.1.23.2.dylib
-          lipo -archs src-tauri/native/macos/libmoonshine.dylib | tr ' ' '\n' | grep -Fx '${{ matrix.arch }}'
-          lipo -archs src-tauri/native/macos/libonnxruntime.1.23.2.dylib | tr ' ' '\n' | grep -Fx '${{ matrix.arch }}'
+      - name: Stage application and Whisper notices
+        run: bash scripts/prepare_macos_notices.sh
+
       - name: Collect dependency license texts
         run: python3 scripts/collect_release_licenses.py
       - name: Build unsigned debug macOS application smoke bundle

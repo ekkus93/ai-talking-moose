@@ -76,8 +76,8 @@ jobs:
       - name: Verify pinned Whisper source and model provenance
         run: python3 scripts/check_whisper_provenance.py
 
-      - name: Validate Moonshine runtime provenance
-        run: python3 scripts/validate_moonshine_runtime_manifest.py
+      - name: Validate Whisper runtime provenance
+        run: python3 scripts/check_whisper_provenance.py
 
       - name: Validate release helper syntax
         run: |
@@ -88,7 +88,7 @@ jobs:
             scripts/check_local_llm_packaging_policy.py \
             scripts/check_local_tts_packaging_policy.py \
             scripts/measure_local_llm_bundle_impact.py
-          bash -n scripts/prepare_moonshine_macos.sh
+          bash -n scripts/prepare_macos_notices.sh
           bash -n scripts/verify_macos_bundle.sh
           bash -n scripts/verify_app_build_provenance.sh
           bash -n scripts/verify_macos_release.sh
@@ -200,13 +200,13 @@ jobs:
       - name: Verify native Whisper source provenance
         run: python3 scripts/check_whisper_provenance.py
 
-      - name: Validate Moonshine and Local TTS runtime provenance
+      - name: Validate Whisper and Local TTS runtime provenance
         run: |
-          python3 scripts/validate_moonshine_runtime_manifest.py
+          python3 scripts/check_whisper_provenance.py
           python3 scripts/check_local_tts_packaging_policy.py
 
-      - name: Build pinned Moonshine native runtime
-        run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
+      - name: Stage application and Whisper notices
+        run: bash scripts/prepare_macos_notices.sh
 
       - name: Collect dependency license texts
         run: python3 scripts/collect_release_licenses.py
@@ -264,6 +264,8 @@ jobs:
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - name: Generate release icon set
         run: python3 scripts/generate_app_icons.py

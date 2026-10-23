@@ -10,12 +10,12 @@ on:
       - "src-tauri/Cargo.lock"
       - "src-tauri/src/ai/local_tts.rs"
       - "src-tauri/src/ai/local_tts/**"
-      - "src-tauri/src/asr/moonshine/**"
+      - "src-tauri/src/asr/whisper/**"
       - "src-tauri/src/asr/pipeline.rs"
       - "src-tauri/src/asr/pipeline_benchmarks.rs"
       - "src-tauri/src/audio/resample.rs"
-      - "scripts/prepare_moonshine_macos.sh"
-      - "src-tauri/native/moonshine-runtime.json"
+      - "scripts/prepare_macos_notices.sh"
+      - "src-tauri/src/asr/whisper/manifest.rs"
   push:
     branches:
       - master
@@ -25,12 +25,12 @@ on:
       - "src-tauri/Cargo.lock"
       - "src-tauri/src/ai/local_tts.rs"
       - "src-tauri/src/ai/local_tts/**"
-      - "src-tauri/src/asr/moonshine/**"
+      - "src-tauri/src/asr/whisper/**"
       - "src-tauri/src/asr/pipeline.rs"
       - "src-tauri/src/asr/pipeline_benchmarks.rs"
       - "src-tauri/src/audio/resample.rs"
-      - "scripts/prepare_moonshine_macos.sh"
-      - "src-tauri/native/moonshine-runtime.json"
+      - "scripts/prepare_macos_notices.sh"
+      - "src-tauri/src/asr/whisper/manifest.rs"
   workflow_dispatch:
 
 permissions:
@@ -97,7 +97,7 @@ jobs:
           echo "Exact round-trip SHA: \`$expected_sha\`" >> "$GITHUB_STEP_SUMMARY"
 
   roundtrip:
-    name: KittenTTS → Moonshine Tiny (macos-arm64)
+    name: KittenTTS → Whisper Small (macos-arm64)
     needs: guard
     runs-on: macos-15
     timeout-minutes: 25
@@ -110,6 +110,7 @@ jobs:
       - name: Check out exact round-trip head
         uses: actions/checkout@v7
         with:
+          submodules: true
           ref: ${{ needs.guard.outputs.expected_sha }}
 
       - name: Install Rust stable
@@ -126,30 +127,8 @@ jobs:
             macos-arm64-kittentts-asr-cargo-
             macos-arm64-kittentts-cargo-
 
-      - name: Cache pinned Moonshine native runtime
-        id: moonshine-runtime-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            src-tauri/native/macos/libmoonshine.dylib
-            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
-            src-tauri/native/macos/notices/MoonshineRuntime
-            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
-            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
-          key: moonshine-macos-arm64-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
-
-      - name: Prepare pinned Moonshine native runtime
-        if: steps.moonshine-runtime-cache.outputs.cache-hit != 'true'
-        run: bash scripts/prepare_moonshine_macos.sh arm64
-
-      - name: Verify Moonshine native runtime architecture
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s src-tauri/native/macos/libmoonshine.dylib
-          test -s src-tauri/native/macos/libonnxruntime.1.23.2.dylib
-          lipo -archs src-tauri/native/macos/libmoonshine.dylib | tr ' ' '\n' | grep -Fx arm64
-          lipo -archs src-tauri/native/macos/libonnxruntime.1.23.2.dylib | tr ' ' '\n' | grep -Fx arm64
+      - name: Stage application and Whisper notices
+        run: bash scripts/prepare_macos_notices.sh
 
       - name: Restore pinned KittenTTS artifact cache
         id: kitten-cache
@@ -213,12 +192,12 @@ jobs:
           path: ${{ runner.temp }}/kittentts-artifacts
           key: kittentts-macos-arm64-${{ env.MODEL_SHA256 }}-${{ env.VOICES_SHA256 }}-${{ env.G2P_SHA256 }}-${{ env.ORT_SHA256 }}
 
-      - name: Restore Moonshine Tiny model cache
-        id: moonshine-model-cache
+      - name: Restore Whisper Small model cache
+        id: whisper-model-cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/kittentts-roundtrip-moonshine
-          key: kittentts-roundtrip-moonshine-tiny-${{ hashFiles('src-tauri/src/asr/moonshine/manifest.rs') }}
+          path: ${{ runner.temp }}/kittentts-roundtrip-whisper
+          key: kittentts-roundtrip-whisper-small-${{ hashFiles('src-tauri/src/asr/whisper/manifest.rs') }}
 
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
@@ -232,9 +211,7 @@ jobs:
           export KTT301_VOICES_PATH="$RUNNER_TEMP/kittentts-artifacts/$VOICES_FILENAME"
           export KTT301_G2P_PATH="$RUNNER_TEMP/kittentts-artifacts/$G2P_FILENAME"
           export KTT301_ORT_ARCHIVE_PATH="$RUNNER_TEMP/kittentts-artifacts/$ORT_FILENAME"
-          export KITTENTTS_ASR_MODEL_ROOT="$RUNNER_TEMP/kittentts-roundtrip-moonshine"
-          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
-          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          export KITTENTTS_ASR_MODEL_ROOT="$RUNNER_TEMP/kittentts-roundtrip-whisper"
           export CARGO_INCREMENTAL=0
           set +e
           cargo test \
@@ -242,7 +219,7 @@ jobs:
             --release \
             --manifest-path src-tauri/Cargo.toml \
             --lib \
-            'asr::pipeline::benchmarks::kittentts_all_voices_round_trip_through_moonshine_tiny' \
+            'asr::pipeline::benchmarks::kittentts_all_voices_round_trip_through_whisper_small' \
             -- \
             --ignored \
             --exact \
@@ -254,12 +231,12 @@ jobs:
           echo "cargo_status=$cargo_status" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Save verified Moonshine Tiny model cache
-        if: steps.moonshine-model-cache.outputs.cache-hit != 'true' && steps.smoke.outputs.cargo_status == '0'
+      - name: Save verified Whisper Small model cache
+        if: steps.whisper-model-cache.outputs.cache-hit != 'true' && steps.smoke.outputs.cargo_status == '0'
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/kittentts-roundtrip-moonshine
-          key: kittentts-roundtrip-moonshine-tiny-${{ hashFiles('src-tauri/src/asr/moonshine/manifest.rs') }}
+          path: ${{ runner.temp }}/kittentts-roundtrip-whisper
+          key: kittentts-roundtrip-whisper-small-${{ hashFiles('src-tauri/src/asr/whisper/manifest.rs') }}
 
       - name: Publish round-trip intelligibility evidence
         if: always()
@@ -292,7 +269,7 @@ jobs:
 
           summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
           with summary.open("a", encoding="utf-8") as handle:
-              handle.write("## KittenTTS → Moonshine Tiny intelligibility smoke\n\n")
+              handle.write("## KittenTTS → Whisper Small intelligibility smoke\n\n")
               handle.write(f"Qualified SHA: `{evidence['qualified_sha']}`\n\n")
               handle.write("| Voice | WER | Content recall | Result | Transcript |\n")
               handle.write("| --- | ---: | ---: | :---: | --- |\n")

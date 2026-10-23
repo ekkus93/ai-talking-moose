@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AsrMode {
-    MoonshineTinyStreaming,
-    MoonshineSmallStreaming,
     #[cfg_attr(any(target_os = "linux", target_os = "macos"), default)]
     WhisperSmall,
     #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), default)]
@@ -18,8 +16,6 @@ pub enum AsrMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalAsrArchitecture {
-    MoonshineTinyStreaming,
-    MoonshineSmallStreaming,
     WhisperSmall,
 }
 
@@ -165,14 +161,6 @@ mod tests {
     #[test]
     fn local_asr_architecture_has_stable_serialized_names() {
         assert_eq!(
-            serde_json::to_string(&LocalAsrArchitecture::MoonshineTinyStreaming).unwrap(),
-            r#""moonshine_tiny_streaming""#
-        );
-        assert_eq!(
-            serde_json::to_string(&LocalAsrArchitecture::MoonshineSmallStreaming).unwrap(),
-            r#""moonshine_small_streaming""#
-        );
-        assert_eq!(
             serde_json::to_string(&LocalAsrArchitecture::WhisperSmall).unwrap(),
             r#""whisper_small""#
         );
@@ -187,6 +175,8 @@ mod tests {
             "gemini_live_audio ",
             "local_asr",
             "moonshine_unknown",
+            "moonshine_tiny_streaming",
+            "moonshine_small_streaming",
         ] {
             let encoded = serde_json::to_string(invalid).unwrap();
             assert!(
@@ -207,14 +197,6 @@ mod tests {
 
     #[test]
     fn asr_mode_has_stable_serialized_names() {
-        assert_eq!(
-            serde_json::to_string(&AsrMode::MoonshineTinyStreaming).unwrap(),
-            r#""moonshine_tiny_streaming""#
-        );
-        assert_eq!(
-            serde_json::to_string(&AsrMode::MoonshineSmallStreaming).unwrap(),
-            r#""moonshine_small_streaming""#
-        );
         assert_eq!(
             serde_json::to_string(&AsrMode::WhisperSmall).unwrap(),
             r#""whisper_small""#

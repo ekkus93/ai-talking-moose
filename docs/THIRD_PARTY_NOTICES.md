@@ -5,39 +5,12 @@ Recorded: 2026-09-12
 
 This file records licenses and immutable source identities for native components that Talking Moose expects to redistribute or directly depend on. Release packaging must include the actual license/notice texts required by those components; this inventory is not a substitute for those texts.
 
-## Local ASR runtime and models
-
-| Component | Pin / identity | License | Notes |
-| --- | --- | --- | --- |
-| Moonshine Voice | `moonshine-ai/moonshine` `v0.1.3`, commit `db88bffd14574212b6094a2e230d4f328029c31b` | MIT | First-party runtime code outside `core/third-party`. |
-| Moonshine Tiny Streaming English | native `quantized_26_07_30`; source commit `f8e9dfd8c562c257c151a907b7b7f2fe8ff8511a` | MIT | V1 default local ASR model. |
-| Moonshine Small Streaming English | native `quantized_26_07_30`; source commit `2c036506f23a09c18df5a50057599ba6d9280999` | MIT | Optional higher-accuracy local ASR model. |
-| ONNX Runtime | Moonshine `v0.1.3` vendored runtime; macOS CMake path identifies `1.23.2` | MIT | Native inference dependency. |
-
-Exact model component URLs, sizes, and checksums are recorded in `docs/MOONSHINE_NATIVE.md`.
-
 ## Local Whisper.cpp runtime and model
 
 | Component | Pin / identity | License | Notes |
 | --- | --- | --- | --- |
-| whisper.cpp source | `ggml-org/whisper.cpp`; vendored commit `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` | MIT | Built through `src-tauri/build.rs` on supported Linux local-ASR targets; macOS release preparation verifies this checkout and stages its exact upstream MIT notice in the Tauri resource path. |
+| whisper.cpp source | `ggml-org/whisper.cpp`; vendored commit `60c0be6ac8fa71b1a2ae2dd938a31a34a508e774` | MIT | Built through `src-tauri/build.rs` on supported Linux and macOS local-ASR targets; macOS release preparation verifies this checkout and stages its exact upstream MIT notice in the Tauri resource path. |
 | `ggml-small.bin` weights | Hugging Face asset `ggml-small.bin` in `ggerganov/whisper.cpp`, source commit `5359861c739e955e79d9a303bcbc70fb988958b1`: `https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin?download=true`; 487601967 bytes; SHA-256 `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b` | MIT | Downloaded only after explicit user action; not bundled. The model repository metadata records the artifact license as MIT; exact SHA-256 and byte size are enforced by the production installer. |
-
-## Moonshine vendored native dependencies
-
-These identities refer to the subtrees included by the pinned Moonshine runtime. Only components that actually reach the Talking Moose release artifact need to be reproduced in the final bundled-notices payload, but the build/release audit must begin from this complete native-tree inventory.
-
-| Component | Pinned Moonshine subtree | License / notice source |
-| --- | --- | --- |
-| cpp-annote | source tree under Moonshine `v0.1.3`; `src` tree `2af8b2cf4d675e7e7053351db855379b60d7bb71` | MIT; `LICENSE` blob `63148e08d3b99e9249e37d398260329b7ca979a9` |
-| Eigen | tree `854e3e24b303a00db385ff10b0dfa8b4a2c2280c` | MPL-2.0 subset; `COPYING.MPL2` blob `14e2f777f6c395e7e04ab4aa306bbcc4b0c1120e` |
-| doctest | tree `4ca3b4ea819d9a456eec3dd4394fcd479e75ba4d` | MIT; `LICENSE.txt` blob `5ae0eb1052c28da584bcf2fdcc6b7ef45c30952c` |
-| kaldi-native-fbank | tree `4f5350e5cd33535b47b74122178bb1b278626c29` | Apache-2.0; `LICENSE` blob `d645695673349e3947e8e5ae42332d0ac3164cd7` |
-| kissfft | tree `ac532e99e00422cc9e06b29d2f2185c909da04c0` | BSD-3-Clause; `COPYING` blob `6b4b622e7bd7053be8531deaf4242603bca4c85b` |
-| nlohmann/json | tree `4cdff2a7534036a8d775c0531b1a3868d2d9d338` | MIT; `LICENSE.MIT` blob `1c1f7a690d815db3a79ea3d4c9138a497e2e7702` |
-| utf8cpp (`utf-8`) | tree `7a47e860bac3e6db6785261abc68566d1ac3053d` | Boost Software License 1.0; `LICENSE.txt` blob `36b7cd93cdfbac762f5be4c6ce276df2ea6305c2` |
-| utf8proc | tree `06bd0edcb1ec6e74aa175ffdabbb56138f6a9cbb` | MIT; `LICENSE.md` blob `f18b1f3abdcb55e82ecdd84f476e7f366b00183b` |
-| ONNX Runtime subtree | tree `d31a828135464f018d708432bf0bd1b224f7ce8e` | MIT; preserve upstream ONNX Runtime notices shipped with the native runtime |
 
 ## Local LLM native runtime
 
@@ -84,12 +57,11 @@ These crates are thin Rust bindings around Apple's Security framework and are us
 
 Before producing a signed/notarized V1 distribution:
 
-- run `scripts/prepare_moonshine_macos.sh` so the package notice directory is regenerated from the pinned Moonshine source tree and includes the Talking Moose project license;
+- run `scripts/prepare_macos_notices.sh` to stage the Talking Moose project license and pinned Whisper notice;
 - the same preparation step verifies the pinned whisper.cpp checkout and stages its upstream `LICENSE` text at `Resources/native/macos/notices/WhisperRuntime/WHISPER_CPP_LICENSE`;
 - run `scripts/collect_release_licenses.py` after `npm ci` and Cargo dependency resolution to collect production npm and resolved Rust license/notice texts plus a generated dependency inventory, including `llama-cpp-2`, `llama-cpp-sys-2`, `ort`, and `piper-plus-g2p`;
 - run `scripts/check_local_tts_packaging_policy.py` so Local TTS model/runtime assets remain externally installed, immutable/checksum-pinned, model-weight-free in the app bundle, and free of unapproved eSpeak/GPL payloads;
 - include the generated inventories and license/notice texts under the application bundle's `Resources/native/macos/notices` path, including the staged Whisper source license and checked-in `LocalLlmRuntime/LLAMA_CPP_LICENSE` native notice and `LocalLlmRuntime/LLAMA_CPP_RS_LICENSE_MIT` binding notice;
 - keep installer-downloaded Local TTS artifact evidence in `docs/LOCAL_TTS_ASSET_LICENSES.md` rather than representing those external assets as bundled application resources;
-- verify that no non-commercial Moonshine model has entered the release payload;
-- verify that model downloads remain limited to the explicitly approved English Tiny/Small manifests;
+- verify that local ASR model downloads remain limited to the pinned Whisper Small manifest;
 - verify that the application bundle does not accidentally contain developer model caches, GGUF weights, Local TTS ONNX/voice/dictionary/runtime archives, or credentials.

@@ -1,5 +1,7 @@
 # Cross-Platform Whisper.cpp Local ASR — Implementation TODO
 
+> **Owner override, 2026-10-22:** The owner explicitly instructed removal of Moonshine before the remaining WSP-200/300/400 acceptance gates. Removal proceeds under that instruction; outstanding performance, physical-device, and release acceptance are still open. Earlier gating language below records the original plan.
+
 **Date:** 2026-10-15
 **Status:** Open — architecture authorized; implementation and acceptance outstanding
 **Specification:** `docs/CROSS_PLATFORM_WHISPER_ASR_SPEC_2026-10-15.md`
@@ -140,16 +142,18 @@ Check a box **only** when a concrete implementation and its stated evidence exis
 
 **WSP-400 aborted-generation malformed queue regression (2026-10-20):** Source commit `9cf17c9fa49a9272419aaff367adee8a6b4129e9`, formatted at exact source `a943abbdc937236eb2d6d9efc1b3d1a2cd4ecdda`, adds `whisper_abort_discards_malformed_queued_pcm_without_audio_error`. With a fake Whisper inference blocked, it queues malformed 16-bit PCM and another valid chunk, explicitly aborts the generation, and verifies no queued input replay, no stale partial/final/error callback, no terminal audio error and one cleanup. [Main CI 39347946354](https://github.com/ekkus93/ai-talking-moose/actions/runs/39347946354) **passed** full Rust tests, Rust quality/formatting/Clippy and generated backend contract at exact source `a943abbd`. Separate macOS native [39347946334](https://github.com/ekkus93/ai-talking-moose/actions/runs/39347946334) and unsigned app [39347946277](https://github.com/ekkus93/ai-talking-moose/actions/runs/39347946277) were still running at evidence capture (app ARM64 passed); check terminal job conclusions separately. The first source CI `39347856965` was cancelled after the formatting commit and **does not count**. Legacy [ASR-015 39347946281](https://github.com/ekkus93/ai-talking-moose/actions/runs/39347946281) failed before inference while preparing Moonshine's pinned ONNX runtime; this is not a Whisper regression result. This is deterministic fake-engine cancellation coverage, **not** actual Mac Seatbelt-denied inference, sustained Intel performance, physical mic/TTS, KittenTTS offline packaging acceptance, signed release or authorization to remove Moonshine. All applicable WSP-200/300/400/500/600/700 gates remain open.
 
-## WSP-500 — Remove Moonshine and obsolete dependencies (only after WSP-200/300/400)
+## WSP-500 — Remove Moonshine and obsolete dependencies (owner-authorized override)
 
-- [ ] Remove `src-tauri/src/asr/moonshine/`, Moonshine factories/types, architecture variants and default branches, old installers/commands, native load probes and active Moonshine test fixtures; keep useful provider-neutral tests.
-- [ ] Remove the Moonshine-specific build/link logic from `src-tauri/build.rs`, `TALKING_MOOSE_MOONSHINE_LIB_DIR` and Moonshine cfg; use only the cross-platform Whisper native build.
-- [ ] Remove `scripts/prepare_moonshine_macos.sh`, `src-tauri/native/moonshine-runtime.json` and generated/staged Moonshine dylibs/notices from the shipping path; delete deprecated provenance validators and wrappers only if no other feature uses them.
+- [x] Remove `src-tauri/src/asr/moonshine/`, Moonshine factories/types, architecture variants and default branches, old installers/commands, native load probes and active Moonshine test fixtures; keep useful provider-neutral tests.
+- [x] Remove the Moonshine-specific build/link logic from `src-tauri/build.rs`, `TALKING_MOOSE_MOONSHINE_LIB_DIR` and Moonshine cfg; use only the cross-platform Whisper native build.
+- [x] Remove `scripts/prepare_moonshine_macos.sh`, `src-tauri/native/moonshine-runtime.json` and generated/staged Moonshine dylibs/notices from the shipping path; delete deprecated provenance validators and wrappers only if no other feature uses them.
 - [ ] Update `src-tauri/tauri.conf.json`: eliminate Moonshine-only `bundle.macOS.frameworks` entries and resources; forbid unused dynamic lib payloads. Verify static whisper.cpp license notice still ships.
 - [ ] Remove Moonshine build/source/LFS references from `.github/workflows/ci.yml`, `.github/workflows/release.yml`, Mac smoke, native architecture checkers, release verifier, package policy and dependency-license reports. Replace with real Whisper provenance/native checks, **never** simply relax a gate.
-- [ ] Remove obsolete Moonshine model installation UI/progress, API calls, test data, generated contract variants and user-facing instructions. Keep archived Moonshine benchmarking/incident evidence clearly labeled historical if useful.
+- [x] Remove obsolete Moonshine model installation UI/progress, API calls, test data, generated contract variants and user-facing instructions. Keep archived Moonshine benchmarking/incident evidence clearly labeled historical if useful.
 - [ ] Preserve separately owned `ort` and verified ONNX Runtime artifacts required by **KittenTTS**. Verify `Local KittenTTS` downloads, offline synthesis, playback, no fallback and packaging policy before and after deletion.
 - [ ] Search the entire tracked repository again for Moonshine/legacy enum variants/dylib paths. Every remaining match must be archived history or have a documented reason. Check no third-party submodule/source or license needed by Whisper was accidentally removed.
+
+**Removal implementation (owner override, 2026-10-22):** Source/runtime deletion and current selectors are implemented. Verification and residual-reference dispositions are tracked in `docs/evidence/MOONSHINE_REMOVAL_2026-10-22.md`. Unchecked hardware/release and KittenTTS real-acceptance checks remain open.
 
 **Gate WSP-500:** no Moonshine runtime, fallback, download or distributable dylib remains; Whisper and KittenTTS still work.
 

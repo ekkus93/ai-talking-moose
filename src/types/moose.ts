@@ -35,11 +35,7 @@ export type TtsProvider = "google" | "local" | "system";
 
 export type MouthShape = "closed" | "small" | "medium" | "wide";
 
-export type AsrMode =
-  | "moonshine_tiny_streaming"
-  | "moonshine_small_streaming"
-  | "whisper_small"
-  | "gemini_live_audio";
+export type AsrMode = "whisper_small" | "gemini_live_audio";
 
 export type AsrErrorKind =
   | "model_not_installed"

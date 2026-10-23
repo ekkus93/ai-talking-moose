@@ -275,7 +275,6 @@ fn test_request(muted: bool) -> ConversationStartRequest {
             tools: vec![],
         },
         asr_mode: AsrMode::GeminiLiveAudio,
-        moonshine_installer: None,
         whisper_installer: None,
         capture: Arc::new(SyncMutex::new(AudioCapture::new_mock())),
         input_device: None,

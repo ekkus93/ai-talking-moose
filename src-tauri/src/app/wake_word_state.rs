@@ -22,14 +22,11 @@ pub(crate) use super::wake_word_listener_controller::{
 };
 
 pub(crate) fn wake_word_asr_mode_supported(mode: AsrMode) -> bool {
-    matches!(
-        mode,
-        AsrMode::MoonshineTinyStreaming | AsrMode::MoonshineSmallStreaming | AsrMode::WhisperSmall
-    )
+    matches!(mode, AsrMode::WhisperSmall)
 }
 
 pub(crate) const WAKE_WORD_UNSUPPORTED_ASR_MESSAGE: &str =
-    "Asr settings do not support local command ASR wake word activation. Choose a local command ASR mode (Moonshine or Whisper) in Settings > Speech Recognition.";
+    "Asr settings do not support local command ASR wake word activation. Choose a local command ASR mode (Whisper Small) in Settings > Speech Recognition.";
 
 fn ensure_wake_word_asr_mode_supported(mode: AsrMode) -> Result<(), String> {
     if wake_word_asr_mode_supported(mode) {

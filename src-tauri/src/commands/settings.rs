@@ -495,12 +495,7 @@ mod tests {
             // Exercise the same Serde decoding as a direct/stale Tauri IPC caller.
             let mut incoming = serde_json::to_value(&saved).unwrap();
             incoming["asr_mode"] = serde_json::json!(retired);
-            let decoded: AppSettings = serde_json::from_value(incoming).unwrap();
-            let error = normalize_settings_update(decoded).unwrap_err();
-            assert!(
-                error.contains("Moonshine ASR is retired"),
-                "{retired}: {error}"
-            );
+            assert!(serde_json::from_value::<AppSettings>(incoming).is_err());
             // Rejected requests cannot reach persist_and_apply_settings.
             let (loaded, migrated) = AppSettings::from_persisted_json(&persisted_before).unwrap();
             assert!(!migrated);

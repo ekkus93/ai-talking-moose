@@ -8,227 +8,15 @@ use crate::ai::local_tts::{
 };
 use crate::ai::traits::SpeechSynthesizer;
 use crate::ai::types::TtsRequest;
-use crate::asr::moonshine::{
-    model_manifest_info, MoonshineModelArchitecture, MoonshineModelInstallCancellation,
-    MoonshineTinyEngine,
+use crate::asr::whisper::{
+    engine::WhisperEngine, installer::WhisperModelInstallCancellation, manifest,
+    WhisperModelInstaller,
 };
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
-const MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ: u32 = LOCAL_ASR_INPUT_SAMPLE_RATE_HZ;
-
-#[cfg(target_os = "macos")]
-fn benchmark_architecture_name(architecture: MoonshineModelArchitecture) -> &'static str {
-    match architecture {
-        MoonshineModelArchitecture::TinyStreaming => "tiny_streaming",
-        MoonshineModelArchitecture::SmallStreaming => "small_streaming",
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn assert_useful_transcript(text: &str) {
-    let normalized = text.to_ascii_lowercase();
-    let expected_words = ["fellow", "americans", "ask", "country", "you"];
-    let hits = expected_words
-        .iter()
-        .filter(|word| normalized.contains(*word))
-        .count();
-    assert!(
-        hits >= 3,
-        "native benchmark transcript is not recognizably derived from the pinned JFK corpus: {text:?}"
-    );
-}
-
-#[cfg(target_os = "macos")]
-async fn run_cpu_benchmark(architecture: MoonshineModelArchitecture) {
-    assert_eq!(
-        std::env::var("TALKING_MOOSE_ASR_BENCHMARK").as_deref(),
-        Ok("1"),
-        "set TALKING_MOOSE_ASR_BENCHMARK=1 to run the opt-in ASR benchmark"
-    );
-    let model_root = PathBuf::from(
-        std::env::var("TALKING_MOOSE_ASR_BENCHMARK_MODEL_ROOT")
-            .expect("TALKING_MOOSE_ASR_BENCHMARK_MODEL_ROOT must point at the installer root"),
-    );
-    let pcm_path = PathBuf::from(
-        std::env::var("TALKING_MOOSE_ASR_BENCHMARK_PCM")
-            .expect("TALKING_MOOSE_ASR_BENCHMARK_PCM must be 16 kHz mono signed i16-le PCM"),
-    );
-    let bytes = std::fs::read(&pcm_path).expect("failed to read benchmark PCM corpus");
-    const BYTES_PER_100_MS: usize = 16_000 / 10 * std::mem::size_of::<i16>();
-    assert!(!bytes.is_empty(), "benchmark PCM must not be empty");
-    assert_eq!(
-        bytes.len() % BYTES_PER_100_MS,
-        0,
-        "benchmark PCM must contain whole 100 ms chunks"
-    );
-
-    let installer = Arc::new(
-        MoonshineModelInstaller::new(model_root).expect("failed to open benchmark model root"),
-    );
-    if std::env::var("TALKING_MOOSE_ASR_BENCHMARK_INSTALL").as_deref() == Ok("1") {
-        let cancellation = MoonshineModelInstallCancellation::default();
-        let outcome = installer
-            .install(architecture, &cancellation)
-            .await
-            .expect("failed to install/verify the pinned Moonshine benchmark model");
-        println!(
-            "ASR015_MODEL_READY architecture={} model_id={} revision={} bytes={} disposition={:?}",
-            benchmark_architecture_name(architecture),
-            outcome.model_id,
-            outcome.revision,
-            outcome.installed_bytes,
-            outcome.disposition,
-        );
-    }
-
-    let events = Arc::new(Mutex::new(Vec::<AsrEvent>::new()));
-    let callback_events = events.clone();
-    let callback: LocalAsrPipelineEventCallback = Arc::new(move |event, _ack| {
-        callback_events.lock().push(event);
-    });
-    let mut pipeline = match architecture {
-        MoonshineModelArchitecture::TinyStreaming => {
-            LocalAsrPipeline::start_tiny(installer, callback)
-                .await
-                .expect("failed to start Tiny benchmark pipeline")
-        }
-        MoonshineModelArchitecture::SmallStreaming => {
-            LocalAsrPipeline::start_small(installer, callback)
-                .await
-                .expect("failed to start Small benchmark pipeline")
-        }
-    };
-    let sender = pipeline.test_sender();
-    let mut accepted_chunks = 0_u64;
-    let mut dropped_chunks = 0_u64;
-
-    for chunk in bytes.chunks_exact(BYTES_PER_100_MS) {
-        match sender.try_send(chunk.to_vec()) {
-            Ok(()) => accepted_chunks += 1,
-            Err(mpsc::error::TrySendError::Full(_)) => dropped_chunks += 1,
-            Err(mpsc::error::TrySendError::Closed(_)) => {
-                panic!("benchmark pipeline closed before the corpus finished")
-            }
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-
-    let expected_processed_ms = accepted_chunks.saturating_mul(100);
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while pipeline.diagnostics().processed_audio_ms < expected_processed_ms {
-        assert!(pipeline.is_running(), "benchmark pipeline stopped early");
-        assert!(Instant::now() < deadline, "benchmark inference timed out");
-        thread::sleep(Duration::from_millis(10));
-    }
-
-    while !events
-        .lock()
-        .iter()
-        .any(|event| matches!(event, AsrEvent::FinalTranscript { .. }))
-    {
-        assert!(
-            pipeline.is_running(),
-            "benchmark pipeline stopped before a final transcript"
-        );
-        assert!(
-            Instant::now() < deadline,
-            "benchmark final transcript timed out"
-        );
-        thread::sleep(Duration::from_millis(10));
-    }
-
-    let diagnostics = pipeline.diagnostics();
-    let final_transcript = events
-        .lock()
-        .iter()
-        .filter_map(|event| match event {
-            AsrEvent::FinalTranscript { text } if !text.trim().is_empty() => Some(text.trim()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-    assert_useful_transcript(&final_transcript);
-
-    println!(
-        "ASR015_BENCHMARK architecture={:?} corpus={} accepted_chunks={} dropped_chunks={} diagnostics={:#?}",
-        architecture,
-        pcm_path.display(),
-        accepted_chunks,
-        dropped_chunks,
-        diagnostics,
-    );
-    assert_eq!(
-        dropped_chunks, 0,
-        "the representative real-time feed overloaded the bounded ASR queue"
-    );
-    assert!(diagnostics.first_partial_latency_ms.is_some());
-    assert!(diagnostics.first_final_latency_ms.is_some());
-    assert!(diagnostics.last_error.is_none());
-    assert!(
-        diagnostics.real_time_factor.is_some_and(|rtf| rtf < 1.0),
-        "candidate supported Mac must sustain local ASR faster than real time"
-    );
-    assert!(diagnostics.process_cpu_time_ms.is_some());
-    assert!(diagnostics.average_cpu_utilization_percent.is_some());
-    assert!(diagnostics.baseline_resident_memory_bytes.is_some());
-    assert!(diagnostics.resident_memory_bytes.is_some());
-    assert!(diagnostics.peak_resident_memory_bytes.is_some());
-
-    let model = model_manifest_info(architecture);
-    let phase = std::env::var("TALKING_MOOSE_ASR_BENCHMARK_PHASE")
-        .unwrap_or_else(|_| "unspecified".to_string());
-    let run = std::env::var("TALKING_MOOSE_ASR_BENCHMARK_RUN")
-        .ok()
-        .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(0);
-    let record = serde_json::json!({
-        "architecture": benchmark_architecture_name(architecture),
-        "phase": phase,
-        "run": run,
-        "model_id": model.id,
-        "model_revision": model.revision,
-        "model_expected_bytes": model.expected_bytes,
-        "runtime_release": model.runtime_release,
-        "accepted_chunks": accepted_chunks,
-        "dropped_chunks": dropped_chunks,
-        "first_partial_latency_ms": diagnostics.first_partial_latency_ms,
-        "first_final_latency_ms": diagnostics.first_final_latency_ms,
-        "last_transcription_latency_ms": diagnostics.last_transcription_latency_ms,
-        "processed_audio_ms": diagnostics.processed_audio_ms,
-        "inference_wall_time_ms": diagnostics.inference_wall_time_ms,
-        "real_time_factor": diagnostics.real_time_factor,
-        "process_cpu_time_ms": diagnostics.process_cpu_time_ms,
-        "average_cpu_utilization_percent": diagnostics.average_cpu_utilization_percent,
-        "baseline_resident_memory_bytes": diagnostics.baseline_resident_memory_bytes,
-        "resident_memory_bytes": diagnostics.resident_memory_bytes,
-        "peak_resident_memory_bytes": diagnostics.peak_resident_memory_bytes,
-        "last_error": diagnostics.last_error,
-        "final_transcript": final_transcript,
-    });
-    println!("ASR015_BENCHMARK_JSON={record}");
-
-    pipeline.stop_and_join().await.unwrap();
-}
-
-/// Opt-in, hardware-dependent ASR-015 acceptance benchmark. Ordinary tests do
-/// not load models or native Moonshine and therefore never execute this test.
-#[cfg(target_os = "macos")]
-#[tokio::test]
-#[ignore = "requires explicit ASR-015 benchmark environment and native Moonshine"]
-async fn asr015_cpu_benchmark_tiny_on_supported_mac() {
-    run_cpu_benchmark(MoonshineModelArchitecture::TinyStreaming).await;
-}
-
-/// Small-model companion to `asr015_cpu_benchmark_tiny_on_supported_mac`.
-#[cfg(target_os = "macos")]
-#[tokio::test]
-#[ignore = "requires explicit ASR-015 benchmark environment and native Moonshine"]
-async fn asr015_cpu_benchmark_small_on_supported_mac() {
-    run_cpu_benchmark(MoonshineModelArchitecture::SmallStreaming).await;
-}
+const WHISPER_INPUT_SAMPLE_RATE_HZ: u32 = LOCAL_ASR_INPUT_SAMPLE_RATE_HZ;
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 fn roundtrip_tts_platform() -> LocalTtsPlatform {
@@ -253,7 +41,7 @@ fn roundtrip_ort_filename(platform: LocalTtsPlatform) -> &'static str {
         LocalTtsPlatform::MacosArm64 => "onnxruntime-osx-arm64-1.23.2.tgz",
         LocalTtsPlatform::MacosX86_64 => "onnxruntime-osx-x86_64-1.23.2.tgz",
         LocalTtsPlatform::LinuxX86_64 => {
-            panic!("KittenTTS-to-Moonshine round-trip is a macOS acceptance test")
+            panic!("KittenTTS-to-Whisper round-trip is a macOS acceptance test")
         }
     }
 }
@@ -399,45 +187,47 @@ fn content_word_recall(actual: &[String], content_words: &[&str]) -> f64 {
     hits as f64 / content_words.len() as f64
 }
 
-fn resample_kitten_audio_for_moonshine(audio: &crate::ai::types::AudioStreamData) -> Vec<f32> {
+fn resample_kitten_audio_for_whisper(audio: &crate::ai::types::AudioStreamData) -> Vec<f32> {
     assert_eq!(audio.sample_rate, 24_000);
     let source_i16 = crate::audio::resample::AudioResampler::bytes_to_i16(&audio.pcm_bytes);
     let source_f32 = crate::audio::resample::AudioResampler::i16_to_f32(&source_i16);
     crate::audio::resample::AudioResampler::resample_linear(
         audio.sample_rate,
-        MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ,
+        WHISPER_INPUT_SAMPLE_RATE_HZ,
         &source_f32,
     )
 }
 
-fn moonshine_transcribe_generated_audio(engine: &mut MoonshineTinyEngine, pcm: &[f32]) -> String {
-    let chunk_samples = usize::try_from(MOONSHINE_TINY_INPUT_SAMPLE_RATE_HZ / 10).unwrap();
+fn whisper_transcribe_generated_audio(engine: &mut WhisperEngine, pcm: &[f32]) -> String {
+    let chunk_samples = usize::try_from(WHISPER_INPUT_SAMPLE_RATE_HZ / 10).unwrap();
     let mut updates = Vec::new();
     for chunk in pcm.chunks(chunk_samples) {
         updates.extend(
             engine
                 .push_pcm(chunk)
-                .expect("Moonshine failed while consuming generated KittenTTS audio"),
+                .expect("Whisper failed while consuming generated KittenTTS audio"),
         );
     }
 
-    // Give the streaming decoder a clean utterance boundary before forcing its
-    // latest transcript state. This is synthetic silence generated in-memory;
+    // Give the batch decoder a clean utterance boundary before stopping its
+    // current transcript state. This is synthetic silence generated in-memory;
     // no microphone or speaker loopback is involved.
     let silence = vec![0.0_f32; chunk_samples];
     for _ in 0..8 {
         updates.extend(
             engine
                 .push_pcm(&silence)
-                .expect("Moonshine failed while consuming round-trip trailing silence"),
+                .expect("Whisper failed while consuming round-trip trailing silence"),
         );
     }
-    updates.extend(
-        engine
-            .flush()
-            .expect("Moonshine failed to flush the round-trip transcript"),
+    assert!(
+        updates
+            .iter()
+            .any(|update| matches!(update, StreamingTranscriptUpdate::Final { .. })),
+        "Whisper silence endpoint must finalize each generated utterance"
     );
 
+    engine.updates_delivered(&updates);
     updates
         .iter()
         .filter_map(|update| match update {
@@ -478,8 +268,8 @@ struct RoundTripEvidence {
 /// proxy used this objective evidence as part of the V1 default-voice decision;
 /// that policy decision does not turn this smoke test into human-listening evidence.
 #[tokio::test]
-#[ignore = "requires verified KittenTTS artifacts, pinned Moonshine Tiny, and native macOS runtimes"]
-async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
+#[ignore = "requires verified KittenTTS artifacts, pinned Whisper Small, and native macOS runtimes"]
+async fn kittentts_all_voices_round_trip_through_whisper_small() {
     const PHRASE: &str = "The talking moose reads seven blue books beside the quiet river.";
     const CONTENT_WORDS: [&str; 7] = [
         "talking", "moose", "seven", "blue", "books", "quiet", "river",
@@ -490,20 +280,17 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
     let (_tts_install, platform) = stage_roundtrip_tts_install();
     let asr_model_root = PathBuf::from(
         std::env::var("KITTENTTS_ASR_MODEL_ROOT")
-            .expect("KITTENTTS_ASR_MODEL_ROOT must point at the Moonshine installer cache"),
+            .expect("KITTENTTS_ASR_MODEL_ROOT must point at the Whisper installer cache"),
     );
     let asr_installer = Arc::new(
-        MoonshineModelInstaller::new(asr_model_root)
-            .expect("failed to initialize Moonshine installer for round-trip smoke"),
+        WhisperModelInstaller::new(asr_model_root)
+            .expect("failed to initialize Whisper installer for round-trip smoke"),
     );
-    let install_cancellation = MoonshineModelInstallCancellation::default();
+    let mut install_cancellation = WhisperModelInstallCancellation::default();
     asr_installer
-        .install(
-            MoonshineModelArchitecture::TinyStreaming,
-            &install_cancellation,
-        )
+        .install(&mut install_cancellation, &None)
         .await
-        .expect("failed to install or verify pinned Moonshine Tiny for round-trip smoke");
+        .expect("failed to install or verify pinned Whisper Small for round-trip smoke");
 
     let _network_guard = crate::test_support::deny_network_for_scope();
     assert!(crate::test_support::network_denied());
@@ -516,10 +303,10 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
     );
     let engine_installer = asr_installer.clone();
     let mut asr_engine =
-        tokio::task::spawn_blocking(move || MoonshineTinyEngine::open(&engine_installer))
+        tokio::task::spawn_blocking(move || crate::asr::whisper::engine::open(engine_installer))
             .await
-            .expect("Moonshine Tiny open worker panicked")
-            .expect("failed to open pinned Moonshine Tiny");
+            .expect("Whisper Small open worker panicked")
+            .expect("failed to open pinned Whisper Small");
     let expected_words = normalized_words(PHRASE);
     let mut voice_results = Vec::with_capacity(LOCAL_TTS_VOICE_IDS.len());
 
@@ -535,9 +322,9 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
             .unwrap_or_else(|error| panic!("KittenTTS synthesis failed for {voice}: {error}"));
         assert!(!generated.pcm_bytes.is_empty());
 
-        let resampled = resample_kitten_audio_for_moonshine(&generated);
+        let resampled = resample_kitten_audio_for_whisper(&generated);
         assert!(!resampled.is_empty());
-        let transcript = moonshine_transcribe_generated_audio(&mut asr_engine, &resampled);
+        let transcript = whisper_transcribe_generated_audio(&mut asr_engine, &resampled);
         let actual_words = normalized_words(&transcript);
         let wer = word_error_rate(&expected_words, &actual_words);
         let recall = content_word_recall(&actual_words, &CONTENT_WORDS);
@@ -555,14 +342,13 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
         });
     }
 
-    asr_engine.stop().expect("failed to stop Moonshine Tiny");
-    let asr_manifest = model_manifest_info(MoonshineModelArchitecture::TinyStreaming);
+    asr_engine.stop().expect("failed to stop Whisper Small");
     let all_passed = voice_results.iter().all(|voice| voice.passed);
     let evidence = RoundTripEvidence {
         platform: roundtrip_platform_label(platform),
         tts_model_id: DEFAULT_LOCAL_TTS_MODEL_ID,
-        asr_model_id: asr_manifest.id,
-        asr_model_revision: asr_manifest.revision,
+        asr_model_id: manifest::WHISPER_SMALL_ID,
+        asr_model_revision: manifest::WHISPER_MODEL_REVISION,
         phrase: PHRASE,
         wer_limit: WER_LIMIT,
         content_recall_floor: CONTENT_RECALL_FLOOR,
@@ -577,6 +363,6 @@ async fn kittentts_all_voices_round_trip_through_moonshine_tiny() {
     );
     assert!(
         evidence.all_passed,
-        "one or more KittenTTS voices failed the Moonshine intelligibility smoke"
+        "one or more KittenTTS voices failed the Whisper intelligibility smoke"
     );
 }

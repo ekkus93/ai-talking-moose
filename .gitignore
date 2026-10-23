@@ -21,11 +21,13 @@ target
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Generated macOS Moonshine native runtime staging
+# Generated macOS native runtime staging (including retired ASR cache hygiene)
 src-tauri/native/macos/*.dylib
 src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
 src-tauri/native/macos/notices/MoonshineRuntime/
 src-tauri/native/macos/notices/Dependencies/
+src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
+src-tauri/native/macos/notices/WhisperRuntime/
 # Deterministically generated application icons
 src-tauri/icons/*.png
 src-tauri/icons/*.icns

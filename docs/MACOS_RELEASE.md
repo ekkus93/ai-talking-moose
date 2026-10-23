@@ -7,7 +7,7 @@
 
 This document describes direct Developer ID distribution outside the Mac App Store. The release gate is intentionally split into automated artifact integrity and physical clean-Mac acceptance. A tagged workflow creates a **draft** GitHub Release; it must not be published until the project owner has explicitly resolved the physical-acceptance gate. When supported Mac hardware is unavailable, those physical rows remain deferred rather than being inferred from CI.
 
-The V1 floor is set by the pinned ONNX Runtime 1.23.2 dylibs shipped with Moonshine. Their Mach-O deployment target is macOS 13.4, so advertising an earlier application minimum would be incorrect even if the Rust/Tauri executable itself could be compiled for an older OS.
+The supported floor remains macOS 13.4 after removing the former ASR dylibs. Whisper is statically linked; the application and independently installed KittenTTS runtime require qualification before lowering this floor.
 
 ## Entitlement review
 
@@ -64,13 +64,13 @@ git tag -a v0.1.0 -m "Talking Moose AI v0.1.0"
 git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` first runs a **tagged source release gate**. Signing does not begin until that gate passes frontend typecheck/lint/format/tests/build, Rust formatting/Clippy/tests, release metadata, Moonshine provenance, dependency audits, and dependency-license collection.
+`.github/workflows/release.yml` first runs a **tagged source release gate**. Signing does not begin until that gate passes frontend typecheck/lint/format/tests/build, Rust formatting/Clippy/tests, release metadata, Whisper provenance, dependency audits, and dependency-license collection.
 
 After the source gate, Apple Silicon and Intel artifacts build independently. For each architecture the workflow:
 
 1. generates the deterministic icon set and validates tag/version/product/bundle metadata plus the generated icon containers;
-2. prepares the pinned Moonshine + ONNX Runtime dylibs at the explicit macOS 13.4 support floor;
-3. stages the project license, Moonshine/native notices, and dependency license evidence inventory described above;
+2. compiles pinned Whisper statically at the explicit macOS 13.4 support floor;
+3. stages the project license, Whisper/native notices, and dependency license evidence inventory described above;
 4. sets `TALKING_MOOSE_BUILD_COMMIT` to the exact tag `GITHUB_SHA`;
 5. builds the Tauri `.app` and DMG with Developer ID signing and Tauri notarization/stapling;
 6. verifies nested native libraries, deployment target, embedded build commit, Developer ID authority, secure timestamp, hardened runtime, Gatekeeper assessment, stapled notarization ticket, and absence of obvious secret/database files;

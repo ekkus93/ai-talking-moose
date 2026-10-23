@@ -42,6 +42,8 @@ jobs:
     steps:
       - name: Check out exact head
         uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -57,21 +59,8 @@ jobs:
             macos-arm64-system-tts-cargo-
             macos-arm64-kittentts-asr-audition-cargo-
 
-      - name: Cache pinned Moonshine native runtime
-        id: moonshine-runtime-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            src-tauri/native/macos/libmoonshine.dylib
-            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
-            src-tauri/native/macos/notices/MoonshineRuntime
-            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
-            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
-          key: moonshine-macos-arm64-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
-
-      - name: Prepare pinned Moonshine native runtime
-        if: steps.moonshine-runtime-cache.outputs.cache-hit != 'true'
-        run: bash scripts/prepare_moonshine_macos.sh arm64
+      - name: Stage application and Whisper notices
+        run: bash scripts/prepare_macos_notices.sh
 
       - name: Generate application icon set
         run: python3 scripts/generate_app_icons.py
@@ -84,8 +73,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
-          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
           export CARGO_INCREMENTAL=0
           cargo test --locked --release --manifest-path src-tauri/Cargo.toml --lib system_tts
 
@@ -93,8 +80,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
-          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
           export CARGO_INCREMENTAL=0
           cargo test --locked --release --manifest-path src-tauri/Cargo.toml --lib app::state::tests::talk_routing
 
@@ -103,8 +88,6 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          export TALKING_MOOSE_MOONSHINE_LIB_DIR="$GITHUB_WORKSPACE/src-tauri/native/macos"
-          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/src-tauri/native/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
           export CARGO_INCREMENTAL=0
           mkdir -p "$RUNNER_TEMP/system-tts"
           set +e
@@ -169,6 +152,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          submodules: true
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -192,35 +177,11 @@ jobs:
         run: python3 scripts/generate_app_icons.py
       - name: Validate release metadata and icon set
         run: python3 scripts/validate_release_metadata.py
-      - name: Validate Moonshine runtime provenance
-        run: python3 scripts/validate_moonshine_runtime_manifest.py
-      - name: Cache pinned Moonshine native runtime
-        id: smoke-runtime-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            src-tauri/native/macos/libmoonshine.dylib
-            src-tauri/native/macos/libonnxruntime.1.23.2.dylib
-            src-tauri/native/macos/notices/MoonshineRuntime
-            src-tauri/native/macos/notices/TALKING_MOOSE_LICENSE
-            src-tauri/native/macos/notices/THIRD_PARTY_NOTICES.md
-            src-tauri/native/macos/notices/WhisperRuntime
-          key: moonshine-macos-${{ matrix.arch }}-v2-${{ hashFiles('src-tauri/native/moonshine-runtime.json', 'scripts/prepare_moonshine_macos.sh', 'docs/THIRD_PARTY_NOTICES.md', 'LICENSE') }}
-          restore-keys: |
-            moonshine-macos-${{ matrix.arch }}-v2-
-      - name: Build pinned Moonshine native runtime on cache miss
-        if: steps.smoke-runtime-cache.outputs.cache-hit != 'true'
-        run: bash scripts/prepare_moonshine_macos.sh "${{ matrix.arch }}"
-      - name: Restore pinned Whisper notices from gitlink on cache hit
-        if: steps.smoke-runtime-cache.outputs.cache-hit == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/check_whisper_provenance.py
-          git submodule update --init -- third_party/whisper.cpp
-          python3 scripts/check_whisper_provenance.py
-          mkdir -p src-tauri/native/macos/notices/WhisperRuntime
-          cp third_party/whisper.cpp/LICENSE src-tauri/native/macos/notices/WhisperRuntime/WHISPER_CPP_LICENSE
+      - name: Validate Whisper runtime provenance
+        run: python3 scripts/check_whisper_provenance.py
+      - name: Stage application and Whisper notices
+        run: bash scripts/prepare_macos_notices.sh
+
       - name: Collect dependency license texts
         run: python3 scripts/collect_release_licenses.py
       - name: Build unsigned macOS application smoke bundle

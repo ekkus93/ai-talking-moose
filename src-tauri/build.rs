@@ -1,41 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const MOONSHINE_DYLIB: &str = "libmoonshine.dylib";
-const ONNXRUNTIME_DYLIB: &str = "libonnxruntime.1.23.2.dylib";
 const UNKNOWN_BUILD_COMMIT: &str = "unknown";
 
 const WHISPER_LIB_DIR: &str = "TALKING_MOOSE_WHISPER_LIB_DIR";
 const WHISPER_BUILD_JOBS: &str = "TALKING_MOOSE_WHISPER_BUILD_JOBS";
 const WHISPER_STATIC_LIBS: [&str; 4] = ["whisper", "ggml", "ggml-cpu", "ggml-base"];
-
-fn explicit_library_dir() -> Option<PathBuf> {
-    let lib_dir = std::env::var("TALKING_MOOSE_MOONSHINE_LIB_DIR").ok()?;
-    let lib_dir = lib_dir.trim();
-    if lib_dir.is_empty() {
-        None
-    } else {
-        Some(PathBuf::from(lib_dir))
-    }
-}
-
-fn packaged_macos_library_dir() -> Option<PathBuf> {
-    let target = std::env::var("TARGET").ok()?;
-    if !target.ends_with("-apple-darwin") {
-        return None;
-    }
-    Some(PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR")?).join("native/macos"))
-}
-
-fn has_packaged_macos_runtime(lib_dir: &Path) -> bool {
-    lib_dir.join(MOONSHINE_DYLIB).is_file() && lib_dir.join(ONNXRUNTIME_DYLIB).is_file()
-}
-
-fn emit_moonshine_link(lib_dir: &Path) {
-    println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    println!("cargo:rustc-link-lib=dylib=moonshine");
-    println!("cargo:rustc-cfg=moonshine_native_linked");
-}
 
 fn normalize_commit(value: &str) -> Option<String> {
     let value = value.trim();
@@ -150,7 +120,6 @@ fn build_commit() -> String {
 // The pinned whisper.cpp source builds for Linux and macOS without requiring
 // shared libwhisper libraries at application runtime. macOS uses a separate
 // target-specific CMake directory so ARM and Intel archives cannot be mixed.
-// The Moonshine path remains intact until Mac real-model acceptance is proven.
 fn explicit_whisper_lib_dir() -> Option<PathBuf> {
     let lib_dir = std::env::var(WHISPER_LIB_DIR).ok()?;
     let lib_dir = lib_dir.trim();
@@ -394,9 +363,7 @@ fn whisper_build_failure(reason: &str) {
 }
 
 fn main() {
-    println!("cargo:rustc-check-cfg=cfg(moonshine_native_linked)");
     println!("cargo:rustc-check-cfg=cfg(whisper_native_linked)");
-    println!("cargo:rerun-if-env-changed=TALKING_MOOSE_MOONSHINE_LIB_DIR");
 
     println!("cargo:rerun-if-env-changed={WHISPER_LIB_DIR}");
     println!("cargo:rerun-if-env-changed={WHISPER_BUILD_JOBS}");
@@ -405,25 +372,13 @@ fn main() {
     println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
     println!("cargo:rerun-if-env-changed=TALKING_MOOSE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
-    println!("cargo:rerun-if-changed=native/macos/{MOONSHINE_DYLIB}");
-    println!("cargo:rerun-if-changed=native/macos/{ONNXRUNTIME_DYLIB}");
     emit_git_rerun_paths();
     println!(
         "cargo:rustc-env=TALKING_MOOSE_BUILD_COMMIT={}",
         build_commit()
     );
 
-    if let Some(lib_dir) = explicit_library_dir() {
-        // Deliberate development/benchmark escape hatch retained from the
-        // pre-packaging implementation. Production macOS bundles do not set it.
-        emit_moonshine_link(&lib_dir);
-    } else if let Some(lib_dir) = packaged_macos_library_dir() {
-        if has_packaged_macos_runtime(&lib_dir) {
-            emit_moonshine_link(&lib_dir);
-        }
-    }
-
-    // Preserve the pre-cutover fail-closed behavior for source checkouts
+    // Preserve the fail-closed behavior for source checkouts
     // without submodules. Mac native acceptance sets REQUIRE=1, and must fail
     // instead of treating a missing Whisper runtime as a passing build.
     if let Some(build_dir) = explicit_whisper_lib_dir() {

@@ -57,8 +57,7 @@ jobs:
       - name: Generate app icons
         run: python3 scripts/generate_app_icons.py
       - name: Build real native-linked acceptance binary
-        # Do not require unrelated Moonshine .app frameworks for this CLI.
-        # The shipping app configuration is not changed by this override.
+        # Standalone CLI acceptance uses no additional dynamic frameworks.
         env:
           TAURI_CONFIG: '{"bundle":{"macOS":{"frameworks":[]}}}'
         run: |

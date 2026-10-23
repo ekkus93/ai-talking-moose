@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Check out release candidate
         uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - name: Generate deterministic application icons
         run: python3 scripts/generate_app_icons.py
@@ -37,7 +39,7 @@ jobs:
         run: python3 scripts/validate_release_metadata.py --tag v0.1.0
 
       - name: Validate pinned native runtime provenance
-        run: python3 scripts/validate_moonshine_runtime_manifest.py
+        run: python3 scripts/check_whisper_provenance.py
 
       - name: Require release credentials
         shell: bash

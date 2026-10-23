@@ -169,9 +169,7 @@ describe("SettingsModal Component", () => {
       (model) => model.mode,
     );
     expect(availableModes).toContain(
-      process.platform === "linux"
-        ? "whisper_small"
-        : "moonshine_tiny_streaming",
+      process.platform === "linux" ? "whisper_small" : "whisper_small",
     );
     render(<SettingsModal />);
     fireEvent.click(screen.getByText("Speech Recognition"));

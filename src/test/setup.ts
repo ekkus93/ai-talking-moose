@@ -82,37 +82,10 @@ const mockWakeWordDiagnostics = (): WakeWordDiagnostics => ({
   last_error: null,
 });
 
-const mockMoonshineAsrModels: AsrModelDescriptor[] = [
-  {
-    id: "moonshine-tiny-streaming-en",
-    display_name: "Moonshine Tiny Streaming (English)",
-    mode: "moonshine_tiny_streaming",
-    install_state: "not_installed",
-    revision: "quantized_26_07_30",
-    runtime_release: "v0.1.3",
-    installed_bytes: null,
-    expected_bytes: 51_441_771,
-    active: false,
-    error_message: null,
-  },
-  {
-    id: "moonshine-small-streaming-en",
-    display_name: "Moonshine Small Streaming (English)",
-    mode: "moonshine_small_streaming",
-    install_state: "not_installed",
-    revision: "quantized_26_07_30",
-    runtime_release: "v0.1.3",
-    installed_bytes: null,
-    expected_bytes: 165_489_086,
-    active: false,
-    error_message: null,
-  },
-];
-
 const mockWhisperAsrModels: AsrModelDescriptor[] = [
   {
-    id: "whisper-small-en",
-    display_name: "Whisper Small (English)",
+    id: "whisper-small-ggml",
+    display_name: "Whisper Small",
     mode: "whisper_small",
     install_state: "not_installed",
     revision: "5359861c739e955e79d9a303bcbc70fb988958b1",
@@ -124,8 +97,7 @@ const mockWhisperAsrModels: AsrModelDescriptor[] = [
   },
 ];
 
-const mockAsrModels =
-  process.platform === "linux" ? mockWhisperAsrModels : mockMoonshineAsrModels;
+const mockAsrModels = mockWhisperAsrModels;
 const defaultMockAsrMode = frontendDefaultSettings().asr_mode;
 const defaultMockAsrModel =
   mockAsrModels.find((model) => model.mode === defaultMockAsrMode) ??

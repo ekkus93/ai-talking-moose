@@ -1,3 +1,5 @@
+> **Historical documentation:** Moonshine was removed on 2026-10-22 by explicit owner instruction. These instructions and results describe the retired implementation. Current ASR uses Whisper Small; see `WHISPER_CPP_LOCAL_ASR_PIPELINE.md`.
+
 # Moonshine Local ASR Pipeline
 
 Status: **V1R-ASR-008/009/012/015 Tiny + Small lifecycle and diagnostics integrated**

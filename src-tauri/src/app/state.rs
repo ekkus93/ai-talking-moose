@@ -15,7 +15,6 @@ use crate::app::wake_word_settings::{
     WakeWordSettings, DEFAULT_WAKE_PHRASE, WAKE_WORD_ENABLED_FIELD, WAKE_WORD_PHRASE_FIELD,
 };
 use crate::app::wake_word_state::NativeWakeListenerController;
-use crate::asr::moonshine::MoonshineModelInstaller;
 use crate::asr::whisper::WhisperModelInstaller;
 use crate::asr::AsrMode;
 use crate::audio::capture::AudioCapture;
@@ -277,7 +276,7 @@ impl AppSettings {
             }
         }
         // Rewrite only persisted Moonshine ASR selections before decoding the
-        // legacy enum variants. Leave saved Gemini Live, saved Whisper, and
+        // supported ASR enum. Leave saved Gemini Live, saved Whisper, and
         // profiles with no ASR selector unchanged. Missing legacy selectors
         // continue to represent the old Gemini Live behavior.
         let asr_migrated = value
@@ -511,7 +510,6 @@ pub struct AppState {
     pub audio_playback: Arc<AudioPlayback>,
     pub standalone_speech: StandaloneSpeechController,
     pub conversation_mgr: Arc<ConversationManager>,
-    pub moonshine_installer: Arc<MoonshineModelInstaller>,
     pub whisper_installer: Arc<crate::asr::whisper::WhisperModelInstaller>,
     pub(crate) whisper_install_cancellation: Arc<Mutex<Option<Arc<crate::asr::whisper::installer::WhisperModelInstallCancellation>>>>,
     pub(crate) local_llm_runtime: Arc<LocalRuntimeManager>,
@@ -530,7 +528,7 @@ mod model_paths;
 use legacy_secrets::migrate_legacy_google_api_key;
 #[cfg(test)]
 use legacy_secrets::LEGACY_GOOGLE_API_KEY_SETTING;
-use model_paths::{moonshine_model_root, whisper_model_root};
+use model_paths::whisper_model_root;
 
 impl AppState {
     pub fn onboarding_status(&self) -> Result<OnboardingStatus, String> {
@@ -618,10 +616,6 @@ impl AppState {
         audio_playback.set_volume(settings.read().volume);
         let standalone_speech = StandaloneSpeechController::new();
         let conversation_mgr = Arc::new(ConversationManager::new());
-        let moonshine_installer = Arc::new(
-            MoonshineModelInstaller::new(moonshine_model_root(db_path))
-                .map_err(|error| error.to_string())?,
-        );
         let whisper_root = whisper_model_root(db_path);
         let whisper_installer_inner =
             WhisperModelInstaller::new(&whisper_root).map_err(|error| error.to_string())?;
@@ -657,7 +651,6 @@ impl AppState {
             audio_playback,
             standalone_speech,
             conversation_mgr,
-            moonshine_installer,
             whisper_installer,
             whisper_install_cancellation: Arc::new(Mutex::new(None)),
             local_llm_runtime,

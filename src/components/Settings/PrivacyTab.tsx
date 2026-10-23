@@ -135,7 +135,7 @@ export const PrivacyTab: React.FC = () => {
           </p>
         ) : (
           <p>
-            - Moonshine local ASR is selected: microphone PCM stays on this
+            - Whisper local ASR is selected: microphone PCM stays on this
             computer; finalized transcript text is processed by the selected
             conversation provider. Local is the default.
           </p>

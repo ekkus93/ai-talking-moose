@@ -73,7 +73,7 @@ const listenerHelp = (diagnostics: WakeWordDiagnostics | null) => {
     case "suspended_for_command":
       return "Listener ownership is intentionally suspended while command capture owns the microphone.";
     case "failed_closed":
-      return "Listener failed closed; check local Moonshine ASR mode and developer-prepared Wake artifacts.";
+      return "Listener failed closed; check local Whisper ASR mode and developer-prepared Wake artifacts.";
     case "shutting_down":
       return "Listener shutdown is in progress.";
     case "stopped":
@@ -115,7 +115,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
   const listenerListening = diagnostics?.listening ?? false;
   const enabled = settings.wake_word_enabled;
   const preferenceStatus = enabled
-    ? "Enabled — runtime starts only after developer-prepared local KWS artifacts, local Moonshine ASR policy, and lifecycle state permit."
+    ? "Enabled — runtime starts only after developer-prepared local KWS artifacts, local Whisper ASR policy, and lifecycle state permit."
     : "Disabled — manual start remains available.";
 
   const setEnabled = async (nextEnabled: boolean) => {
@@ -200,7 +200,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
         <p>Wake Word V1 uses local/offline keyword spotting.</p>
         <p>The microphone remains locally active while listening.</p>
         <p>Wake detection is not full-time cloud transcription.</p>
-        <p>Wake-triggered commands require local Moonshine command ASR.</p>
+        <p>Wake-triggered commands require local Whisper command ASR.</p>
         <p>
           Wake model/runtime artifacts are developer-prepared; a clean install
           fails closed until the pinned artifacts are prepared and verified.
@@ -297,7 +297,7 @@ export const WakeWordSettingsPanel: React.FC = () => {
               ? "Wake Word preference is enabled and listener ownership is active."
               : "Wake Word preference is enabled, but listener ownership is not active yet."}{" "}
             Runtime availability still depends on developer-prepared local KWS
-            artifacts, local Moonshine command ASR policy, and lifecycle state.
+            artifacts, local Whisper command ASR policy, and lifecycle state.
           </span>
         </div>
       )}

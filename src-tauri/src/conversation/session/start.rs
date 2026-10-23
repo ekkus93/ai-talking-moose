@@ -14,7 +14,7 @@ impl ConversationManager {
             provider,
             config,
             asr_mode,
-            moonshine_installer,
+
             whisper_installer,
             capture,
             input_device,
@@ -64,7 +64,6 @@ impl ConversationManager {
             .prepare_local_asr(LocalAsrPreparation {
                 generation,
                 asr_mode,
-                installer: moonshine_installer,
                 whisper_installer,
                 session_id: session_id.clone(),
                 capture: capture.clone(),
@@ -178,9 +177,7 @@ impl ConversationManager {
         let (level_tx, mut level_rx) = mpsc::channel::<f32>(32);
         let mut cloud_pcm_rx = None;
         let capture_result = match asr_mode {
-            AsrMode::MoonshineTinyStreaming
-            | AsrMode::MoonshineSmallStreaming
-            | AsrMode::WhisperSmall => local_pipeline
+            AsrMode::WhisperSmall => local_pipeline
                 .as_ref()
                 .expect("local ASR mode must have a provisional ASR pipeline")
                 .start_capture(&mut capture.lock(), input_device, Some(level_tx))

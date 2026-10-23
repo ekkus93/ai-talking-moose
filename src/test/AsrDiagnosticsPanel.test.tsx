@@ -4,9 +4,9 @@ import { AsrDiagnosticsPanel } from "../components/Settings/AsrDiagnosticsPanel"
 import { tauriBridge } from "../lib/tauriBridge";
 
 const diagnostics = {
-  selected_mode: "moonshine_tiny_streaming" as const,
-  engine_name: "Moonshine Tiny Streaming (English)",
-  model_id: "moonshine-tiny-streaming-en",
+  selected_mode: "whisper_small" as const,
+  engine_name: "Whisper Small",
+  model_id: "whisper-small-ggml",
   model_revision: "quantized_26_07_30",
   install_state: "installed" as const,
   input_sample_rate_hz: 16_000,
@@ -44,9 +44,7 @@ describe("AsrDiagnosticsPanel", () => {
 
     render(<AsrDiagnosticsPanel />);
 
-    expect(
-      await screen.findByText("Moonshine Tiny Streaming (English)"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Whisper Small")).toBeInTheDocument();
     expect(screen.getByText("0.250×")).toBeInTheDocument();
     expect(screen.getByText("40.0%")).toBeInTheDocument();
     expect(screen.getByText("60.0 MiB")).toBeInTheDocument();

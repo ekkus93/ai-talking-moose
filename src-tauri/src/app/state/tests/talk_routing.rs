@@ -90,8 +90,7 @@ async fn migrated_moonshine_profiles_keep_selected_text_and_tts_non_live() {
     assert!(!state.secrets.has_google_api_key());
 
     for legacy_asr in [
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        "moonshine_tiny_streaming", "moonshine_small_streaming",
     ] {
         for text_provider in [
             TextProvider::Local,
@@ -102,12 +101,14 @@ async fn migrated_moonshine_profiles_keep_selected_text_and_tts_non_live() {
         ] {
             for tts_provider in [TtsProvider::Local, TtsProvider::Google] {
                 let before = AppSettings {
-                    asr_mode: legacy_asr,
+                    asr_mode: AsrMode::WhisperSmall,
                     text_provider,
                     tts_provider,
                     ..AppSettings::default()
                 };
-                let persisted = serde_json::to_string(&before).unwrap();
+                let mut persisted = serde_json::to_value(&before).unwrap();
+                persisted["asr_mode"] = serde_json::json!(legacy_asr);
+                let persisted = serde_json::to_string(&persisted).unwrap();
                 let (migrated, changed) = AppSettings::from_persisted_json(&persisted).unwrap();
                 assert!(changed, "{legacy_asr:?} must migrate");
                 assert_eq!(migrated.asr_mode, AsrMode::WhisperSmall);
@@ -155,12 +156,11 @@ async fn migrated_moonshine_profiles_keep_selected_text_and_tts_non_live() {
 /// text/TTS routing boundary. A provider choice never turns microphone PCM
 /// into Gemini Live traffic merely because it is an external text provider.
 #[tokio::test]
-async fn both_moonshine_asr_modes_keep_all_external_text_and_voice_pairs_non_live() {
+async fn whisper_asr_keeps_all_external_text_and_voice_pairs_non_live() {
     use crate::ai::types::{LiveServerEvent, ProviderErrorKind};
     let state = AppState::new_for_tests().unwrap();
     for asr_mode in [
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        AsrMode::WhisperSmall,
     ] {
         for text_provider in [
             TextProvider::Local,
@@ -191,7 +191,7 @@ async fn both_moonshine_asr_modes_keep_all_external_text_and_voice_pairs_non_liv
                         sender,
                     )
                     .await
-                    .expect("Moonshine ASR must route through non-Live Talk");
+                    .expect("Whisper ASR must route through non-Live Talk");
                 assert!(
                     matches!(events.recv().await, Some(LiveServerEvent::Connected)),
                     "{asr_mode:?} {text_provider:?} {tts_provider:?}"
@@ -316,8 +316,7 @@ async fn every_local_asr_rejects_unavailable_system_voice_without_contacting_tex
     let state = AppState::new_for_tests().unwrap();
     for asr_mode in [
         AsrMode::WhisperSmall,
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        AsrMode::WhisperSmall,
     ] {
         for text_provider in [
             TextProvider::Local,

@@ -101,7 +101,7 @@
       "exact_head_required": true,
       "skipped_conclusion_counts_as_pass": false,
       "specialized_runner_required": false,
-      "acceptance_scope": "ordinary CI and disclosure tests proving Wake-triggered command ASR remains local-Moonshine-only and unsupported modes fail before listening"
+      "acceptance_scope": "ordinary CI and disclosure tests proving Wake-triggered command ASR remains local-Whisper-only and unsupported modes fail before listening"
     },
     {
       "id": "downstream_first_command_word_acceptance",

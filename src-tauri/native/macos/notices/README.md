@@ -1,15 +1,7 @@
-# Generated macOS release notices
+# Bundled Native Notices
 
-`../../moonshine-runtime.json` is the checked-in provenance manifest for the native
-Moonshine runtime. `scripts/prepare_moonshine_macos.sh` populates this directory
-with the exact Moonshine/native license and notice texts copied from the pinned
-source tree, stages the Talking Moose project license, and copies the verified
-whisper.cpp source license to `WhisperRuntime/WHISPER_CPP_LICENSE`.
+Run `bash scripts/prepare_macos_notices.sh` after initializing the pinned Whisper submodule. It stages the project license, third-party inventory, and upstream Whisper MIT license in `WhisperRuntime/WHISPER_CPP_LICENSE`.
 
-For a tagged distribution, `scripts/collect_release_licenses.py` additionally
-collects the resolved production npm and Rust dependency license/notice files into
-`Dependencies/` and writes `Dependencies/DEPENDENCY_LICENSES.md`.
+Run `python3 scripts/collect_release_licenses.py` after installing dependencies to generate `Dependencies/DEPENDENCY_LICENSES.md` and its notice payloads. The checked-in `LocalLlmRuntime/` notices cover the statically linked llama.cpp runtime and Rust bindings.
 
-Generated notice files are intentionally not committed. Release verification fails
-if preparation did not create the project license, native provenance inventory,
-Whisper license, Moonshine notice set, and dependency notice inventory.
+Local TTS ONNX Runtime, model, voices, and dictionary artifacts remain verified user downloads. Their licenses are recorded in `docs/LOCAL_TTS_ASSET_LICENSES.md`; they are not application-bundle resources. Release verification requires the project, Whisper, Local LLM, and dependency notices.

@@ -31,7 +31,7 @@ fn enabled_asr_mode_change_to_unsupported_fails_closed_without_listener() {
 
     let previous = AppSettings {
         wake_word_enabled: true,
-        asr_mode: AsrMode::MoonshineTinyStreaming,
+        asr_mode: AsrMode::WhisperSmall,
         ..Default::default()
     };
     let next = AppSettings {
@@ -77,7 +77,7 @@ fn enabled_input_device_change_without_startup_config_enters_loading_without_lis
 fn enable_from_disabled_restarts_listener_with_pending_settings() {
     let state = AppState::new_for_tests().unwrap();
     let previous = AppSettings {
-        asr_mode: AsrMode::MoonshineTinyStreaming,
+        asr_mode: AsrMode::WhisperSmall,
         ..Default::default()
     };
     let next = AppSettings {
@@ -95,7 +95,7 @@ fn enable_from_disabled_restarts_listener_with_pending_settings() {
             NativeWakeListenerControl::RestartForSettings { settings } => {
                 actions.push("restart");
                 assert!(settings.wake_word_enabled);
-                assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+                assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
                 state
                     .wake_word_runtime
                     .apply_enabled_setting(true)
@@ -204,16 +204,16 @@ fn input_device_change_stops_then_restarts_with_new_device() {
 }
 
 #[test]
-fn supported_asr_mode_change_stops_then_restarts_with_new_mode() {
+fn whisper_input_device_change_stops_then_restarts_listener() {
     let state = AppState::new_for_tests().unwrap();
     begin_listening(&state);
     let previous = AppSettings {
         wake_word_enabled: true,
-        asr_mode: AsrMode::MoonshineTinyStreaming,
+        asr_mode: AsrMode::WhisperSmall,
         ..Default::default()
     };
     let next = AppSettings {
-        asr_mode: AsrMode::MoonshineSmallStreaming,
+        input_device: Some("new-whisper-input".into()),
         ..previous.clone()
     };
     let mut saw_restart = false;
@@ -227,7 +227,7 @@ fn supported_asr_mode_change_stops_then_restarts_with_new_mode() {
             NativeWakeListenerControl::Stop => stop_runtime_for_fake_listener(state),
             NativeWakeListenerControl::RestartForSettings { settings } => {
                 saw_restart = true;
-                assert_eq!(settings.asr_mode, AsrMode::MoonshineSmallStreaming);
+                assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
                 state
                     .wake_word_runtime
                     .apply_enabled_setting(true)

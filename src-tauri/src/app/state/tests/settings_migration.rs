@@ -196,12 +196,12 @@ fn external_provider_values_round_trip_without_changing_defaults() {
 #[test]
 fn persisted_moonshine_selection_migrates_to_whisper_on_supported_platforms() {
     let original = AppSettings {
-        asr_mode: AsrMode::MoonshineSmallStreaming,
+        asr_mode: AsrMode::WhisperSmall,
         wake_word_enabled: true,
         ..Default::default()
     };
     let (settings, migrated) =
-        AppSettings::from_persisted_json(&serde_json::to_string(&original).unwrap()).unwrap();
+        AppSettings::from_persisted_json(&legacy_asr_json(&original, "moonshine_tiny_streaming")).unwrap();
     assert!(migrated);
     assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
     assert!(settings.wake_word_enabled);
@@ -265,7 +265,7 @@ fn persisted_wake_word_enabled_round_trips_without_migration() {
 #[test]
 fn missing_wake_word_fields_default_disabled_and_preserve_unrelated_settings() {
     let mut value = serde_json::to_value(AppSettings {
-        asr_mode: AsrMode::MoonshineSmallStreaming,
+        asr_mode: AsrMode::WhisperSmall,
         tts_provider: TtsProvider::Local,
         local_tts_voice: "Bella".to_string(),
         google_tts_voice: "Kore".to_string(),
@@ -639,12 +639,11 @@ fn frontend_contract_matches_authoritative_rust_defaults_and_catalogs() {
 #[test]
 fn moonshine_tiny_and_small_migration_preserves_independent_settings_and_is_idempotent() {
     for legacy_asr_mode in [
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        "moonshine_tiny_streaming", "moonshine_small_streaming",
     ] {
         let mut original = AppSettings {
             settings_version: 8,
-            asr_mode: legacy_asr_mode,
+            asr_mode: AsrMode::WhisperSmall,
             wake_word_enabled: true,
             memory_enabled: true,
             save_transcripts: true,
@@ -658,7 +657,7 @@ fn moonshine_tiny_and_small_migration_preserves_independent_settings_and_is_idem
             serde_json::json!({"size": 3}),
         );
         let (settings, migrated) =
-            AppSettings::from_persisted_json(&serde_json::to_string(&original).unwrap())
+            AppSettings::from_persisted_json(&legacy_asr_json(&original, legacy_asr_mode))
                 .unwrap();
         assert!(migrated);
         assert_eq!(settings.settings_version, CURRENT_SETTINGS_VERSION);
@@ -687,12 +686,11 @@ fn moonshine_tiny_and_small_migration_preserves_independent_settings_and_is_idem
 #[test]
 fn legacy_moonshine_sqlite_selection_rewrites_once_without_installing_whisper() {
     for retired in [
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        "moonshine_tiny_streaming", "moonshine_small_streaming",
     ] {
         let original = AppSettings {
             settings_version: 8,
-            asr_mode: retired,
+            asr_mode: AsrMode::WhisperSmall,
             text_provider: TextProvider::Google,
             tts_provider: TtsProvider::Local,
             memory_enabled: true,
@@ -702,7 +700,7 @@ fn legacy_moonshine_sqlite_selection_rewrites_once_without_installing_whisper() 
         let file = NamedTempFile::new().unwrap();
         let path = file.path().to_string_lossy().to_string();
         let db = Database::new(&path).unwrap();
-        db.set_setting("app_settings", &serde_json::to_string(&original).unwrap())
+        db.set_setting("app_settings", &legacy_asr_json(&original, retired))
             .unwrap();
         drop(db);
 
@@ -825,14 +823,13 @@ fn invalid_persisted_asr_selection_preserves_original_sqlite_row_on_startup_erro
 #[test]
 fn current_version_legacy_moonshine_selection_migrates_once_without_changing_preferences() {
     for retired in [
-        AsrMode::MoonshineTinyStreaming,
-        AsrMode::MoonshineSmallStreaming,
+        "moonshine_tiny_streaming", "moonshine_small_streaming",
     ] {
         let file = NamedTempFile::new().unwrap();
         let path = file.path().to_string_lossy().to_string();
         let mut saved = AppSettings {
             settings_version: CURRENT_SETTINGS_VERSION,
-            asr_mode: retired,
+            asr_mode: AsrMode::WhisperSmall,
             text_provider: TextProvider::Openai,
             openai_text_model: "gpt-4.1-mini".into(),
             tts_provider: TtsProvider::Local,
@@ -846,7 +843,7 @@ fn current_version_legacy_moonshine_selection_migrates_once_without_changing_pre
             serde_json::json!({"contrast": "high"}),
         );
         let db = Database::new(&path).unwrap();
-        db.set_setting("app_settings", &serde_json::to_string(&saved).unwrap())
+        db.set_setting("app_settings", &legacy_asr_json(&saved, retired))
             .unwrap();
         drop(db);
 
@@ -892,14 +889,13 @@ fn current_version_legacy_moonshine_selection_migrates_once_without_changing_pre
 fn moonshine_upgrade_preserves_full_settings_snapshot_and_sanitizes_additive_data() {
     for version in [8, CURRENT_SETTINGS_VERSION] {
         for retired in [
-            AsrMode::MoonshineTinyStreaming,
-            AsrMode::MoonshineSmallStreaming,
+            "moonshine_tiny_streaming", "moonshine_small_streaming",
         ] {
             let file = NamedTempFile::new().unwrap();
             let path = file.path().to_string_lossy().to_string();
             let mut original = AppSettings {
                 settings_version: version,
-                asr_mode: retired,
+                asr_mode: AsrMode::WhisperSmall,
                 wake_word_enabled: true,
                 input_device: Some("selected-input".into()),
                 output_device: Some("selected-output".into()),
@@ -931,7 +927,7 @@ fn moonshine_upgrade_preserves_full_settings_snapshot_and_sanitizes_additive_dat
             let expected_snapshot = serde_json::to_value(&expected).unwrap();
 
             let db = Database::new(&path).unwrap();
-            db.set_setting("app_settings", &serde_json::to_string(&original).unwrap())
+            db.set_setting("app_settings", &legacy_asr_json(&original, retired))
                 .unwrap();
             drop(db);
 
@@ -993,13 +989,13 @@ fn explicit_cloud_asr_and_missing_legacy_selection_remain_unchanged() {
 #[test]
 fn current_settings_keep_selected_asr_mode() {
     let original = AppSettings {
-        asr_mode: AsrMode::MoonshineSmallStreaming,
+        asr_mode: AsrMode::WhisperSmall,
         ..Default::default()
     };
     let json = serde_json::to_string(&original).unwrap();
 
     let (settings, migrated) = AppSettings::from_persisted_json(&json).unwrap();
-    assert!(migrated);
+    assert!(!migrated);
     assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
 }
 
@@ -1036,4 +1032,10 @@ fn settings_apply_to_live_character_config() {
     assert_eq!(config.behavior.quiet_hours_start, 1);
     assert_eq!(config.behavior.quiet_hours_end, 6);
     assert_eq!(config.behavior.max_comments_per_hour, 2);
+}
+
+fn legacy_asr_json(settings: &AppSettings, mode: &str) -> String {
+    let mut value = serde_json::to_value(settings).unwrap();
+    value["asr_mode"] = serde_json::json!(mode);
+    serde_json::to_string(&value).unwrap()
 }

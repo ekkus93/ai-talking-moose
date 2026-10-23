@@ -221,7 +221,7 @@ Current checks:
 
 Purpose:
 
-- preserve the selected Wake Word V1 Policy B: Wake-triggered command ASR supports local Moonshine streaming modes only
+- preserve the selected Wake Word V1 Policy B: Wake-triggered command ASR supports local Whisper Small only
 - verify Gemini Live audio and other unsupported command ASR modes cannot start or keep the Wake listener active
 - keep user-facing Settings disclosure aligned with the selected policy
 - distinguish ordinary manual ASR choices from Wake-triggered command-ASR eligibility
@@ -363,7 +363,7 @@ Purpose:
 - preserve shared `AudioCapture` ownership without a competing Wake-specific capture owner
 - verify lifecycle, shutdown, Talking suspension, and one-trigger router boundaries stay present
 - verify model/runtime identity checks and native architecture verification boundaries stay present
-- verify local Moonshine-only Wake command-ASR policy enforcement stays present
+- verify local Whisper-only Wake command-ASR policy enforcement stays present
 - reject network or cloud/full-ASR references in the production KWS engine boundary
 
 Policy:
@@ -379,7 +379,7 @@ Current check: `node scripts/check_wake_word_documentation.mjs`.
 Purpose:
 
 - keep current-behavior documentation aligned with implemented and still-pending production integration
-- preserve local/offline, active-microphone, cloud-boundary, local-Moonshine Wake ASR policy, and no-barge-in Settings disclosures
+- preserve local/offline, active-microphone, cloud-boundary, local-Whisper Wake ASR policy, and no-barge-in Settings disclosures
 - reject unqualified final-acceptance claims while post-closeout WPCR integration, production-listener performance, audit, and final qualification work remains pending
 
 ## Pending required acceptance evidence
@@ -392,7 +392,7 @@ The native packaging/architecture policy workflow is implemented. Final packagin
 
 ### Final source/privacy/security audit
 
-The automated privacy and source/security gates are implemented, but final WPCR-900 still requires review of runtime ownership, microphone transitions, cancellation/shutdown, ring clearing, Wake-disabled behavior, Talking suspension/resume, one-trigger/one-command behavior, selected local-Moonshine ASR policy, provider separation, exact artifact loading, architecture verification, offline idle inference, performance-report privacy, and documentation truthfulness.
+The automated privacy and source/security gates are implemented, but final WPCR-900 still requires review of runtime ownership, microphone transitions, cancellation/shutdown, ring clearing, Wake-disabled behavior, Talking suspension/resume, one-trigger/one-command behavior, selected local-Whisper ASR policy, provider separation, exact artifact loading, architecture verification, offline idle inference, performance-report privacy, and documentation truthfulness.
 
 ## Specialized runners and hardware
 

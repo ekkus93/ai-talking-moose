@@ -6,7 +6,7 @@ fn fresh_profile_uses_local_asr_and_conservative_privacy_defaults() {
     let settings = AppSettings::default();
 
     #[cfg(target_os = "macos")]
-    assert_eq!(settings.asr_mode, AsrMode::MoonshineTinyStreaming);
+    assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
     #[cfg(target_os = "linux")]
     assert_eq!(settings.asr_mode, AsrMode::WhisperSmall);
     assert!(!settings.active_app_observation);

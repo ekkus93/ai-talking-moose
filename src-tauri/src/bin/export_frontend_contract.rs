@@ -170,7 +170,7 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
         asr_model_descriptor: AsrModelDescriptor {
             id: "contract-asr-model".to_string(),
             display_name: "Contract ASR model".to_string(),
-            mode: AsrMode::MoonshineTinyStreaming,
+            mode: AsrMode::WhisperSmall,
             install_state: AsrModelInstallState::Installed,
             revision: "contract-revision".to_string(),
             runtime_release: "contract-runtime".to_string(),
@@ -180,7 +180,7 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
             error_message: Some("contract model error".to_string()),
         },
         asr_diagnostics: AsrDiagnostics {
-            selected_mode: AsrMode::MoonshineTinyStreaming,
+            selected_mode: AsrMode::WhisperSmall,
             engine_name: "Contract ASR engine".to_string(),
             model_id: Some("contract-asr-model".to_string()),
             model_revision: Some("contract-revision".to_string()),
@@ -206,7 +206,7 @@ fn representative_ipc_shapes() -> FrontendIpcShapes {
             peak_resident_memory_bytes: Some(3_000),
         },
         asr_model_progress_event: AsrModelProgressEvent {
-            mode: AsrMode::MoonshineTinyStreaming,
+            mode: AsrMode::WhisperSmall,
             install_state: AsrModelInstallState::Downloading,
             downloaded_bytes: 128,
             total_bytes: 256,
